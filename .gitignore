@@ -11,7 +11,14 @@
 !.yarn/versions
 
 # testing
-/coverage
+__tests__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+jest.config.ts
+jest.setup.ts
+coverage/
 
 # next.js
 /.next/
@@ -31,7 +38,7 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+.env
 
 # vercel
 .vercel

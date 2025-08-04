@@ -1,0 +1,5 @@
+# Ignore test files in Vercel
+__tests__/
+*.test.ts
+*.test.tsx
+/README.md
