@@ -25,28 +25,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Next.js
-        run: npm run build
+      - name: Build Next.js (show full logs)
+        run: |
+          echo "🚧 Building Next.js project..."
+          npm run build || { echo "❌ Build failed!"; exit 1; }
 
-      - name: Deploy to Vercel
+      - name: Deploy to Vercel (with logs)
         id: vercel
         run: |
           npm install -g vercel@latest
           
-          if [ "${GITHUB_REF##*/}" = "main" ]; then
+          BRANCH_NAME="${GITHUB_REF##*/}"
+          
+          if [ "$BRANCH_NAME" = "main" ]; then
             echo "🚀 Deploying PRODUCTION build..."
             DEPLOY_URL=$(vercel --prod --confirm \
               --token ${{ secrets.VERCEL_TOKEN }} \
               --org-id ${{ secrets.VERCEL_ORG_ID }} \
               --project-id ${{ secrets.VERCEL_PROJECT_ID }} \
-              2>/dev/null | tail -n 1)
+              --debug | tee /dev/stderr | tail -n 1)
           else
-            echo "🚧 Deploying PREVIEW build for branch: ${GITHUB_REF##*/}..."
+            echo "🚧 Deploying PREVIEW build for branch: $BRANCH_NAME..."
             DEPLOY_URL=$(vercel --confirm \
               --token ${{ secrets.VERCEL_TOKEN }} \
               --org-id ${{ secrets.VERCEL_ORG_ID }} \
               --project-id ${{ secrets.VERCEL_PROJECT_ID }} \
-              2>/dev/null | tail -n 1)
+              --debug | tee /dev/stderr | tail -n 1)
           fi
           
           # Validate deployment URL
@@ -55,7 +59,6 @@ jobs:
             exit 1
           fi
           
-          # Clean URL (remove any extra whitespace or characters)
           DEPLOY_URL=$(echo "$DEPLOY_URL" | tr -d '[:space:]')
           
           echo "✅ Deployment successful!"
