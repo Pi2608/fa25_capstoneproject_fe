@@ -3,18 +3,19 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./login.module.css";
-import { apiFetch } from "@/lib/api";
+import { login as loginApi, postJson } from "@/lib/api";
 import { auth, googleProvider, facebookProvider } from "@/lib/firebase";
 import {
   getIdToken,
   getRedirectResult,
   signInWithPopup,
   signInWithRedirect,
-  AuthError,
-  UserCredential,
+  type AuthError,
+  type UserCredential,
 } from "firebase/auth";
 
 type BannerType = "info" | "error";
+
 type Provider = "google" | "facebook";
 
 function msg(code?: string): { type: BannerType; text: string; fallback?: boolean } {
@@ -33,12 +34,17 @@ function msg(code?: string): { type: BannerType; text: string; fallback?: boolea
   }
 }
 
+interface SocialLoginResponse {
+  token: string;
+  user: { id: string; email: string };
+}
+
 async function finishSocial(cred: UserCredential, provider: Provider, router: ReturnType<typeof useRouter>) {
   const idToken = await getIdToken(cred.user, true);
-  const data = await apiFetch<{ token: string; user: any }>("/auth/login", {
-    method: "POST",
-    body: { provider, idToken },
-  });
+  const data = await postJson<{ provider: Provider; idToken: string }, SocialLoginResponse>(
+    "/auth/login",
+    { provider, idToken }
+  );
   localStorage.setItem("token", data.token);
   router.push("/");
 }
@@ -71,7 +77,7 @@ export default function LoginPage() {
     return Object.keys(e).length === 0;
   };
 
-  const onSubmit = async (ev: React.FormEvent) => {
+  const onSubmit: React.FormEventHandler<HTMLFormElement> = async (ev) => {
     ev.preventDefault();
     setBanner(null);
     if (!validate()) {
@@ -80,18 +86,14 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const data = await apiFetch<{ token: string; user: any }>("/auth/login", {
-        method: "POST",
-        body: { email, password },
-      });
-      localStorage.setItem("token", data.token);
+      const data = await loginApi({ email, password });
+      localStorage.setItem("token", data.accessToken ?? data.token);
       router.push("/");
-    } catch (e: any) {
-      const text =
-        e?.message?.includes("fetch") || e?.name === "TypeError"
-          ? "Không thể kết nối tới máy chủ. Vui lòng thử lại."
-          : e?.message || "Không thể đăng nhập. Vui lòng thử lại.";
-      setBanner({ type: "error", text });
+    } catch (e) {
+      const message = e && typeof e === "object" && "message" in (e as Record<string, unknown>)
+        ? String((e as { message?: unknown }).message)
+        : "Không thể đăng nhập. Vui lòng thử lại.";
+      setBanner({ type: "error", text: message });
     } finally {
       setLoading(false);
     }
@@ -104,8 +106,11 @@ export default function LoginPage() {
     try {
       const cred = await signInWithPopup(auth, prov);
       await finishSocial(cred, provider, router);
-    } catch (e: any) {
-      const m = msg(e?.code);
+    } catch (e) {
+      const code = e && typeof e === "object" && "code" in (e as Record<string, unknown>)
+        ? String((e as { code?: unknown }).code)
+        : undefined;
+      const m = msg(code);
       if (m.fallback) {
         setBanner({ type: "info", text: m.text });
         sessionStorage.setItem("redirectProvider", provider);
@@ -133,11 +138,7 @@ export default function LoginPage() {
         <p className={styles.sub}>Sign in to continue</p>
 
         {banner && (
-          <div
-            className={`${styles.banner} ${banner.type === "error" ? styles.bannerError : styles.bannerInfo}`}
-            role={banner.type === "error" ? "alert" : "status"}
-            aria-live="polite"
-          >
+          <div className={`${styles.banner} ${banner.type === "error" ? styles.bannerError : styles.bannerInfo}`} role={banner.type === "error" ? "alert" : "status"} aria-live="polite">
             {banner.text}
           </div>
         )}
@@ -187,20 +188,10 @@ export default function LoginPage() {
         <div className={styles.divider}><span>or</span></div>
 
         <div className={styles.socialRow}>
-          <button
-            className={`${styles.socialBtn} ${styles.google}`}
-            onClick={() => socialLogin("google")}
-            disabled={loading}
-            type="button"
-          >
+          <button className={`${styles.socialBtn} ${styles.google}`} onClick={() => socialLogin("google")} disabled={loading} type="button">
             Continue with Google
           </button>
-          <button
-            className={`${styles.socialBtn} ${styles.facebook}`}
-            onClick={() => socialLogin("facebook")}
-            disabled={loading}
-            type="button"
-          >
+          <button className={`${styles.socialBtn} ${styles.facebook}`} onClick={() => socialLogin("facebook")} disabled={loading} type="button">
             Continue with Facebook
           </button>
         </div>

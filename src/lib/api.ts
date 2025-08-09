@@ -1,78 +1,80 @@
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "http://localhost:5233";
+export type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
-type ApiInit = Omit<RequestInit, "body" | "headers"> & {
-  headers?: Record<string, string>;
-  body?: any;
-};
-
-function isFormLike(body: any) {
-  return (
-    (typeof FormData !== "undefined" && body instanceof FormData) ||
-    (typeof Blob !== "undefined" && body instanceof Blob) ||
-    body instanceof ArrayBuffer ||
-    (typeof ReadableStream !== "undefined" && body instanceof ReadableStream)
-  );
+export interface ApiErrorShape {
+  status: number;
+  message: string;
 }
 
-export async function apiFetch<T = any>(path: string, options: ApiInit = {}): Promise<T> {
-  const url = `${API_BASE}${path}`;
-  const isStringBody = typeof options.body === "string";
-  const formLike = isFormLike(options.body);
+export async function apiFetch<T>(
+  path: string,
+  options: RequestInit & { method?: ApiMethod } = {}
+): Promise<T> {
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!base) throw new Error("Missing env: NEXT_PUBLIC_API_BASE_URL");
 
-  const headers: Record<string, string> = {
-    ...(formLike ? {} : { "Content-Type": "application/json" }),
-    ...(options.headers || {}),
-  };
-
-  const body =
-    options.body == null
-      ? undefined
-      : formLike
-      ? options.body
-      : isStringBody
-      ? options.body
-      : JSON.stringify(options.body);
-
-  const res = await fetch(url, {
-    method: options.method ?? "GET",
-    headers,
-    body,
-    credentials: options.credentials ?? "omit",
-    cache: "no-store",
-    signal: options.signal,
-    mode: options.mode,
-    redirect: options.redirect,
-    referrerPolicy: options.referrerPolicy,
+  const res = await fetch(`${base}${path}`, {
+    headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
+    ...options,
   });
 
-  if (res.status === 204) return undefined as T;
-
-  const ctype = res.headers.get("content-type") || "";
-  const isJson = ctype.includes("application/json");
-  const parse = async () => (isJson ? await res.json() : await res.text());
-
   if (!res.ok) {
+    let message = `Request failed: ${res.status}`;
     try {
-      const data = await parse();
-      if (isJson) {
-        const msg =
-          (data as any)?.message ||
-          (data as any)?.error ||
-          (data as any)?.title ||
-          res.statusText;
-        throw new Error(msg);
+      const data = (await res.json()) as Partial<ApiErrorShape> | unknown;
+      if (typeof data === "object" && data && "message" in (data as Record<string, unknown>)) {
+        const msg = (data as { message?: unknown }).message;
+        if (typeof msg === "string") message = msg;
       }
-      throw new Error(typeof data === "string" && data ? data : `HTTP ${res.status}`);
-    } catch (err) {
-      throw new Error(res.statusText || `HTTP ${res.status}`);
-    }
+    } catch {}
+    const error: ApiErrorShape = { status: res.status, message };
+    throw error;
   }
 
-  try {
-    const data = await parse();
-    return (isJson ? data : (data as unknown)) as T;
-  } catch {
-    return undefined as T;
-  }
+  const text = await res.text();
+  if (!text) return undefined as unknown as T;
+  return JSON.parse(text) as T;
+}
+
+export function getJson<T>(path: string, init?: RequestInit) {
+  return apiFetch<T>(path, { ...(init ?? {}), method: "GET" });
+}
+
+export function postJson<TReq, TRes>(path: string, body: TReq, init?: RequestInit) {
+  return apiFetch<TRes>(path, {
+    ...(init ?? {}),
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function putJson<TReq, TRes>(path: string, body: TReq, init?: RequestInit) {
+  return apiFetch<TRes>(path, {
+    ...(init ?? {}),
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export function delJson<TRes>(path: string, init?: RequestInit) {
+  return apiFetch<TRes>(path, { ...(init ?? {}), method: "DELETE" });
+}
+
+// Types commonly used by auth screens; adjust to your backend if needed
+export type LoginRequest = { email: string; password: string };
+export type LoginResponse = { accessToken: string; refreshToken?: string };
+export type RegisterRequest = {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+};
+export type RegisterResponse = { userId: string };
+
+export function login(req: LoginRequest) {
+  return postJson<LoginRequest, LoginResponse>("/auth/login", req);
+}
+
+export function register(req: RegisterRequest) {
+  return postJson<RegisterRequest, RegisterResponse>("/auth/register", req);
 }

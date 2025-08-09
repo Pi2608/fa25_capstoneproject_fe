@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./register.module.css";
-import { apiFetch } from "@/lib/api";
+import { postJson } from "@/lib/api";
 
 type Banner = { type: "info" | "error" | "success"; text: string };
 
@@ -40,12 +40,12 @@ export default function RegisterPage() {
       const cachedEmail = localStorage.getItem("reg_email");
       const cachedName = localStorage.getItem("reg_name");
       if (cachedEmail && cachedName) {
-        const { firstName, lastName } = JSON.parse(cachedName);
+        const { firstName, lastName } = JSON.parse(cachedName) as { firstName: string; lastName: string };
         if (!name) setName([lastName, firstName].filter(Boolean).join(" "));
         if (!email) setEmail(cachedEmail);
       }
     } catch {}
-  }, []);
+  }, [email, name]);
 
   const passScore = useMemo(() => {
     let s = 0;
@@ -59,7 +59,7 @@ export default function RegisterPage() {
 
   const scoreLabel = ["Rất yếu", "Yếu", "Khá", "Mạnh", "Rất mạnh"][passScore];
 
-  const validateStep1 = () => {
+  const validateStep1 = useCallback(() => {
     const e: typeof errors = {};
     if (!name.trim()) e.name = "Vui lòng nhập tên.";
     if (!email.trim()) e.email = "Vui lòng nhập email.";
@@ -72,17 +72,17 @@ export default function RegisterPage() {
     if (!agree) e.agree = "Vui lòng đồng ý điều khoản.";
     setErrors(e);
     return Object.keys(e).length === 0;
-  };
+  }, [agree, confirm, email, name, password, phone]);
 
-  const validateStep2 = () => {
+  const validateStep2 = useCallback(() => {
     const e: typeof errors = {};
     if (!otp.trim()) e.otp = "Vui lòng nhập mã xác minh.";
     else if (!/^\d{4,8}$/.test(otp)) e.otp = "Mã không hợp lệ.";
     setErrors(e);
     return Object.keys(e).length === 0;
-  };
+  }, [otp]);
 
-  const submitStep1 = async (ev: React.FormEvent) => {
+  const submitStep1: React.FormEventHandler<HTMLFormElement> = async (ev) => {
     ev.preventDefault();
     setBanner(null);
     if (!validateStep1()) {
@@ -92,53 +92,40 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       const { firstName, lastName } = splitVietnameseName(name);
-      await apiFetch("/auth/verify-email", {
-        method: "POST",
-        body: {
-          firstName,
-          lastName,
-          email,
-          phone: phone || null,
-          password,
-        },
-      });
+      await postJson(
+        "/auth/verify-email",
+        { firstName, lastName, email, phone: phone || null, password }
+      );
       try {
         localStorage.setItem("reg_name", JSON.stringify({ firstName, lastName }));
         localStorage.setItem("reg_email", email);
       } catch {}
       setBanner({ type: "success", text: "Đã gửi mã xác minh tới email. Vui lòng kiểm tra hộp thư." });
       setStep(2);
-    } catch (e: any) {
-      const text =
-        e?.message?.includes("fetch") || e?.name === "TypeError"
-          ? "Không thể kết nối tới máy chủ. Vui lòng thử lại."
-          : e?.message || "Không thể gửi mã xác minh.";
-      setBanner({ type: "error", text });
+    } catch (e) {
+      const message = e && typeof e === "object" && "message" in (e as Record<string, unknown>)
+        ? String((e as { message?: unknown }).message)
+        : "Không thể gửi mã xác minh.";
+      setBanner({ type: "error", text: message });
     } finally {
       setLoading(false);
     }
   };
 
-  const submitStep2 = async (ev: React.FormEvent) => {
+  const submitStep2: React.FormEventHandler<HTMLFormElement> = async (ev) => {
     ev.preventDefault();
     setBanner(null);
     if (!validateStep2()) return;
     setLoading(true);
     try {
-      // Bước 2 đúng endpoint: /auth/verify-otp, chỉ cần { otp }
-      await apiFetch("/auth/verify-otp", {
-        method: "POST",
-        body: { otp },
-      });
-
+      await postJson("/auth/verify-otp", { otp });
       setBanner({ type: "success", text: "Xác minh email thành công. Đang chuyển trang…" });
       setTimeout(() => router.push("/login"), 900);
-    } catch (e: any) {
-      const text =
-        e?.message?.includes("fetch") || e?.name === "TypeError"
-          ? "Không thể kết nối tới máy chủ. Vui lòng thử lại."
-          : e?.message || "Mã xác minh không đúng hoặc đã hết hạn.";
-      setBanner({ type: "error", text });
+    } catch (e) {
+      const message = e && typeof e === "object" && "message" in (e as Record<string, unknown>)
+        ? String((e as { message?: unknown }).message)
+        : "Mã xác minh không đúng hoặc đã hết hạn.";
+      setBanner({ type: "error", text: message });
     } finally {
       setLoading(false);
     }
@@ -148,7 +135,7 @@ export default function RegisterPage() {
     if (banner?.type === "error") return;
     if (Object.keys(errors).length && step === 1) validateStep1();
     if (Object.keys(errors).length && step === 2) validateStep2();
-  }, [name, email, phone, password, confirm, agree, otp, step]);
+  }, [agree, banner?.type, confirm, email, errors, name, otp, password, phone, step, validateStep1, validateStep2]);
 
   return (
     <main className={styles.wrap}>
@@ -165,18 +152,13 @@ export default function RegisterPage() {
         <p className={styles.sub}>{step === 1 ? "Join us and start mapping" : "Nhập mã xác minh đã gửi tới email"}</p>
 
         {banner && (
-          <div
-            className={`${styles.banner} ${banner.type === "error" ? styles.bannerError : banner.type === "success" ? styles.bannerSuccess : styles.bannerInfo}`}
-            role={banner.type === "error" ? "alert" : "status"}
-            aria-live="polite"
-          >
+          <div className={`${styles.banner} ${banner.type === "error" ? styles.bannerError : banner.type === "success" ? styles.bannerSuccess : styles.bannerInfo}`} role={banner.type === "error" ? "alert" : "status"} aria-live="polite">
             {banner.text}
           </div>
         )}
 
         {step === 1 && (
           <form onSubmit={submitStep1} className={styles.form} noValidate>
-            {/* ... form step 1 giữ nguyên như của anh ... */}
             <label className={styles.label}>
               Full name
               <input
@@ -315,28 +297,21 @@ export default function RegisterPage() {
                     let lastName = "";
                     try {
                       const cached = localStorage.getItem("reg_name");
-                      if (cached) ({ firstName, lastName } = JSON.parse(cached));
+                      if (cached) ({ firstName, lastName } = JSON.parse(cached) as { firstName: string; lastName: string });
                       else ({ firstName, lastName } = splitVietnameseName(name));
                     } catch {
                       ({ firstName, lastName } = splitVietnameseName(name));
                     }
-                    await apiFetch("/auth/verify-email", {
-                      method: "POST",
-                      body: {
-                        firstName,
-                        lastName,
-                        email,
-                        phone: phone || null,
-                        password,
-                      },
-                    });
+                    await postJson(
+                      "/auth/verify-email",
+                      { firstName, lastName, email, phone: phone || null, password }
+                    );
                     setBanner({ type: "info", text: "Đã gửi lại mã xác minh." });
-                  } catch (e: any) {
-                    const text =
-                      e?.message?.includes("fetch") || e?.name === "TypeError"
-                        ? "Không thể kết nối tới máy chủ. Vui lòng thử lại."
-                        : e?.message || "Không thể gửi lại mã.";
-                    setBanner({ type: "error", text });
+                  } catch (e) {
+                    const message = e && typeof e === "object" && "message" in (e as Record<string, unknown>)
+                      ? String((e as { message?: unknown }).message)
+                      : "Không thể gửi lại mã.";
+                    setBanner({ type: "error", text: message });
                   } finally {
                     setLoading(false);
                   }
