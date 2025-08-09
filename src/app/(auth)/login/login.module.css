@@ -1,0 +1,214 @@
+.wrap {
+  min-height: 100dvh;
+  background:
+    radial-gradient(1200px 500px at 70% 10%, rgba(95, 127, 82, .25), transparent 60%),
+    linear-gradient(180deg, var(--bg-dark) 58%, var(--brand-green) 42%);
+  color: var(--text);
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  padding: 56px 16px 32px;
+  position: relative;
+}
+
+.brandBar {
+  position: absolute;
+  inset: 20px auto auto 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  user-select: none;
+}
+
+.logoDot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--brand-green);
+  box-shadow: 0 0 0 8px rgba(63, 95, 54, .25), 0 10px 30px rgba(0, 0, 0, .35);
+}
+
+.brandWrap {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.brand {
+  font-weight: 900;
+  letter-spacing: .4px;
+  font-size: 28px;
+  text-shadow: 0 2px 10px rgba(0,0,0,.45);
+}
+
+.tagline {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.card {
+  width: 100%;
+  max-width: 460px;
+  background: linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.06));
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 32px;
+  position: relative;
+  box-shadow:
+    0 50px 120px rgba(0,0,0,.45),
+    0 10px 30px rgba(0,0,0,.35),
+    inset 0 1px 0 rgba(255,255,255,.10);
+  backdrop-filter: blur(8px);
+}
+
+.title {
+  margin: 0 0 4px;
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: .2px;
+  text-shadow: 0 1px 4px rgba(0,0,0,.25);
+}
+
+.sub {
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+}
+
+.label {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.input {
+  appearance: none;
+  background: rgba(255,255,255,.05);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 12px 14px;
+  border-radius: 12px;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease, transform .05s ease;
+}
+
+.input::placeholder { color: rgba(255,255,255,.45); }
+
+.input:focus {
+  border-color: var(--brand-green-hover);
+  background: rgba(255,255,255,.08);
+  box-shadow: 0 0 0 4px rgba(95,127,82,.25), 0 6px 20px rgba(0,0,0,.25);
+  transform: translateY(-1px);
+}
+
+.inputError {
+  border-color: rgba(239,68,68,.7) !important;
+  box-shadow: 0 0 0 3px rgba(239,68,68,.12);
+}
+
+.fieldError {
+  margin-top: 6px;
+  font-size: 0.875rem;
+  color: #ef4444;
+}
+
+.primaryBtn {
+  margin-top: 6px;
+  width: 100%;
+  padding: 13px 16px;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--brand-green), #34543a);
+  color: var(--text);
+  font-weight: 800;
+  letter-spacing: .2px;
+  cursor: pointer;
+  transition: transform .06s ease, filter .15s ease, box-shadow .15s ease, opacity .15s ease;
+  box-shadow: 0 14px 40px rgba(63,95,54,.45), 0 4px 12px rgba(0,0,0,.35);
+}
+
+.primaryBtn:hover { filter: brightness(1.06); }
+.primaryBtn:active { transform: translateY(1px) scale(.998); }
+.primaryBtn:disabled { opacity: .6; cursor: not-allowed; }
+
+.banner {
+  margin: 12px 0 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  border: 1px solid transparent;
+}
+.bannerInfo {
+  background: rgba(59,130,246,.10);
+  color: #2563eb;
+  border-color: rgba(37,99,235,.35);
+}
+.bannerError {
+  background: rgba(239,68,68,.12);
+  color: #ef4444;
+  border-color: rgba(239,68,68,.35);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0;
+  color: #94a3b8;
+}
+.divider::before,
+.divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: rgba(148,163,184,.35);
+}
+
+.socialRow { display: grid; gap: 12px; }
+
+.socialBtn {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255,255,255,.04);
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: .2px;
+  cursor: pointer;
+  transition: transform .06s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease;
+  box-shadow: 0 6px 18px rgba(0,0,0,.25);
+}
+.socialBtn:hover { background: rgba(255,255,255,.08); border-color: rgba(255,255,255,.25); }
+.socialBtn:active { transform: translateY(1px) scale(.998); }
+.socialBtn:disabled { opacity: .6; cursor: not-allowed; }
+
+.google { }
+.facebook { }
+
+.note {
+  margin-top: 14px;
+  color: var(--muted);
+  text-align: center;
+  font-size: 14px;
+}
+.link {
+  color: #e7f7e7;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.link:hover { color: #ffffff; }
+
+@media (max-width: 480px) {
+  .brand { font-size: 22px; }
+  .card { padding: 24px; }
+  .title { font-size: 28px; }
+}
