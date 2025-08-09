@@ -2,17 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import styles from "./login.module.css";
 import { apiFetch } from "@/lib/api";
 import { auth, googleProvider, facebookProvider } from "@/lib/firebase";
 import {
+  getIdToken,
+  getRedirectResult,
   signInWithPopup,
   signInWithRedirect,
-  getRedirectResult,
-  getIdToken,
   AuthError,
   UserCredential,
 } from "firebase/auth";
-import styles from "./login.module.css";
 
 type BannerType = "info" | "error";
 type Provider = "google" | "facebook";
@@ -23,7 +23,7 @@ function msg(code?: string): { type: BannerType; text: string; fallback?: boolea
       return { type: "info", text: "Bạn đã hủy đăng nhập. Nếu muốn, hãy thử lại." };
     case "auth/popup-blocked":
     case "auth/operation-not-supported-in-this-environment":
-      return { type: "info", text: "Trình duyệt đang chặn cửa sổ đăng nhập. Đang chuyển sang cách khác…", fallback: true };
+      return { type: "info", text: "Trình duyệt chặn popup. Đang chuyển sang cách khác…", fallback: true };
     case "auth/account-exists-with-different-credential":
       return { type: "error", text: "Email này đã dùng cách đăng nhập khác. Vui lòng dùng đúng phương thức." };
     case "auth/unauthorized-domain":
@@ -35,12 +35,12 @@ function msg(code?: string): { type: BannerType; text: string; fallback?: boolea
 
 async function finishSocial(cred: UserCredential, provider: Provider, router: ReturnType<typeof useRouter>) {
   const idToken = await getIdToken(cred.user, true);
-  const data = await apiFetch<{ token: string; user: any }>(
-    "/auth/login",
-    { method: "POST", body: JSON.stringify({ provider, idToken }) }
-  );
+  const data = await apiFetch<{ token: string; user: any }>("/auth/login", {
+    method: "POST",
+    body: { provider, idToken },
+  });
   localStorage.setItem("token", data.token);
-  router.push("/"); 
+  router.push("/");
 }
 
 export default function LoginPage() {
@@ -80,12 +80,12 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const data = await apiFetch<{ token: string; user: any }>(
-        "/auth/login",
-        { method: "POST", body: JSON.stringify({ email, password }) }
-      );
+      const data = await apiFetch<{ token: string; user: any }>("/auth/login", {
+        method: "POST",
+        body: { email, password },
+      });
       localStorage.setItem("token", data.token);
-      router.push("/"); 
+      router.push("/");
     } catch (e: any) {
       const text =
         e?.message?.includes("fetch") || e?.name === "TypeError"
@@ -101,7 +101,6 @@ export default function LoginPage() {
     setBanner(null);
     setLoading(true);
     const prov = provider === "google" ? googleProvider : facebookProvider;
-
     try {
       const cred = await signInWithPopup(auth, prov);
       await finishSocial(cred, provider, router);
@@ -180,11 +179,7 @@ export default function LoginPage() {
             {errors.password && <div className={styles.fieldError}>{errors.password}</div>}
           </label>
 
-          <button
-            className={styles.primaryBtn}
-            type="submit"
-            disabled={loading || !email || !password}
-          >
+          <button className={styles.primaryBtn} type="submit" disabled={loading || !email || !password}>
             {loading ? "Signing in…" : "Sign in"}
           </button>
         </form>

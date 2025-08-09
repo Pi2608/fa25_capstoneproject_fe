@@ -94,13 +94,13 @@ export default function RegisterPage() {
       const { firstName, lastName } = splitVietnameseName(name);
       await apiFetch("/auth/verify-email", {
         method: "POST",
-        body: JSON.stringify({
+        body: {
           firstName,
           lastName,
           email,
           phone: phone || null,
           password,
-        }),
+        },
       });
       try {
         localStorage.setItem("reg_name", JSON.stringify({ firstName, lastName }));
@@ -109,7 +109,10 @@ export default function RegisterPage() {
       setBanner({ type: "success", text: "Đã gửi mã xác minh tới email. Vui lòng kiểm tra hộp thư." });
       setStep(2);
     } catch (e: any) {
-      const text = e?.message?.includes("fetch") || e?.name === "TypeError" ? "Không thể kết nối tới máy chủ. Vui lòng thử lại." : e?.message || "Không thể gửi mã xác minh.";
+      const text =
+        e?.message?.includes("fetch") || e?.name === "TypeError"
+          ? "Không thể kết nối tới máy chủ. Vui lòng thử lại."
+          : e?.message || "Không thể gửi mã xác minh.";
       setBanner({ type: "error", text });
     } finally {
       setLoading(false);
@@ -122,26 +125,19 @@ export default function RegisterPage() {
     if (!validateStep2()) return;
     setLoading(true);
     try {
-      let firstName = "";
-      let lastName = "";
-      try {
-        const cached = localStorage.getItem("reg_name");
-        if (cached) ({ firstName, lastName } = JSON.parse(cached));
-        else ({ firstName, lastName } = splitVietnameseName(name));
-      } catch {
-        ({ firstName, lastName } = splitVietnameseName(name));
-      }
-      const res = await apiFetch<{ token: string; user: any }>("/auth/verify-email", {
+      // Bước 2 đúng endpoint: /auth/verify-otp, chỉ cần { otp }
+      await apiFetch("/auth/verify-otp", {
         method: "POST",
-        body: JSON.stringify({ email, otp, firstName, lastName }),
+        body: { otp },
       });
-      try {
-        localStorage.setItem("token", res.token);
-      } catch {}
-      setBanner({ type: "success", text: "Đăng ký thành công. Đang chuyển trang…" });
+
+      setBanner({ type: "success", text: "Xác minh email thành công. Đang chuyển trang…" });
       setTimeout(() => router.push("/login"), 900);
     } catch (e: any) {
-      const text = e?.message?.includes("fetch") || e?.name === "TypeError" ? "Không thể kết nối tới máy chủ. Vui lòng thử lại." : e?.message || "Mã xác minh không đúng hoặc đã hết hạn.";
+      const text =
+        e?.message?.includes("fetch") || e?.name === "TypeError"
+          ? "Không thể kết nối tới máy chủ. Vui lòng thử lại."
+          : e?.message || "Mã xác minh không đúng hoặc đã hết hạn.";
       setBanner({ type: "error", text });
     } finally {
       setLoading(false);
@@ -180,6 +176,7 @@ export default function RegisterPage() {
 
         {step === 1 && (
           <form onSubmit={submitStep1} className={styles.form} noValidate>
+            {/* ... form step 1 giữ nguyên như của anh ... */}
             <label className={styles.label}>
               Full name
               <input
@@ -303,6 +300,7 @@ export default function RegisterPage() {
               </button>
             </div>
             {errors.otp && <div className={styles.fieldError}>{errors.otp}</div>}
+
             <div className={styles.resendWrap}>
               <span>Không nhận được mã?</span>
               <button
@@ -324,17 +322,20 @@ export default function RegisterPage() {
                     }
                     await apiFetch("/auth/verify-email", {
                       method: "POST",
-                      body: JSON.stringify({
+                      body: {
                         firstName,
                         lastName,
                         email,
                         phone: phone || null,
                         password,
-                      }),
+                      },
                     });
                     setBanner({ type: "info", text: "Đã gửi lại mã xác minh." });
                   } catch (e: any) {
-                    const text = e?.message?.includes("fetch") || e?.name === "TypeError" ? "Không thể kết nối tới máy chủ. Vui lòng thử lại." : e?.message || "Không thể gửi lại mã.";
+                    const text =
+                      e?.message?.includes("fetch") || e?.name === "TypeError"
+                        ? "Không thể kết nối tới máy chủ. Vui lòng thử lại."
+                        : e?.message || "Không thể gửi lại mã.";
                     setBanner({ type: "error", text });
                   } finally {
                     setLoading(false);
