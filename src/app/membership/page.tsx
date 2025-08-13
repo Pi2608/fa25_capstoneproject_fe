@@ -53,7 +53,7 @@ export default function MembershipPage() {
         </div>
 
         <div className={styles.planGrid}>
-          {plans.map((plan) => (
+          {plans.map((plan, index) => (
             <div
               key={plan.name}
               className={`${styles.planWrapper} ${plan.highlight ? styles.highlightedWrapper : ''}`}
@@ -73,7 +73,6 @@ export default function MembershipPage() {
                 )}
 
                 <div className={styles.cardContent}>
-
                   <h3 className={styles.planName}>{plan.name}</h3>
                   
                   <p className={styles.planDescription}>{plan.description}</p>
@@ -114,7 +113,7 @@ export default function MembershipPage() {
         </div>
 
         <div className={styles.bottomCta}>
-          <p className={styles.ctaText}>Need help choosing? We're here to help!</p>
+          <p className={styles.ctaText}>Need help choosing? We&apos;re here to help!</p>
           <button className={styles.ctaButton}>
             Talk to Sales
           </button>
