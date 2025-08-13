@@ -53,7 +53,7 @@ export default function MembershipPage() {
         </div>
 
         <div className={styles.planGrid}>
-          {plans.map((plan, index) => (
+          {plans.map((plan) => (
             <div
               key={plan.name}
               className={`${styles.planWrapper} ${plan.highlight ? styles.highlightedWrapper : ''}`}
