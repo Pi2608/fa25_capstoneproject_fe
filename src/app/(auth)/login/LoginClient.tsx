@@ -88,7 +88,7 @@ export default function LoginClient() {
     try {
       const data = await loginApi({ email, password });
       localStorage.setItem("token", data.accessToken);
-      router.push("/");
+      router.push("/profile");
     } catch (e) {
       const message =
         e && typeof e === "object" && "message" in (e as Record<string, unknown>)

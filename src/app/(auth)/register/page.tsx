@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./register.module.css";
 import { postJson } from "@/lib/api";
+import Link from "next/link";
 
 type Banner = { type: "info" | "error" | "success"; text: string };
 
@@ -44,7 +45,7 @@ export default function RegisterPage() {
         if (!name) setName([lastName, firstName].filter(Boolean).join(" "));
         if (!email) setEmail(cachedEmail);
       }
-    } catch {}
+    } catch { }
   }, [email, name]);
 
   const passScore = useMemo(() => {
@@ -99,7 +100,7 @@ export default function RegisterPage() {
       try {
         localStorage.setItem("reg_name", JSON.stringify({ firstName, lastName }));
         localStorage.setItem("reg_email", email);
-      } catch {}
+      } catch { }
       setBanner({ type: "success", text: "Đã gửi mã xác minh tới email. Vui lòng kiểm tra hộp thư." });
       setStep(2);
     } catch (e) {
@@ -142,7 +143,10 @@ export default function RegisterPage() {
       <div className={styles.brandBar}>
         <div className={styles.logoDot} />
         <div className={styles.brandWrap}>
-          <span className={styles.brand}>CustomMapOSM</span>
+          <Link href="/" className="flex items-center gap-2">
+            
+            <span className="text-lg font-semibold tracking-tight">CustomMapOSM</span>
+          </Link>
           <span className={styles.tagline}>Create your account in seconds</span>
         </div>
       </div>
