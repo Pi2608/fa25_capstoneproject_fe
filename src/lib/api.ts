@@ -66,7 +66,7 @@ export async function apiFetch<T>(
         const msg = (data as { message?: unknown }).message;
         if (typeof msg === "string") message = msg;
       }
-    } catch {}
+    } catch { }
     const error: ApiErrorShape = { status: res.status, message };
     throw error;
   }
@@ -207,7 +207,8 @@ export function createOrRenewMembership(payload: { planId: number }) {
   return postJson<typeof payload, MembershipResponse>("/membership/create-or-renew", payload);
 }
 
-// RESET PASSWORD (quên mật khẩu)
+// ==== Forgot / Reset Password ====
+
 export type ResetPasswordVerifyReq = { email: string };
 export type ResetPasswordVerifyRes = { message?: string };
 
@@ -218,7 +219,11 @@ export function resetPasswordVerify(req: ResetPasswordVerifyReq) {
   );
 }
 
-export type ResetPasswordReq = { email: string; otp: string; newPassword: string };
+export type ResetPasswordReq = {
+  otp: string;
+  newPassword: string;
+  confirmPassword: string;
+};
 export type ResetPasswordRes = { message?: string };
 
 export function resetPassword(req: ResetPasswordReq) {
