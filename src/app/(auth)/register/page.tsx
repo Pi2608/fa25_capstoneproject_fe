@@ -330,7 +330,7 @@ export default function RegisterPage() {
         <div className={styles.divider}><span>or</span></div>
 
         <p className={styles.note}>
-          Đã có tài khoản? <a className={styles.link} href="/login">Sign in</a>
+          Đã có tài khoản? <a className={styles.link} href="/login">Login</a>
         </p>
       </section>
     </main>
