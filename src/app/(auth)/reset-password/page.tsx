@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { resetPassword } from "@/lib/api";
+import { getApiMessage } from "@/lib/errors";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -31,44 +32,28 @@ export default function ResetPasswordPage() {
     try {
       await resetPassword({ otp, newPassword, confirmPassword });
       router.push("/login");
-    } catch (e: any) {
-      setErr(e?.message || "Reset password failed.");
+    } catch (err: unknown) {
+      setErr(getApiMessage(err));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <main
-      className={[
-        "relative min-h-[calc(100vh-4rem)]",
-        "bg-gradient-to-b from-zinc-900/70 via-[#0d1412] to-zinc-900/80",
-        "text-zinc-100 overflow-hidden"
-      ].join(" ")}
-    >
-      {/* emerald glows */}
+    <main className="relative min-h-[calc(100vh-4rem)] bg-gradient-to-b from-zinc-900/70 via-[#0d1412] to-zinc-900/80 text-zinc-100 overflow-hidden">
       <div className="pointer-events-none absolute -top-32 -right-24 h-[28rem] w-[28rem] rounded-full bg-emerald-500/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-40 -left-24 h-[26rem] w-[26rem] rounded-full bg-emerald-400/10 blur-3xl" />
 
       <section className="mx-auto max-w-7xl px-4">
         <div className="flex items-center justify-center py-16">
-          <div
-            className={[
-              "w-full max-w-md rounded-2xl",
-              "border border-white/10 bg-zinc-900/50",
-              "backdrop-blur-xl shadow-2xl shadow-emerald-900/20",
-              "ring-1 ring-emerald-400/10"
-            ].join(" ")}
-          >
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-900/50 backdrop-blur-xl shadow-2xl shadow-emerald-900/20 ring-1 ring-emerald-400/10">
             <div className="p-6 sm:p-8">
               <h1 className="text-2xl font-semibold">
                 <span className="bg-gradient-to-r from-emerald-300 to-emerald-400 bg-clip-text text-transparent">
                   Reset password
                 </span>
               </h1>
-              <p className="mt-2 text-sm text-zinc-400">
-                Enter the verification code (OTP) and your new password.
-              </p>
+              <p className="mt-2 text-sm text-zinc-400">Enter the verification code (OTP) and your new password.</p>
 
               {err && (
                 <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
@@ -77,25 +62,17 @@ export default function ResetPasswordPage() {
               )}
 
               <form onSubmit={submit} className="mt-6 space-y-4">
-                {/* OTP */}
                 <label className="block text-sm">
                   <span className="mb-1 block text-zinc-300">Verification code (OTP)</span>
                   <input
                     value={otp}
                     onChange={(e) => setOtp(e.target.value)}
                     placeholder="6-digit code"
-                    className={[
-                      "w-full rounded-xl px-3 py-2.5",
-                      "bg-zinc-900/70 placeholder-zinc-500",
-                      "border border-white/10",
-                      "outline-none focus:ring-2 focus:ring-emerald-400/60 focus:border-emerald-400/60",
-                      "transition"
-                    ].join(" ")}
+                    className="w-full rounded-xl px-3 py-2.5 bg-zinc-900/70 placeholder-zinc-500 border border-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60 focus:border-emerald-400/60 transition"
                     required
                   />
                 </label>
 
-                {/* New password */}
                 <label className="block text-sm">
                   <span className="mb-1 block text-zinc-300">New password</span>
                   <div className="relative">
@@ -104,13 +81,7 @@ export default function ResetPasswordPage() {
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="••••••••"
-                      className={[
-                        "w-full rounded-xl px-3 py-2.5 pr-20",
-                        "bg-zinc-900/70 placeholder-zinc-500",
-                        "border border-white/10",
-                        "outline-none focus:ring-2 focus:ring-emerald-400/60 focus:border-emerald-400/60",
-                        "transition"
-                      ].join(" ")}
+                      className="w-full rounded-xl px-3 py-2.5 pr-20 bg-zinc-900/70 placeholder-zinc-500 border border-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60 focus:border-emerald-400/60 transition"
                       required
                     />
                     <button
@@ -124,7 +95,6 @@ export default function ResetPasswordPage() {
                   <p className="mt-1 text-xs text-zinc-500">Use 8+ characters with a mix of letters & numbers.</p>
                 </label>
 
-                {/* Confirm password */}
                 <label className="block text-sm">
                   <span className="mb-1 block text-zinc-300">Confirm new password</span>
                   <div className="relative">
@@ -133,13 +103,7 @@ export default function ResetPasswordPage() {
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
-                      className={[
-                        "w-full rounded-xl px-3 py-2.5 pr-20",
-                        "bg-zinc-900/70 placeholder-zinc-500",
-                        "border border-white/10",
-                        "outline-none focus:ring-2 focus:ring-emerald-400/60 focus:border-emerald-400/60",
-                        "transition"
-                      ].join(" ")}
+                      className="w-full rounded-xl px-3 py-2.5 pr-20 bg-zinc-900/70 placeholder-zinc-500 border border-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60 focus:border-emerald-400/60 transition"
                       required
                     />
                     <button
@@ -155,12 +119,7 @@ export default function ResetPasswordPage() {
                 <button
                   type="submit"
                   disabled={loading || !otp || !newPassword || !confirmPassword}
-                  className={[
-                    "group w-full rounded-xl py-2.5 font-medium text-zinc-950",
-                    "bg-emerald-500 hover:bg-emerald-400",
-                    "shadow-lg shadow-emerald-900/20",
-                    "disabled:opacity-60 disabled:cursor-not-allowed transition"
-                  ].join(" ")}
+                  className="group w-full rounded-xl py-2.5 font-medium text-zinc-950 bg-emerald-500 hover:bg-emerald-400 shadow-lg shadow-emerald-900/20 disabled:opacity-60 disabled:cursor-not-allowed transition"
                 >
                   {loading ? "Updating…" : "Set new password"}
                 </button>
@@ -169,8 +128,8 @@ export default function ResetPasswordPage() {
               <p className="mt-5 text-center text-sm text-zinc-400">
                 <a href="/forgot-password" className="text-emerald-400 hover:text-emerald-300 hover:underline">
                   Resend code
-                </a>
-                {" · "}
+                </a>{" "}
+                ·{" "}
                 <a href="/login" className="text-emerald-400 hover:text-emerald-300 hover:underline">
                   Back to sign in
                 </a>

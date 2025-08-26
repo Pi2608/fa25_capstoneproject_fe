@@ -1,81 +1,104 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { getPlans, type Plan } from "@/lib/api";
 
+function safeMessage(err: unknown) {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === "object" && "message" in err) {
+    const m = (err as { message?: unknown }).message;
+    if (typeof m === "string") return m;
+  }
+  return "Request failed";
+}
+
+const fmtCurrency = new Intl.NumberFormat(undefined, {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+});
+
 export default function PricingPage() {
-    const [plans, setPlans] = useState<Plan[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
-    const router = useRouter();
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-    useEffect(() => {
-        async function fetchPlans() {
-            try {
-                const data = await getPlans();
-                setPlans(data);
-            } catch (err: any) {
-                setError(err.message || "Failed to fetch plans.");
-            } finally {
-                setLoading(false);
-            }
-        }
-        fetchPlans();
-    }, []);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const data = await getPlans();
+        if (alive) setPlans(data);
+      } catch (err: unknown) {
+        if (alive) setError(safeMessage(err));
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
-    const handleGetStarted = () => {
-        const token = localStorage.getItem("token");
-        if (!token) {
-            router.push("/login");
-        } else {
-            alert("Already logged in! Proceeding with plan...");
-        }
-    };
+  const popularIds = useMemo(() => {
+    const s = new Set<number>();
+    plans.forEach(p => { if (/pro/i.test(p.planName)) s.add(p.planId); });
+    return s;
+  }, [plans]);
 
-    return (
-        <main className="min-h-screen bg-gradient-to-b from-[#0D1912] via-[#0D1117] to-[#000000] text-white py-20">
-            <div className="max-w-7xl mx-auto text-center">
-                <h1 className="text-4xl font-bold mb-4">Pricing Plans</h1>
-                <p className="text-zinc-400 mb-12">
-                    Start free. Upgrade when you need more collaboration, storage, and advanced export options.
-                </p>
+  return (
+    <main className="relative mx-auto max-w-screen-2xl px-4 py-12 text-zinc-100">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(900px_400px_at_20%_0%,rgba(16,185,129,0.18),transparent),radial-gradient(900px_400px_at_80%_0%,rgba(16,185,129,0.12),transparent)]" />
 
-                {loading ? (
-                    <p className="text-zinc-400">Loading plans...</p>
-                ) : error ? (
-                    <p className="text-red-500">{error}</p>
-                ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
-                        {plans.map((plan) => (
-                            <div
-                                key={plan.planId}
-                                className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 flex flex-col justify-between shadow-xl hover:scale-105 transition-transform duration-300"
-                            >
-                                <div>
-                                    <h3 className="text-2xl font-semibold mb-2">{plan.planName}</h3>
-                                    <p className="text-sm text-zinc-400 mb-6">{plan.description}</p>
-                                </div>
+      <h1 className="text-3xl font-semibold mb-2">Pricing</h1>
+      <p className="mb-8 text-zinc-400">Simple plans that scale with you. No hidden fees.</p>
 
-                                <div>
-                                    <p className="text-3xl font-bold">
-                                        {plan.priceMonthly === 0 ? "Free" : `$${plan.priceMonthly}`}
-                                        <span className="text-sm font-normal text-zinc-400"> /month</span>
-                                    </p>
+      {error && (
+        <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
 
-                                    <button
-                                        className="mt-4 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-md font-medium transition-colors shadow"
-                                        onClick={() => handleGetStarted(plan.planName)}
-                                    >
-                                        Get started
-                                    </button>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {plans.map((p) => {
+          const isPopular = popularIds.has(p.planId);
+          const isFree = p.priceMonthly === 0;
 
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
+          return (
+            <div
+              key={p.planId}
+              className={[
+                "relative rounded-2xl border p-6",
+                "bg-zinc-900/50 backdrop-blur-sm border-white/10",
+                "shadow-lg transition hover:-translate-y-0.5 hover:ring-1 hover:ring-emerald-400/30",
+                isPopular ? "ring-1 ring-emerald-400/30" : ""
+              ].join(" ")}
+            >
+              {isPopular && (
+                <span className="absolute -top-2 right-4 rounded-full bg-emerald-500/90 px-3 py-1 text-xs font-semibold text-zinc-950 shadow">
+                  Popular
+                </span>
+              )}
+
+              <div className="flex h-full flex-col">
+                <div>
+                  <h3 className="text-lg font-semibold">{p.planName}</h3>
+                  <p className="mt-1 text-sm text-zinc-400">{p.description}</p>
+                </div>
+
+                <div className="mt-5">
+                  <span className="text-3xl font-bold text-emerald-400">
+                    {isFree ? "$0.00" : fmtCurrency.format(p.priceMonthly)}
+                  </span>
+                  <span className="ml-1 text-sm text-zinc-400">/month</span>
+                </div>
+
+                <button
+                  className="mt-auto w-full rounded-xl py-2.5 font-medium text-zinc-950 bg-emerald-500/90 hover:bg-emerald-400 shadow-lg shadow-emerald-900/20 transition"
+                  onClick={() => alert(`Choose plan: ${p.planName}`)}
+                >
+                  Choose plan
+                </button>
+              </div>
             </div>
-        </main>
-    );
+          );
+        })}
+      </div>
+    </main>
+  );
 }
