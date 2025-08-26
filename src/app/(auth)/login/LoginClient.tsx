@@ -1,3 +1,4 @@
+// src/app/(auth)/login/LoginClient.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -13,6 +14,7 @@ import {
   type AuthError,
   type UserCredential,
 } from "firebase/auth";
+import { authStore } from "@/contexts/auth-store";
 
 type BannerType = "info" | "error";
 type Provider = "google" | "facebook";
@@ -38,13 +40,19 @@ interface SocialLoginResponse {
   user: { id: string; email: string };
 }
 
-async function finishSocial(cred: UserCredential, provider: Provider, router: ReturnType<typeof useRouter>) {
+async function finishSocial(
+  cred: UserCredential,
+  provider: Provider,
+  router: ReturnType<typeof useRouter>
+) {
   const idToken = await getIdToken(cred.user, true);
   const data = await postJson<{ provider: Provider; idToken: string }, SocialLoginResponse>(
     "/auth/login",
     { provider, idToken }
   );
-  localStorage.setItem("token", data.token);
+  // LƯU TOKEN + thông báo toàn app
+  authStore.setToken(data.token);
+  router.refresh();
   router.push("/");
 }
 
@@ -87,7 +95,12 @@ export default function LoginClient() {
     setLoading(true);
     try {
       const data = await loginApi({ email, password });
-      localStorage.setItem("token", data.accessToken);
+      const token = (data as any)?.accessToken ?? (data as any)?.token;
+      if (!token) throw new Error("Login response missing token");
+
+      authStore.setToken(token);
+
+      router.refresh();
       router.push("/profile");
     } catch (e) {
       const message =
@@ -185,6 +198,11 @@ export default function LoginClient() {
             />
             {errors.password && <div className={styles.fieldError}>{errors.password}</div>}
           </label>
+          <p className="mt-2 text-right">
+            <a href="/forgot-password" className="text-sm text-emerald-400 hover:underline">
+              Forgot password?
+            </a>
+          </p>
 
           <button className={styles.primaryBtn} type="submit" disabled={loading || !email || !password}>
             {loading ? "Signing in…" : "Sign in"}
