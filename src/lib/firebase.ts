@@ -1,4 +1,3 @@
-// src/lib/firebase.ts
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider, FacebookAuthProvider, type Auth } from "firebase/auth";
 
@@ -12,7 +11,6 @@ type FirebaseConfig = {
 };
 
 function buildConfig(): FirebaseConfig {
-  // KHÔNG throw ở đây — chỉ đọc giá trị
   return {
     apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
     authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -42,7 +40,6 @@ let app: FirebaseApp | null = null;
 
 function ensureClientApp(): FirebaseApp {
   if (typeof window === "undefined") {
-    // Không cho init trên server để tránh lỗi khi build/prerender
     throw new Error("Firebase Auth is client-only");
   }
   if (!app) {

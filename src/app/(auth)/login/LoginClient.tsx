@@ -3,8 +3,17 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./login.module.css";
-import { login as loginApi, postJson } from "@/lib/api";
-import { getFirebaseAuth, googleProvider, facebookProvider } from "@/lib/firebase";
+import {
+  login as loginApi,
+  postJson,
+  type LoginResponse,
+} from "@/lib/api";
+import { authStore } from "@/contexts/auth-store";
+import {
+  getFirebaseAuth,
+  googleProvider,
+  facebookProvider,
+} from "@/lib/firebase";
 import {
   getIdToken,
   getRedirectResult,
@@ -16,6 +25,15 @@ import {
 
 type BannerType = "info" | "error";
 type Provider = "google" | "facebook";
+
+function safeMessage(err: unknown, fallback = "Request failed") {
+  if (err instanceof Error && typeof err.message === "string") return err.message;
+  if (err && typeof err === "object" && "message" in err) {
+    const m = (err as { message?: unknown }).message;
+    if (typeof m === "string") return m;
+  }
+  return fallback;
+}
 
 function msg(code?: string): { type: BannerType; text: string; fallback?: boolean } {
   switch (code) {
@@ -38,24 +56,32 @@ interface SocialLoginResponse {
   user: { id: string; email: string };
 }
 
-async function finishSocial(cred: UserCredential, provider: Provider, router: ReturnType<typeof useRouter>) {
+async function finishSocial(
+  cred: UserCredential,
+  provider: Provider,
+  router: ReturnType<typeof useRouter>
+) {
   const idToken = await getIdToken(cred.user, true);
   const data = await postJson<{ provider: Provider; idToken: string }, SocialLoginResponse>(
     "/auth/login",
     { provider, idToken }
   );
-  localStorage.setItem("token", data.token);
+  authStore.setToken(data.token);
+  router.refresh();
   router.push("/");
 }
 
 export default function LoginClient() {
   const router = useRouter();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState<{ type: BannerType; text: string } | null>(null);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
+  // Handle Firebase redirect result (popup fallback)
   useEffect(() => {
     const a = getFirebaseAuth();
     getRedirectResult(a)
@@ -86,15 +112,15 @@ export default function LoginClient() {
     }
     setLoading(true);
     try {
-      const data = await loginApi({ email, password });
-      localStorage.setItem("token", data.accessToken);
-      router.push("/");
-    } catch (e) {
-      const message =
-        e && typeof e === "object" && "message" in (e as Record<string, unknown>)
-          ? String((e as { message?: unknown }).message)
-          : "Không thể đăng nhập. Vui lòng thử lại.";
-      setBanner({ type: "error", text: message });
+      const data: LoginResponse = await loginApi({ email, password });
+      const token = data.accessToken ?? data.token;
+      if (!token) throw new Error("Login response missing token");
+
+      authStore.setToken(token);
+      router.refresh();
+      router.push("/profile");
+    } catch (err: unknown) {
+      setBanner({ type: "error", text: safeMessage(err, "Không thể đăng nhập. Vui lòng thử lại.") });
     } finally {
       setLoading(false);
     }
@@ -107,11 +133,9 @@ export default function LoginClient() {
     try {
       const cred = await signInWithPopup(getFirebaseAuth(), prov);
       await finishSocial(cred, provider, router);
-    } catch (e) {
+    } catch (e: unknown) {
       const code =
-        e && typeof e === "object" && "code" in (e as Record<string, unknown>)
-          ? String((e as { code?: unknown }).code)
-          : undefined;
+        e && typeof e === "object" && "code" in e ? String((e as { code?: unknown }).code) : undefined;
       const m = msg(code);
       if (m.fallback) {
         setBanner({ type: "info", text: m.text });
@@ -211,6 +235,11 @@ export default function LoginClient() {
             Continue with Facebook
           </button>
         </div>
+
+        <p className={styles.note}>
+          Forgot your password?{" "}
+          <a href="/forgot-password" className={styles.link}>Reset it</a>
+        </p>
 
         <p className={styles.note}>
           New here? <a href="/register" className={styles.link}>Create an account</a>
