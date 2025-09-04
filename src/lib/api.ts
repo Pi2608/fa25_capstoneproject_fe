@@ -103,13 +103,17 @@ export async function apiFetch<T>(
     if (ct.includes("application/json") && rawText) {
       const body = safeJsonParse<unknown>(rawText);
       if (isRecord(body)) {
-        if (hasString(body, "detail") || hasString(body, "title")) {
-          const d = hasString(body, "detail") ? String(body.detail).trim() : "";
-          const t = hasString(body, "title") ? String(body.title).trim() : "";
-          return d || t || defaultByStatus(res.status);
-        }
-        if ("errors" in body && typeof body.errors === "object" && body.errors !== null) {
-          const errorsObj = body.errors as Record<string, unknown>;
+        const bodyObj = body as Record<string, unknown>;
+
+        // Ưu tiên detail/title nếu có
+        const d = typeof bodyObj.detail === "string" ? bodyObj.detail.trim() : "";
+        const t = typeof bodyObj.title === "string" ? bodyObj.title.trim() : "";
+        if (d || t) return d || t || defaultByStatus(res.status);
+
+        // ModelState errors { errors: { field: [msg] } }
+        const maybeErrors = bodyObj.errors;
+        if (typeof maybeErrors === "object" && maybeErrors !== null) {
+          const errorsObj = maybeErrors as Record<string, unknown>;
           const keys = Object.keys(errorsObj);
           if (keys.length) {
             const first = errorsObj[keys[0]];
@@ -119,9 +123,14 @@ export async function apiFetch<T>(
           }
           return defaultByStatus(400);
         }
-        if (hasString(body, "message") && String(body.message).trim()) {
-          return String(body.message).trim();
-        }
+
+        // message / error / detail dạng string
+        const msg =
+          (typeof bodyObj.message === "string" && bodyObj.message.trim()) ? bodyObj.message.trim() :
+            (typeof bodyObj.error === "string" && bodyObj.error.trim()) ? bodyObj.error.trim() :
+              (typeof bodyObj.detail === "string" && bodyObj.detail.trim()) ? bodyObj.detail.trim() :
+                "";
+        if (msg) return msg;
       }
     }
 

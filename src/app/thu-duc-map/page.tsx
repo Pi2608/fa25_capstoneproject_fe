@@ -1,33 +1,33 @@
 // src/app/thu-duc-map/page.tsx
-
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
 import type {
   Map,
-  GeoJSON,
   Layer,
   LatLngExpression,
   FeatureGroup,
-  FeatureGroupOptions
+  PopupOptions,
 } from "leaflet";
 import type {
   Feature,
   FeatureCollection,
   GeoJsonObject,
-  Geometry
+  Feature as GJFeature,
 } from "geojson";
 
 const BOUNDARY_SRC = "/data/ThuDucCity_boundary.json";
 const WARDS_SRC = "/data/ThuDucCity_ward.json";
 const STORE_KEY = "thu-duc-sketch";
 
-type BoundaryProps = Record<string, unknown>;
-type WardProps = { name?: string; NAME?: string; ten?: string } & Record<string, unknown>;
-type SketchProps = Record<string, never>;
+type WardProps = { name?: string; NAME?: string; ten?: string } & Record<
+  string,
+  unknown
+>;
+type LGeoJSON = import("leaflet").GeoJSON;
 
 type MapWithPM = Map & {
   pm: {
@@ -48,24 +48,36 @@ type MapWithPM = Map & {
 };
 
 type LType = typeof import("leaflet");
-type PMCreateEvent = {
-  layer: Layer;
+type PMCreateEvent = { layer: Layer };
+
+type PopupLayer = Layer & {
+  bindPopup: (content: string | HTMLElement, options?: PopupOptions) => Layer;
+  setStyle?: (s: object) => void;
+  on: (event: string, handler: () => void) => PopupLayer;
 };
 
+/** --------- NEW: bọc Suspense quanh component con --------- */
 export default function ThuDucMapPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-white">Đang tải bản đồ…</div>}>
+      <MapClient />
+    </Suspense>
+  );
+}
+
+function MapClient() {
   const params = useSearchParams();
   const mapEl = useRef<HTMLDivElement | null>(null);
   const LRef = useRef<LType | null>(null);
   const mapRef = useRef<Map | null>(null);
-  const boundaryRef = useRef<GeoJSON<Geometry, BoundaryProps> | null>(null);
-  const wardsRef = useRef<GeoJSON<Geometry, WardProps> | null>(null);
+
+  const boundaryRef = useRef<LGeoJSON | null>(null);
+  const wardsRef = useRef<LGeoJSON | null>(null);
   const sketchRef = useRef<FeatureGroup | null>(null);
+
   const [ready, setReady] = useState(false);
 
-  const loadGeoJSON = useCallback(async function <T extends BoundaryProps | WardProps>(
-    url: string,
-    targetLayer: GeoJSON<Geometry, T>
-  ) {
+  const loadGeoJSON = useCallback(async (url: string, targetLayer: LGeoJSON) => {
     const res = await fetch(url, { cache: "force-cache" });
     if (!res.ok) throw new Error(`Không tải được ${url}`);
     const data: GeoJsonObject = await res.json();
@@ -76,7 +88,8 @@ export default function ThuDucMapPage() {
 
   const handleLoadBoundary = useCallback(async () => {
     try {
-      const bounds = await loadGeoJSON(BOUNDARY_SRC, boundaryRef.current!);
+      if (!boundaryRef.current) return;
+      const bounds = await loadGeoJSON(BOUNDARY_SRC, boundaryRef.current);
       mapRef.current!.fitBounds(bounds.pad(0.05));
     } catch (e) {
       alert((e as Error).message || "Không tải được ranh giới");
@@ -85,7 +98,8 @@ export default function ThuDucMapPage() {
 
   const handleLoadWards = useCallback(async () => {
     try {
-      const bounds = await loadGeoJSON(WARDS_SRC, wardsRef.current!);
+      if (!wardsRef.current) return;
+      const bounds = await loadGeoJSON(WARDS_SRC, wardsRef.current);
       mapRef.current!.fitBounds(bounds.pad(0.05));
     } catch (e) {
       alert((e as Error).message || "Không tải được phường/xã");
@@ -116,7 +130,7 @@ export default function ThuDucMapPage() {
           fillColor: "#60a5fa",
           fillOpacity: 0.08,
         },
-      }) as GeoJSON<Geometry, BoundaryProps>;
+      }) as unknown as LGeoJSON;
       boundary.addTo(map);
       boundaryRef.current = boundary;
 
@@ -127,28 +141,30 @@ export default function ThuDucMapPage() {
           fillColor: "#22c55e",
           fillOpacity: 0.12,
         }),
-        onEachFeature: (feature, layer) => {
-          const props = feature.properties ?? {};
-          const name = (props as WardProps).name || props.NAME || props.ten || "Khu vực";
-          layer.bindPopup(`<b>${name}</b>`);
-          layer.on("mouseover", () =>
-            (layer as Layer & { setStyle?: (s: object) => void }).setStyle?.({
+        onEachFeature: (feature: GJFeature | null, layer: Layer) => {
+          const props = (feature?.properties ?? {}) as WardProps;
+          const name = props.name || props.NAME || props.ten || "Khu vực";
+
+          const pl = layer as PopupLayer;
+          pl.bindPopup(`<b>${name}</b>`);
+          pl.on("mouseover", () =>
+            pl.setStyle?.({
               weight: 2,
               fillOpacity: 0.22,
             })
           );
-          layer.on("mouseout", () =>
-            (layer as Layer & { setStyle?: (s: object) => void }).setStyle?.({
+          pl.on("mouseout", () =>
+            pl.setStyle?.({
               weight: 1,
               fillOpacity: 0.12,
             })
           );
         },
-      }) as GeoJSON<Geometry, WardProps>;
+      }) as unknown as LGeoJSON;
       wards.addTo(map);
       wardsRef.current = wards;
 
-      const sketch = L.featureGroup(undefined as FeatureGroupOptions | undefined).addTo(map);
+      const sketch = L.featureGroup().addTo(map);
       sketchRef.current = sketch;
 
       (map as MapWithPM).pm.addControls({
@@ -172,7 +188,9 @@ export default function ThuDucMapPage() {
       try {
         const bounds = await loadGeoJSON(BOUNDARY_SRC, boundary);
         map.fitBounds(bounds.pad(0.05));
-      } catch {}
+      } catch {
+        /* ignore */
+      }
 
       setReady(true);
     })();
@@ -185,19 +203,25 @@ export default function ThuDucMapPage() {
 
   useEffect(() => {
     if (!ready) return;
-    const layers = (params.get("layers") ?? "").split(",").map((s) => s.trim());
+    const layersParam = params?.get("layers") ?? "";
+    const layers = layersParam
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+
     if (layers.includes("boundary")) handleLoadBoundary();
     if (layers.includes("wards")) handleLoadWards();
   }, [ready, params, handleLoadBoundary, handleLoadWards]);
 
   function fitAll() {
     const layers = [boundaryRef.current, wardsRef.current, sketchRef.current].filter(
-      (l): l is FeatureGroup => !!l && l.getLayers().length > 0
+      (l): l is FeatureGroup =>
+        !!l && (l as FeatureGroup).getLayers?.().length > 0
     );
     if (!layers.length) return;
-    let bounds = layers[0].getBounds();
+    let bounds = (layers[0] as FeatureGroup).getBounds();
     for (let i = 1; i < layers.length; i++) {
-      bounds = bounds.extend(layers[i].getBounds());
+      bounds = bounds.extend((layers[i] as FeatureGroup).getBounds());
     }
     mapRef.current?.fitBounds(bounds.pad(0.05));
   }
@@ -207,7 +231,8 @@ export default function ThuDucMapPage() {
     sketchRef.current?.eachLayer((layer) => {
       const gj = (layer as Layer & { toGeoJSON: () => GeoJsonObject }).toGeoJSON();
       if (gj.type === "Feature") features.push(gj as Feature);
-      else if (gj.type === "FeatureCollection") features.push(...(gj as FeatureCollection).features);
+      else if (gj.type === "FeatureCollection")
+        features.push(...(gj as FeatureCollection).features);
     });
     return { type: "FeatureCollection", features };
   }
@@ -219,7 +244,7 @@ export default function ThuDucMapPage() {
       try {
         const L = LRef.current!;
         const data: GeoJsonObject = JSON.parse(String(reader.result));
-        const layer = L.geoJSON(data) as GeoJSON<Geometry, SketchProps>;
+        const layer = L.geoJSON(data) as unknown as LGeoJSON;
         layer.eachLayer((l: Layer) => sketchRef.current?.addLayer(l));
         fitAll();
       } catch {
@@ -231,7 +256,9 @@ export default function ThuDucMapPage() {
 
   function handleExport() {
     const fc = serializeSketch();
-    const blob = new Blob([JSON.stringify(fc, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(fc, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -258,9 +285,10 @@ export default function ThuDucMapPage() {
       view: { center: LatLngExpression; zoom: number };
     };
     sketchRef.current?.clearLayers();
-    const layer = L.geoJSON(fc) as GeoJSON<Geometry, SketchProps>;
+    const layer = L.geoJSON(fc) as unknown as LGeoJSON;
     layer.eachLayer((l: Layer) => sketchRef.current?.addLayer(l));
-    if (view?.center && view?.zoom) mapRef.current?.setView(view.center, view.zoom);
+    if (view?.center && view?.zoom)
+      mapRef.current?.setView(view.center, view.zoom);
     else fitAll();
   }
 
@@ -279,20 +307,45 @@ export default function ThuDucMapPage() {
       <div className="fixed inset-x-0 top-16 z-[3000] flex justify-center px-4 pointer-events-none">
         <div className="pointer-events-auto max-w-5xl w-full rounded-2xl bg-zinc-950/70 backdrop-blur-md ring-1 ring-white/10 shadow-2xl">
           <div className="flex items-center gap-2 overflow-x-auto no-scrollbar px-3 py-2">
-            <button onClick={handleLoadBoundary} disabled={!ready} className={btnPrimary}>Ranh giới</button>
-            <button onClick={handleLoadWards} disabled={!ready} className={btnPrimary}>Phường/Xã</button>
+            <button onClick={handleLoadBoundary} disabled={!ready} className={btnPrimary}>
+              Ranh giới
+            </button>
+            <button onClick={handleLoadWards} disabled={!ready} className={btnPrimary}>
+              Phường/Xã
+            </button>
             <span className="mx-1 text-white/20">|</span>
-            <button onClick={fitAll} disabled={!ready} className={btn}>Fit</button>
+            <button onClick={fitAll} disabled={!ready} className={btn}>
+              Fit
+            </button>
             <label className={`${btn} cursor-pointer`}>
               Nhập GeoJSON
-              <input type="file" accept=".geojson,.json" className="hidden" onChange={(e) => handleImport(e.target.files?.[0] ?? null)} />
+              <input
+                type="file"
+                accept=".geojson,.json"
+                className="hidden"
+                onChange={(e) => handleImport(e.target.files?.[0] ?? null)}
+              />
             </label>
-            <button onClick={() => sketchRef.current?.clearLayers()} disabled={!ready} className={btn}>Xoá vẽ</button>
-            <button onClick={handleExport} disabled={!ready} className={btnPrimary}>Xuất GeoJSON</button>
+            <button
+              onClick={() => sketchRef.current?.clearLayers()}
+              disabled={!ready}
+              className={btn}
+            >
+              Xoá vẽ
+            </button>
+            <button onClick={handleExport} disabled={!ready} className={btnPrimary}>
+              Xuất GeoJSON
+            </button>
             <span className="mx-1 text-white/20">|</span>
-            <button onClick={handleSave} disabled={!ready} className={btn}>Lưu</button>
-            <button onClick={handleLoad} disabled={!ready} className={btn}>Tải</button>
-            <button onClick={handleResetSave} disabled={!ready} className={btn}>Xoá lưu</button>
+            <button onClick={handleSave} disabled={!ready} className={btn}>
+              Lưu
+            </button>
+            <button onClick={handleLoad} disabled={!ready} className={btn}>
+              Tải
+            </button>
+            <button onClick={handleResetSave} disabled={!ready} className={btn}>
+              Xoá lưu
+            </button>
           </div>
         </div>
       </div>
@@ -300,9 +353,16 @@ export default function ThuDucMapPage() {
       <div ref={mapEl} className="w-full" style={{ height: "100vh" }} />
 
       <style jsx global>{`
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .leaflet-top.leaflet-left { top: 112px; }
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+        .no-scrollbar {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+        .leaflet-top.leaflet-left {
+          top: 112px;
+        }
       `}</style>
     </main>
   );
