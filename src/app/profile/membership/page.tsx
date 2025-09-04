@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
-  getPlans,
-  createOrRenewMembership,
-  type Plan,
-  type MembershipResponse,
-} from "@/lib/api";
+import { getPlans, type Plan, getJson } from "@/lib/api";
+
+type MyMembership = {
+  planId: number;
+  status: "active" | "expired" | "pending" | string;
+};
 
 function safeMessage(err: unknown) {
   if (err instanceof Error) return err.message;
@@ -14,27 +15,44 @@ function safeMessage(err: unknown) {
     const m = (err as { message?: unknown }).message;
     if (typeof m === "string") return m;
   }
-  return "Request failed";
+  return "Yêu cầu thất bại";
 }
 
 export default function MembershipPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [selected, setSelected] = useState<Plan | null>(null);
-  const [loadingPlans, setLoadingPlans] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const data = await getPlans();
-        if (alive) setPlans(data);
-      } catch (err: unknown) {
-        if (alive) setError(safeMessage(err));
+        const ps = await getPlans();
+        if (!alive) return;
+        setPlans(ps);
+
+        try {
+          const me = await getJson<MyMembership>("/membership/me");
+          if (!alive) return;
+          const found = ps.find((p) => p.planId === me.planId);
+          if (found) {
+            setCurrentPlan(found);
+            setStatus(me.status ?? "active");
+            return;
+          }
+        } catch {
+        }
+
+        const free = ps.find((p) => p.priceMonthly === 0) || null;
+        setCurrentPlan(free);
+        setStatus(free ? "active" : null);
+      } catch (e) {
+        if (!alive) return;
+        setErr(safeMessage(e));
       } finally {
-        if (alive) setLoadingPlans(false);
+        if (alive) setLoading(false);
       }
     })();
     return () => {
@@ -42,83 +60,99 @@ export default function MembershipPage() {
     };
   }, []);
 
-  const handleChoose = (plan: Plan) => {
-    setSelected(plan);
-    setMsg(null);
-    setError(null);
-  };
-
-  const pay = async () => {
-    if (!selected) return;
-    setSubmitting(true);
-    setMsg(null);
-    setError(null);
-    try {
-      const res: MembershipResponse = await createOrRenewMembership({ planId: selected.planId });
-      setMsg(`Membership status: ${res.status}`);
-    } catch (err: unknown) {
-      setError(safeMessage(err));
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   return (
     <main className="text-zinc-100">
-      <h1 className="text-2xl font-semibold mb-4">Membership</h1>
-
-      {loadingPlans && <p className="text-sm text-zinc-400">Loading plans…</p>}
-      {error && (
-        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-          {error}
-        </div>
-      )}
-      {msg && (
-        <div className="mb-4 rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
-          {msg}
-        </div>
-      )}
-
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {plans.map((p) => {
-          const isSelected = selected?.planId === p.planId;
-          return (
-            <div
-              key={p.planId}
-              className={`rounded-2xl border p-6 bg-zinc-900/50 shadow-lg ${
-                isSelected ? "border-emerald-400/60 ring-1 ring-emerald-400/40" : "border-white/10"
-              }`}
-            >
-              <div className="text-lg font-medium">{p.planName}</div>
-              <p className="mt-1 text-sm text-zinc-400">{p.description}</p>
-              <div className="mt-4 text-2xl font-bold text-emerald-400">
-                ${p.priceMonthly.toFixed(2)} <span className="text-sm text-zinc-400">/month</span>
-              </div>
-
-              <div className="mt-5 flex gap-3">
-                <button
-                  onClick={() => handleChoose(p)}
-                  className={`flex-1 rounded-xl border px-4 py-2 text-sm font-medium transition ${
-                    isSelected
-                      ? "border-emerald-400/70 text-emerald-300"
-                      : "border-white/10 text-zinc-300 hover:text-white"
-                  }`}
-                >
-                  {isSelected ? "Selected" : "Select"}
-                </button>
-
-                <button
-                  onClick={pay}
-                  disabled={!isSelected || submitting}
-                  className="flex-1 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 text-sm font-semibold text-zinc-950"
-                >
-                  {submitting ? "Processing…" : "Subscribe"}
-                </button>
-              </div>
-            </div>
-          );
-        })}
+      <div className="mb-6">
+        <h1 className="text-2xl font-semibold">Thành viên</h1>
+        <p className="text-zinc-400 mt-1">
+          Quản lý trạng thái gói và quyền lợi của bạn. Muốn đổi gói? Nhấn <strong>Chọn gói</strong>.
+        </p>
       </div>
+
+      {err && (
+        <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          {err}
+        </div>
+      )}
+
+      <div className="grid gap-6 sm:grid-cols-2">
+        <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-5 backdrop-blur-sm">
+          <div className="flex items-center justify-between">
+            <div className="text-lg font-semibold">Gói hiện tại</div>
+            {!loading && currentPlan && (
+              <span className="rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 text-xs font-semibold">
+                {status === "active" ? "Đang dùng" : status}
+              </span>
+            )}
+          </div>
+
+          <div className="mt-3">
+            {loading ? (
+              <div className="text-sm text-zinc-400">Đang tải…</div>
+            ) : currentPlan ? (
+              <>
+                <div className="text-xl font-semibold">{currentPlan.planName}</div>
+                <p className="text-sm text-zinc-400 mt-1">{currentPlan.description || "—"}</p>
+                <div className="mt-4 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-emerald-400">
+                    {currentPlan.priceMonthly === 0
+                      ? "$0.00"
+                      : `$${currentPlan.priceMonthly.toFixed(2)}`}
+                  </span>
+                  <span className="text-sm md:text-base text-zinc-400">/tháng</span>
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-zinc-400">Không có gói nào.</div>
+            )}
+          </div>
+
+          {/* <div className="mt-4">
+            <Link
+              href="/profile/select-plan"
+              className="inline-flex items-center rounded-xl bg-emerald-500/90 hover:bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition"
+            >
+              Chọn gói
+            </Link>
+          </div> */}
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-5 backdrop-blur-sm">
+          <div className="text-lg font-semibold">Quyền lợi nổi bật</div>
+          <ul className="mt-2 space-y-2 text-sm text-zinc-300">
+            <li>• Tải dữ liệu raster, vector, bảng tính…</li>
+            <li>• Lọc & phân tích không gian</li>
+            <li>• Dashboard, biểu đồ & xuất bản đồ</li>
+            <li>• Chia sẻ & cộng tác theo thời gian thực</li>
+          </ul>
+          <div className="mt-4">
+            <Link
+              href="/profile/select-plan"
+              className="inline-flex items-center rounded-xl border border-emerald-400/40 px-4 py-2 text-sm font-medium text-emerald-300 hover:text-emerald-200 transition"
+            >
+              Xem các gói
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* <div className="mt-8 rounded-2xl border border-white/10 bg-zinc-900/50 p-5 backdrop-blur-sm">
+        <div className="text-lg font-semibold">Thao tác nhanh</div>
+        <div className="mt-3 flex flex-wrap gap-3">
+          <Link
+            href="/profile/select-plan"
+            className="rounded-xl bg-emerald-500/90 hover:bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition"
+          >
+            Chọn gói
+          </Link>
+          <Link
+            href="/profile/help"
+            className="rounded-xl border border-white/10 px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white transition"
+          >
+            Trợ giúp
+          </Link>
+        </div>
+      </div> */}
     </main>
   );
 }
