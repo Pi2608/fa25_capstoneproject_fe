@@ -4,20 +4,31 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
 import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
+import type {
+  Map,
+  GeoJSON as GeoJSONLayer,
+  Layer,
+  LatLngExpression,
+  LeafletMouseEvent,
+  FeatureGroup,
+  FeatureGroupOptions,
+} from "leaflet";
+import type { Feature, FeatureCollection, GeoJsonObject } from "geojson";
 
 const BOUNDARY_SRC = "/data/ThuDucCity_boundary.json";
 const WARDS_SRC = "/data/ThuDucCity_ward.json";
 const STORE_KEY = "thu-duc-sketch";
+
 type LType = typeof import("leaflet");
 
 export default function ThuDucMapPage() {
   const params = useSearchParams();
   const mapEl = useRef<HTMLDivElement | null>(null);
   const LRef = useRef<LType | null>(null);
-  const mapRef = useRef<import("leaflet").Map | null>(null);
-  const boundaryRef = useRef<import("leaflet").GeoJSON | null>(null);
-  const wardsRef = useRef<import("leaflet").GeoJSON | null>(null);
-  const sketchRef = useRef<import("leaflet").FeatureGroup | null>(null);
+  const mapRef = useRef<Map | null>(null);
+  const boundaryRef = useRef<GeoJSONLayer | null>(null);
+  const wardsRef = useRef<GeoJSONLayer | null>(null);
+  const sketchRef = useRef<FeatureGroup | null>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -33,27 +44,27 @@ export default function ThuDucMapPage() {
 
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 20,
-        attribution: "&copy; OpenStreetMap",
+        attribution: "&copy; OpenStreetMap contributors",
       }).addTo(map);
 
-      const boundary = L.geoJSON(null, {
+      const boundary = L.geoJSON(undefined, {
         style: { color: "#3b82f6", weight: 2, fillColor: "#60a5fa", fillOpacity: 0.08 },
       }).addTo(map);
       boundaryRef.current = boundary;
 
-      const wards = L.geoJSON(null, {
+      const wards = L.geoJSON(undefined, {
         style: () => ({ color: "#22c55e", weight: 1, fillColor: "#22c55e", fillOpacity: 0.12 }),
-        onEachFeature: (f: any, layer: L.Layer) => {
-          const p = f?.properties ?? {};
-          const name = p.name || p.NAME || p.ten || "Khu vực";
+        onEachFeature: (feature: Feature, layer: Layer) => {
+          const props = feature.properties as Record<string, string> | undefined;
+          const name = props?.name || props?.NAME || props?.ten || "Khu vực";
           layer.bindPopup(`<b>${name}</b>`);
-          layer.on("mouseover", () => layer.setStyle?.({ weight: 2, fillOpacity: 0.22 }));
-          layer.on("mouseout", () => layer.setStyle?.({ weight: 1, fillOpacity: 0.12 }));
+          layer.on("mouseover", () => (layer as any).setStyle?.({ weight: 2, fillOpacity: 0.22 }));
+          layer.on("mouseout", () => (layer as any).setStyle?.({ weight: 1, fillOpacity: 0.12 }));
         },
       }).addTo(map);
       wardsRef.current = wards;
 
-      const sketch = L.featureGroup().addTo(map);
+      const sketch = L.featureGroup(undefined as FeatureGroupOptions | undefined).addTo(map);
       sketchRef.current = sketch;
 
       (map as any).pm.addControls({
@@ -70,20 +81,20 @@ export default function ThuDucMapPage() {
         removalMode: true,
       });
 
-      map.on("pm:create", (e: any) => {
+      map.on("pm:create", (e: { layer: Layer }) => {
         sketch.addLayer(e.layer);
       });
 
       try {
-        const b = await loadGeoJSON(BOUNDARY_SRC, boundary);
-        map.fitBounds(b.pad(0.05));
+        const bounds = await loadGeoJSON(BOUNDARY_SRC, boundary);
+        map.fitBounds(bounds.pad(0.05));
       } catch {}
 
       setReady(true);
     })();
     return () => {
       alive = false;
-      mapRef.current?.remove?.();
+      mapRef.current?.remove();
     };
   }, []);
 
@@ -94,41 +105,43 @@ export default function ThuDucMapPage() {
     if (layers.includes("wards")) handleLoadWards();
   }, [ready, params]);
 
-  async function loadGeoJSON(url: string, targetLayer: import("leaflet").GeoJSON) {
+  async function loadGeoJSON(url: string, targetLayer: GeoJSONLayer) {
     const res = await fetch(url, { cache: "force-cache" });
     if (!res.ok) throw new Error(`Không tải được ${url}`);
-    const gj = await res.json();
+    const data: GeoJsonObject = await res.json();
     targetLayer.clearLayers();
-    targetLayer.addData(gj);
+    targetLayer.addData(data);
     return targetLayer.getBounds();
   }
 
   function fitAll() {
-    const list = [boundaryRef.current, wardsRef.current, sketchRef.current].filter(
-      (l): l is import("leaflet").LayerGroup => !!l && l.getLayers().length > 0
+    const layers = [boundaryRef.current, wardsRef.current, sketchRef.current].filter(
+      (l): l is FeatureGroup => !!l && l.getLayers().length > 0
     );
-    if (!list.length) return;
-    let b = list[0].getBounds();
-    for (let i = 1; i < list.length; i++) b = b.extend(list[i].getBounds());
-    mapRef.current!.fitBounds(b.pad(0.05));
+    if (!layers.length) return;
+    let bounds = layers[0].getBounds();
+    for (let i = 1; i < layers.length; i++) {
+      bounds = bounds.extend(layers[i].getBounds());
+    }
+    mapRef.current?.fitBounds(bounds.pad(0.05));
   }
 
-  function serializeSketch() {
-    const fc = { type: "FeatureCollection", features: [] as any[] };
-    sketchRef.current?.eachLayer((l: any) => {
-      const gj = l.toGeoJSON();
-      if (gj.type === "Feature") fc.features.push(gj);
-      else if (gj.type === "FeatureCollection") fc.features.push(...gj.features);
+  function serializeSketch(): FeatureCollection {
+    const features: Feature[] = [];
+    sketchRef.current?.eachLayer((layer: Layer) => {
+      const gj = (layer as any).toGeoJSON();
+      if (gj.type === "Feature") features.push(gj as Feature);
+      else if (gj.type === "FeatureCollection") features.push(...(gj as FeatureCollection).features);
     });
-    return fc;
+    return { type: "FeatureCollection", features };
   }
 
   const handleLoadBoundary = async () => {
     try {
       const b = await loadGeoJSON(BOUNDARY_SRC, boundaryRef.current!);
       mapRef.current!.fitBounds(b.pad(0.05));
-    } catch (e: any) {
-      alert(e?.message || "Không tải được ranh giới");
+    } catch (e) {
+      alert((e as Error).message || "Không tải được ranh giới");
     }
   };
 
@@ -136,8 +149,8 @@ export default function ThuDucMapPage() {
     try {
       const b = await loadGeoJSON(WARDS_SRC, wardsRef.current!);
       mapRef.current!.fitBounds(b.pad(0.05));
-    } catch (e: any) {
-      alert(e?.message || "Không tải được phường/xã");
+    } catch (e) {
+      alert((e as Error).message || "Không tải được phường/xã");
     }
   };
 
@@ -147,9 +160,9 @@ export default function ThuDucMapPage() {
     reader.onload = () => {
       try {
         const L = LRef.current!;
-        const data = JSON.parse(String(reader.result));
-        const layer = (L as any).geoJSON(data);
-        layer.eachLayer((l: any) => sketchRef.current?.addLayer(l));
+        const data: GeoJsonObject = JSON.parse(String(reader.result));
+        const layer = (L.geoJSON(data) as GeoJSONLayer);
+        layer.eachLayer((l: Layer) => sketchRef.current?.addLayer(l));
         fitAll();
       } catch {
         alert("File không phải GeoJSON hợp lệ.");
@@ -179,10 +192,13 @@ export default function ThuDucMapPage() {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return alert("Chưa có dữ liệu đã lưu.");
     const L = LRef.current!;
-    const { fc, view } = JSON.parse(raw);
+    const { fc, view } = JSON.parse(raw) as {
+      fc: FeatureCollection;
+      view: { center: LatLngExpression; zoom: number };
+    };
     sketchRef.current?.clearLayers();
-    const layer = (L as any).geoJSON(fc);
-    layer.eachLayer((l: any) => sketchRef.current?.addLayer(l));
+    const layer = (L.geoJSON(fc) as GeoJSONLayer);
+    layer.eachLayer((l: Layer) => sketchRef.current?.addLayer(l));
     if (view?.center && view?.zoom) mapRef.current?.setView(view.center, view.zoom);
     else fitAll();
   };
@@ -206,7 +222,7 @@ export default function ThuDucMapPage() {
             <button onClick={handleLoadWards} disabled={!ready} className={btnPrimary}>Phường/Xã</button>
             <span className="mx-1 text-white/20">|</span>
             <button onClick={fitAll} disabled={!ready} className={btn}>Fit</button>
-            <label className={btn + " cursor-pointer"}>
+            <label className={`${btn} cursor-pointer`}>
               Nhập GeoJSON
               <input type="file" accept=".geojson,.json" className="hidden" onChange={(e) => handleImport(e.target.files?.[0] ?? null)} />
             </label>
