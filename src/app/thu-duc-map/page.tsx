@@ -27,6 +27,7 @@ const STORE_KEY = "thu-duc-sketch";
 
 type BoundaryProps = Record<string, unknown>;
 type WardProps = { name?: string; NAME?: string; ten?: string } & Record<string, unknown>;
+type SketchProps = Record<string, never>; // 👈 thêm loại cụ thể cho sketch
 
 type LType = typeof import("leaflet");
 
@@ -129,7 +130,7 @@ export default function ThuDucMapPage() {
       const sketch = L.featureGroup(undefined as FeatureGroupOptions | undefined).addTo(map);
       sketchRef.current = sketch;
 
-      (map as any).pm.addControls({
+      (map as Map & { pm: any }).pm.addControls({
         position: "topleft",
         drawMarker: true,
         drawPolyline: true,
@@ -197,7 +198,7 @@ export default function ThuDucMapPage() {
       try {
         const L = LRef.current!;
         const data: GeoJsonObject = JSON.parse(String(reader.result));
-        const layer = L.geoJSON(data) as GeoJSON<Geometry, any>;
+        const layer = L.geoJSON(data) as GeoJSON<Geometry, SketchProps>; 
         layer.eachLayer((l: Layer) => sketchRef.current?.addLayer(l));
         fitAll();
       } catch {
@@ -224,7 +225,7 @@ export default function ThuDucMapPage() {
       zoom: mapRef.current!.getZoom(),
     };
     localStorage.setItem(STORE_KEY, JSON.stringify({ fc: serializeSketch(), view }));
-    alert("\u0110\u00e3 l\u01b0u b\u1ea3n v\u1ebd v\u00e0o tr\u00ecnh duy\u1ec7t.");
+    alert("Đã lưu bản vẽ vào trình duyệt.");
   }
 
   function handleLoad() {
@@ -236,7 +237,7 @@ export default function ThuDucMapPage() {
       view: { center: LatLngExpression; zoom: number };
     };
     sketchRef.current?.clearLayers();
-    const layer = L.geoJSON(fc) as GeoJSON<Geometry, any>;
+    const layer = L.geoJSON(fc) as GeoJSON<Geometry, SketchProps>; 
     layer.eachLayer((l: Layer) => sketchRef.current?.addLayer(l));
     if (view?.center && view?.zoom) mapRef.current?.setView(view.center, view.zoom);
     else fitAll();
@@ -244,7 +245,7 @@ export default function ThuDucMapPage() {
 
   function handleResetSave() {
     localStorage.removeItem(STORE_KEY);
-    alert("\u0110\u00e3 xoá dữ liệu đã lưu.");
+    alert("Đã xoá dữ liệu đã lưu.");
   }
 
   const btnBase =
