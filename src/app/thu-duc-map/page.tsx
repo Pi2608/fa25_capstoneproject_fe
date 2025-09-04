@@ -12,13 +12,13 @@ import type {
   Layer,
   LatLngExpression,
   FeatureGroup,
-  FeatureGroupOptions,
+  FeatureGroupOptions
 } from "leaflet";
 import type {
   Feature,
   FeatureCollection,
   GeoJsonObject,
-  Geometry,
+  Geometry
 } from "geojson";
 
 const BOUNDARY_SRC = "/data/ThuDucCity_boundary.json";
@@ -27,15 +27,30 @@ const STORE_KEY = "thu-duc-sketch";
 
 type BoundaryProps = Record<string, unknown>;
 type WardProps = { name?: string; NAME?: string; ten?: string } & Record<string, unknown>;
-type SketchProps = Record<string, never>; 
+type SketchProps = Record<string, never>;
 
 type MapWithPM = Map & {
   pm: {
-    addControls: (options: Record<string, any>) => void;
+    addControls: (options: {
+      position: string;
+      drawMarker: boolean;
+      drawPolyline: boolean;
+      drawRectangle: boolean;
+      drawPolygon: boolean;
+      drawCircle: boolean;
+      drawCircleMarker: boolean;
+      editMode: boolean;
+      dragMode: boolean;
+      cutPolygon: boolean;
+      removalMode: boolean;
+    }) => void;
   };
 };
 
 type LType = typeof import("leaflet");
+type PMCreateEvent = {
+  layer: Layer;
+};
 
 export default function ThuDucMapPage() {
   const params = useSearchParams();
@@ -114,7 +129,7 @@ export default function ThuDucMapPage() {
         }),
         onEachFeature: (feature, layer) => {
           const props = feature.properties ?? {};
-          const name = props.name || props.NAME || props.ten || "Khu vực";
+          const name = (props as WardProps).name || props.NAME || props.ten || "Khu vực";
           layer.bindPopup(`<b>${name}</b>`);
           layer.on("mouseover", () =>
             (layer as Layer & { setStyle?: (s: object) => void }).setStyle?.({
@@ -150,7 +165,7 @@ export default function ThuDucMapPage() {
         removalMode: true,
       });
 
-      map.on("pm:create", (e: { layer: Layer }) => {
+      map.on("pm:create", (e: PMCreateEvent) => {
         sketch.addLayer(e.layer);
       });
 
