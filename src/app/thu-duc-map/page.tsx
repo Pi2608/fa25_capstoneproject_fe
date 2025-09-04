@@ -71,6 +71,12 @@ export default function ThuDucMapPage() {
     }
   }, [loadGeoJSON]);
 
+  type MapWithPM = Map & {
+    pm: {
+      addControls: (options: Record<string, any>) => void;
+    };
+  };
+
   useEffect(() => {
     let alive = true;
 
@@ -151,7 +157,7 @@ export default function ThuDucMapPage() {
       try {
         const bounds = await loadGeoJSON(BOUNDARY_SRC, boundary);
         map.fitBounds(bounds.pad(0.05));
-      } catch {}
+      } catch { }
 
       setReady(true);
     })();
@@ -198,7 +204,7 @@ export default function ThuDucMapPage() {
       try {
         const L = LRef.current!;
         const data: GeoJsonObject = JSON.parse(String(reader.result));
-        const layer = L.geoJSON(data) as GeoJSON<Geometry, SketchProps>; 
+        const layer = L.geoJSON(data) as GeoJSON<Geometry, SketchProps>;
         layer.eachLayer((l: Layer) => sketchRef.current?.addLayer(l));
         fitAll();
       } catch {
@@ -237,7 +243,7 @@ export default function ThuDucMapPage() {
       view: { center: LatLngExpression; zoom: number };
     };
     sketchRef.current?.clearLayers();
-    const layer = L.geoJSON(fc) as GeoJSON<Geometry, SketchProps>; 
+    const layer = L.geoJSON(fc) as GeoJSON<Geometry, SketchProps>;
     layer.eachLayer((l: Layer) => sketchRef.current?.addLayer(l));
     if (view?.center && view?.zoom) mapRef.current?.setView(view.center, view.zoom);
     else fitAll();
