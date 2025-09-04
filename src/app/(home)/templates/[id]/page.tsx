@@ -1,8 +1,13 @@
-// app/templates/[id]/page.tsx
 import { notFound } from "next/navigation";
 import { getMapTemplateWithDetails } from "@/lib/api";
 
-export default async function TemplateDetail({ params }: { params: { id: string } }) {
+type PageProps = {
+  params: {
+    id: string;
+  };
+};
+
+export default async function TemplateDetail({ params }: PageProps) {
   const tpl = await getMapTemplateWithDetails(params.id).catch(() => null);
   if (!tpl) return notFound();
 

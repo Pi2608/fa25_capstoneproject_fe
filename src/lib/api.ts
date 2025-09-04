@@ -100,26 +100,25 @@ export async function apiFetch<T>(
       }
     }
 
-    // ==== trong normalizeMessage ====
     if (ct.includes("application/json") && rawText) {
       const body = safeJsonParse<unknown>(rawText);
       if (isRecord(body)) {
-        // Trường hợp có detail/title
         if (hasString(body, "detail") || hasString(body, "title")) {
           const d = hasString(body, "detail") ? String(body.detail).trim() : "";
           const t = hasString(body, "title") ? String(body.title).trim() : "";
           return d || t || defaultByStatus(res.status);
         }
-        // Trường hợp có errors
-        if ("errors" in body && isRecord(body.errors)) {
-          const keys = Object.keys(body.errors);
+        if ("errors" in body && typeof body.errors === "object" && body.errors !== null) {
+          const errorsObj = body.errors as Record<string, unknown>;
+          const keys = Object.keys(errorsObj);
           if (keys.length) {
-            const first = body.errors[keys[0]];
-            if (isStringArray(first) && first[0]?.trim()) return first[0].trim();
+            const first = errorsObj[keys[0]];
+            if (Array.isArray(first) && typeof first[0] === "string" && first[0].trim()) {
+              return first[0].trim();
+            }
           }
           return defaultByStatus(400);
         }
-        // Trường hợp có message
         if (hasString(body, "message") && String(body.message).trim()) {
           return String(body.message).trim();
         }

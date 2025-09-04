@@ -7,12 +7,17 @@ import {
   type CancelPaymentWithContextReq,
 } from "@/lib/api";
 
-function pretty(e: unknown) {
-  if (e && typeof e === "object" && "message" in e && typeof (e as any).message === "string")
-    return (e as any).message as string;
+function pretty(e: unknown): string {
   if (e instanceof Error) return e.message;
+
+  if (typeof e === "object" && e !== null && "message" in e) {
+    const maybeMsg = (e as { message?: unknown }).message;
+    if (typeof maybeMsg === "string") return maybeMsg;
+  }
+
   return "Hủy thanh toán thất bại.";
 }
+
 
 export default function PaymentCancelPage() {
   const router = useRouter();
