@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { getUserAccessTools, type UserAccessTool } from "@/lib/api";
 
 function safeMessage(err: unknown) {
@@ -10,14 +11,6 @@ function safeMessage(err: unknown) {
     if (typeof m === "string") return m;
   }
   return "Request failed";
-}
-
-function formatExpiry(iso?: string) {
-  if (!iso) return "—";
-  // BE đang trả "0001-01-01T00:00:00" => coi như không hết hạn
-  if (/^0001-01-01/i.test(iso)) return "No expiry";
-  const d = new Date(iso);
-  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString();
 }
 
 export default function AccessToolsPage() {
@@ -72,27 +65,29 @@ export default function AccessToolsPage() {
           >
             <div className="flex items-start gap-4">
               {t.iconUrl ? (
-                <img
+                <Image
                   src={t.iconUrl}
                   alt=""
-                  className="h-10 w-10 opacity-90 rounded-md bg-zinc-800/70 p-1"
+                  width={40}
+                  height={40}
+                  className="h-10 w-10 rounded-md bg-zinc-800/70 p-1 object-contain"
+                  unoptimized
                 />
               ) : (
                 <div className="h-10 w-10 rounded-md bg-zinc-800/50" />
               )}
+
               <div className="flex-1">
-                {/* Tên tool */}
                 <div className="text-lg font-semibold text-white">{t.name}</div>
-                {/* Mô tả */}
                 <div className="text-sm text-zinc-400 mt-1">
                   {(t.description && String(t.description)) || "No description"}
                 </div>
-                {/* Footer: trạng thái + expiry */}
-                <div className="flex items-center justify-between text-xs text-zinc-400 mt-3 border-t border-white/5 pt-2">
+
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-400 border-t border-white/5 pt-2">
                   <span className={t.isActive ? "text-emerald-400" : "text-red-400"}>
                     {t.isActive ? "Active" : "Inactive"}
                   </span>
-                  <span>
+                  <span className="text-right">
                     Expires:{" "}
                     {/^0001-01-01/.test(t.expiredAt)
                       ? "No expiry"

@@ -7,7 +7,6 @@ import {
   login as loginApi,
   postJson,
   type LoginResponse,
-  // ↓↓↓ ADD
   getPlans,
   createOrRenewMembership,
   type Plan,
@@ -70,7 +69,10 @@ function humanizeLoginError(err: unknown): string {
   if (!candidate && isRecord(err)) {
     if (isRecord(err.body)) {
       candidate = err.body as ErrorPayload;
-    } else if (isRecord(err.response) && isRecord((err.response as unknown as Record<string, unknown>).data)) {
+    } else if (
+      isRecord(err.response) &&
+      isRecord((err.response as unknown as Record<string, unknown>).data)
+    ) {
       const resp = err.response as Record<string, unknown>;
       candidate = resp.data as ErrorPayload;
     } else if (isRecord(err.response)) {
@@ -86,28 +88,37 @@ function humanizeLoginError(err: unknown): string {
   }
 
   const status =
-    (isRecord(err) && typeof err.status === "number" ? (err.status as number) : undefined) ??
+    (isRecord(err) && typeof err.status === "number"
+      ? (err.status as number)
+      : undefined) ??
     (isRecord(err) &&
-      isRecord(err.response) &&
-      typeof (err.response as Record<string, unknown>).status === "number"
-        ? ((err.response as Record<string, unknown>).status as number)
-        : undefined);
+    isRecord(err.response) &&
+    typeof (err.response as Record<string, unknown>).status === "number"
+      ? ((err.response as Record<string, unknown>).status as number)
+      : undefined);
 
   if (status === 400 || status === 401) return "Email hoặc mật khẩu không đúng";
   if (status === 429) return "Thao tác quá nhiều. Hãy thử lại sau.";
   if (/InvalidEmailOrPassword/i.test(raw)) return "Email hoặc mật khẩu không đúng";
-  if (/network|failed to fetch|timeout/i.test(raw)) return "Lỗi mạng. Vui lòng kiểm tra kết nối.";
+  if (/network|failed to fetch|timeout/i.test(raw))
+    return "Lỗi mạng. Vui lòng kiểm tra kết nối.";
 
   return "Không thể đăng nhập. Vui lòng thử lại.";
 }
 
-function firebaseMsg(code?: string): { type: BannerType; text: string; fallback?: boolean } {
+function firebaseMsg(
+  code?: string
+): { type: BannerType; text: string; fallback?: boolean } {
   switch (code) {
     case "auth/popup-closed-by-user":
       return { type: "info", text: "Bạn đã huỷ đăng nhập. Thử lại nếu muốn." };
     case "auth/popup-blocked":
     case "auth/operation-not-supported-in-this-environment":
-      return { type: "info", text: "Popup bị chặn. Đang chuyển sang đăng nhập bằng chuyển hướng…", fallback: true };
+      return {
+        type: "info",
+        text: "Popup bị chặn. Đang chuyển sang đăng nhập bằng chuyển hướng…",
+        fallback: true,
+      };
     case "auth/account-exists-with-different-credential":
       return { type: "error", text: "Email này đang dùng phương thức đăng nhập khác." };
     case "auth/unauthorized-domain":
@@ -117,36 +128,32 @@ function firebaseMsg(code?: string): { type: BannerType; text: string; fallback?
   }
 }
 
-/** ===== FE-only: đảm bảo user có Free membership sau login ===== */
 const MEMBERSHIP_GUARD_KEY = "cmosm:membership-checked";
-/**
- * Gọi khi đã có token. Best-effort:
- * - Tìm gói "Free" (ưu tiên name "Free", fallback priceMonthly === 0)
- * - Gọi createOrRenewMembership({ planId: freeId })
- * - Nuốt mọi lỗi (không chặn luồng).
- * - Dùng cờ localStorage tránh gọi lặp.
- */
+
 async function ensureFreeMembership() {
   try {
-    // tránh spam nếu đã gọi trong phiên trình duyệt này
-    if (typeof window !== "undefined" && window.localStorage.getItem(MEMBERSHIP_GUARD_KEY)) return;
+    if (
+      typeof window !== "undefined" &&
+      window.localStorage.getItem(MEMBERSHIP_GUARD_KEY)
+    )
+      return;
 
-    const plans = await getPlans().catch(() => [] as Plan[]);
+    const plans: Plan[] = await getPlans().catch(() => []);
     if (!plans || plans.length === 0) return;
 
     const free =
       plans.find((p) => /free/i.test(p.planName)) ??
-      plans.find((p) => (p as any).priceMonthly === 0) ??
+      plans.find((p) => p.priceMonthly === 0) ??
       null;
     if (!free) return;
 
-    await createOrRenewMembership({ planId: free.planId }).catch(() => void 0);
+    await createOrRenewMembership({ planId: free.planId }).catch(() => {
+    });
 
     if (typeof window !== "undefined") {
       window.localStorage.setItem(MEMBERSHIP_GUARD_KEY, "1");
     }
   } catch {
-    // im lặng
   }
 }
 
@@ -162,7 +169,6 @@ async function finishSocial(
   );
   authStore.setToken(data.token);
 
-  // ✅ đảm bảo có gói Free nếu chưa có
   await ensureFreeMembership();
 
   router.refresh();
@@ -215,7 +221,6 @@ export default function LoginClient() {
 
       authStore.setToken(token);
 
-      // ✅ đảm bảo có gói Free nếu chưa có
       await ensureFreeMembership();
 
       router.refresh();
@@ -268,7 +273,9 @@ export default function LoginClient() {
 
         {banner && (
           <div
-            className={`${styles.banner} ${banner.type === "error" ? styles.bannerError : styles.bannerInfo}`}
+            className={`${styles.banner} ${
+              banner.type === "error" ? styles.bannerError : styles.bannerInfo
+            }`}
             role={banner.type === "error" ? "alert" : "status"}
             aria-live="polite"
           >
@@ -313,12 +320,18 @@ export default function LoginClient() {
             {errors.password && <div className={styles.fieldError}>{errors.password}</div>}
           </label>
 
-          <button className={styles.primaryBtn} type="submit" disabled={loading || !email || !password}>
+          <button
+            className={styles.primaryBtn}
+            type="submit"
+            disabled={loading || !email || !password}
+          >
             {loading ? "Đang đăng nhập…" : "Đăng nhập"}
           </button>
         </form>
 
-        <div className={styles.divider}><span>hoặc</span></div>
+        <div className={styles.divider}>
+          <span>hoặc</span>
+        </div>
 
         <div className={styles.socialRow}>
           <button
@@ -340,8 +353,7 @@ export default function LoginClient() {
         </div>
 
         <p className={styles.note}>
-          Quên mật khẩu?{" "}
-          <a href="/forgot-password" className={styles.link}>Đặt lại</a>
+          Quên mật khẩu? <a href="/forgot-password" className={styles.link}>Đặt lại</a>
         </p>
 
         <p className={styles.note}>

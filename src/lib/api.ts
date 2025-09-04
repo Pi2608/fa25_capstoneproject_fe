@@ -48,11 +48,12 @@ export async function apiFetch<T>(
 
   const token = getToken();
 
-  // Đừng set Content-Type khi body là FormData (multipart)
+  const hasBody = typeof options.body !== "undefined";
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
+
   const defaultHeaders: Record<string, string> = {
     Accept: "application/json",
-    ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    ...(hasBody && !isFormData ? { "Content-Type": "application/json" } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
 
@@ -82,27 +83,46 @@ export async function apiFetch<T>(
   };
 
   const normalizeMessage = (): string => {
-    if (ct.includes("application/json") && rawText) {
+    function isRecord(v: unknown): v is Record<string, unknown> {
+      return typeof v === "object" && v !== null;
+    }
+    function hasString(o: Record<string, unknown>, k: string): o is Record<string, string | unknown> {
+      return k in o && typeof o[k] === "string";
+    }
+    function isStringArray(v: unknown): v is string[] {
+      return Array.isArray(v) && v.every((x) => typeof x === "string");
+    }
+    function safeJsonParse<T = unknown>(text: string): T | null {
       try {
-        const body = JSON.parse(rawText) as any;
-        if (body && typeof body === "object") {
-          if (body.detail || body.title) {
-            const d = typeof body.detail === "string" ? body.detail.trim() : "";
-            const t = typeof body.title === "string" ? body.title.trim() : "";
-            return d || t || defaultByStatus(res.status);
-          }
-          if (body.errors && typeof body.errors === "object") {
-            const firstKey = Object.keys(body.errors)[0];
-            const firstMsg = Array.isArray(body.errors[firstKey]) ? body.errors[firstKey][0] : "";
-            if (typeof firstMsg === "string" && firstMsg.trim()) return firstMsg;
-            return defaultByStatus(400);
-          }
-          if (typeof body.message === "string" && body.message.trim()) {
-            return body.message.trim();
-          }
-        }
+        return JSON.parse(text) as T;
       } catch {
-        // ignore
+        return null;
+      }
+    }
+
+    // ==== trong normalizeMessage ====
+    if (ct.includes("application/json") && rawText) {
+      const body = safeJsonParse<unknown>(rawText);
+      if (isRecord(body)) {
+        // Trường hợp có detail/title
+        if (hasString(body, "detail") || hasString(body, "title")) {
+          const d = hasString(body, "detail") ? String(body.detail).trim() : "";
+          const t = hasString(body, "title") ? String(body.title).trim() : "";
+          return d || t || defaultByStatus(res.status);
+        }
+        // Trường hợp có errors
+        if ("errors" in body && isRecord(body.errors)) {
+          const keys = Object.keys(body.errors);
+          if (keys.length) {
+            const first = body.errors[keys[0]];
+            if (isStringArray(first) && first[0]?.trim()) return first[0].trim();
+          }
+          return defaultByStatus(400);
+        }
+        // Trường hợp có message
+        if (hasString(body, "message") && String(body.message).trim()) {
+          return String(body.message).trim();
+        }
       }
     }
 
@@ -214,7 +234,24 @@ export function createExport(req: ExportRequest) {
   return postJson<ExportRequest, ExportResponse>("/exports", req);
 }
 
-/** ===== ACCESS TOOLS – USER ===== */
+// ==== ACCESS TOOLS – USER (types “raw” từ BE) ====
+export type RawAccessTool = {
+  accessToolId?: number | string;
+  accessToolName?: string;
+  accessToolDescription?: string;
+  iconUrl?: string;
+  requiredMembership?: boolean;
+};
+
+export type RawUserAccessTool = {
+  userAccessToolId?: number | string;
+  id?: number | string;
+  accessToolId?: number | string;
+  accessTool?: RawAccessTool | null;
+  expiredAt?: string;
+  isActive?: boolean;
+};
+
 export type UserAccessTool = {
   id: string;
   accessToolId: string;
@@ -225,21 +262,26 @@ export type UserAccessTool = {
   iconUrl?: string;
 };
 
-function mapUserAccessTool(raw: any): UserAccessTool {
+function mapUserAccessTool(raw: RawUserAccessTool): UserAccessTool {
   return {
-    id: String(raw.userAccessToolId ?? raw.id),
+    id: String(raw.userAccessToolId ?? raw.id ?? ""),
     accessToolId: String(raw.accessToolId ?? raw.accessTool?.accessToolId ?? ""),
-    name: raw.accessTool?.accessToolName ?? raw.name ?? "Unknown tool",
-    description: raw.accessTool?.accessToolDescription ?? raw.description,
+    name: raw.accessTool?.accessToolName ?? "Unknown tool",
+    description: raw.accessTool?.accessToolDescription,
     expiredAt: raw.expiredAt ?? "",
     isActive: typeof raw.isActive === "boolean" ? raw.isActive : true,
     iconUrl: raw.accessTool?.iconUrl,
   };
 }
 
-export async function getUserAccessTools() {
-  const data = await getJson<any[]>("/user-access-tool/get-all");
-  return (Array.isArray(data) ? data : []).map(mapUserAccessTool);
+export async function getUserAccessTools(): Promise<UserAccessTool[]> {
+  const data = await getJson<RawUserAccessTool[]>("/user-access-tool/get-all");
+  return (data ?? []).map(mapUserAccessTool);
+}
+
+export async function getActiveUserAccessTools(): Promise<UserAccessTool[]> {
+  const data = await getJson<RawUserAccessTool[]>("/user-access-tool/get-active");
+  return (data ?? []).map(mapUserAccessTool);
 }
 
 
@@ -252,11 +294,11 @@ export type MembershipResponse = {
 function isApiError(x: unknown): x is ApiErrorShape {
   return Boolean(
     x &&
-      typeof x === "object" &&
-      "status" in x &&
-      "message" in x &&
-      typeof (x as { status: unknown }).status === "number" &&
-      typeof (x as { message: unknown }).message === "string"
+    typeof x === "object" &&
+    "status" in x &&
+    "message" in x &&
+    typeof (x as { status: unknown }).status === "number" &&
+    typeof (x as { message: unknown }).message === "string"
   );
 }
 
@@ -427,7 +469,7 @@ export interface UpdateMapRequest {
   description?: string;
   isPublic?: boolean;
 }
-export interface UpdateMapResponse extends Map {}
+export type UpdateMapResponse = Map;
 
 export function updateMap(mapId: string, body: UpdateMapRequest) {
   return putJson<UpdateMapRequest, UpdateMapResponse>(`/maps/${mapId}`, body);
@@ -468,7 +510,7 @@ export async function getMapTemplates(): Promise<MapTemplate[]> {
   return Array.isArray(res) ? res : (res.templates ?? []);
 }
 
-export interface GetMapTemplateByIdResponse extends MapTemplate {}
+export type GetMapTemplateByIdResponse = MapTemplate;
 export function getMapTemplateById(templateId: string) {
   return getJson<GetMapTemplateByIdResponse>(`/maps/templates/${templateId}`);
 }

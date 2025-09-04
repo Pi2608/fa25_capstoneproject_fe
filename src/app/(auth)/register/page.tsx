@@ -11,92 +11,133 @@ type Banner = { type: "info" | "error" | "success"; text: string };
 const phoneValid = (v: string) => /^\d{10}$/.test(v);
 const emailValid = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
+/** ==== Types & Guards ==== */
+interface NameParts {
+  firstName: string;
+  lastName: string;
+}
+
+interface UnknownApiError {
+  message?: string;
+  detail?: string;
+  title?: string;
+  type?: string;
+  status?: number;
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+function hasNumber(x: Record<string, unknown>, key: string): x is Record<string, number | unknown> {
+  return key in x && typeof x[key] === "number";
+}
+
+function hasString(x: Record<string, unknown>, key: string): x is Record<string, string | unknown> {
+  return key in x && typeof x[key] === "string";
+}
+
 /** ==== Helpers ==== */
-function splitVietnameseName(fullName: string) {
+function splitVietnameseName(fullName: string): NameParts {
   const clean = fullName.replace(/\s+/g, " ").trim();
   if (!clean) return { firstName: "", lastName: "" };
   const parts = clean.split(" ");
   if (parts.length === 1) return { firstName: parts[0], lastName: parts[0] };
-  const lastName = parts[0];
+  const lastName = parts[0] ?? "";
   const firstName = parts.slice(1).join(" ");
   return { firstName, lastName };
 }
 
 /** Chuẩn hoá thông báo lỗi trả về từ BE để hiện cho người dùng */
-function prettyError(err: unknown, fallback = "Có lỗi xảy ra. Vui lòng thử lại.") {
+function prettyError(err: unknown, fallback = "Có lỗi xảy ra. Vui lòng thử lại."): string {
   try {
-    if (err && typeof err === "object") {
-      const anyErr = err as Record<string, any>;
-      if (typeof anyErr.message === "string") {
-        const msg = anyErr.message;
+    if (isPlainObject(err)) {
+      const obj = err as Record<string, unknown>;
+
+      // status số
+      if (hasNumber(obj, "status")) {
+        const st = obj.status as number;
+        if (st === 429) return "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
+        if (st === 401) return "Bạn không có quyền thực hiện thao tác này.";
+        if (st === 403) return "Bạn không có quyền truy cập.";
+        if (st === 404) return "Không tìm thấy tài nguyên.";
+        if (st >= 500) return "Hệ thống đang bận. Vui lòng thử lại sau.";
+      }
+
+      // message / detail / title / type chuỗi
+      const msgLike: string[] = [];
+      if (hasString(obj, "message")) msgLike.push(String(obj.message));
+      if (hasString(obj, "detail")) msgLike.push(String(obj.detail));
+      if (hasString(obj, "title")) msgLike.push(String(obj.title));
+      if (hasString(obj, "type")) msgLike.push(String(obj.type));
+
+      for (const msg of msgLike) {
         if (/already exists/i.test(msg)) return "Email này đã được đăng ký, vui lòng dùng email khác.";
         if (/otp/i.test(msg) && /invalid|expired/i.test(msg)) return "Mã xác minh không đúng hoặc đã hết hạn.";
-        if (/too many/i.test(msg) || /rate/i.test(msg) || anyErr.status === 429) return "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
-        if (anyErr.status === 401) return "Bạn không có quyền thực hiện thao tác này.";
-        if (anyErr.status === 403) return "Bạn không có quyền truy cập.";
-        if (anyErr.status === 404) return "Không tìm thấy tài nguyên.";
-        if (anyErr.status >= 500) return "Hệ thống đang bận. Vui lòng thử lại sau.";
-        return msg;
+        if (/too many/i.test(msg) || /rate/i.test(msg)) return "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
+        if (/500|internal server/i.test(msg)) return "Hệ thống đang bận. Vui lòng thử lại sau.";
       }
-      if (typeof anyErr.detail === "string") {
-        const d = anyErr.detail;
-        if (/already exists/i.test(d)) return "Email này đã được đăng ký, vui lòng dùng email khác.";
-        if (/otp/i.test(d) && /invalid|expired/i.test(d)) return "Mã xác minh không đúng hoặc đã hết hạn.";
-        return d;
-      }
-      if (typeof anyErr.title === "string" && /EmailAlreadyExists/i.test(anyErr.title)) {
-        return "Email này đã được đăng ký, vui lòng dùng email khác.";
-      }
-      if (typeof anyErr.type === "string" && /EmailAlreadyExists/i.test(anyErr.type)) {
-        return "Email này đã được đăng ký, vui lòng dùng email khác.";
-      }
-      if (typeof anyErr.status === "number" && anyErr.status >= 500) {
-        return "Hệ thống đang bận. Vui lòng thử lại sau.";
-      }
+
+      if (msgLike.length > 0) return msgLike[0]!;
     }
+
     if (typeof err === "string") {
+      // Thử parse JSON string an toàn
       try {
-        const j = JSON.parse(err);
+        const j = JSON.parse(err) as unknown;
         return prettyError(j, fallback);
       } catch {
-        if (/already exists/i.test(err)) return "Email này đã được đăng ký, vui lòng dùng email khác.";
-        if (/otp/i.test(err) && /invalid|expired/i.test(err)) return "Mã xác minh không đúng hoặc đã hết hạn.";
-        if (/500|internal server/i.test(err)) return "Hệ thống đang bận. Vui lòng thử lại sau.";
-        return err;
+        const s = err;
+        if (/already exists/i.test(s)) return "Email này đã được đăng ký, vui lòng dùng email khác.";
+        if (/otp/i.test(s) && /invalid|expired/i.test(s)) return "Mã xác minh không đúng hoặc đã hết hạn.";
+        if (/500|internal server/i.test(s)) return "Hệ thống đang bận. Vui lòng thử lại sau.";
+        return s;
       }
     }
-  } catch {}
+  } catch {
+    // no-op
+  }
   return fallback;
 }
 
 export default function RegisterPage() {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2>(1);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [showPass, setShowPass] = useState(false);
-  const [agree, setAgree] = useState(false);
-  const [otp, setOtp] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+  const [phone, setPhone] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [confirm, setConfirm] = useState<string>("");
+  const [showPass, setShowPass] = useState<boolean>(false);
+  const [agree, setAgree] = useState<boolean>(false);
+  const [otp, setOtp] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
   const [banner, setBanner] = useState<Banner | null>(null);
-  const [errors, setErrors] = useState<{ name?: string; email?: string; phone?: string; password?: string; confirm?: string; agree?: string; otp?: string }>({});
+  const [errors, setErrors] = useState<{
+    name?: string;
+    email?: string;
+    phone?: string;
+    password?: string;
+    confirm?: string;
+    agree?: string;
+    otp?: string;
+  }>({});
 
   useEffect(() => {
     try {
-      const cachedEmail = localStorage.getItem("reg_email");
-      const cachedName = localStorage.getItem("reg_name");
+      const cachedEmail = typeof window !== "undefined" ? localStorage.getItem("reg_email") : null;
+      const cachedName = typeof window !== "undefined" ? localStorage.getItem("reg_name") : null;
       if (cachedEmail && cachedName) {
-        const { firstName, lastName } = JSON.parse(cachedName) as { firstName: string; lastName: string };
+        const { firstName, lastName } = JSON.parse(cachedName) as NameParts;
         if (!name) setName([lastName, firstName].filter(Boolean).join(" "));
         if (!email) setEmail(cachedEmail);
       }
-    } catch {}
+    } catch {
+      // ignore cache errors
+    }
   }, [email, name]);
 
-  const passScore = useMemo(() => {
+  const passScore = useMemo<number>(() => {
     let s = 0;
     if (password.length >= 8) s++;
     if (/[A-Z]/.test(password)) s++;
@@ -146,12 +187,14 @@ export default function RegisterPage() {
         { firstName, lastName, email, phone: phone || null, password }
       );
       try {
-        localStorage.setItem("reg_name", JSON.stringify({ firstName, lastName }));
+        localStorage.setItem("reg_name", JSON.stringify({ firstName, lastName } satisfies NameParts));
         localStorage.setItem("reg_email", email);
-      } catch {}
+      } catch {
+        // ignore storage
+      }
       setBanner({ type: "success", text: "Đã gửi mã xác minh tới email. Vui lòng kiểm tra hộp thư." });
       setStep(2);
-    } catch (e) {
+    } catch (e: unknown) {
       setBanner({ type: "error", text: prettyError(e, "Không thể gửi mã xác minh. Vui lòng thử lại sau.") });
     } finally {
       setLoading(false);
@@ -167,7 +210,7 @@ export default function RegisterPage() {
       await postJson("/auth/verify-otp", { otp });
       setBanner({ type: "success", text: "Xác minh email thành công. Đang chuyển trang…" });
       setTimeout(() => router.push("/login"), 900);
-    } catch (e) {
+    } catch (e: unknown) {
       setBanner({ type: "error", text: prettyError(e, "Mã xác minh không đúng hoặc đã hết hạn.") });
     } finally {
       setLoading(false);
@@ -194,7 +237,9 @@ export default function RegisterPage() {
 
       <section className={styles.card}>
         <h1 className={styles.title}>Tạo tài khoản</h1>
-        <p className={styles.sub}>{step === 1 ? "Tham gia và bắt đầu tạo bản đồ" : "Nhập mã xác minh đã gửi tới email"}</p>
+        <p className={styles.sub}>
+          {step === 1 ? "Tham gia và bắt đầu tạo bản đồ" : "Nhập mã xác minh đã gửi tới email"}
+        </p>
 
         {banner && (
           <div
@@ -354,8 +399,13 @@ export default function RegisterPage() {
                     let lastName = "";
                     try {
                       const cached = localStorage.getItem("reg_name");
-                      if (cached) ({ firstName, lastName } = JSON.parse(cached) as { firstName: string; lastName: string });
-                      else ({ firstName, lastName } = splitVietnameseName(name));
+                      if (cached) {
+                        const parsed = JSON.parse(cached) as NameParts;
+                        firstName = parsed.firstName;
+                        lastName = parsed.lastName;
+                      } else {
+                        ({ firstName, lastName } = splitVietnameseName(name));
+                      }
                     } catch {
                       ({ firstName, lastName } = splitVietnameseName(name));
                     }
@@ -364,7 +414,7 @@ export default function RegisterPage() {
                       { firstName, lastName, email, phone: phone || null, password }
                     );
                     setBanner({ type: "info", text: "Đã gửi lại mã xác minh." });
-                  } catch (e) {
+                  } catch (e: unknown) {
                     setBanner({ type: "error", text: prettyError(e, "Không thể gửi lại mã. Vui lòng thử lại sau.") });
                   } finally {
                     setLoading(false);
