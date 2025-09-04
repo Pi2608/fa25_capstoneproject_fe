@@ -27,7 +27,13 @@ const STORE_KEY = "thu-duc-sketch";
 
 type BoundaryProps = Record<string, unknown>;
 type WardProps = { name?: string; NAME?: string; ten?: string } & Record<string, unknown>;
-type SketchProps = Record<string, never>; // 👈 thêm loại cụ thể cho sketch
+type SketchProps = Record<string, never>; 
+
+type MapWithPM = Map & {
+  pm: {
+    addControls: (options: Record<string, any>) => void;
+  };
+};
 
 type LType = typeof import("leaflet");
 
@@ -70,12 +76,6 @@ export default function ThuDucMapPage() {
       alert((e as Error).message || "Không tải được phường/xã");
     }
   }, [loadGeoJSON]);
-
-  type MapWithPM = Map & {
-    pm: {
-      addControls: (options: Record<string, any>) => void;
-    };
-  };
 
   useEffect(() => {
     let alive = true;
@@ -136,7 +136,7 @@ export default function ThuDucMapPage() {
       const sketch = L.featureGroup(undefined as FeatureGroupOptions | undefined).addTo(map);
       sketchRef.current = sketch;
 
-      (map as Map & { pm: any }).pm.addControls({
+      (map as MapWithPM).pm.addControls({
         position: "topleft",
         drawMarker: true,
         drawPolyline: true,
@@ -157,7 +157,7 @@ export default function ThuDucMapPage() {
       try {
         const bounds = await loadGeoJSON(BOUNDARY_SRC, boundary);
         map.fitBounds(bounds.pad(0.05));
-      } catch { }
+      } catch {}
 
       setReady(true);
     })();
@@ -190,7 +190,7 @@ export default function ThuDucMapPage() {
   function serializeSketch(): FeatureCollection {
     const features: Feature[] = [];
     sketchRef.current?.eachLayer((layer) => {
-      const gj = (layer as unknown as { toGeoJSON: () => GeoJsonObject }).toGeoJSON();
+      const gj = (layer as Layer & { toGeoJSON: () => GeoJsonObject }).toGeoJSON();
       if (gj.type === "Feature") features.push(gj as Feature);
       else if (gj.type === "FeatureCollection") features.push(...(gj as FeatureCollection).features);
     });
