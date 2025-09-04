@@ -11,8 +11,10 @@
     "test:coverage": "jest --coverage"
   },
   "dependencies": {
+    "@geoman-io/leaflet-geoman-free": "^2.18.3",
     "axios": "^1.11.0",
     "firebase": "^12.1.0",
+    "leaflet": "^1.9.4",
     "next": "15.4.4",
     "react": "19.1.0",
     "react-dom": "19.1.0",

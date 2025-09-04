@@ -20,11 +20,11 @@ export default function ResetPasswordPage() {
     setErr(null);
 
     if (newPassword.length < 8) {
-      setErr("Password should be at least 8 characters.");
+      setErr("Mật khẩu phải có ít nhất 8 ký tự.");
       return;
     }
     if (newPassword !== confirmPassword) {
-      setErr("Passwords do not match.");
+      setErr("Mật khẩu nhập lại không khớp.");
       return;
     }
 
@@ -50,10 +50,12 @@ export default function ResetPasswordPage() {
             <div className="p-6 sm:p-8">
               <h1 className="text-2xl font-semibold">
                 <span className="bg-gradient-to-r from-emerald-300 to-emerald-400 bg-clip-text text-transparent">
-                  Reset password
+                  Đặt lại mật khẩu
                 </span>
               </h1>
-              <p className="mt-2 text-sm text-zinc-400">Enter the verification code (OTP) and your new password.</p>
+              <p className="mt-2 text-sm text-zinc-400">
+                Nhập mã xác minh (OTP) và mật khẩu mới của bạn.
+              </p>
 
               {err && (
                 <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
@@ -63,18 +65,18 @@ export default function ResetPasswordPage() {
 
               <form onSubmit={submit} className="mt-6 space-y-4">
                 <label className="block text-sm">
-                  <span className="mb-1 block text-zinc-300">Verification code (OTP)</span>
+                  <span className="mb-1 block text-zinc-300">Mã xác minh (OTP)</span>
                   <input
                     value={otp}
                     onChange={(e) => setOtp(e.target.value)}
-                    placeholder="6-digit code"
+                    placeholder="Mã gồm 6 chữ số"
                     className="w-full rounded-xl px-3 py-2.5 bg-zinc-900/70 placeholder-zinc-500 border border-white/10 outline-none focus:ring-2 focus:ring-emerald-400/60 focus:border-emerald-400/60 transition"
                     required
                   />
                 </label>
 
                 <label className="block text-sm">
-                  <span className="mb-1 block text-zinc-300">New password</span>
+                  <span className="mb-1 block text-zinc-300">Mật khẩu mới</span>
                   <div className="relative">
                     <input
                       type={showNew ? "text" : "password"}
@@ -89,14 +91,16 @@ export default function ResetPasswordPage() {
                       onClick={() => setShowNew((s) => !s)}
                       className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs text-zinc-300 hover:text-white hover:bg-white/5"
                     >
-                      {showNew ? "Hide" : "Show"}
+                      {showNew ? "Ẩn" : "Hiện"}
                     </button>
                   </div>
-                  <p className="mt-1 text-xs text-zinc-500">Use 8+ characters with a mix of letters & numbers.</p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Sử dụng 8+ ký tự gồm cả chữ và số.
+                  </p>
                 </label>
 
                 <label className="block text-sm">
-                  <span className="mb-1 block text-zinc-300">Confirm new password</span>
+                  <span className="mb-1 block text-zinc-300">Xác nhận mật khẩu mới</span>
                   <div className="relative">
                     <input
                       type={showConfirm ? "text" : "password"}
@@ -111,7 +115,7 @@ export default function ResetPasswordPage() {
                       onClick={() => setShowConfirm((s) => !s)}
                       className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs text-zinc-300 hover:text-white hover:bg-white/5"
                     >
-                      {showConfirm ? "Hide" : "Show"}
+                      {showConfirm ? "Ẩn" : "Hiện"}
                     </button>
                   </div>
                 </label>
@@ -121,17 +125,23 @@ export default function ResetPasswordPage() {
                   disabled={loading || !otp || !newPassword || !confirmPassword}
                   className="group w-full rounded-xl py-2.5 font-medium text-zinc-950 bg-emerald-500 hover:bg-emerald-400 shadow-lg shadow-emerald-900/20 disabled:opacity-60 disabled:cursor-not-allowed transition"
                 >
-                  {loading ? "Updating…" : "Set new password"}
+                  {loading ? "Đang cập nhật…" : "Đặt mật khẩu mới"}
                 </button>
               </form>
 
               <p className="mt-5 text-center text-sm text-zinc-400">
-                <a href="/forgot-password" className="text-emerald-400 hover:text-emerald-300 hover:underline">
-                  Resend code
+                <a
+                  href="/forgot-password"
+                  className="text-emerald-400 hover:text-emerald-300 hover:underline"
+                >
+                  Gửi lại mã
                 </a>{" "}
                 ·{" "}
-                <a href="/login" className="text-emerald-400 hover:text-emerald-300 hover:underline">
-                  Back to sign in
+                <a
+                  href="/login"
+                  className="text-emerald-400 hover:text-emerald-300 hover:underline"
+                >
+                  Quay lại đăng nhập
                 </a>
               </p>
             </div>

@@ -1,18 +1,25 @@
-import type { Metadata } from "next";
+// app/templates/page.tsx
+import Link from "next/link";
+import { getMapTemplates } from "@/lib/api";
 
-export const metadata: Metadata = {
-  title: "Community — CustomMapOSM",
-  description: "Join the CustomMapOSM community.",
-};
+export default async function TemplatesPage() {
+  const templates = await getMapTemplates();
 
-export default function CommunityPage() {
   return (
-    <main className="relative mx-auto max-w-7xl px-4 py-12 text-zinc-100">
-      <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(900px_400px_at_20%_0%,rgba(16,185,129,0.15),transparent),radial-gradient(900px_400px_at_80%_0%,rgba(16,185,129,0.1),transparent)]" />
-      <h1 className="text-3xl font-semibold mb-2">Community</h1>
-      <p className="text-zinc-400">
-        Welcome to the community. Updates, discussions, and resources coming soon.
-      </p>
+    <main className="max-w-6xl mx-auto px-6 py-10 text-white">
+      <h1 className="text-3xl font-bold mb-6">Danh sách mẫu</h1>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+        {templates.map(t => (
+          <Link
+            key={t.templateId}
+            href={`/templates/${t.templateId}`}
+            className="rounded-lg bg-white/10 p-6 hover:bg-white/20 transition"
+          >
+            <h2 className="font-semibold text-lg">{t.templateName}</h2>
+            <p className="text-sm text-white/70 mt-2 line-clamp-2">{t.description}</p>
+          </Link>
+        ))}
+      </div>
     </main>
   );
 }
