@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./login.module.css";
 import {
   login as loginApi,
   postJson,
   type LoginResponse,
+  getPlans,
+  createOrRenewMembership,
+  type Plan,
 } from "@/lib/api";
 import { authStore } from "@/contexts/auth-store";
 import {
@@ -26,34 +29,132 @@ import {
 type BannerType = "info" | "error";
 type Provider = "google" | "facebook";
 
-function safeMessage(err: unknown, fallback = "Request failed") {
-  if (err instanceof Error && typeof err.message === "string") return err.message;
-  if (err && typeof err === "object" && "message" in err) {
-    const m = (err as { message?: unknown }).message;
-    if (typeof m === "string") return m;
-  }
-  return fallback;
-}
-
-function msg(code?: string): { type: BannerType; text: string; fallback?: boolean } {
-  switch (code) {
-    case "auth/popup-closed-by-user":
-      return { type: "info", text: "Bạn đã hủy đăng nhập. Nếu muốn, hãy thử lại." };
-    case "auth/popup-blocked":
-    case "auth/operation-not-supported-in-this-environment":
-      return { type: "info", text: "Trình duyệt chặn popup. Đang chuyển sang cách khác…", fallback: true };
-    case "auth/account-exists-with-different-credential":
-      return { type: "error", text: "Email này đã dùng cách đăng nhập khác. Vui lòng dùng đúng phương thức." };
-    case "auth/unauthorized-domain":
-      return { type: "error", text: "Tên miền hiện tại chưa được phép đăng nhập. Vui lòng thử lại sau." };
-    default:
-      return { type: "error", text: "Không thể đăng nhập lúc này. Vui lòng thử lại." };
-  }
-}
-
 interface SocialLoginResponse {
   token: string;
   user: { id: string; email: string };
+}
+
+interface ErrorPayload {
+  type?: string;
+  title?: string;
+  status?: number;
+  detail?: string;
+  message?: string;
+  errors?: string[];
+}
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null;
+}
+
+function humanizeLoginError(err: unknown): string {
+  const raw =
+    typeof err === "string"
+      ? err
+      : err instanceof Error
+      ? err.message
+      : isRecord(err) && typeof err.message === "string"
+      ? (err.message as string)
+      : "";
+
+  let candidate: ErrorPayload | null = null;
+  if (typeof raw === "string" && raw.trim().startsWith("{")) {
+    try {
+      candidate = JSON.parse(raw) as ErrorPayload;
+    } catch {
+      candidate = null;
+    }
+  }
+
+  if (!candidate && isRecord(err)) {
+    if (isRecord(err.body)) {
+      candidate = err.body as ErrorPayload;
+    } else if (
+      isRecord(err.response) &&
+      isRecord((err.response as unknown as Record<string, unknown>).data)
+    ) {
+      const resp = err.response as Record<string, unknown>;
+      candidate = resp.data as ErrorPayload;
+    } else if (isRecord(err.response)) {
+      candidate = err.response as ErrorPayload;
+    }
+  }
+
+  if (candidate) {
+    if (candidate.detail) return String(candidate.detail);
+    if (candidate.message) return String(candidate.message);
+    if (candidate.title) return String(candidate.title);
+    if (Array.isArray(candidate.errors)) return candidate.errors.join("\n");
+  }
+
+  const status =
+    (isRecord(err) && typeof err.status === "number"
+      ? (err.status as number)
+      : undefined) ??
+    (isRecord(err) &&
+    isRecord(err.response) &&
+    typeof (err.response as Record<string, unknown>).status === "number"
+      ? ((err.response as Record<string, unknown>).status as number)
+      : undefined);
+
+  if (status === 400 || status === 401) return "Email hoặc mật khẩu không đúng";
+  if (status === 429) return "Thao tác quá nhiều. Hãy thử lại sau.";
+  if (/InvalidEmailOrPassword/i.test(raw)) return "Email hoặc mật khẩu không đúng";
+  if (/network|failed to fetch|timeout/i.test(raw))
+    return "Lỗi mạng. Vui lòng kiểm tra kết nối.";
+
+  return "Không thể đăng nhập. Vui lòng thử lại.";
+}
+
+function firebaseMsg(
+  code?: string
+): { type: BannerType; text: string; fallback?: boolean } {
+  switch (code) {
+    case "auth/popup-closed-by-user":
+      return { type: "info", text: "Bạn đã huỷ đăng nhập. Thử lại nếu muốn." };
+    case "auth/popup-blocked":
+    case "auth/operation-not-supported-in-this-environment":
+      return {
+        type: "info",
+        text: "Popup bị chặn. Đang chuyển sang đăng nhập bằng chuyển hướng…",
+        fallback: true,
+      };
+    case "auth/account-exists-with-different-credential":
+      return { type: "error", text: "Email này đang dùng phương thức đăng nhập khác." };
+    case "auth/unauthorized-domain":
+      return { type: "error", text: "Miền này không được phép đăng nhập." };
+    default:
+      return { type: "error", text: "Hiện không thể đăng nhập. Vui lòng thử lại." };
+  }
+}
+
+const MEMBERSHIP_GUARD_KEY = "cmosm:membership-checked";
+
+async function ensureFreeMembership() {
+  try {
+    if (
+      typeof window !== "undefined" &&
+      window.localStorage.getItem(MEMBERSHIP_GUARD_KEY)
+    )
+      return;
+
+    const plans: Plan[] = await getPlans().catch(() => []);
+    if (!plans || plans.length === 0) return;
+
+    const free =
+      plans.find((p) => /free/i.test(p.planName)) ??
+      plans.find((p) => p.priceMonthly === 0) ??
+      null;
+    if (!free) return;
+
+    await createOrRenewMembership({ planId: free.planId }).catch(() => {
+    });
+
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(MEMBERSHIP_GUARD_KEY, "1");
+    }
+  } catch {
+  }
 }
 
 async function finishSocial(
@@ -67,6 +168,9 @@ async function finishSocial(
     { provider, idToken }
   );
   authStore.setToken(data.token);
+
+  await ensureFreeMembership();
+
   router.refresh();
   router.push("/");
 }
@@ -74,14 +178,13 @@ async function finishSocial(
 export default function LoginClient() {
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<boolean>(false);
   const [banner, setBanner] = useState<{ type: BannerType; text: string } | null>(null);
   const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
 
-  // Handle Firebase redirect result (popup fallback)
   useEffect(() => {
     const a = getFirebaseAuth();
     getRedirectResult(a)
@@ -91,11 +194,11 @@ export default function LoginClient() {
         await finishSocial(res, pv, router);
         sessionStorage.removeItem("redirectProvider");
       })
-      .catch((e: AuthError) => setBanner(msg(e?.code)));
+      .catch((e: AuthError) => setBanner(firebaseMsg(e?.code)));
   }, [router]);
 
   const validate = () => {
-    const e: typeof errors = {};
+    const e: { email?: string; password?: string } = {};
     if (!email.trim()) e.email = "Vui lòng nhập email.";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) e.email = "Email không hợp lệ.";
     if (!password.trim()) e.password = "Vui lòng nhập mật khẩu.";
@@ -103,24 +206,27 @@ export default function LoginClient() {
     return Object.keys(e).length === 0;
   };
 
-  const onSubmit: React.FormEventHandler<HTMLFormElement> = async (ev) => {
+  const onSubmit = async (ev: FormEvent<HTMLFormElement>) => {
     ev.preventDefault();
     setBanner(null);
     if (!validate()) {
-      setBanner({ type: "error", text: "Vui lòng điền đầy đủ thông tin." });
+      setBanner({ type: "error", text: "Vui lòng điền đầy đủ các trường bắt buộc." });
       return;
     }
     setLoading(true);
     try {
       const data: LoginResponse = await loginApi({ email, password });
-      const token = data.accessToken ?? data.token;
+      const token = data.accessToken ?? (data as unknown as { token?: string }).token;
       if (!token) throw new Error("Login response missing token");
 
       authStore.setToken(token);
+
+      await ensureFreeMembership();
+
       router.refresh();
       router.push("/profile");
     } catch (err: unknown) {
-      setBanner({ type: "error", text: safeMessage(err, "Không thể đăng nhập. Vui lòng thử lại.") });
+      setBanner({ type: "error", text: humanizeLoginError(err) });
     } finally {
       setLoading(false);
     }
@@ -135,8 +241,10 @@ export default function LoginClient() {
       await finishSocial(cred, provider, router);
     } catch (e: unknown) {
       const code =
-        e && typeof e === "object" && "code" in e ? String((e as { code?: unknown }).code) : undefined;
-      const m = msg(code);
+        isRecord(e) && typeof (e as Record<string, unknown>).code === "string"
+          ? ((e as Record<string, unknown>).code as string)
+          : undefined;
+      const m = firebaseMsg(code);
       if (m.fallback) {
         setBanner({ type: "info", text: m.text });
         sessionStorage.setItem("redirectProvider", provider);
@@ -155,17 +263,19 @@ export default function LoginClient() {
         <div className={styles.logoDot} />
         <div className={styles.brandWrap}>
           <span className={styles.brand}>CustomMapOSM</span>
-          <span className={styles.tagline}>Map your world—fast & simple</span>
+          <span className={styles.tagline}>Bản đồ của bạn — nhanh &amp; đơn giản</span>
         </div>
       </div>
 
       <section className={styles.card}>
-        <h1 className={styles.title}>Welcome back</h1>
-        <p className={styles.sub}>Sign in to continue</p>
+        <h1 className={styles.title}>Chào mừng trở lại</h1>
+        <p className={styles.sub}>Đăng nhập để tiếp tục</p>
 
         {banner && (
           <div
-            className={`${styles.banner} ${banner.type === "error" ? styles.bannerError : styles.bannerInfo}`}
+            className={`${styles.banner} ${
+              banner.type === "error" ? styles.bannerError : styles.bannerInfo
+            }`}
             role={banner.type === "error" ? "alert" : "status"}
             aria-live="polite"
           >
@@ -185,7 +295,7 @@ export default function LoginClient() {
                 if (errors.email) setErrors((p) => ({ ...p, email: undefined }));
               }}
               onBlur={validate}
-              placeholder="you@example.com"
+              placeholder="ban@example.com"
               aria-invalid={!!errors.email}
               autoComplete="email"
             />
@@ -193,7 +303,7 @@ export default function LoginClient() {
           </label>
 
           <label className={styles.label}>
-            Password
+            Mật khẩu
             <input
               className={`${styles.input} ${errors.password ? styles.inputError : ""}`}
               type="password"
@@ -210,12 +320,18 @@ export default function LoginClient() {
             {errors.password && <div className={styles.fieldError}>{errors.password}</div>}
           </label>
 
-          <button className={styles.primaryBtn} type="submit" disabled={loading || !email || !password}>
-            {loading ? "Signing in…" : "Sign in"}
+          <button
+            className={styles.primaryBtn}
+            type="submit"
+            disabled={loading || !email || !password}
+          >
+            {loading ? "Đang đăng nhập…" : "Đăng nhập"}
           </button>
         </form>
 
-        <div className={styles.divider}><span>or</span></div>
+        <div className={styles.divider}>
+          <span>hoặc</span>
+        </div>
 
         <div className={styles.socialRow}>
           <button
@@ -224,7 +340,7 @@ export default function LoginClient() {
             disabled={loading}
             type="button"
           >
-            Continue with Google
+            Tiếp tục với Google
           </button>
           <button
             className={`${styles.socialBtn} ${styles.facebook}`}
@@ -232,17 +348,16 @@ export default function LoginClient() {
             disabled={loading}
             type="button"
           >
-            Continue with Facebook
+            Tiếp tục với Facebook
           </button>
         </div>
 
         <p className={styles.note}>
-          Forgot your password?{" "}
-          <a href="/forgot-password" className={styles.link}>Reset it</a>
+          Quên mật khẩu? <a href="/forgot-password" className={styles.link}>Đặt lại</a>
         </p>
 
         <p className={styles.note}>
-          New here? <a href="/register" className={styles.link}>Create an account</a>
+          Mới dùng? <a href="/register" className={styles.link}>Tạo tài khoản</a>
         </p>
       </section>
     </main>

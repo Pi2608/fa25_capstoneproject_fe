@@ -1,14 +1,15 @@
-// src/components/ClientShell.tsx
 "use client";
 
 import type { ReactNode } from "react";
 import Header from "@/components/Header";
+import Footer from "./Footer";
 
 export default function ClientShell({ children }: { children: ReactNode }) {
   return (
     <>
-      <Header />
+      {/* <Header /> */}
       {children}
+      <Footer/>
     </>
   );
 }

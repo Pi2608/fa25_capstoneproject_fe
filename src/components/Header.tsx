@@ -12,41 +12,34 @@ const NAV = [
   { label: "Community", href: "/community" },
 ] as const;
 
-const CATEGORIES = [
-  "Geospatial",
-  "Planning",
-  "Reports",
-  "Education",
-  "Engineering",
-  "Research",
-  "Operations",
-  "Fieldwork",
-] as const;
-
 export default function Header() {
   const router = useRouter();
   const { isLoggedIn, clear } = useAuthStatus();
 
   const onLogout = () => {
-    clear();           
+    clear();
     router.push("/login");
     router.refresh();
   };
 
   return (
-    <header className="sticky top-0 z-50 backdrop-blur supports-[backdrop-filter]:bg-zinc-950/40 border-b border-white/10">
+    <header className="sticky top-0 z-50 backdrop-blur-md bg-black/50 border-b border-white/10 shadow-sm">
       <div className="mx-auto max-w-7xl px-4">
         <div className="flex h-16 items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-lg bg-emerald-400/90 shadow" />
-            <span className="text-lg font-semibold tracking-tight text-zinc-100">
+            <div className="h-6 w-6 rounded-md bg-emerald-400 shadow" />
+            <span className="text-base font-semibold tracking-tight text-white">
               CustomMapOSM
             </span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-7 text-sm text-zinc-300">
+          <nav className="hidden md:flex items-center gap-6 text-sm text-white/80">
             {NAV.map((n) => (
-              <Link key={n.label} href={n.href} className="hover:text-white transition">
+              <Link
+                key={n.label}
+                href={n.href}
+                className="hover:text-white transition"
+              >
                 {n.label}
               </Link>
             ))}
@@ -57,49 +50,33 @@ export default function Header() {
               <>
                 <Link
                   href="/login"
-                  className="rounded-xl px-3 py-2 text-sm text-zinc-300 hover:text-white"
+                  className="rounded-lg px-3 py-2 text-sm text-white/80 hover:text-white"
                 >
                   Login
                 </Link>
                 <Link
                   href="/register"
-                  className="rounded-xl bg-emerald-500/90 px-4 py-2 text-sm font-medium text-zinc-950 shadow hover:bg-emerald-400 transition"
+                  className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 shadow hover:bg-emerald-400 transition"
                 >
-                  Get started
+                  Get Started
                 </Link>
               </>
             ) : (
               <>
                 <Link
                   href="/profile"
-                  className="rounded-xl bg-emerald-500/90 px-4 py-2 text-sm font-medium text-zinc-950 shadow hover:bg-emerald-400 transition"
+                  className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 shadow hover:bg-emerald-400 transition"
                 >
                   Profile
                 </Link>
                 <button
                   onClick={onLogout}
-                  className="rounded-xl px-3 py-2 text-sm text-zinc-300 hover:text-red-400"
+                  className="rounded-lg px-3 py-2 text-sm text-white/80 hover:text-red-400"
                 >
                   Logout
                 </button>
               </>
             )}
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-white/10">
-        <div className="mx-auto max-w-7xl px-4">
-          <div className="flex items-center gap-2 overflow-x-auto py-2 text-sm text-zinc-300 [scrollbar-width:none] [-ms-overflow-style:none]">
-            {CATEGORIES.map((c) => (
-              <button
-                key={c}
-                type="button"
-                className="shrink-0 rounded-full border border-white/10 bg-white/5 px-3 py-1 hover:border-emerald-400/70 hover:text-white transition"
-              >
-                {c}
-              </button>
-            ))}
           </div>
         </div>
       </div>
