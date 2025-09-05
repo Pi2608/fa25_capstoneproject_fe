@@ -4,7 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import { getPlans, type Plan, getJson } from "@/lib/api";
+import {
+  getPlans,
+  type Plan,
+  getJson,
+  getMyOrganizations,
+  type MyOrganizationDto,
+} from "@/lib/api";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
 
 type MyMembership = {
@@ -46,6 +52,9 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
   const [planLabel, setPlanLabel] = useState<string | null>(null);
   const [planStatus, setPlanStatus] = useState<string | null>(null);
 
+  const [orgs, setOrgs] = useState<MyOrganizationDto[] | null>(null);
+  const [orgsErr, setOrgsErr] = useState<string | null>(null);
+
   useEffect(() => {
     let alive = true;
 
@@ -74,22 +83,60 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
         }
 
         const free = ps.find((p) => p.priceMonthly === 0);
-        if (free) {
-          setPlanLabel(free.planName || "Free");
-          setPlanStatus("active");
-        } else {
-          setPlanLabel("Free");
-          setPlanStatus("active");
-        }
+        setPlanLabel(free?.planName ?? "Free");
+        setPlanStatus("active");
       } catch {
         setPlanLabel("Free");
         setPlanStatus("active");
       }
     }
 
+    async function loadOrgs() {
+      if (!isLoggedIn) {
+        setOrgs(null);
+        setOrgsErr(null);
+        return;
+      }
+      try {
+        const res = await getMyOrganizations();
+        if (!alive) return;
+
+        let items: MyOrganizationDto[] = [];
+
+        if (
+          typeof res === "object" &&
+          res !== null &&
+          Array.isArray((res as { organizations?: unknown }).organizations)
+        ) {
+          items = (res as { organizations: MyOrganizationDto[] }).organizations;
+        } else if (Array.isArray(res)) {
+          items = res as MyOrganizationDto[];
+        }
+
+        setOrgs(items);
+        setOrgsErr(null);
+      } catch {
+        if (!alive) return;
+        setOrgsErr("Không tải được danh sách tổ chức.");
+        setOrgs([]);
+      }
+    }
+
     loadPlanBadge();
+    loadOrgs();
+
+    const onAuthChanged = () => {
+      loadPlanBadge();
+      loadOrgs();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("auth-changed", onAuthChanged);
+    }
     return () => {
       alive = false;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("auth-changed", onAuthChanged);
+      }
     };
   }, [isLoggedIn]);
 
@@ -100,25 +147,56 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
           <div>
             <div className="mb-6">
               <div className="text-[11px] uppercase tracking-widest text-emerald-300/70 mb-2">
-                Hồ sơ của bạn
+                Chung
               </div>
               <div className="space-y-1">
                 <SidebarLink href="/" label="Trang chủ" />
                 <SidebarLink href="/profile" label="Thông tin cá nhân" />
-                <SidebarLink href="/profile/membership" label="Thành viên" />
                 <SidebarLink href="/profile/access-tool" label="Công cụ truy cập" />
+                <SidebarLink href="/profile/recents" label="Gần đây" />
+                <SidebarLink href="/profile/drafts" label="Bản nháp" />
+                <SidebarLink href="/profile/invite" label="Mời thành viên" />
               </div>
             </div>
 
             <div className="mb-6">
               <div className="text-[11px] uppercase tracking-widest text-emerald-300/70 mb-2">
-                Khác
+                Dự án
               </div>
               <div className="space-y-1">
-                <SidebarLink href="/profile/recents" label="Gần đây" />
-                <SidebarLink href="/profile/drafts" label="Bản nháp" />
+                <SidebarLink href="/profile/create-project" label="Tạo tổ chức" />
+
+                {orgs === null && (
+                  <>
+                    <div className="h-8 rounded-md bg-white/5 animate-pulse" />
+                    <div className="h-8 rounded-md bg-white/5 animate-pulse" />
+                  </>
+                )}
+
+                {orgsErr && (
+                  <div className="px-3 py-2 text-xs rounded-md border border-red-400/40 bg-red-500/10 text-red-200">
+                    {orgsErr}
+                  </div>
+                )}
+
+                {orgs && !orgsErr && orgs.length === 0 && (
+                  <div className="px-3 py-2 text-xs rounded-md border border-white/10 bg-white/5 text-zinc-300">
+                    Chưa có tổ chức. Hãy tạo tổ chức đầu tiên của bạn!
+                  </div>
+                )}
+
+                {(orgs ?? []).slice(0, 5).map((o) => (
+                  <SidebarLink
+                    key={o.orgId}
+                    href={`/profile/organizations/${o.orgId}`}
+                    label={o.orgName}
+                  />
+                ))}
+                {(orgs ?? []).length > 5 && (
+                  <SidebarLink href="/profile/organizations" label="Xem tất cả tổ chức" />
+                )}
+
                 <SidebarLink href="/profile/settings" label="Cài đặt" />
-                <SidebarLink href="/profile/invite" label="Mời thành viên" />
                 <SidebarLink href="/profile/help" label="Trợ giúp" />
               </div>
             </div>

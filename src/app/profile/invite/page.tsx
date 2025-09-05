@@ -12,7 +12,29 @@ import {
 
 function fmtDate(iso?: string) {
   if (!iso) return "—";
-  try { return new Date(iso).toLocaleString(); } catch { return iso; }
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+type ApiLikeError = {
+  status?: number;
+  message?: string;
+  detail?: string;
+};
+
+function toApiError(err: unknown): ApiLikeError {
+  if (typeof err === "object" && err !== null) {
+    const r = err as Record<string, unknown>;
+    return {
+      status: typeof r.status === "number" ? r.status : undefined,
+      message: typeof r.message === "string" ? r.message : undefined,
+      detail: typeof r.detail === "string" ? r.detail : undefined,
+    };
+  }
+  return {};
 }
 
 export default function MyInvitationsPage() {
@@ -35,7 +57,9 @@ export default function MyInvitationsPage() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    void load();
+  }, []);
 
   const pending = useMemo(
     () => (data?.invitations ?? []).filter((i) => !i.isAccepted),
@@ -49,13 +73,13 @@ export default function MyInvitationsPage() {
       await acceptInvite(body);
       setToast("Đã chấp nhận lời mời.");
       await load();
-    } catch (e: any) {
-      const detail: string | undefined = e?.detail || e?.message;
-      if ((e?.status ?? 0) === 409) {
+    } catch (e: unknown) {
+      const errObj = toApiError(e);
+      if ((errObj.status ?? 0) === 409) {
         setToast("Lời mời này đã được chấp nhận trước đó.");
         await load();
       } else {
-        alert(detail ?? "Chấp nhận lời mời thất bại.");
+        alert(errObj.detail ?? errObj.message ?? "Chấp nhận lời mời thất bại.");
       }
     } finally {
       setBusyId(null);
@@ -69,8 +93,9 @@ export default function MyInvitationsPage() {
       await rejectInvite(body);
       setToast("Đã từ chối lời mời.");
       await load();
-    } catch (e: any) {
-      alert(e?.detail ?? e?.message ?? "Từ chối lời mời thất bại.");
+    } catch (e: unknown) {
+      const errObj = toApiError(e);
+      alert(errObj.detail ?? errObj.message ?? "Từ chối lời mời thất bại.");
     } finally {
       setBusyId(null);
     }
@@ -145,30 +170,33 @@ export default function MyInvitationsPage() {
         </div>
       )}
 
-      {!loading && !err && (data?.invitations ?? []).some((i) => i.isAccepted) && (
-        <div className="pt-2">
-          <div className="text-sm text-zinc-400 mb-2">Đã xử lý</div>
-          <div className="space-y-2">
-            {data!.invitations
-              .filter((i) => i.isAccepted)
-              .map((inv) => (
-                <div
-                  key={inv.invitationId}
-                  className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-300 flex items-center justify-between"
-                >
-                  <div>
-                    <span className="font-medium text-white">{inv.orgName}</span>{" "}
-                    • Vai trò: <span className="text-emerald-300">{inv.memberType ?? "Member"}</span>{" "}
-                    • Accepted at: {fmtDate(inv.acceptedAt ?? undefined)}
+      {!loading &&
+        !err &&
+        (data?.invitations ?? []).some((i) => i.isAccepted) && (
+          <div className="pt-2">
+            <div className="text-sm text-zinc-400 mb-2">Đã xử lý</div>
+            <div className="space-y-2">
+              {data!.invitations
+                .filter((i) => i.isAccepted)
+                .map((inv) => (
+                  <div
+                    key={inv.invitationId}
+                    className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-300 flex items-center justify-between"
+                  >
+                    <div>
+                      <span className="font-medium text-white">{inv.orgName}</span>{" "}
+                      • Vai trò:{" "}
+                      <span className="text-emerald-300">{inv.memberType ?? "Member"}</span>{" "}
+                      • Accepted at: {fmtDate(inv.acceptedAt ?? undefined)}
+                    </div>
+                    <span className="rounded bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 px-2 py-0.5 text-xs">
+                      Accepted
+                    </span>
                   </div>
-                  <span className="rounded bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 px-2 py-0.5 text-xs">
-                    Accepted
-                  </span>
-                </div>
-              ))}
+                ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
     </div>
   );
 }

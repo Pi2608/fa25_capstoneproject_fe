@@ -4,10 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import {
   getPlans,
   type Plan,
-  createOrRenewMembership,
   processPayment,
-  type MembershipResponse,
-  type ApprovalUrlResponse,
+  type ProcessPaymentRes,
+  type ProcessPaymentReq,
   getJson,
 } from "@/lib/api";
 
@@ -16,7 +15,7 @@ type MyMembership = {
   status: "active" | "expired" | "pending" | string;
 };
 
-function safeMessage(err: unknown) {
+function safeMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (err && typeof err === "object" && "message" in err) {
     const m = (err as { message?: unknown }).message;
@@ -25,23 +24,21 @@ function safeMessage(err: unknown) {
   return "Yêu cầu thất bại";
 }
 
-function formatUSD(n?: number | null) {
+function formatUSD(n?: number | null): string {
   const v = typeof n === "number" ? n : 0;
   return `$${v.toFixed(2)}`;
 }
 
 export default function SelectPlanPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   const [selected, setSelected] = useState<Plan | null>(null);
-
   const [submittingByPlan, setSubmittingByPlan] = useState<Record<number, boolean>>({});
 
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-
   const [hint, setHint] = useState<string | null>(null);
 
   useEffect(() => {
@@ -56,24 +53,24 @@ export default function SelectPlanPage() {
           const me = await getJson<MyMembership>("/membership/me");
           if (!alive) return;
 
-          const found = ps.find((p) => p.planId === me.planId);
+          const found = ps.find((p) => p.planId === me.planId) ?? null;
           if (found) {
             setCurrentPlan(found);
             setStatus(me.status ?? "active");
           } else {
-            const free = ps.find((p) => (p.priceMonthly ?? 0) <= 0) || null;
-            setCurrentPlan(free);
+            const free = ps.find((p) => (p.priceMonthly ?? 0) <= 0) ?? null;
+            setCurrentPlan(free ?? null);
             setStatus(free ? "active" : null);
           }
 
-          if (me.status === "pending") {
-            setHint("Bạn có giao dịch đang chờ thanh toán. Hãy bấm “Tiếp tục thanh toán”.");
-          } else {
-            setHint(null);
-          }
+          setHint(
+            me.status === "pending"
+              ? "Bạn có giao dịch đang chờ thanh toán. Hãy bấm “Tiếp tục thanh toán”."
+              : null
+          );
         } catch {
-          const free = ps.find((p) => (p.priceMonthly ?? 0) <= 0) || null;
-          setCurrentPlan(free);
+          const free = ps.find((p) => (p.priceMonthly ?? 0) <= 0) ?? null;
+          setCurrentPlan(free ?? null);
           setStatus(free ? "active" : null);
         }
       } catch (e) {
@@ -89,44 +86,48 @@ export default function SelectPlanPage() {
   }, []);
 
   const currentId = currentPlan?.planId ?? null;
-  const paidPlans = useMemo(
-    () => plans.filter((p) => (p.priceMonthly ?? 0) > 0),
-    [plans]
-  );
+  const paidPlans = useMemo<Plan[]>(() => plans.filter((p) => (p.priceMonthly ?? 0) > 0), [plans]);
 
   const setPlanSubmitting = (planId: number, v: boolean) =>
     setSubmittingByPlan((prev) => ({ ...prev, [planId]: v }));
 
-  const isPlanSubmitting = (planId: number) => !!submittingByPlan[planId];
+  const isPlanSubmitting = (planId: number) => Boolean(submittingByPlan[planId]);
 
   const pay = async (plan: Plan) => {
-    if ((plan.priceMonthly ?? 0) <= 0) return;
-    if (isPlanSubmitting(plan.planId)) return; 
+    const price = plan.priceMonthly ?? 0;
+    if (price <= 0) return;
+    if (isPlanSubmitting(plan.planId)) return;
 
     setPlanSubmitting(plan.planId, true);
     setError(null);
 
     try {
-      const mem: MembershipResponse = await createOrRenewMembership({
-        planId: plan.planId,
-      });
-      if (!mem?.membershipId) {
-        throw new Error("Không thể khởi tạo gói. Vui lòng thử lại.");
-      }
+      const FE_ORIGIN = window.location.origin;
 
-      const approval: ApprovalUrlResponse = await processPayment({
-        paymentGateway: "PayOS", 
-        total: plan.priceMonthly,
+      const reqBody: ProcessPaymentReq = {
+        paymentGateway: "PayPal",
         purpose: "membership",
-        membershipId: mem.membershipId,
-      });
+        total: price,
+        currency: "USD",
+        returnUrl: `${FE_ORIGIN}/payment/paypal-return`,
+        successUrl: `${FE_ORIGIN}/payment/return`,
+        cancelUrl: `${FE_ORIGIN}/profile/select-plan?status=cancelled`,
+        context: {
+          PlanId: plan.planId,
+        },
+      };
 
-      if (!approval?.approvalUrl) {
-        throw new Error("Thiếu URL thanh toán từ cổng thanh toán.");
+      // Lưu planId để confirm sau
+      sessionStorage.setItem("pendingPlanId", String(plan.planId));
+
+      const res: ProcessPaymentRes = await processPayment(reqBody);
+
+      if (!res.approvalUrl) {
+        throw new Error("Thiếu URL thanh toán từ PayPal.");
       }
 
-      setHint("Đang chuyển đến cổng thanh toán…");
-      window.location.href = approval.approvalUrl;
+      setHint("Đang chuyển đến PayPal…");
+      window.location.href = res.approvalUrl;
     } catch (e) {
       setError(safeMessage(e));
     } finally {
@@ -185,7 +186,6 @@ export default function SelectPlanPage() {
             const isFree = (p.priceMonthly ?? 0) <= 0;
             const isSelected = selected?.planId === p.planId;
             const isSubmitting = isPlanSubmitting(p.planId);
-
             const isCurrentActive = currentId === p.planId && status === "active";
             const isCurrentPending = currentId === p.planId && status === "pending";
 
@@ -240,7 +240,7 @@ export default function SelectPlanPage() {
                           className="flex-1 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 text-sm font-semibold text-zinc-950"
                         >
                           {isSubmitting
-                            ? "Đang xử lý…"
+                            ? "Đang chuyển tới PayPal…"
                             : isCurrentPending && currentId === p.planId
                             ? "Tiếp tục thanh toán"
                             : "Đăng ký"}
