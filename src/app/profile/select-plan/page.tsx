@@ -1,3 +1,4 @@
+// src/app/profile/select-plan/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -10,20 +11,23 @@ import {
   getJson,
 } from "@/lib/api";
 
+/** Trạng thái membership tối thiểu để hiển thị UI hiện tại */
 type MyMembership = {
   planId: number;
   status: "active" | "expired" | "pending" | string;
 };
 
-function safeMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
+/** Chuẩn hoá message lỗi -> luôn trả về string */
+function safeMessage(err: unknown, fallback = "Yêu cầu thất bại"): string {
+  if (err instanceof Error && err.message) return err.message;
   if (err && typeof err === "object" && "message" in err) {
     const m = (err as { message?: unknown }).message;
-    if (typeof m === "string") return m;
+    if (typeof m === "string" && m.trim()) return m;
   }
-  return "Yêu cầu thất bại";
+  return fallback;
 }
 
+/** Định dạng USD */
 function formatUSD(n?: number | null): string {
   const v = typeof n === "number" ? n : 0;
   return `$${v.toFixed(2)}`;
@@ -41,6 +45,7 @@ export default function SelectPlanPage() {
   const [status, setStatus] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
 
+  /** Nạp danh sách gói + membership hiện tại */
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -49,11 +54,13 @@ export default function SelectPlanPage() {
         if (!alive) return;
         setPlans(ps);
 
+        // Thử lấy membership hiện tại
         try {
           const me = await getJson<MyMembership>("/membership/me");
           if (!alive) return;
 
           const found = ps.find((p) => p.planId === me.planId) ?? null;
+
           if (found) {
             setCurrentPlan(found);
             setStatus(me.status ?? "active");
@@ -69,13 +76,14 @@ export default function SelectPlanPage() {
               : null
           );
         } catch {
+          // Chưa có membership -> set mặc định Free nếu có
           const free = ps.find((p) => (p.priceMonthly ?? 0) <= 0) ?? null;
           setCurrentPlan(free ?? null);
           setStatus(free ? "active" : null);
         }
       } catch (e) {
         if (!alive) return;
-        setError(safeMessage(e));
+        setError(safeMessage(e, "Không tải được danh sách gói."));
       } finally {
         if (alive) setLoading(false);
       }
@@ -86,13 +94,17 @@ export default function SelectPlanPage() {
   }, []);
 
   const currentId = currentPlan?.planId ?? null;
-  const paidPlans = useMemo<Plan[]>(() => plans.filter((p) => (p.priceMonthly ?? 0) > 0), [plans]);
+  const paidPlans = useMemo<Plan[]>(
+    () => plans.filter((p) => (p.priceMonthly ?? 0) > 0),
+    [plans]
+  );
 
   const setPlanSubmitting = (planId: number, v: boolean) =>
     setSubmittingByPlan((prev) => ({ ...prev, [planId]: v }));
 
   const isPlanSubmitting = (planId: number) => Boolean(submittingByPlan[planId]);
 
+  /** Gọi thanh toán cho 1 plan trả phí */
   const pay = async (plan: Plan) => {
     const price = plan.priceMonthly ?? 0;
     if (price <= 0) return;
@@ -109,6 +121,7 @@ export default function SelectPlanPage() {
         purpose: "membership",
         total: price,
         currency: "USD",
+        // tuỳ BE: các url này sẽ được PayPal redirect về
         returnUrl: `${FE_ORIGIN}/payment/paypal-return`,
         successUrl: `${FE_ORIGIN}/payment/return`,
         cancelUrl: `${FE_ORIGIN}/profile/select-plan?status=cancelled`,
@@ -117,24 +130,32 @@ export default function SelectPlanPage() {
         },
       };
 
-      // Lưu planId để confirm sau
+      // Lưu planId để trang return có thể confirm membership
       sessionStorage.setItem("pendingPlanId", String(plan.planId));
 
       const res: ProcessPaymentRes = await processPayment(reqBody);
 
-      if (!res.approvalUrl) {
+      // Chuẩn tên field approve url (BE của bạn đang dùng approveUrl)
+      const approveUrl =
+        (res as { approveUrl?: string }).approveUrl ??
+        // fallback nếu BE đổi tên về sau:
+        (res as { approvalUrl?: string }).approvalUrl ??
+        "";
+
+      if (!approveUrl) {
         throw new Error("Thiếu URL thanh toán từ PayPal.");
       }
 
       setHint("Đang chuyển đến PayPal…");
-      window.location.href = res.approvalUrl;
+      window.location.href = approveUrl;
     } catch (e) {
-      setError(safeMessage(e));
+      setError(safeMessage(e, "Không khởi tạo được thanh toán."));
     } finally {
       setPlanSubmitting(plan.planId, false);
     }
   };
 
+  /** Badge hiển thị trạng thái của 1 plan so với membership hiện tại */
   const renderStatusBadge = (p: Plan) => {
     const isCurrent = currentId === p.planId && status === "active";
     const isPending = currentId === p.planId && status === "pending";
@@ -164,7 +185,9 @@ export default function SelectPlanPage() {
   return (
     <main className="relative mx-auto max-w-6xl px-4 py-8 text-zinc-100">
       <h1 className="text-2xl font-semibold">Chọn gói</h1>
-      <p className="mt-1 text-zinc-400">Các gói đơn giản, mở rộng theo nhu cầu. Không phí ẩn.</p>
+      <p className="mt-1 text-zinc-400">
+        Các gói đơn giản, mở rộng theo nhu cầu. Không phí ẩn.
+      </p>
 
       {hint && (
         <div className="mt-3 mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
@@ -181,7 +204,7 @@ export default function SelectPlanPage() {
       {loading ? (
         <div className="mt-6 text-sm text-zinc-400">Đang tải gói…</div>
       ) : (
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
           {plans.map((p) => {
             const isFree = (p.priceMonthly ?? 0) <= 0;
             const isSelected = selected?.planId === p.planId;
