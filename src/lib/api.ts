@@ -292,6 +292,39 @@ export async function getActiveUserAccessTools(): Promise<UserAccessTool[]> {
   return (data ?? []).map(mapUserAccessTool);
 }
 
+export type CancelPaymentWithContextReq = {
+  paymentGateway: "paypal" | "payos";
+  purpose?: {
+    userId?: string;
+    planId?: number;
+    email?: string;
+    [k: string]: unknown;
+  };
+  paymentId?: string;
+  payerId?: string;
+  token?: string;
+  intent?: string;
+  secret?: string;
+  orderCode?: string;
+  signature?: string;
+  transactionId?: string;
+};
+
+
+export type CancelPaymentRes = {
+  ok: boolean;
+  message?: string;
+};
+
+export async function cancelPaymentWithContext(
+  payload: CancelPaymentWithContextReq
+) {
+  return postJson<CancelPaymentWithContextReq, CancelPaymentRes>(
+    "/transaction/cancel-payment-with-context",
+    payload
+  );
+}
+
 
 /** ===== MEMBERSHIP ===== */
 export type MembershipResponse = {
@@ -321,41 +354,24 @@ function mentionsInvalidMembership(msg: string): boolean {
 
 
 export async function createOrRenewMembership(payload: { planId: number }) {
+  const body = { plan_id: payload.planId };
+
   try {
-    return await postJson<typeof payload, MembershipResponse>(
+    return await postJson<typeof body, MembershipResponse>(
       "/membership/create-or-renew",
-      payload
+      body
     );
-  } catch (err1: unknown) {
-    if (!isApiError(err1)) throw err1;
+  } catch (err) {
+    if (!isApiError(err)) throw err;
 
-    if (err1.status === 400 || err1.status === 422 || mentionsInvalidMembership(err1.message)) {
-      const bodySnake = { plan_id: payload.planId };
-      try {
-        return await postJson<typeof bodySnake, MembershipResponse>(
-          "/membership/create-or-renew",
-          bodySnake
-        );
-      } catch (err2: unknown) {
-        if (!isApiError(err2)) throw err2;
-
-        if (mentionsMissingBody(err2.message)) {
-          const url = `/membership/create-or-renew?planId=${encodeURIComponent(payload.planId)}`;
-          return await apiFetch<MembershipResponse>(url, { method: "POST" });
-        }
-        throw err2;
-      }
-    }
-
-    if (mentionsMissingBody(err1.message)) {
+    if (mentionsMissingBody(err.message)) {
       const url = `/membership/create-or-renew?planId=${encodeURIComponent(payload.planId)}`;
       return await apiFetch<MembershipResponse>(url, { method: "POST" });
     }
 
-    throw err1;
+    throw err;
   }
 }
-
 
 /** ===== Forgot / Reset Password ===== */
 export type ResetPasswordVerifyReq = { email: string };
@@ -379,75 +395,110 @@ export function resetPassword(req: ResetPasswordReq) {
   return postJson<ResetPasswordReq, ResetPasswordRes>("/auth/reset-password", req);
 }
 
-/** ===== Transactions / Payments ===== */
-export type PaymentGateway = "PayOS" | "PayPal";
 
-export type ProcessPaymentReq = {
-  paymentGateway: PaymentGateway;
-  total: number;
-  purpose: string;
-  membershipId?: string;
-};
-
-export type ApprovalUrlResponse = {
-  approvalUrl: string;
-  paymentGateway: PaymentGateway;
-  sessionId?: string;
-  paymentId?: string;
-  orderCode?: string;
-};
-
-export function processPayment(req: ProcessPaymentReq) {
-  return postJson<ProcessPaymentReq, ApprovalUrlResponse>("/transaction/process-payment", req);
+// ==== Transactions (PayPal) ====
+export interface ProcessPaymentReq {
+  paymentGateway: "PayPal" | "PayOS";
+  purpose: "membership" | "order";
+  total?: number;           
+  currency?: string;        
+  returnUrl?: string;
+  successUrl: string;
+  cancelUrl: string;
+  context?: {
+    PlanId?: number;
+    OrgId?: string;
+    AutoRenew?: boolean;
+    MembershipId?: string;
+    AddonKey?: string;
+    Quantity?: number;
+    UserId?: string;
+  };
 }
 
-export type ConfirmPaymentWithContextReq = {
-  transactionId?: string;
-  paymentGateway: PaymentGateway;
-  paymentId?: string;
-  orderCode?: string;
-  signature?: string;
-  purpose: string;
-};
-
-export function confirmPaymentWithContext(req: ConfirmPaymentWithContextReq) {
-  return postJson<ConfirmPaymentWithContextReq, unknown>("/transaction/confirm-payment-with-context", req);
+// Response trả về khi tạo giao dịch
+export interface ProcessPaymentRes {
+  approveUrl: string;     
+  transactionId: string;  
+  provider?: string;
 }
 
-export type CancelPaymentWithContextReq = {
-  paymentGateway: PaymentGateway;
-  paymentId?: string;
-  payerId?: string;
-  token?: string;
-  intent?: string;
-  secret?: string;
-  orderCode?: string;
-  signature?: string;
-  transactionId?: string;
-};
-
-export type CancelPaymentResponse = { status: string; gateway: string; };
-
-export function cancelPaymentWithContext(req: CancelPaymentWithContextReq) {
-  return postJson<CancelPaymentWithContextReq, CancelPaymentResponse>("/transaction/cancel-payment", req);
+export function processPayment(body: ProcessPaymentReq) {
+  return postJson<ProcessPaymentReq, ProcessPaymentRes>(
+    "/transaction/process-payment",
+    body
+  );
 }
 
-export type Transaction = {
+export interface ConfirmPaymentReq {
+  transactionId: string;
+  token: string;
+  payerId: string;   
+  paymentId: string; 
+}
+
+export interface ConfirmPaymentRes {
+  success: boolean;
+  message?: string;
+}
+
+export function confirmPayment(body: ConfirmPaymentReq) {
+  return postJson<ConfirmPaymentReq, ConfirmPaymentRes>(
+    "/transaction/confirm-payment-with-context",
+    body
+  );
+}
+
+// ==== Confirm Payment (với context) ====
+
+export type PaymentGateway = "PayPal" | "PayOS";
+export type PaymentPurpose = "membership" | "order";
+
+export interface ConfirmPaymentWithContextReq {
+  transactionId: string;
+  token: string;
+  payerId: string;
+  paymentId: string;
+  paymentGateway: PaymentGateway;
+  purpose: PaymentPurpose;
+  membershipContext: {
+    userId: string;
+    planId: number;
+    email?: string;
+  };
+}
+
+export interface ConfirmPaymentWithContextRes {
+  success: boolean;
+  message?: string;
+}
+
+export function confirmPaymentWithContext(body: ConfirmPaymentWithContextReq) {
+  return postJson<ConfirmPaymentWithContextReq, ConfirmPaymentWithContextRes>(
+    "/transaction/confirm-payment-with-context",
+    body
+  );
+}
+
+// Gọi GET /api/v1/transaction/{id}
+export function getTransactionById(transactionId: string) {
+  return getJson(`/transaction/${transactionId}`);
+}
+
+export interface Transaction {
   transactionId: string;
   amount: number;
   status: string;
-  paymentGatewayId: string;
   purpose: string;
-};
-
-export function getTransactionById(id: string) {
-  return getJson<Transaction>(`/transaction/${id}`);
+  paymentGatewayId?: string;
+  transactionReference?: string;
+  transactionDate?: string;
+  createdAt?: string;
 }
 
-/** =========================================================
- * ========== MAPS / TEMPLATES / LAYERS / FEATURES ==========
- * ======================================================= */
 
+/** =========================================================
+MAPS / TEMPLATES / LAYERS / FEATURES 
 /* ---------- Map core ---------- */
 export type Map = {
   id: string;
@@ -670,4 +721,180 @@ export function updateMapFeature(mapId: string, featureId: string, body: UpdateM
 
 export function deleteMapFeature(mapId: string, featureId: string) {
   return delJson<{ deleted: boolean }>(`/maps/${mapId}/features/${featureId}`);
+}
+
+/* ================== ORGANIZATION API (MATCH BACKEND) ================== */
+
+export type OrganizationReqDto = {
+  // BE yêu cầu OrgName & Abbreviation là required
+  orgName: string;
+  abbreviation: string;
+  description?: string;
+  logoUrl?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  address?: string;
+};
+
+export type OrganizationResDto = { result?: string };
+
+export type OrganizationDetailDto = {
+  orgId: string;
+  orgName: string;
+  abbreviation: string;
+  description?: string | null;
+  logoUrl?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  address?: string | null;
+  createdAt?: string;
+  isActive?: boolean;
+};
+
+export type GetAllOrganizationsResDto = { organizations: OrganizationDetailDto[] };
+export type GetOrganizationByIdResDto = { organization: OrganizationDetailDto };
+export type UpdateOrganizationResDto = { result?: string };
+export type DeleteOrganizationResDto = { result?: string };
+
+/* My organizations */
+export type MyOrganizationDto = {
+  orgId: string;
+  orgName: string;
+  abbreviation: string;
+  myRole: "Owner" | "Admin" | "Member" | string;
+  joinedAt?: string;
+  logoUrl?: string | null;
+};
+export type GetMyOrganizationsResDto = { organizations: MyOrganizationDto[] };
+
+/* Invitations */
+export type InvitationDto = {
+  invitationId: string;
+  orgId: string;
+  orgName: string;
+  email: string;
+  inviterEmail: string;
+  memberType: "Admin" | "Member" | "Viewer" | string;
+  invitedAt: string;
+  isAccepted: boolean;
+  acceptedAt?: string | null;
+};
+export type GetInvitationsResDto = { invitations: InvitationDto[] };
+
+/* Members */
+export type MemberDto = {
+  memberId: string;
+  email: string;
+  fullName: string;
+  role: "Owner" | "Admin" | "Member" | "Viewer" | string;
+  joinedAt: string;
+  isActive: boolean;
+};
+export type GetOrganizationMembersResDto = { members: MemberDto[] };
+
+/* Requests for special ops */
+export type InviteMemberOrganizationReqDto = {
+  orgId: string;
+  memberEmail: string;
+  memberType: "Admin" | "Member" | "Viewer" | string;
+};
+export type InviteMemberOrganizationResDto = { result?: string };
+
+export type AcceptInviteOrganizationReqDto = { invitationId: string };
+export type AcceptInviteOrganizationResDto = { result?: string };
+
+export type RejectInviteOrganizationReqDto = { invitationId: string };
+export type RejectInviteOrganizationResDto = { result?: string };
+
+export type CancelInviteOrganizationReqDto = { invitationId: string };
+export type CancelInviteOrganizationResDto = { result?: string };
+
+export type UpdateMemberRoleReqDto = {
+  orgId: string;
+  memberId: string;
+  newRole: "Owner" | "Admin" | "Member" | "Viewer" | string;
+};
+export type UpdateMemberRoleResDto = { result?: string };
+
+export type RemoveMemberReqDto = { orgId: string; memberId: string };
+export type RemoveMemberResDto = { result?: string };
+
+export type TransferOwnershipReqDto = { orgId: string; newOwnerId: string };
+export type TransferOwnershipResDto = { result?: string };
+
+/* ------------------ CRUD Organization ------------------ */
+export function createOrganization(body: OrganizationReqDto) {
+  return postJson<OrganizationReqDto, OrganizationResDto>("/organizations", body);
+}
+export function getOrganizations() {
+  return getJson<GetAllOrganizationsResDto>("/organizations");
+}
+export function getOrganizationById(orgId: string) {
+  return getJson<GetOrganizationByIdResDto>(`/organizations/${orgId}`);
+}
+export function updateOrganization(orgId: string, body: OrganizationReqDto) {
+  return putJson<OrganizationReqDto, UpdateOrganizationResDto>(`/organizations/${orgId}`, body);
+}
+export function deleteOrganization(orgId: string) {
+  return delJson<DeleteOrganizationResDto>(`/organizations/${orgId}`);
+}
+
+/* ------------------ My orgs & invitations ------------------ */
+export function getMyOrganizations() {
+  return getJson<GetMyOrganizationsResDto>("/organizations/mine");
+}
+export function getMyInvitations() {
+  return getJson<GetInvitationsResDto>("/organizations/my-invitations");
+}
+
+/* ------------------ Members ------------------ */
+export function getOrganizationMembers(orgId: string) {
+  return getJson<GetOrganizationMembersResDto>(`/organizations/${orgId}/members`);
+}
+export function updateMemberRole(body: UpdateMemberRoleReqDto) {
+  return apiFetch<UpdateMemberRoleResDto>("/organizations/members/role", {
+    method: "PUT",
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+export function removeMember(body: RemoveMemberReqDto) {
+  return delJson<RemoveMemberResDto>("/organizations/members/remove", {
+    body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  } as RequestInit);
+}
+
+/* ------------------ Invitations ops ------------------ */
+export function inviteMember(body: InviteMemberOrganizationReqDto) {
+  return postJson<InviteMemberOrganizationReqDto, InviteMemberOrganizationResDto>(
+    "/organizations/invite-member",
+    body
+  );
+}
+export function acceptInvite(body: AcceptInviteOrganizationReqDto) {
+  return postJson<AcceptInviteOrganizationReqDto, AcceptInviteOrganizationResDto>(
+    "/organizations/accept-invite",
+    body
+  );
+}
+export function rejectInvite(body: RejectInviteOrganizationReqDto) {
+  return postJson<RejectInviteOrganizationReqDto, RejectInviteOrganizationResDto>(
+    "/organizations/invites/reject",
+    body
+  );
+}
+export function cancelInvite(body: CancelInviteOrganizationReqDto) {
+  return postJson<CancelInviteOrganizationReqDto, CancelInviteOrganizationResDto>(
+    "/organizations/invites/cancel",
+    body
+  );
+}
+
+/* ------------------ Transfer ownership ------------------ */
+export function transferOwnership(body: TransferOwnershipReqDto) {
+  return postJson<TransferOwnershipReqDto, TransferOwnershipResDto>(
+    "/organizations/ownership/transfer",
+    body
+  );
 }
