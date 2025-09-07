@@ -293,7 +293,7 @@ export async function getActiveUserAccessTools(): Promise<UserAccessTool[]> {
 }
 
 export type CancelPaymentWithContextReq = {
-  paymentGateway: "paypal" | "payos";
+  paymentGateway: "paypal" | "payOS";
   purpose?: {
     userId?: string;
     planId?: number;
@@ -319,6 +319,7 @@ export type CancelPaymentRes = {
 export async function cancelPaymentWithContext(
   payload: CancelPaymentWithContextReq
 ) {
+  console.log("cancelPaymentWithContext", payload);
   return postJson<CancelPaymentWithContextReq, CancelPaymentRes>(
     "/transaction/cancel-payment-with-context",
     payload
@@ -397,30 +398,49 @@ export function resetPassword(req: ResetPasswordReq) {
 
 
 // ==== Transactions (PayPal) ====
+// export interface ProcessPaymentReq {
+//   paymentGateway: "PayPal" | "payOS";
+//   purpose: "membership" | "order";
+//   total?: number;           
+//   currency?: string;        
+//   returnUrl?: string;
+//   successUrl: string;
+//   cancelUrl: string;
+//   context?: {
+//     PlanId?: number;
+//     OrgId?: string;
+//     AutoRenew?: boolean;
+//     MembershipId?: string;
+//     AddonKey?: string;
+//     Quantity?: number;
+//     UserId?: string;
+//   };
+// }
+
+// ==== Transactions (PayOS) ====
 export interface ProcessPaymentReq {
-  paymentGateway: "PayPal" | "PayOS";
+  paymentGateway: "PayPal" | "payOS";
   purpose: "membership" | "order";
-  total?: number;           
-  currency?: string;        
-  returnUrl?: string;
-  successUrl: string;
-  cancelUrl: string;
-  context?: {
-    PlanId?: number;
-    OrgId?: string;
-    AutoRenew?: boolean;
-    MembershipId?: string;
-    AddonKey?: string;
-    Quantity?: number;
-    UserId?: string;
-  };
+  total?: number;
+  PlanId?: number;
+  UserId?: string;
+  OrgId?: string;
+  AutoRenew?: boolean;
+  MembershipId?: string;
+  AddonKey?: string;
+  Quantity?: number;
 }
 
 // Response trả về khi tạo giao dịch
 export interface ProcessPaymentRes {
-  approveUrl: string;     
-  transactionId: string;  
+  approvalUrl: string;     
+  transactionId?: string;  
   provider?: string;
+  
+  paymentGateway?: "PayPal" | "payOS";  
+  sessionId: string;
+  qrCode?: string;
+  orderCode: string;
 }
 
 export function processPayment(body: ProcessPaymentReq) {
@@ -451,29 +471,48 @@ export function confirmPayment(body: ConfirmPaymentReq) {
 
 // ==== Confirm Payment (với context) ====
 
-export type PaymentGateway = "PayPal" | "PayOS";
+export type PaymentGateway = "PayPal" | "payOS";
 export type PaymentPurpose = "membership" | "order";
 
+// export interface ConfirmPaymentWithContextReq {
+//   transactionId: string;
+//   token: string;
+//   payerId: string;
+//   paymentId: string;
+//   paymentGateway: PaymentGateway;
+//   purpose: PaymentPurpose;
+//   membershipContext: {
+//     userId: string;
+//     planId: number;
+//     email?: string;
+//   };
+// }
+
 export interface ConfirmPaymentWithContextReq {
-  transactionId: string;
-  token: string;
-  payerId: string;
-  paymentId: string;
-  paymentGateway: PaymentGateway;
-  purpose: PaymentPurpose;
-  membershipContext: {
-    userId: string;
-    planId: number;
-    email?: string;
-  };
+  paymentGateway: PaymentGateway,
+  paymentId: string,
+  orderCode: string,
+  purpose: string,
+  transactionId: string,
+  userId: string,
+  orgId: string,
+  planId: number,
+  autoRenew: true
 }
 
+// export interface ConfirmPaymentWithContextRes {
+//   success: boolean;
+//   message?: string;
+// }
+
 export interface ConfirmPaymentWithContextRes {
-  success: boolean;
-  message?: string;
+  membershipId: string,
+  transactionId: string,
+  accessToolsGranted: true
 }
 
 export function confirmPaymentWithContext(body: ConfirmPaymentWithContextReq) {
+  console.log("confirmPaymentWithContext", body);
   return postJson<ConfirmPaymentWithContextReq, ConfirmPaymentWithContextRes>(
     "/transaction/confirm-payment-with-context",
     body

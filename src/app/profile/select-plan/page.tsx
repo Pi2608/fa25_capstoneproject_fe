@@ -1,6 +1,7 @@
 // src/app/profile/select-plan/page.tsx
 "use client";
 
+import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   getPlans,
@@ -8,8 +9,11 @@ import {
   processPayment,
   type ProcessPaymentRes,
   type ProcessPaymentReq,
+  confirmPaymentWithContext, type ConfirmPaymentWithContextReq, type ConfirmPaymentWithContextRes,
+  cancelPaymentWithContext, type CancelPaymentWithContextReq,
   getJson,
 } from "@/lib/api";
+import { useAuthStatus } from "@/contexts/useAuthStatus";
 
 /** Trạng thái membership tối thiểu để hiển thị UI hiện tại */
 type MyMembership = {
@@ -34,6 +38,10 @@ function formatUSD(n?: number | null): string {
 }
 
 export default function SelectPlanPage() {
+  const { isLoggedIn } = useAuthStatus();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +52,9 @@ export default function SelectPlanPage() {
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+
+  const [popup, setPopup] = useState<{ type: "success" | "cancel"; msg: string } | null>(null);
+
 
   /** Nạp danh sách gói + membership hiện tại */
   useEffect(() => {
@@ -93,6 +104,87 @@ export default function SelectPlanPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const transactionId = searchParams.get("transactionId");
+    const code = searchParams.get("code");
+    const cancel = searchParams.get("cancel");
+    const status = searchParams.get("status");
+    const orderCode = searchParams.get("orderCode");
+    const paymentId = searchParams.get("id");
+
+    if (!transactionId) return;
+
+    let finalStatus: "success" | "cancel" | null = null;
+
+    console.log({ transactionId, code, cancel, status, orderCode, paymentId });
+
+    if (code === "00" && cancel === "false" && status?.toUpperCase() === "PAID") {
+      finalStatus = "success";
+    } else if (cancel === "true" || status?.toUpperCase() === "CANCELLED") {
+      finalStatus = "cancel";
+    }
+
+    console.log({ finalStatus });
+
+    if (finalStatus === "success") {
+      const req: ConfirmPaymentWithContextReq = {
+        paymentGateway: "payOS",
+        paymentId: paymentId ?? "",
+        orderCode: orderCode ?? "",
+        purpose: "membership",
+        transactionId,
+        userId: "08ddedf7-64e8-40ca-8fff-4d303167014d", // test
+        orgId: "550e8400-e29b-41d4-a716-446655440000", // test
+        planId: Number(localStorage.getItem("planId")) || 0,
+        autoRenew: true,
+      };
+
+      confirmPaymentWithContext(req)
+        .then(() => setPopup({ type: "success", msg: "Thanh toán thành công!" }))
+        .catch((res) => {setPopup({ type: "cancel", msg: "Thanh toán thất bại." }); console.log(res);});
+    }
+
+    if (finalStatus === "cancel") {
+      const req: CancelPaymentWithContextReq = {
+        paymentGateway: "payOS",
+        transactionId,
+        paymentId: paymentId ?? "",
+        orderCode: orderCode ?? "",
+      };
+
+      cancelPaymentWithContext(req)
+        .then(() => setPopup({ type: "cancel", msg: "Bạn đã hủy thanh toán." }))
+        .catch(() => setPopup({ type: "cancel", msg: "Có lỗi khi hủy giao dịch." }));
+    }
+  }, [searchParams]);
+
+  const handleSelectPlan = async (plan: Plan) => {
+    try {
+      if (!isLoggedIn) {
+        router.push("/login");
+        return;
+      }
+
+      const req: ProcessPaymentReq = {
+        paymentGateway: "payOS",
+        purpose: "membership",
+        // total: plan.priceMonthly,
+        total: 0.1, // test
+        PlanId: plan.planId,
+        UserId: "08ddedf7-64e8-40ca-8fff-4d303167014d", // test
+        AutoRenew: true,
+      };
+
+      const res: ProcessPaymentRes = await processPayment(req);
+
+      localStorage.setItem("planId", String(plan.planId));
+
+      window.location.href = res.approvalUrl;
+    } catch (err) {
+      alert(safeMessage(err));
+    }
+  };
+
   const currentId = currentPlan?.planId ?? null;
   const paidPlans = useMemo<Plan[]>(
     () => plans.filter((p) => (p.priceMonthly ?? 0) > 0),
@@ -105,55 +197,55 @@ export default function SelectPlanPage() {
   const isPlanSubmitting = (planId: number) => Boolean(submittingByPlan[planId]);
 
   /** Gọi thanh toán cho 1 plan trả phí */
-  const pay = async (plan: Plan) => {
-    const price = plan.priceMonthly ?? 0;
-    if (price <= 0) return;
-    if (isPlanSubmitting(plan.planId)) return;
+  // const pay = async (plan: Plan) => {
+  //   const price = plan.priceMonthly ?? 0;
+  //   if (price <= 0) return;
+  //   if (isPlanSubmitting(plan.planId)) return;
 
-    setPlanSubmitting(plan.planId, true);
-    setError(null);
+  //   setPlanSubmitting(plan.planId, true);
+  //   setError(null);
 
-    try {
-      const FE_ORIGIN = window.location.origin;
+  //   try {
+  //     const FE_ORIGIN = window.location.origin;
 
-      const reqBody: ProcessPaymentReq = {
-        paymentGateway: "PayPal",
-        purpose: "membership",
-        total: price,
-        currency: "USD",
-        // tuỳ BE: các url này sẽ được PayPal redirect về
-        returnUrl: `${FE_ORIGIN}/payment/paypal-return`,
-        successUrl: `${FE_ORIGIN}/payment/return`,
-        cancelUrl: `${FE_ORIGIN}/profile/select-plan?status=cancelled`,
-        context: {
-          PlanId: plan.planId,
-        },
-      };
+  //     const reqBody: ProcessPaymentReq = {
+  //       paymentGateway: "PayPal",
+  //       purpose: "membership",
+  //       total: price,
+  //       currency: "USD",
+  //       // tuỳ BE: các url này sẽ được PayPal redirect về
+  //       returnUrl: `${FE_ORIGIN}/payment/paypal-return`,
+  //       successUrl: `${FE_ORIGIN}/payment/return`,
+  //       cancelUrl: `${FE_ORIGIN}/profile/select-plan?status=cancelled`,
+  //       context: {
+  //         PlanId: plan.planId,
+  //       },
+  //     };
 
-      // Lưu planId để trang return có thể confirm membership
-      sessionStorage.setItem("pendingPlanId", String(plan.planId));
+  //     // Lưu planId để trang return có thể confirm membership
+  //     sessionStorage.setItem("pendingPlanId", String(plan.planId));
 
-      const res: ProcessPaymentRes = await processPayment(reqBody);
+  //     const res: ProcessPaymentRes = await processPayment(reqBody);
 
-      // Chuẩn tên field approve url (BE của bạn đang dùng approveUrl)
-      const approveUrl =
-        (res as { approveUrl?: string }).approveUrl ??
-        // fallback nếu BE đổi tên về sau:
-        (res as { approvalUrl?: string }).approvalUrl ??
-        "";
+  //     // Chuẩn tên field approve url (BE của bạn đang dùng approveUrl)
+  //     const approveUrl =
+  //       (res as { approveUrl?: string }).approveUrl ??
+  //       // fallback nếu BE đổi tên về sau:
+  //       (res as { approvalUrl?: string }).approvalUrl ??
+  //       "";
 
-      if (!approveUrl) {
-        throw new Error("Thiếu URL thanh toán từ PayPal.");
-      }
+  //     if (!approveUrl) {
+  //       throw new Error("Thiếu URL thanh toán từ PayPal.");
+  //     }
 
-      setHint("Đang chuyển đến PayPal…");
-      window.location.href = approveUrl;
-    } catch (e) {
-      setError(safeMessage(e, "Không khởi tạo được thanh toán."));
-    } finally {
-      setPlanSubmitting(plan.planId, false);
-    }
-  };
+  //     setHint("Đang chuyển đến PayPal…");
+  //     window.location.href = approveUrl;
+  //   } catch (e) {
+  //     setError(safeMessage(e, "Không khởi tạo được thanh toán."));
+  //   } finally {
+  //     setPlanSubmitting(plan.planId, false);
+  //   }
+  // };
 
   /** Badge hiển thị trạng thái của 1 plan so với membership hiện tại */
   const renderStatusBadge = (p: Plan) => {
@@ -258,12 +350,12 @@ export default function SelectPlanPage() {
 
                       {!isFree && (
                         <button
-                          onClick={() => pay(p)}
+                          onClick={() => handleSelectPlan(p)}
                           disabled={isSubmitting}
                           className="flex-1 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 text-sm font-semibold text-zinc-950"
                         >
                           {isSubmitting
-                            ? "Đang chuyển tới PayPal…"
+                            ? "Đang chuyển tới PayOS"
                             : isCurrentPending && currentId === p.planId
                             ? "Tiếp tục thanh toán"
                             : "Đăng ký"}
@@ -282,6 +374,27 @@ export default function SelectPlanPage() {
         <p className="mt-6 text-xs text-zinc-500">
           * Chỉ các gói trả phí mới yêu cầu thanh toán. Gói Free không cần đăng ký.
         </p>
+      )}
+
+      {popup && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+          <div className="bg-zinc-900 text-white rounded-xl p-6 max-w-sm">
+            <h2 className="text-3xl font-semibold mb-4">
+              {popup.type === "success" ? "Thành công" : "Thanh toán thất bại"}
+            </h2>
+            <p>{popup.msg}</p>
+            <button
+              onClick={() => {
+                setPopup(null);
+                router.replace("/profile/select-plan");
+                localStorage.removeItem("planId");
+              }}
+              className="mt-4 px-4 py-2 rounded bg-emerald-500 text-black"
+            >
+              Đóng
+            </button>
+          </div>
+        </div>
       )}
     </main>
   );
