@@ -1,4 +1,3 @@
-// src/contexts/useAuthStatus.ts
 "use client";
 
 import { useSyncExternalStore } from "react";
@@ -8,7 +7,7 @@ export function useAuthStatus() {
   const isLoggedIn = useSyncExternalStore(
     authStore.subscribe,
     authStore.getSnapshot,
-    () => false // snapshot cho server
+    () => false 
   );
   return {
     isLoggedIn,

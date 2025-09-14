@@ -46,7 +46,12 @@ const SidebarLink = ({ href, label }: { href: string; label: string }) => {
 };
 
 export default function ProfileLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname(); 
   const { isLoggedIn } = useAuthStatus();
+
+  const isFullScreenMap = /\/profile\/organizations\/[^/]+\/maps\/new\/?$/.test(
+    pathname || ""
+  );
 
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [planLabel, setPlanLabel] = useState<string | null>(null);
@@ -79,8 +84,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
             setPlanStatus(me.status ?? "active");
             return;
           }
-        } catch {
-        }
+        } catch {}
 
         const free = ps.find((p) => p.priceMonthly === 0);
         setPlanLabel(free?.planName ?? "Free");
@@ -117,7 +121,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
         setOrgsErr(null);
       } catch {
         if (!alive) return;
-        setOrgsErr("Không tải được danh sách tổ chức.");
+        setOrgsErr("Failed to load organizations.");
         setOrgs([]);
       }
     }
@@ -129,16 +133,42 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       loadPlanBadge();
       loadOrgs();
     };
+    const onOrgsChanged = () => {
+      loadOrgs();
+    };
+
     if (typeof window !== "undefined") {
       window.addEventListener("auth-changed", onAuthChanged);
+      window.addEventListener("orgs-changed", onOrgsChanged as EventListener);
     }
     return () => {
       alive = false;
       if (typeof window !== "undefined") {
         window.removeEventListener("auth-changed", onAuthChanged);
+        window.removeEventListener("orgs-changed", onOrgsChanged as EventListener);
       }
     };
   }, [isLoggedIn]);
+
+  if (isFullScreenMap) {
+    return (
+      <main className="fixed inset-0 m-0 p-0 overflow-hidden bg-black">
+        {children}
+
+        <style jsx global>{`
+          html,
+          body {
+            height: 100%;
+            overflow: hidden;
+          }
+          .leaflet-container {
+            width: 100%;
+            height: 100%;
+          }
+        `}</style>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen text-zinc-100 bg-gradient-to-b from-[#0b0f0e] via-emerald-900/10 to-[#0b0f0e]">
@@ -147,24 +177,26 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
           <div>
             <div className="mb-6">
               <div className="text-[11px] uppercase tracking-widest text-emerald-300/70 mb-2">
-                Chung
+                General
               </div>
               <div className="space-y-1">
-                <SidebarLink href="/" label="Trang chủ" />
-                <SidebarLink href="/profile" label="Thông tin cá nhân" />
-                <SidebarLink href="/profile/access-tool" label="Công cụ truy cập" />
-                <SidebarLink href="/profile/recents" label="Gần đây" />
-                <SidebarLink href="/profile/drafts" label="Bản nháp" />
-                <SidebarLink href="/profile/invite" label="Mời thành viên" />
+                <SidebarLink href="/" label="Home" />
+                <SidebarLink href="/profile" label="Personal Information" />
+                <SidebarLink href="/profile/recents" label="Recents" />
+                <SidebarLink href="/profile/drafts" label="Drafts" />
+                <SidebarLink href="/profile/invite" label="Invite Members" />
               </div>
             </div>
 
             <div className="mb-6">
               <div className="text-[11px] uppercase tracking-widest text-emerald-300/70 mb-2">
-                Dự án
+                Projects
               </div>
               <div className="space-y-1">
-                <SidebarLink href="/profile/create-project" label="Tạo tổ chức" />
+                <SidebarLink
+                  href="/profile/create-project"
+                  label="Create Organization"
+                />
 
                 {orgs === null && (
                   <>
@@ -181,7 +213,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
 
                 {orgs && !orgsErr && orgs.length === 0 && (
                   <div className="px-3 py-2 text-xs rounded-md border border-white/10 bg-white/5 text-zinc-300">
-                    Chưa có tổ chức. Hãy tạo tổ chức đầu tiên của bạn!
+                    No organizations yet. Create your first one!
                   </div>
                 )}
 
@@ -193,11 +225,11 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                   />
                 ))}
                 {(orgs ?? []).length > 5 && (
-                  <SidebarLink href="/profile/organizations" label="Xem tất cả tổ chức" />
+                  <SidebarLink href="/organizations" label="View all organizations" />
                 )}
 
-                <SidebarLink href="/profile/settings" label="Cài đặt" />
-                <SidebarLink href="/profile/help" label="Trợ giúp" />
+                <SidebarLink href="/profile/settings" label="Settings" />
+                <SidebarLink href="/profile/help" label="Help" />
               </div>
             </div>
           </div>
@@ -206,13 +238,15 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
             {isLoggedIn && (
               <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-zinc-400">Gói hiện tại</span>
+                  <span className="text-[12px] text-zinc-400">Current Plan</span>
                   {planLabel ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-emerald-300">{planLabel}</span>
+                      <span className="text-sm font-semibold text-emerald-300">
+                        {planLabel}
+                      </span>
                       {planStatus === "active" && (
                         <span className="rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 text-[11px] font-semibold">
-                          Đang dùng
+                          Active
                         </span>
                       )}
                     </div>
@@ -225,25 +259,21 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
 
             <div>
               <div className="text-[11px] uppercase tracking-widest text-emerald-300/80 mb-2">
-                Nâng cấp
+                Upgrade
               </div>
               <Link
                 href="/profile/select-plan"
-                className="block w-full text-center text-sm font-semibold rounded-lg px-4 py-2
-                           bg-gradient-to-r from-emerald-400 to-emerald-500 text-zinc-950
-                           shadow-lg shadow-emerald-900/30 ring-1 ring-emerald-300/40
-                           hover:from-emerald-300 hover:to-emerald-400 transition"
+                className="block w-full text-center text-sm font-semibold rounded-lg px-4 py-2 bg-gradient-to-r from-emerald-400 to-emerald-500 text-zinc-950 shadow-lg shadow-emerald-900/30 ring-1 ring-emerald-300/40 hover:from-emerald-300 hover:to-emerald-400 transition"
               >
-                Chọn gói
+                Choose Plan
               </Link>
             </div>
 
             <Link
               href="/login"
-              className="block w-full text-center text-sm font-medium rounded-lg px-4 py-2
-                         bg-red-500/90 hover:bg-red-400 ring-1 ring-transparent hover:ring-red-300/40 transition"
+              className="block w-full text-center text-sm font-medium rounded-lg px-4 py-2 bg-red-500/90 hover:bg-red-400 ring-1 ring-transparent hover:ring-red-300/40 transition"
             >
-              Đăng xuất
+              Log out
             </Link>
           </div>
         </aside>
@@ -259,11 +289,13 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2 text-xs">
               {isLoggedIn && planLabel && (
                 <span className="hidden xs:flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5">
-                  <span className="text-[11px] text-zinc-400">Gói:</span>
-                  <span className="text-[12px] font-semibold text-emerald-300">{planLabel}</span>
+                  <span className="text-[11px] text-zinc-400">Plan:</span>
+                  <span className="text-[12px] font-semibold text-emerald-300">
+                    {planLabel}
+                  </span>
                   {planStatus === "active" && (
                     <span className="ml-1 rounded bg-emerald-500/15 border border-emerald-400/30 px-1 text-[10px] text-emerald-300">
-                      Đang dùng
+                      Active
                     </span>
                   )}
                 </span>
@@ -272,7 +304,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 href="/profile/select-plan"
                 className="rounded px-2 py-1 font-semibold bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
               >
-                Chọn gói
+                Choose Plan
               </Link>
             </div>
           </div>

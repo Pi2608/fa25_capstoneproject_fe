@@ -11,7 +11,6 @@ type Banner = { type: "info" | "error" | "success"; text: string };
 const phoneValid = (v: string) => /^\d{10}$/.test(v);
 const emailValid = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-/** ==== Types & Guards ==== */
 interface NameParts {
   firstName: string;
   lastName: string;
@@ -28,16 +27,13 @@ interface UnknownApiError {
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
-
 function hasNumber(x: Record<string, unknown>, key: string): x is Record<string, number | unknown> {
   return key in x && typeof x[key] === "number";
 }
-
 function hasString(x: Record<string, unknown>, key: string): x is Record<string, string | unknown> {
   return key in x && typeof x[key] === "string";
 }
 
-/** ==== Helpers ==== */
 function splitVietnameseName(fullName: string): NameParts {
   const clean = fullName.replace(/\s+/g, " ").trim();
   if (!clean) return { firstName: "", lastName: "" };
@@ -48,23 +44,20 @@ function splitVietnameseName(fullName: string): NameParts {
   return { firstName, lastName };
 }
 
-/** Chuẩn hoá thông báo lỗi trả về từ BE để hiện cho người dùng */
-function prettyError(err: unknown, fallback = "Có lỗi xảy ra. Vui lòng thử lại."): string {
+function prettyError(err: unknown, fallback = "Something went wrong. Please try again."): string {
   try {
     if (isPlainObject(err)) {
       const obj = err as Record<string, unknown>;
 
-      // status số
       if (hasNumber(obj, "status")) {
         const st = obj.status as number;
-        if (st === 429) return "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
-        if (st === 401) return "Bạn không có quyền thực hiện thao tác này.";
-        if (st === 403) return "Bạn không có quyền truy cập.";
-        if (st === 404) return "Không tìm thấy tài nguyên.";
-        if (st >= 500) return "Hệ thống đang bận. Vui lòng thử lại sau.";
+        if (st === 429) return "Too many attempts. Please try again in a moment.";
+        if (st === 401) return "You are not authorized to perform this action.";
+        if (st === 403) return "You don’t have permission to access this resource.";
+        if (st === 404) return "Requested resource was not found.";
+        if (st >= 500) return "The server is busy. Please try again later.";
       }
 
-      // message / detail / title / type chuỗi
       const msgLike: string[] = [];
       if (hasString(obj, "message")) msgLike.push(String(obj.message));
       if (hasString(obj, "detail")) msgLike.push(String(obj.detail));
@@ -72,30 +65,28 @@ function prettyError(err: unknown, fallback = "Có lỗi xảy ra. Vui lòng th�
       if (hasString(obj, "type")) msgLike.push(String(obj.type));
 
       for (const msg of msgLike) {
-        if (/already exists/i.test(msg)) return "Email này đã được đăng ký, vui lòng dùng email khác.";
-        if (/otp/i.test(msg) && /invalid|expired/i.test(msg)) return "Mã xác minh không đúng hoặc đã hết hạn.";
-        if (/too many/i.test(msg) || /rate/i.test(msg)) return "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
-        if (/500|internal server/i.test(msg)) return "Hệ thống đang bận. Vui lòng thử lại sau.";
+        if (/already exists/i.test(msg)) return "This email is already registered. Please use a different email.";
+        if (/otp/i.test(msg) && /invalid|expired/i.test(msg)) return "The verification code is invalid or expired.";
+        if (/too many/i.test(msg) || /rate/i.test(msg)) return "Too many attempts. Please try again later.";
+        if (/500|internal server/i.test(msg)) return "The server is busy. Please try again later.";
       }
 
       if (msgLike.length > 0) return msgLike[0]!;
     }
 
     if (typeof err === "string") {
-      // Thử parse JSON string an toàn
       try {
         const j = JSON.parse(err) as unknown;
         return prettyError(j, fallback);
       } catch {
         const s = err;
-        if (/already exists/i.test(s)) return "Email này đã được đăng ký, vui lòng dùng email khác.";
-        if (/otp/i.test(s) && /invalid|expired/i.test(s)) return "Mã xác minh không đúng hoặc đã hết hạn.";
-        if (/500|internal server/i.test(s)) return "Hệ thống đang bận. Vui lòng thử lại sau.";
+        if (/already exists/i.test(s)) return "This email is already registered. Please use a different email.";
+        if (/otp/i.test(s) && /invalid|expired/i.test(s)) return "The verification code is invalid or expired.";
+        if (/500|internal server/i.test(s)) return "The server is busy. Please try again later.";
         return s;
       }
     }
   } catch {
-    // no-op
   }
   return fallback;
 }
@@ -113,6 +104,7 @@ export default function RegisterPage() {
   const [otp, setOtp] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [banner, setBanner] = useState<Banner | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   const [errors, setErrors] = useState<{
     name?: string;
     email?: string;
@@ -133,7 +125,6 @@ export default function RegisterPage() {
         if (!email) setEmail(cachedEmail);
       }
     } catch {
-      // ignore cache errors
     }
   }, [email, name]);
 
@@ -147,27 +138,27 @@ export default function RegisterPage() {
     return Math.min(s, 4);
   }, [password]);
 
-  const scoreLabel = ["Rất yếu", "Yếu", "Khá", "Mạnh", "Rất mạnh"][passScore];
+  const scoreLabel = ["Very weak", "Weak", "Fair", "Strong", "Very strong"][passScore];
 
   const validateStep1 = useCallback(() => {
     const e: typeof errors = {};
-    if (!name.trim()) e.name = "Vui lòng nhập tên.";
-    if (!email.trim()) e.email = "Vui lòng nhập email.";
-    else if (!emailValid(email)) e.email = "Email không hợp lệ.";
-    if (phone && !phoneValid(phone)) e.phone = "Số điện thoại phải gồm đúng 10 chữ số.";
-    if (!password.trim()) e.password = "Vui lòng nhập mật khẩu.";
-    else if (password.length < 8) e.password = "Mật khẩu tối thiểu 8 ký tự.";
-    if (!confirm.trim()) e.confirm = "Vui lòng nhập lại mật khẩu.";
-    else if (confirm !== password) e.confirm = "Mật khẩu nhập lại không khớp.";
-    if (!agree) e.agree = "Vui lòng đồng ý điều khoản.";
+    if (!name.trim()) e.name = "Please enter your name.";
+    if (!email.trim()) e.email = "Please enter your email.";
+    else if (!emailValid(email)) e.email = "Invalid email address.";
+    if (phone && !phoneValid(phone)) e.phone = "Phone number must be exactly 10 digits.";
+    if (!password.trim()) e.password = "Please enter a password.";
+    else if (password.length < 8) e.password = "Password must be at least 8 characters.";
+    if (!confirm.trim()) e.confirm = "Please re-enter your password.";
+    else if (confirm !== password) e.confirm = "Passwords do not match.";
+    if (!agree) e.agree = "Please agree to the Terms.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }, [agree, confirm, email, name, password, phone]);
 
   const validateStep2 = useCallback(() => {
     const e: typeof errors = {};
-    if (!otp.trim()) e.otp = "Vui lòng nhập mã xác minh.";
-    else if (!/^\d{4,8}$/.test(otp)) e.otp = "Mã không hợp lệ.";
+    if (!otp.trim()) e.otp = "Please enter the verification code.";
+    else if (!/^\d{4,8}$/.test(otp)) e.otp = "Invalid code.";
     setErrors(e);
     return Object.keys(e).length === 0;
   }, [otp]);
@@ -176,26 +167,30 @@ export default function RegisterPage() {
     ev.preventDefault();
     setBanner(null);
     if (!validateStep1()) {
-      setBanner({ type: "error", text: "Vui lòng điền đầy đủ thông tin." });
+      setBanner({ type: "error", text: "Please complete all required fields." });
       return;
     }
     setLoading(true);
     try {
       const { firstName, lastName } = splitVietnameseName(name);
-      await postJson(
-        "/auth/verify-email",
-        { firstName, lastName, email, phone: phone || null, password }
-      );
+      await postJson("/auth/verify-email", {
+        firstName,
+        lastName,
+        email,
+        phone: phone || null,
+        password,
+      });
       try {
         localStorage.setItem("reg_name", JSON.stringify({ firstName, lastName } satisfies NameParts));
         localStorage.setItem("reg_email", email);
       } catch {
-        // ignore storage
       }
-      setBanner({ type: "success", text: "Đã gửi mã xác minh tới email. Vui lòng kiểm tra hộp thư." });
+      setBanner({ type: "success", text: "Verification code sent. Please check your inbox." });
+      setToast("Verification code sent ✉️");
+      setTimeout(() => setToast(null), 1600);
       setStep(2);
     } catch (e: unknown) {
-      setBanner({ type: "error", text: prettyError(e, "Không thể gửi mã xác minh. Vui lòng thử lại sau.") });
+      setBanner({ type: "error", text: prettyError(e, "Could not send verification code. Please try again later.") });
     } finally {
       setLoading(false);
     }
@@ -208,10 +203,12 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await postJson("/auth/verify-otp", { otp });
-      setBanner({ type: "success", text: "Xác minh email thành công. Đang chuyển trang…" });
+      setBanner({ type: "success", text: "Email verified. Redirecting…" });
+      setToast("Email verified ✅");
+      setTimeout(() => setToast(null), 1400);
       setTimeout(() => router.push("/login"), 900);
     } catch (e: unknown) {
-      setBanner({ type: "error", text: prettyError(e, "Mã xác minh không đúng hoặc đã hết hạn.") });
+      setBanner({ type: "error", text: prettyError(e, "The verification code is invalid or expired.") });
     } finally {
       setLoading(false);
     }
@@ -229,16 +226,16 @@ export default function RegisterPage() {
         <div className={styles.logoDot} />
         <div className={styles.brandWrap}>
           <Link href="/" className="flex items-center gap-2">
-            <span className="text-lg font-semibold tracking-tight">CustomMapOSM</span>
+            <span className={styles.brand}>CustomMapOSM</span>
           </Link>
-          <span className={styles.tagline}>Tạo tài khoản chỉ trong vài giây</span>
+          <span className={styles.tagline}>Create an account in seconds</span>
         </div>
       </div>
 
       <section className={styles.card}>
-        <h1 className={styles.title}>Tạo tài khoản</h1>
+        <h1 className={styles.title}>Create your account</h1>
         <p className={styles.sub}>
-          {step === 1 ? "Tham gia và bắt đầu tạo bản đồ" : "Nhập mã xác minh đã gửi tới email"}
+          {step === 1 ? "Join and start building maps" : "Enter the verification code we sent to your email"}
         </p>
 
         {banner && (
@@ -257,13 +254,13 @@ export default function RegisterPage() {
         {step === 1 && (
           <form onSubmit={submitStep1} className={styles.form} noValidate>
             <label className={styles.label}>
-              Họ và tên
+              Full name
               <input
                 className={`${styles.input} ${errors.name ? styles.inputError : ""}`}
                 type="text"
                 value={name}
                 onChange={(e) => { setName(e.target.value); if (errors.name) setErrors((p) => ({ ...p, name: undefined })); }}
-                placeholder="Nguyễn Văn A"
+                placeholder="John Doe"
                 aria-invalid={!!errors.name}
                 autoComplete="name"
               />
@@ -277,7 +274,7 @@ export default function RegisterPage() {
                 type="email"
                 value={email}
                 onChange={(e) => { setEmail(e.target.value); if (errors.email) setErrors((p) => ({ ...p, email: undefined })); }}
-                placeholder="ban@example.com"
+                placeholder="you@example.com"
                 aria-invalid={!!errors.email}
                 autoComplete="email"
               />
@@ -285,7 +282,7 @@ export default function RegisterPage() {
             </label>
 
             <label className={styles.label}>
-              Số điện thoại (tuỳ chọn)
+              Phone (optional)
               <input
                 className={`${styles.input} ${errors.phone ? styles.inputError : ""}`}
                 type="tel"
@@ -301,14 +298,14 @@ export default function RegisterPage() {
             </label>
 
             <label className={styles.label}>
-              Mật khẩu
+              Password
               <div className={styles.passRow}>
                 <input
                   className={`${styles.input} ${errors.password ? styles.inputError : ""}`}
                   type={showPass ? "text" : "password"}
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); if (errors.password) setErrors((p) => ({ ...p, password: undefined })); }}
-                  placeholder="Ít nhất 8 ký tự"
+                  placeholder="At least 8 characters"
                   aria-invalid={!!errors.password}
                   autoComplete="new-password"
                 />
@@ -316,9 +313,9 @@ export default function RegisterPage() {
                   type="button"
                   className={styles.peek}
                   onClick={() => setShowPass((v) => !v)}
-                  aria-label={showPass ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                  aria-label={showPass ? "Hide password" : "Show password"}
                 >
-                  {showPass ? "Ẩn" : "Hiện"}
+                  {showPass ? "Hide" : "Show"}
                 </button>
               </div>
               <div className={styles.strengthWrap} aria-hidden="true">
@@ -332,13 +329,13 @@ export default function RegisterPage() {
             </label>
 
             <label className={styles.label}>
-              Nhập lại mật khẩu
+              Confirm password
               <input
                 className={`${styles.input} ${errors.confirm ? styles.inputError : ""}`}
                 type="password"
                 value={confirm}
                 onChange={(e) => { setConfirm(e.target.value); if (errors.confirm) setErrors((p) => ({ ...p, confirm: undefined })); }}
-                placeholder="Nhập lại mật khẩu"
+                placeholder="Re-enter your password"
                 aria-invalid={!!errors.confirm}
                 autoComplete="new-password"
               />
@@ -353,20 +350,20 @@ export default function RegisterPage() {
                 className={styles.checkbox}
               />
               <span>
-                Tôi đồng ý với <a className={styles.link} href="/terms">Điều khoản</a> và <a className={styles.link} href="/privacy">Chính sách bảo mật</a>.
+                I agree to the <a className={styles.link} href="/terms">Terms</a> and <a className={styles.link} href="/privacy">Privacy Policy</a>.
               </span>
             </label>
             {errors.agree && <div className={styles.fieldError}>{errors.agree}</div>}
 
             <button className={styles.primaryBtn} type="submit" disabled={loading || !name || !email || !password || !confirm || !agree}>
-              {loading ? "Đang gửi…" : "Tạo tài khoản"}
+              {loading ? "Sending…" : "Create account"}
             </button>
           </form>
         )}
 
         {step === 2 && (
           <form onSubmit={submitStep2} className={styles.form} noValidate>
-            <div className={styles.otpLabel}>Mã xác minh</div>
+            <div className={styles.otpLabel}>Verification code</div>
             <div className={styles.otpRow}>
               <input
                 className={`${styles.input} ${styles.otpInput} ${errors.otp ? styles.inputError : ""}`}
@@ -375,18 +372,18 @@ export default function RegisterPage() {
                 maxLength={8}
                 value={otp}
                 onChange={(e) => { setOtp(e.target.value.replace(/\D/g, "")); if (errors.otp) setErrors((p) => ({ ...p, otp: undefined })); }}
-                placeholder="Nhập mã OTP"
+                placeholder="Enter OTP"
                 aria-invalid={!!errors.otp}
                 autoFocus
               />
               <button type="submit" className={styles.primaryBtn} disabled={loading || !otp}>
-                {loading ? "Đang xác minh…" : "Xác minh & hoàn tất"}
+                {loading ? "Verifying…" : "Verify & finish"}
               </button>
             </div>
             {errors.otp && <div className={styles.fieldError}>{errors.otp}</div>}
 
             <div className={styles.resendWrap}>
-              <span>Không nhận được mã?</span>
+              <span>Didn’t get the code?</span>
               <button
                 type="button"
                 className={styles.resendBtn}
@@ -409,30 +406,34 @@ export default function RegisterPage() {
                     } catch {
                       ({ firstName, lastName } = splitVietnameseName(name));
                     }
-                    await postJson(
-                      "/auth/verify-email",
-                      { firstName, lastName, email, phone: phone || null, password }
-                    );
-                    setBanner({ type: "info", text: "Đã gửi lại mã xác minh." });
+                    await postJson("/auth/verify-email", { firstName, lastName, email, phone: phone || null, password });
+                    setBanner({ type: "info", text: "Verification code resent." });
+                    setToast("Code resent ✉️");
+                    setTimeout(() => setToast(null), 1400);
                   } catch (e: unknown) {
-                    setBanner({ type: "error", text: prettyError(e, "Không thể gửi lại mã. Vui lòng thử lại sau.") });
+                    setBanner({ type: "error", text: prettyError(e, "Could not resend the code. Please try again later.") });
                   } finally {
                     setLoading(false);
                   }
                 }}
               >
-                Gửi lại mã
+                Resend code
               </button>
             </div>
           </form>
         )}
 
-        <div className={styles.divider}><span>hoặc</span></div>
+        <div className={styles.divider}><span>or</span></div>
 
         <p className={styles.note}>
-          Đã có tài khoản? <a className={styles.link} href="/login">Đăng nhập</a>
+          Already have an account? <a className={styles.link} href="/login">Sign in</a>
         </p>
       </section>
+
+      <div className={`${styles.toast} ${toast ? styles.toastShow : ""}`} role="status" aria-live="polite">
+        <div className={styles.toastDot} />
+        <span>{toast}</span>
+      </div>
     </main>
   );
 }
