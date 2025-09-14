@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
-
 import {
   getOrganizationById,
   type OrganizationDetailDto,
@@ -14,12 +13,13 @@ import {
   deleteOrganization,
   getUserAccessTools,
   type UserAccessTool,
+  getOrganizationMaps,
 } from "@/lib/api";
+type MapRow = Awaited<ReturnType<typeof getOrganizationMaps>>[number];
 
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 }
-
 function safeMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   if (err && typeof err === "object" && "message" in err) {
@@ -40,14 +40,12 @@ function getMyIdentityFromToken(): { userId?: string | null; email?: string | nu
     const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const json = typeof atob === "function" ? atob(b64) : Buffer.from(b64, "base64").toString("utf8");
     const p = JSON.parse(json) as JwtPayload;
-
     const email =
       (typeof p.email === "string" && p.email) ||
       (typeof p.Email === "string" && p.Email) ||
       (typeof p["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] === "string" &&
         (p["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] as string)) ||
       null;
-
     const userId =
       (typeof p.userId === "string" && p.userId) ||
       (typeof p.uid === "string" && p.uid) ||
@@ -56,7 +54,6 @@ function getMyIdentityFromToken(): { userId?: string | null; email?: string | nu
       (typeof p["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] === "string" &&
         (p["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] as string)) ||
       null;
-
     return { userId, email };
   } catch {
     return { userId: null, email: null };
@@ -67,7 +64,6 @@ type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "lastViewed" | "name" | "author";
 type SortOrder = "asc" | "desc";
 
-/** Kiểu tối thiểu cho member để tránh any */
 type MemberLike = {
   memberId?: string | null;
   email?: string | null;
@@ -75,7 +71,6 @@ type MemberLike = {
   role?: string | null;
   memberType?: string | null;
 };
-
 function asMemberArray(x: unknown): MemberLike[] {
   if (!Array.isArray(x)) return [];
   return x.map((m) => {
@@ -93,12 +88,15 @@ function asMemberArray(x: unknown): MemberLike[] {
 }
 
 export default function OrgDetailPage() {
-  const { orgId } = useParams<{ orgId: string }>();
+  const p = useParams<{ orgId: string }>();
+  const orgId = p?.orgId ?? "";
+
   const router = useRouter();
 
   const [org, setOrg] = useState<OrganizationDetailDto | null>(null);
   const [members, setMembers] = useState<GetOrganizationMembersResDto | null>(null);
   const [tools, setTools] = useState<UserAccessTool[]>([]);
+  const [maps, setMaps] = useState<MapRow[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -119,6 +117,7 @@ export default function OrgDetailPage() {
   const [viewOpen, setViewOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [sortKey, setSortKey] = useState<SortKey>("dateCreated");
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
   const title = useMemo(() => org?.orgName ?? "—", [org?.orgName]);
@@ -132,12 +131,10 @@ export default function OrgDetailPage() {
     return list.some((m) => {
       const role = (m.role ?? m.memberType ?? "").toLowerCase();
       if (role !== "owner") return false;
-
       const matchById =
         myId && typeof m.memberId === "string" && m.memberId.toLowerCase() === myId.toLowerCase();
       const matchByEmail =
         myEmail && typeof m.email === "string" && m.email.toLowerCase() === myEmail.toLowerCase();
-
       return Boolean(matchById || matchByEmail);
     });
   }, [members, myEmail, myId]);
@@ -148,20 +145,20 @@ export default function OrgDetailPage() {
       try {
         setLoading(true);
         setErr(null);
-
-        const [orgRes, memRes] = await Promise.all([getOrganizationById(orgId), getOrganizationMembers(orgId)]);
+        const [orgRes, memRes, mapsRes] = await Promise.all([
+          getOrganizationById(orgId),
+          getOrganizationMembers(orgId),
+          getOrganizationMaps(orgId),
+        ]);
         if (!alive) return;
-
         setOrg(orgRes.organization);
         setMembers(memRes);
-
+        setMaps(mapsRes);
         try {
           const ats = await getUserAccessTools();
           if (!alive) return;
           setTools(ats);
-        } catch (e) {
-          console.warn("Load user access tools failed:", safeMessage(e));
-        }
+        } catch { }
       } catch (e) {
         if (!alive) return;
         setErr(safeMessage(e));
@@ -185,7 +182,6 @@ export default function OrgDetailPage() {
       .split(/[,\s]+/)
       .map((x) => x.trim())
       .filter(Boolean);
-
     if (emails.length === 0) {
       setInviteMsg("Hãy nhập ít nhất 1 email.");
       return;
@@ -195,7 +191,6 @@ export default function OrgDetailPage() {
       setInviteMsg(`Email không hợp lệ: ${invalid}`);
       return;
     }
-
     setInviteBusy(true);
     setInviteMsg(null);
     try {
@@ -233,9 +228,7 @@ export default function OrgDetailPage() {
   const requireOwner = useCallback(
     (action: () => void) => {
       if (!isOwner) {
-        setPermMsg(
-          "You have limited access in this workspace. To create or edit maps, ask your admin for full access."
-        );
+        setPermMsg("You have limited access in this workspace. To create or edit maps, ask your admin for full access.");
         return;
       }
       setPermMsg(null);
@@ -245,18 +238,18 @@ export default function OrgDetailPage() {
   );
 
   const clickNewMap = useCallback(() => {
-    requireOwner(() => router.push(`/profile/organizations/${orgId}/maps/new`));
+    requireOwner(() => router.push(`/maps/new?org=${orgId}`));
   }, [orgId, router, requireOwner]);
 
   const clickNewFolder = useCallback(() => {
     requireOwner(() => {
-      alert("Create Folder (stub) - thêm route khi backend sẵn sàng.");
+      alert("Create Folder (stub)");
     });
   }, [requireOwner]);
 
   const clickNewView = useCallback(() => {
     requireOwner(() => {
-      alert("Create View (stub) - thêm route khi backend sẵn sàng.");
+      alert("Create View (stub)");
     });
   }, [requireOwner]);
 
@@ -269,12 +262,25 @@ export default function OrgDetailPage() {
     void navigator.clipboard.writeText(String(orgId));
   }, [orgId]);
 
-  if (loading) {
-    return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">Đang tải…</div>;
-  }
-  if (err || !org) {
-    return <div className="max-w-3xl px-4 text-red-400">{err ?? "Không tìm thấy tổ chức."}</div>;
-  }
+  const sortedMaps = useMemo(() => {
+    const arr = [...maps];
+    arr.sort((a, b) => {
+      if (sortKey === "name") {
+        return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
+      }
+      if (sortKey === "author") {
+        return (a.ownerId || "").localeCompare(b.ownerId || "", undefined, { sensitivity: "base" });
+      }
+      const ad = new Date(a.createdAt ?? 0).getTime();
+      const bd = new Date(b.createdAt ?? 0).getTime();
+      return ad - bd;
+    });
+    if (sortOrder === "desc") arr.reverse();
+    return arr;
+  }, [maps, sortKey, sortOrder]);
+
+  if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">Đang tải…</div>;
+  if (err || !org) return <div className="max-w-3xl px-4 text-red-400">{err ?? "Không tìm thấy tổ chức."}</div>;
 
   const memberRows: MemberLike[] = asMemberArray(members?.members ?? []);
 
@@ -283,44 +289,32 @@ export default function OrgDetailPage() {
       {permMsg && !isOwner && (
         <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           {permMsg}{" "}
-          <button
-            onClick={() => setPermMsg(null)}
-            className="ml-2 rounded bg-amber-500/20 px-2 py-[2px] text-amber-100"
-          >
+          <button onClick={() => setPermMsg(null)} className="ml-2 rounded bg-amber-500/20 px-2 py-[2px] text-amber-100">
             Dismiss
           </button>
         </div>
       )}
 
       <div className="flex items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl sm:text-3xl font-semibold">{title}</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold">{org.orgName}</h1>
 
         <div className="flex items-center gap-2 relative">
           <div className="relative">
-            <button
-              onClick={() => setViewOpen((v) => !v)}
-              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
-            >
+            <button onClick={() => setViewOpen((v) => !v)} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm">
               View ▾
             </button>
             {viewOpen && (
-              <div
-                className="absolute right-0 mt-2 w-64 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl p-2"
-                onMouseLeave={() => setViewOpen(false)}
-              >
+              <div className="absolute right-0 mt-2 w-64 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl p-2" onMouseLeave={() => setViewOpen(false)}>
                 <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Show items as</div>
                 {(["grid", "list"] as ViewMode[]).map((m) => (
                   <button
                     key={m}
-                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${
-                      viewMode === m ? "text-emerald-300" : "text-zinc-200"
-                    }`}
+                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${viewMode === m ? "text-emerald-300" : "text-zinc-200"}`}
                     onClick={() => setViewMode(m)}
                   >
                     {m === "grid" ? "Grid" : "List"}
                   </button>
                 ))}
-
                 <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Sort by</div>
                 {(
                   [
@@ -333,22 +327,17 @@ export default function OrgDetailPage() {
                 ).map(([k, label]) => (
                   <button
                     key={k}
-                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${
-                      sortKey === k ? "text-emerald-300" : "text-zinc-200"
-                    }`}
+                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${sortKey === k ? "text-emerald-300" : "text-zinc-200"}`}
                     onClick={() => setSortKey(k)}
                   >
                     {label}
                   </button>
                 ))}
-
                 <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Order</div>
                 {(["desc", "asc"] as SortOrder[]).map((o) => (
                   <button
                     key={o}
-                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${
-                      sortOrder === o ? "text-emerald-300" : "text-zinc-200"
-                    }`}
+                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${sortOrder === o ? "text-emerald-300" : "text-zinc-200"}`}
                     onClick={() => setSortOrder(o)}
                   >
                     {o === "desc" ? "Descending" : "Ascending"}
@@ -365,24 +354,15 @@ export default function OrgDetailPage() {
             Share
           </button>
 
-          <button
-            onClick={clickNewFolder}
-            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10"
-            title="New folder"
-          >
+          <button onClick={clickNewFolder} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10" title="New folder">
             New folder
           </button>
-          {/* <button
-            onClick={clickNewView}
-            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10"
-            title="New view"
-          >
+
+          {/* <button onClick={clickNewView} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10" title="New view">
             New view
           </button> */}
-          <button
-            onClick={clickNewMap}
-            className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
-          >
+
+          <button onClick={clickNewMap} className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400">
             New map
           </button>
 
@@ -396,25 +376,12 @@ export default function OrgDetailPage() {
             >
               ⋯
             </button>
-
             {moreOpen && (
-              <div
-                role="menu"
-                className="absolute right-0 mt-2 w-60 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl overflow-hidden"
-                onMouseLeave={() => setMoreOpen(false)}
-              >
-                <button
-                  onClick={copyProjectUrl}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200"
-                  role="menuitem"
-                >
+              <div role="menu" className="absolute right-0 mt-2 w-60 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl overflow-hidden" onMouseLeave={() => setMoreOpen(false)}>
+                <button onClick={copyProjectUrl} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
                   Copy project URL
                 </button>
-                <button
-                  onClick={copyProjectId}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200"
-                  role="menuitem"
-                >
+                <button onClick={copyProjectId} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
                   Copy project ID for API
                 </button>
                 <button
@@ -433,97 +400,158 @@ export default function OrgDetailPage() {
         </div>
       </div>
 
-      <section className="mb-6">
-        <h2 className="text-lg font-semibold">Access Tools</h2>
-        {tools.length === 0 ? (
-          <p className="mt-2 text-sm text-zinc-400">No access tools granted yet.</p>
-        ) : (
-          <ul className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {tools.map((t) => (
+      <section className="mb-8">
+        <h2 className="mb-3 text-lg font-semibold">Maps</h2>
+
+        {sortedMaps.length === 0 && (
+          <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
+            <p className="text-zinc-400 mb-4">No maps in this project yet.</p>
+            <button
+              onClick={clickNewMap}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
+            >
+              Create a map here
+            </button>
+          </div>
+        )}
+
+        {sortedMaps.length > 0 && viewMode === "grid" && (
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {sortedMaps.map((m) => (
               <li
-                key={t.id}
-                className="rounded-xl border border-white/10 bg-zinc-900/60 p-4 hover:bg-zinc-800/60 transition"
+                key={m.id}
+                className="group rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4 cursor-pointer"
+                onClick={() => router.push(`/maps/${m.id}`)}
+                title={m.name}
               >
-                <div className="flex items-start gap-3">
-                  {t.iconUrl ? (
-                    <Image
-                      src={t.iconUrl}
-                      alt=""
-                      width={32}
-                      height={32}
-                      className="h-8 w-8 rounded-md bg-zinc-800/70 p-1 object-contain"
-                      unoptimized
-                    />
-                  ) : (
-                    <div className="h-8 w-8 rounded-md bg-zinc-800/50" />
-                  )}
-
-                  <div className="flex-1">
-                    <div className="text-base font-semibold">{t.name}</div>
-                    <div className="text-sm text-zinc-400">
-                      {t.description ? String(t.description) : "No description"}
-                    </div>
-
-                    <div className="mt-2 flex items-center justify-between text-xs text-zinc-400 border-t border-white/5 pt-2">
-                      <span className={t.isActive ? "text-emerald-400" : "text-red-400"}>
-                        {t.isActive ? "Active" : "Inactive"}
-                      </span>
-                      <span>
-                        Expires:{" "}
-                        {/^(?:0001-01-01|0001)/.test(t.expiredAt)
-                          ? "No expiry"
-                          : new Date(t.expiredAt).toLocaleDateString()}
-                      </span>
+                <div className="h-32 w-full rounded-lg bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/5 mb-3 grid place-items-center text-zinc-400 text-xs">
+                  Preview
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <div className="truncate font-semibold">{m.name || "Untitled"}</div>
+                    <div className="text-xs text-zinc-400">
+                      {m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}
                     </div>
                   </div>
+                  <button
+                    className="opacity-0 group-hover:opacity-100 transition text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      router.push(`/maps/${m.id}`);
+                    }}
+                  >
+                    Edit
+                  </button>
                 </div>
               </li>
             ))}
           </ul>
         )}
+
+        {sortedMaps.length > 0 && viewMode === "list" && (
+          <div className="rounded-xl border border-white/10 overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-white/5 text-zinc-300">
+                <tr>
+                  <th className="text-left px-3 py-2">Name</th>
+                  <th className="text-left px-3 py-2">Author</th>
+                  <th className="text-left px-3 py-2">Created</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {sortedMaps.map((m) => (
+                  <tr key={m.id} className="hover:bg-white/5">
+                    <td className="px-3 py-2">
+                      <button className="text-emerald-300 hover:underline" onClick={() => router.push(`/maps/${m.id}`)}>
+                        {m.name || "Untitled"}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2 text-zinc-400">{m.ownerId || "—"}</td>
+                    <td className="px-3 py-2 text-zinc-400">{m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}</td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                        onClick={() => router.push(`/maps/${m.id}`)}
+                      >
+                        Edit
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
-      <div className="rounded-xl border border-white/10 bg-white/5 p-4 sm:p-6">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            { t: "Getting started in 30 seconds" },
-            { t: "Uploading your data" },
-            { t: "Styling your data" },
-            { t: "Easily share your maps" },
-          ].map((c, i) => (
-            <div
-              key={String(i)}
-              className="rounded-lg border border-white/10 bg-zinc-900/50 p-4 h-32 flex items-center justify-center text-center text-sm text-zinc-300"
-            >
-              {c.t}
-            </div>
-          ))}
-        </div>
+      <section className="mb-6">
+        <button
+          type="button"
+          onClick={() => setToolsOpen((v) => !v)}
+          className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 hover:bg-white/10"
+          aria-expanded={toolsOpen}
+          aria-controls="access-tools-panel"
+        >
+          <span className="text-lg font-semibold">
+            Access Tools
+            <span className="ml-2 text-xs font-normal text-zinc-400">{tools.length ? `(${tools.length})` : ""}</span>
+          </span>
+          <span className={["inline-block transition-transform duration-200", toolsOpen ? "rotate-180" : "rotate-0"].join(" ")} aria-hidden>
+            ▾
+          </span>
+        </button>
 
-        <div className="mt-8 text-center py-10">
-          <p className="text-zinc-400 mb-3">No maps in this project yet!</p>
-          <button
-            onClick={clickNewMap}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
-          >
-            Create a map here
-          </button>
-        </div>
-      </div>
+        {toolsOpen && (
+          <div id="access-tools-panel" className="mt-3 rounded-xl border border-white/10 bg-zinc-900/60 p-4">
+            {tools.length === 0 ? (
+              <p className="text-sm text-zinc-400">No access tools granted yet.</p>
+            ) : (
+              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {tools.map((t) => (
+                  <li key={t.id} className="rounded-xl border border-white/10 bg-zinc-900/60 p-4 hover:bg-zinc-800/60 transition">
+                    <div className="flex items-start gap-3">
+                      {t.iconUrl ? (
+                        <Image
+                          src={t.iconUrl}
+                          alt=""
+                          width={32}
+                          height={32}
+                          className="h-8 w-8 rounded-md bg-zinc-800/70 p-1 object-contain"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="h-8 w-8 rounded-md bg-zinc-800/50" />
+                      )}
+                      <div className="flex-1">
+                        <div className="text-base font-semibold">{t.name}</div>
+                        <div className="text-sm text-zinc-400">{t.description ? String(t.description) : "No description"}</div>
+                        <div className="mt-2 flex items-center justify-between text-xs text-zinc-400 border-t border-white/5 pt-2">
+                          <span className={t.isActive ? "text-emerald-400" : "text-red-400"}>{t.isActive ? "Active" : "Inactive"}</span>
+                          <span>
+                            Expires:{" "}
+                            {/^(?:0001-01-01|0001)/.test(t.expiredAt) ? "No expiry" : new Date(t.expiredAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </section>
 
       {shareOpen && (
         <div className="absolute top-12 right-0 w-[28rem] rounded-xl border border-white/10 bg-zinc-900/95 shadow-xl p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="text-sm font-medium text-zinc-200">Share project</div>
-            <button
-              className="text-zinc-500 hover:text-white"
-              onClick={() => setShareOpen(false)}
-              aria-label="Close share"
-            >
+            <button className="text-zinc-500 hover:text-white" onClick={() => setShareOpen(false)} aria-label="Close share">
               ✕
             </button>
           </div>
-
           <div className="mb-3">
             <label className="block text-xs text-zinc-400 mb-1">Emails</label>
             <div className="flex gap-2">
@@ -547,7 +575,6 @@ export default function OrgDetailPage() {
             </div>
             {inviteMsg && <div className="mt-2 text-xs text-zinc-300">{inviteMsg}</div>}
           </div>
-
           <div className="divide-y divide-white/10 text-sm max-h-56 overflow-auto rounded-md border border-white/5">
             {memberRows.map((m) => {
               const roleLabel = (m.role ?? m.memberType ?? "") || "";
@@ -561,11 +588,8 @@ export default function OrgDetailPage() {
                 </div>
               );
             })}
-            {memberRows.length === 0 && (
-              <div className="py-6 text-center text-zinc-400">No members yet</div>
-            )}
+            {memberRows.length === 0 && <div className="py-6 text-center text-zinc-400">No members yet</div>}
           </div>
-
           <div className="mt-3 flex items-center justify-between text-xs text-zinc-400">
             <span>Only invited users see this project</span>
             <button
@@ -588,7 +612,6 @@ export default function OrgDetailPage() {
               Bạn sắp xóa tổ chức <span className="font-semibold">{title}</span>. Hành động này không thể hoàn tác. Nhập{" "}
               <span className="font-mono">{title}</span> để xác nhận.
             </p>
-
             <input
               autoFocus
               value={deleteConfirm}
@@ -596,9 +619,7 @@ export default function OrgDetailPage() {
               placeholder={title}
               className="mt-4 w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
             />
-
             {deleteErr && <div className="mt-3 text-sm text-red-300">{deleteErr}</div>}
-
             <div className="mt-5 flex justify-end gap-2">
               <button
                 className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"

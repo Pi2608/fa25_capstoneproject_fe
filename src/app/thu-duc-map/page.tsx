@@ -56,7 +56,6 @@ type PopupLayer = Layer & {
   on: (event: string, handler: () => void) => PopupLayer;
 };
 
-/** --------- NEW: bọc Suspense quanh component con --------- */
 export default function ThuDucMapPage() {
   return (
     <Suspense fallback={<div className="p-4 text-white">Đang tải bản đồ…</div>}>
