@@ -1,5 +1,3 @@
-// src/lib/api.ts
-
 export type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export interface ApiErrorShape {
@@ -7,7 +5,6 @@ export interface ApiErrorShape {
   message: string;
 }
 
-/** ===== Auth storage helpers ===== */
 const ACCESS_TOKEN_KEY = "token";
 const REFRESH_TOKEN_KEY = "refreshToken";
 
@@ -38,7 +35,6 @@ export function clearAuth() {
   window.dispatchEvent(new Event("auth-changed"));
 }
 
-/** ===== Core fetch (auto Authorization, error normalization) ===== */
 export async function apiFetch<T>(
   path: string,
   options: RequestInit & { method?: ApiMethod } = {}
@@ -105,12 +101,10 @@ export async function apiFetch<T>(
       if (isRecord(body)) {
         const bodyObj = body as Record<string, unknown>;
 
-        // Ưu tiên detail/title nếu có
         const d = typeof bodyObj.detail === "string" ? bodyObj.detail.trim() : "";
         const t = typeof bodyObj.title === "string" ? bodyObj.title.trim() : "";
         if (d || t) return d || t || defaultByStatus(res.status);
 
-        // ModelState errors { errors: { field: [msg] } }
         const maybeErrors = bodyObj.errors;
         if (typeof maybeErrors === "object" && maybeErrors !== null) {
           const errorsObj = maybeErrors as Record<string, unknown>;
@@ -124,7 +118,6 @@ export async function apiFetch<T>(
           return defaultByStatus(400);
         }
 
-        // message / error / detail dạng string
         const msg =
           (typeof bodyObj.message === "string" && bodyObj.message.trim()) ? bodyObj.message.trim() :
             (typeof bodyObj.error === "string" && bodyObj.error.trim()) ? bodyObj.error.trim() :
@@ -152,7 +145,6 @@ export async function apiFetch<T>(
   return JSON.parse(rawText) as T;
 }
 
-/** ===== JSON helpers ===== */
 export function getJson<T>(path: string, init?: RequestInit) {
   return apiFetch<T>(path, { ...(init ?? {}), method: "GET" });
 }
@@ -169,7 +161,6 @@ export function delJson<TRes>(path: string, init?: RequestInit) {
   return apiFetch<TRes>(path, { ...(init ?? {}), method: "DELETE" });
 }
 
-/** ===== AUTH ===== */
 export type LoginRequest = { email: string; password: string };
 export type LoginResponse = { accessToken?: string; token?: string; refreshToken?: string };
 
@@ -191,7 +182,6 @@ export function register(req: RegisterRequest) {
   return postJson<RegisterRequest, RegisterResponse>("/auth/register", req);
 }
 
-/** ===== PLANS ===== */
 export type Plan = {
   planId: number;
   planName: string;
@@ -203,7 +193,6 @@ export function getPlans() {
   return getJson<Plan[]>("/membership-plan/active");
 }
 
-/** ===== TEMPLATES (không liên quan maps) ===== */
 export type Template = {
   id: string;
   title: string;
@@ -215,17 +204,85 @@ export function getTemplates() {
   return getJson<Template[]>("/templates");
 }
 
-/** ===== USERS ===== */
-export type User = {
-  userId: string;
-  email: string;
-  fullName?: string;
-  role: string;
-};
-
-export function getUsers() {
-  return getJson<User[]>("/users");
+export type MeRaw = {
+  user: {
+    userId: string
+    email: string
+    fullName: string
+    phone?: string | null
+    role: string
+    accountStatus?: string | null
+    createdAt?: string | null
+    lastLogin?: string | null
+  }
 }
+
+export type Me = {
+  userId: string
+  email: string
+  fullName: string
+  phone?: string | null
+  role: string
+  accountStatus?: string | null
+  createdAt?: string | null
+  lastLogin?: string | null
+}
+
+export async function getMe(): Promise<Me> {
+  const r = await getJson<MeRaw | Me>("/user/me");
+  if (r && typeof r === "object" && "user" in r) {
+    return (r as MeRaw).user;
+  }
+  return r as Me;
+}
+
+
+export type CurrentMembershipDto = {
+  membershipId: string
+  userId: string
+  orgId: string
+  orgName: string
+  planId: number
+  planName: string
+  startDate?: string | null
+  endDate?: string | null
+  status: string
+  autoRenew?: boolean
+  lastResetDate?: string | null
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
+export type GetCurrentMembershipResponse = { membership: CurrentMembershipDto }
+
+export async function getMyMembership(orgId: string): Promise<CurrentMembershipDto | null> {
+  const res = await getJson<GetCurrentMembershipResponse | CurrentMembershipDto>(
+    `/user/me/membership/${orgId}`
+  );
+  if (res && typeof res === "object" && "membership" in res) {
+    return (res as GetCurrentMembershipResponse).membership;
+  }
+  return res as CurrentMembershipDto;
+}
+
+
+export interface CurrentMembership {
+  membershipId: string
+  userId: string
+  orgId: string
+  orgName: string
+  planId: number
+  planName: string
+  startDate: string
+  endDate: string
+  status: string
+  autoRenew: boolean
+}
+
+export async function getMyOrgMembership(orgId: string) {
+  return getJson<{ membership: CurrentMembership }>(`/user/me/membership/${orgId}`)
+}
+
 
 /** ===== EXPORTS ===== */
 export type ExportRequest = {
@@ -242,7 +299,6 @@ export function createExport(req: ExportRequest) {
   return postJson<ExportRequest, ExportResponse>("/exports", req);
 }
 
-// ==== ACCESS TOOLS – USER (types “raw” từ BE) ====
 export type RawAccessTool = {
   accessToolId?: number | string;
   accessToolName?: string;
@@ -433,11 +489,11 @@ export interface ProcessPaymentReq {
 
 // Response trả về khi tạo giao dịch
 export interface ProcessPaymentRes {
-  approvalUrl: string;     
-  transactionId?: string;  
+  approvalUrl: string;
+  transactionId?: string;
   provider?: string;
-  
-  paymentGateway?: "PayPal" | "payOS";  
+
+  paymentGateway?: "PayPal" | "payOS";
   sessionId: string;
   qrCode?: string;
   orderCode: string;
@@ -453,8 +509,8 @@ export function processPayment(body: ProcessPaymentReq) {
 export interface ConfirmPaymentReq {
   transactionId: string;
   token: string;
-  payerId: string;   
-  paymentId: string; 
+  payerId: string;
+  paymentId: string;
 }
 
 export interface ConfirmPaymentRes {
@@ -464,12 +520,10 @@ export interface ConfirmPaymentRes {
 
 export function confirmPayment(body: ConfirmPaymentReq) {
   return postJson<ConfirmPaymentReq, ConfirmPaymentRes>(
-    "/transaction/confirm-payment-with-context",
+    "/transaction/confirm-payment",
     body
   );
 }
-
-// ==== Confirm Payment (với context) ====
 
 export type PaymentGateway = "PayPal" | "payOS";
 export type PaymentPurpose = "membership" | "order";
@@ -519,7 +573,6 @@ export function confirmPaymentWithContext(body: ConfirmPaymentWithContextReq) {
   );
 }
 
-// Gọi GET /api/v1/transaction/{id}
 export function getTransactionById(transactionId: string) {
   return getJson(`/transaction/${transactionId}`);
 }
@@ -537,38 +590,64 @@ export interface Transaction {
 
 
 /** =========================================================
-MAPS / TEMPLATES / LAYERS / FEATURES 
-/* ---------- Map core ---------- */
-export type Map = {
+MAPS / TEMPLATES / LAYERS / FEATURES
+*/
+export type ViewState = { center: [number, number]; zoom: number };
+export type BaseMapProvider = "OSM" | "Satellite" | "Dark";
+
+// ==== MAPS ====
+export interface CreateMapRequest {
+  orgId?: string;
+  name: string;
+  description?: string;
+  isPublic: boolean;
+  initialLatitude: number;
+  initialLongitude: number;
+  initialZoom: number;
+  baseMapProvider: BaseMapProvider;
+}
+
+export interface CreateMapResponse {
+  mapId: string;
+  message?: string;
+  createdAt?: string;
+}
+
+export function createMap(req: CreateMapRequest) {
+  const body = {
+    OrgId: req.orgId,
+    Name: req.name,
+    Description: req.description,
+    IsPublic: req.isPublic,
+    InitialLatitude: req.initialLatitude,
+    InitialLongitude: req.initialLongitude,
+    InitialZoom: req.initialZoom,
+    BaseMapProvider: req.baseMapProvider,
+  };
+  return postJson<typeof body, CreateMapResponse>("/maps", body);
+}
+
+export type MapDto = {
   id: string;
   name: string;
-  ownerId: string;
+  ownerId?: string;
   description?: string;
   createdAt: string;
 };
 
-export interface CreateMapRequest {
-  mapName: string;
-  description?: string;
-  isPublic?: boolean;
-}
-export interface CreateMapResponse { mapId: string; }
-
-export function createMap(body: CreateMapRequest) {
-  return postJson<CreateMapRequest, CreateMapResponse>("/maps/", body);
-}
-
 export function getMapById(mapId: string) {
-  return getJson<Map>(`/maps/${mapId}`);
+  return getJson<MapDto>(`/maps/${mapId}`);
 }
 
 export interface UpdateMapRequest {
-  mapName?: string;
+  name?: string;
   description?: string;
   isPublic?: boolean;
+  baseMapProvider?: BaseMapProvider;
+  geographicBounds?: string;
+  viewState?: string;
 }
-export type UpdateMapResponse = Map;
-
+export interface UpdateMapResponse { message?: string; }
 export function updateMap(mapId: string, body: UpdateMapRequest) {
   return putJson<UpdateMapRequest, UpdateMapResponse>(`/maps/${mapId}`, body);
 }
@@ -578,70 +657,128 @@ export function deleteMap(mapId: string) {
   return delJson<DeleteMapResponse>(`/maps/${mapId}`);
 }
 
-export interface GetMyMapsResponse { maps: Map[] }
-export async function getMyMaps(): Promise<Map[]> {
-  const res = await getJson<GetMyMapsResponse | Map[]>("/maps/my");
+export interface GetMyMapsResponse { maps: MapDto[] }
+export async function getMyMaps(): Promise<MapDto[]> {
+  const res = await getJson<GetMyMapsResponse | MapDto[]>("/maps/my");
   return Array.isArray(res) ? res : (res.maps ?? []);
 }
 
-export interface GetOrganizationMapsResponse { maps: Map[] }
-export async function getOrganizationMaps(orgId: string): Promise<Map[]> {
-  const res = await getJson<GetOrganizationMapsResponse | Map[]>(`/maps/organization/${orgId}`);
+export interface GetOrganizationMapsResponse { maps: MapDto[] }
+export async function getOrganizationMaps(orgId: string): Promise<MapDto[]> {
+  const res = await getJson<GetOrganizationMapsResponse | MapDto[]>(`/maps/organization/${orgId}`);
   return Array.isArray(res) ? res : (res.maps ?? []);
 }
 
-/* ---------- Map templates ---------- */
+// ==== Map detail types ====
+export interface MapDetail {
+  id: string;
+  mapName: string;
+  description?: string;
+  baseMapProvider: BaseMapProvider;
+  initialLatitude: number;
+  initialLongitude: number;
+  initialZoom: number;
+}
+
+type MapDetailRawWrapped = {
+  map: {
+    id: string;
+    name: string;
+    description?: string | null;
+    baseMapProvider: BaseMapProvider;
+    initialLatitude: number;
+    initialLongitude: number;
+    initialZoom: number;
+  };
+};
+
+export async function getMapDetail(mapId: string): Promise<MapDetail> {
+  const res = await getJson<MapDetailRawWrapped | MapDetail>(`/maps/${mapId}`);
+
+  if (res && typeof res === "object" && "map" in res) {
+    const m = (res as MapDetailRawWrapped).map;
+    return {
+      id: m.id,
+      mapName: m.name,
+      description: m.description ?? "",
+      baseMapProvider: m.baseMapProvider,
+      initialLatitude: m.initialLatitude,
+      initialLongitude: m.initialLongitude,
+      initialZoom: m.initialZoom,
+    };
+  }
+
+  return res as MapDetail;
+}
+
+/* ---------- TEMPLATES ---------- */
 export interface MapTemplate {
   templateId: string;
   templateName: string;
   description: string;
-  category: string; // enum -> string
+  category: string;
   isPublic: boolean;
   previewImageUrl?: string | null;
   layerCount?: number | null;
   featureCount?: number | null;
 }
-export interface GetMapTemplatesResponse { templates: MapTemplate[]; }
+
+export interface MapTemplateLayer {
+  layerId: string;
+  layerName: string;
+  featureCount?: number;
+}
+
+export interface MapTemplateDetails extends MapTemplate {
+  layers: MapTemplateLayer[];
+  annotations?: unknown[];
+  images?: string[];
+}
+
+export interface GetMapTemplatesResponse {
+  templates: MapTemplate[];
+}
 
 export async function getMapTemplates(): Promise<MapTemplate[]> {
   const res = await getJson<GetMapTemplatesResponse | MapTemplate[]>("/maps/templates");
   return Array.isArray(res) ? res : (res.templates ?? []);
 }
 
-export type GetMapTemplateByIdResponse = MapTemplate;
 export function getMapTemplateById(templateId: string) {
-  return getJson<GetMapTemplateByIdResponse>(`/maps/templates/${templateId}`);
+  return getJson<MapTemplate>(`/maps/templates/${templateId}`);
 }
 
-export interface MapTemplateWithDetails extends MapTemplate {
-  layers?: Array<{ layerId: string; layerName: string; geometryType?: string }>;
-}
 export function getMapTemplateWithDetails(templateId: string) {
-  return getJson<MapTemplateWithDetails>(`/maps/templates/${templateId}/details`);
+  return getJson<MapTemplateDetails>(`/maps/templates/${templateId}/details`);
 }
 
 export function getMapTemplateLayerData(templateId: string, layerId: string) {
   return getJson<{ layerData: unknown }>(`/maps/templates/${templateId}/layers/${layerId}/data`);
 }
 
-/** Tạo Map từ Template (auth) */
 export interface CreateMapFromTemplateRequest {
   templateId: string;
   mapName?: string;
   description?: string;
   isPublic?: boolean;
 }
-export interface CreateMapFromTemplateResponse { mapId: string; }
-export function createMapFromTemplate(body: CreateMapFromTemplateRequest) {
-  return postJson<CreateMapFromTemplateRequest, CreateMapFromTemplateResponse>("/maps/from-template", body);
+
+export interface CreateMapFromTemplateResponse {
+  mapId: string;
 }
 
-/** Upload GeoJSON -> tạo MapTemplate (auth, multipart) */
-export interface CreateMapTemplateFromGeoJsonResult {
+export function createMapFromTemplate(body: CreateMapFromTemplateRequest) {
+  return postJson<CreateMapFromTemplateRequest, CreateMapFromTemplateResponse>(
+    "/maps/from-template",
+    body
+  );
+}
+
+export interface CreateMapTemplateResponse {
   templateId: string;
   message?: string;
-  warning?: string | null;
 }
+
 export async function createMapTemplateFromGeoJson(args: {
   geoJsonFile: File;
   templateName?: string;
@@ -657,15 +794,14 @@ export async function createMapTemplateFromGeoJson(args: {
   if (args.layerName) form.append("layerName", args.layerName);
   if (args.category) form.append("category", args.category);
   form.append("isPublic", String(!!args.isPublic));
-
-  return apiFetch<CreateMapTemplateFromGeoJsonResult>("/maps/create-template", {
+  return apiFetch<CreateMapTemplateResponse>("/maps/create-template", {
     method: "POST",
     body: form,
-    headers: { Accept: "application/json" }, // KHÔNG set Content-Type
+    headers: { Accept: "application/json" },
   });
 }
 
-/* ---------- Map layers (auth) ---------- */
+/* ---------- LAYERS ---------- */
 export interface AddLayerToMapRequest {
   layerId?: string;
   layerName?: string;
@@ -673,99 +809,74 @@ export interface AddLayerToMapRequest {
   styleJson?: unknown;
 }
 export interface AddLayerToMapResponse { mapLayerId: string; }
-
 export function addLayerToMap(mapId: string, body: AddLayerToMapRequest) {
   return postJson<AddLayerToMapRequest, AddLayerToMapResponse>(`/maps/${mapId}/layers`, body);
 }
 
-export interface UpdateMapLayerRequest {
-  layerName?: string;
-  styleJson?: unknown;
-  visible?: boolean;
-  opacity?: number;
-}
+export interface UpdateMapLayerRequest { layerName?: string; styleJson?: unknown; visible?: boolean; opacity?: number; }
 export interface UpdateMapLayerResponse { mapLayerId: string; }
 export function updateMapLayer(mapId: string, layerId: string, body: UpdateMapLayerRequest) {
   return putJson<UpdateMapLayerRequest, UpdateMapLayerResponse>(`/maps/${mapId}/layers/${layerId}`, body);
 }
-
 export interface RemoveLayerFromMapResponse { removed?: boolean; }
 export function removeLayerFromMap(mapId: string, layerId: string) {
   return delJson<RemoveLayerFromMapResponse>(`/maps/${mapId}/layers/${layerId}`);
 }
 
-/* ---------- Map sharing (auth) ---------- */
-export interface ShareMapRequest {
-  mapId: string;
-  targetUserId: string;
-  permission?: "View" | "Edit";
-}
+/* ---------- SHARE ---------- */
+export interface ShareMapRequest { mapId: string; targetUserId: string; permission?: "View" | "Edit"; }
 export interface ShareMapResponse { shared: boolean; }
-export function shareMap(body: ShareMapRequest) {
-  return postJson<ShareMapRequest, ShareMapResponse>("/maps/share", body);
+export function shareMap(mapId: string, body: ShareMapRequest) {
+  return postJson<ShareMapRequest, ShareMapResponse>(`/maps/${mapId}/share`, body);
 }
-
 export interface UnshareMapRequest { mapId: string; targetUserId: string; }
 export interface UnshareMapResponse { removed: boolean; }
-/** DELETE with body */
-export function unshareMap(body: UnshareMapRequest) {
-  return delJson<UnshareMapResponse>("/maps/share", {
+export function unshareMap(mapId: string, body: UnshareMapRequest) {
+  return delJson<UnshareMapResponse>(`/maps/${mapId}/share`, {
     body: JSON.stringify(body),
     headers: { "Content-Type": "application/json" },
   } as RequestInit);
 }
 
-/* ---------- Map features (auth) ---------- */
+/* ---------- FEATURES ---------- */
 export interface MapFeatureResponse {
   featureId: string;
   mapId: string;
   layerId?: string | null;
   category?: string | null;
-  geometry?: unknown; // GeoJSON geometry
+  geometry?: unknown;
   properties?: Record<string, unknown>;
 }
-
 export interface CreateMapFeatureRequest {
-  mapId?: string; // BE sẽ override từ route
+  mapId?: string;
   layerId?: string;
   category?: string;
-  geometry: unknown; // GeoJSON geometry
+  geometry: unknown;
   properties?: Record<string, unknown>;
 }
 export function createMapFeature(mapId: string, body: CreateMapFeatureRequest) {
   return postJson<CreateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features`, body);
 }
-
 export function getMapFeatures(mapId: string) {
   return getJson<MapFeatureResponse[]>(`/maps/${mapId}/features`);
 }
-
 export function getMapFeaturesByCategory(mapId: string, category: string) {
   return getJson<MapFeatureResponse[]>(`/maps/${mapId}/features/by-category/${category}`);
 }
-
 export function getMapFeaturesByLayer(mapId: string, layerId: string) {
   return getJson<MapFeatureResponse[]>(`/maps/${mapId}/features/by-layer/${layerId}`);
 }
-
-export interface UpdateMapFeatureRequest {
-  layerId?: string;
-  category?: string;
-  geometry?: unknown;
-  properties?: Record<string, unknown>;
-}
+export interface UpdateMapFeatureRequest { layerId?: string; category?: string; geometry?: unknown; properties?: Record<string, unknown>; }
 export function updateMapFeature(mapId: string, featureId: string, body: UpdateMapFeatureRequest) {
   return putJson<UpdateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features/${featureId}`, body);
 }
-
 export function deleteMapFeature(mapId: string, featureId: string) {
   return delJson<{ deleted: boolean }>(`/maps/${mapId}/features/${featureId}`);
 }
 
-/* ================== ORGANIZATION API (MATCH BACKEND) ================== */
 
 export type OrganizationReqDto = {
-  // BE yêu cầu OrgName & Abbreviation là required
+
   orgName: string;
   abbreviation: string;
   description?: string;
@@ -795,7 +906,6 @@ export type GetOrganizationByIdResDto = { organization: OrganizationDetailDto };
 export type UpdateOrganizationResDto = { result?: string };
 export type DeleteOrganizationResDto = { result?: string };
 
-/* My organizations */
 export type MyOrganizationDto = {
   orgId: string;
   orgName: string;
@@ -806,7 +916,6 @@ export type MyOrganizationDto = {
 };
 export type GetMyOrganizationsResDto = { organizations: MyOrganizationDto[] };
 
-/* Invitations */
 export type InvitationDto = {
   invitationId: string;
   orgId: string;
@@ -820,7 +929,6 @@ export type InvitationDto = {
 };
 export type GetInvitationsResDto = { invitations: InvitationDto[] };
 
-/* Members */
 export type MemberDto = {
   memberId: string;
   email: string;
@@ -831,7 +939,6 @@ export type MemberDto = {
 };
 export type GetOrganizationMembersResDto = { members: MemberDto[] };
 
-/* Requests for special ops */
 export type InviteMemberOrganizationReqDto = {
   orgId: string;
   memberEmail: string;
@@ -936,4 +1043,46 @@ export function transferOwnership(body: TransferOwnershipReqDto) {
     "/organizations/ownership/transfer",
     body
   );
+}
+
+export type FaqItem = {
+  faqId: number;
+  question: string;
+  answer: string;
+  category: string;
+  createdAt: string;
+};
+
+export async function searchFaqs(q: string): Promise<FaqItem[]> {
+  const res = await getJson<FaqItem[] | { items: FaqItem[] }>(`/faqs/search?q=${encodeURIComponent(q)}`);
+  return Array.isArray(res) ? res : (res.items ?? []);
+}
+
+export async function getFaqSuggestions(limit = 8): Promise<string[]> {
+  try {
+    const res = await getJson<FaqItem[] | { items: FaqItem[] }>(`/faqs?limit=${limit}`);
+    const arr = Array.isArray(res) ? res : (res.items ?? []);
+    return arr.slice(0, limit).map((x) => x.question);
+  } catch {
+    return [];
+  }
+}
+
+export type AIMessage = { role: "user" | "assistant" | "system"; content: string };
+export type AIAnswer = { answer: string };
+
+export async function askAI(messages: AIMessage[]): Promise<string | null> {
+  const aiBase = process.env.NEXT_PUBLIC_AI_ENDPOINT?.replace(/\/+$/, "");
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/+$/, "");
+  const url = aiBase ? `${aiBase}/chat` : `${base}/ai/chat`;
+  try {
+    const res = await apiFetch<AIAnswer>(url.replace(/([^:]\/)\/+/g, "$1"), {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+      headers: { "Content-Type": "application/json" },
+    });
+    return res?.answer ?? null;
+  } catch {
+    return null;
+  }
 }

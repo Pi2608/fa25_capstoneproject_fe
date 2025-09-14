@@ -2,7 +2,7 @@
 "use client";
 
 import { useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, Suspense } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   getPlans,
   type Plan,
@@ -15,13 +15,11 @@ import {
 } from "@/lib/api";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
 
-/** Trạng thái membership tối thiểu để hiển thị UI hiện tại */
 type MyMembership = {
   planId: number;
   status: "active" | "expired" | "pending" | string;
 };
 
-/** Chuẩn hoá message lỗi -> luôn trả về string */
 function safeMessage(err: unknown, fallback = "Yêu cầu thất bại"): string {
   if (err instanceof Error && err.message) return err.message;
   if (err && typeof err === "object" && "message" in err) {
@@ -31,7 +29,6 @@ function safeMessage(err: unknown, fallback = "Yêu cầu thất bại"): string
   return fallback;
 }
 
-/** Định dạng USD */
 function formatUSD(n?: number | null): string {
   const v = typeof n === "number" ? n : 0;
   return `$${v.toFixed(2)}`;
@@ -56,7 +53,6 @@ export default function SelectPlanPage() {
   const [popup, setPopup] = useState<{ type: "success" | "cancel"; msg: string } | null>(null);
 
 
-  /** Nạp danh sách gói + membership hiện tại */
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -65,7 +61,6 @@ export default function SelectPlanPage() {
         if (!alive) return;
         setPlans(ps);
 
-        // Thử lấy membership hiện tại
         try {
           const me = await getJson<MyMembership>("/membership/me");
           if (!alive) return;
@@ -87,7 +82,6 @@ export default function SelectPlanPage() {
               : null
           );
         } catch {
-          // Chưa có membership -> set mặc định Free nếu có
           const free = ps.find((p) => (p.priceMonthly ?? 0) <= 0) ?? null;
           setCurrentPlan(free ?? null);
           setStatus(free ? "active" : null);
@@ -105,12 +99,12 @@ export default function SelectPlanPage() {
   }, []);
 
   useEffect(() => {
-    const transactionId = searchParams.get("transactionId");
-    const code = searchParams.get("code");
-    const cancel = searchParams.get("cancel");
-    const status = searchParams.get("status");
-    const orderCode = searchParams.get("orderCode");
-    const paymentId = searchParams.get("id");
+    const transactionId = searchParams?.get("transactionId") ?? null;
+    const code = searchParams?.get("code") ?? null;
+    const cancel = searchParams?.get("cancel") ?? null;
+    const status = searchParams?.get("status") ?? null;
+    const orderCode = searchParams?.get("orderCode") ?? null;
+    const paymentId = searchParams?.get("id") ?? null;
 
     if (!transactionId) return;
 
@@ -141,7 +135,7 @@ export default function SelectPlanPage() {
 
       confirmPaymentWithContext(req)
         .then(() => setPopup({ type: "success", msg: "Thanh toán thành công!" }))
-        .catch((res) => {setPopup({ type: "cancel", msg: "Thanh toán thất bại." }); console.log(res);});
+        .catch((res) => { setPopup({ type: "cancel", msg: "Thanh toán thất bại." }); console.log(res); });
     }
 
     if (finalStatus === "cancel") {
@@ -357,8 +351,8 @@ export default function SelectPlanPage() {
                           {isSubmitting
                             ? "Đang chuyển tới PayOS"
                             : isCurrentPending && currentId === p.planId
-                            ? "Tiếp tục thanh toán"
-                            : "Đăng ký"}
+                              ? "Tiếp tục thanh toán"
+                              : "Đăng ký"}
                         </button>
                       )}
                     </>

@@ -1,4 +1,3 @@
-// src/app/profile/select-plan/page.tsx
 import { Suspense } from "react";
 import SelectPlan from "./SelectPlan";
 

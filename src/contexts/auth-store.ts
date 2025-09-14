@@ -1,4 +1,3 @@
-// src/contexts/auth-store.ts
 "use client";
 
 type Listener = () => void;
@@ -12,19 +11,17 @@ function readToken(): string | null {
 }
 
 export const authStore = {
-  /** snapshot hiện tại (dùng cho useSyncExternalStore) */
   getSnapshot: () => !!readToken(),
 
-  /** đăng ký lắng nghe mọi thay đổi liên quan đến auth/token */
   subscribe: (listener: Listener) => {
     listeners.add(listener);
 
     const onStorage = (e: StorageEvent) => {
       if (!e.key || e.key === TOKEN_KEY) listener();
     };
-    const onAuthChanged = () => listener();                 // do mình phát ra khi set/clear token
-    const onPageShow = () => listener();                    // khi khôi phục từ bfcache
-    const onPopState = () => listener();                    // back/forward
+    const onAuthChanged = () => listener();               
+    const onPageShow = () => listener();                   
+    const onPopState = () => listener();                    
     const onVisible = () => {
       if (document.visibilityState === "visible") listener();
     };
@@ -45,13 +42,11 @@ export const authStore = {
     };
   },
 
-  /** set hoặc xoá token + phát sự kiện cho toàn app */
   setToken: (token?: string) => {
     if (typeof window === "undefined") return;
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
 
-    // gọi tất cả subscriber + phát event cho nơi nào nghe event
     listeners.forEach((l) => l());
     window.dispatchEvent(new Event("auth-changed"));
   },

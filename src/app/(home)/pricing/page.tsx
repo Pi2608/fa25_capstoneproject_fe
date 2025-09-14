@@ -56,16 +56,14 @@ export default function PricingPage() {
       const req: ProcessPaymentReq = {
         paymentGateway: "payOS",
         purpose: "membership",
-        // total: plan.priceMonthly,
-        total: 0.5, // test
+        total: 0.5, 
         PlanId: plan.planId,
-        UserId: "08ddec7d-cf40-429c-8e03-e930f337ca69", // test
+        UserId: "08ddec7d-cf40-429c-8e03-e930f337ca69", 
         AutoRenew: true,
       };
 
       const res: ProcessPaymentRes = await processPayment(req);
 
-      // Lưu lại để confirm/cancel sau redirect
       localStorage.setItem("transactionId", res.sessionId);
       localStorage.setItem("orderCode", res.orderCode);
       localStorage.setItem("planId", String(plan.planId));
