@@ -12,6 +12,9 @@ type LFeatureGroup = import("leaflet").FeatureGroup;
 type LTileLayer = import("leaflet").TileLayer;
 type LatLngTuple = import("leaflet").LatLngTuple;
 type LeafletEvent = import("leaflet").LeafletEvent;
+type Position = import("geojson").Position;
+type LatLng = import("leaflet").LatLng;
+type LatLngBounds = import("leaflet").LatLngBounds;
 
 type MapWithPM = LMap & {
   pm: {
@@ -44,19 +47,19 @@ interface LayerInfo {
 interface GeoJSONLayer extends LLayer {
   feature?: {
     type?: string;
-    properties?: Record<string, any>;
+    properties?: Record<string, unknown>;
     geometry?: {
       type?: string;
-      coordinates?: any;
+      coordinates?: Position | Position[] | Position[][] | Position[][][];
     };
   };
 }
 
 interface ExtendedLayer extends GeoJSONLayer {
-  _mRadius?: number;     // Circle
-  _latlng?: any;         // Marker
-  _latlngs?: any[];      // Polyline/Polygon
-  _bounds?: any;         // Rectangle
+  _mRadius?: number;                                // Circle
+  _latlng?: LatLng;                                 // Marker
+  _latlngs?: LatLng[] | LatLng[][] | LatLng[][][];  // Polyline / Polygon / MultiPolygon
+  _bounds?: LatLngBounds;                           // Rectangle
 }
 
 type PMCreateEvent = LeafletEvent & { layer: LLayer };
@@ -90,31 +93,37 @@ function NewMapPageInner() {
 
   const getLayerType = useCallback((layer: ExtendedLayer): string => {
     if (layer.feature?.geometry?.type) {
-      return layer.feature.geometry.type;
+      return layer.feature.geometry.type; // "Point" | "LineString" | "Polygon" | ...
     }
-    if (layer._mRadius) return "Circle";
-    if (layer._latlng) return "Marker";
-    if (layer._latlngs) {
-      if (layer._latlngs[0]?.length > 2) return "Polygon";
+    if (layer._mRadius !== undefined) return "Circle";
+    if (layer._latlng !== undefined) return "Marker";
+    if (layer._latlngs !== undefined) {
+      // Nếu _latlngs là LatLng[][] hoặc LatLng[][][]
+      const first = layer._latlngs[0];
+      if (Array.isArray(first) && first.length > 2) return "Polygon";
       return "Polyline";
     }
-    if (layer._bounds) return "Rectangle";
+    if (layer._bounds !== undefined) return "Rectangle";
     return "Unknown";
   }, []);
 
+  // Thêm layer vào danh sách quản lý
   const addLayerToList = useCallback((layer: LLayer | LFeatureGroup) => {
     if ("eachLayer" in layer && typeof layer.eachLayer === "function") {
-      // Nếu là FeatureGroup (GeoJSON nhiều feature)
+      // FeatureGroup
       layer.eachLayer((subLayer: LLayer) => {
         const sub = subLayer as ExtendedLayer;
-        const props = sub.feature?.properties || {};
-        const layerName = props.name || props.Name || `Layer ${Date.now()}`;
+        const props = sub.feature?.properties ?? {};
+        const layerName =
+          (props.name as string) ||
+          (props.Name as string) ||
+          `Layer ${Date.now()}`;
 
         setLayers(prevLayers => [
           ...prevLayers,
           {
-            id: `layer_${Date.now()}_${Math.random().toString(36)}`,
-            name: layerName, // đặt tên từ attribute name
+            id: `layer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            name: layerName,
             type: getLayerType(sub),
             visible: true,
             layer: subLayer,
@@ -123,15 +132,18 @@ function NewMapPageInner() {
         ]);
       });
     } else {
-      // Nếu là layer đơn (Marker, Polygon, Circle…)
+      // Layer đơn (Marker, Polygon, Circle…)
       const l = layer as ExtendedLayer;
-      const props = l.feature?.properties || {};
-      const layerName = props.name || props.Name || `Layer ${Date.now()}`;
+      const props = l.feature?.properties ?? {};
+      const layerName =
+        (props.name as string) ||
+        (props.Name as string) ||
+        `Layer ${Date.now()}`;
 
       setLayers(prevLayers => [
         ...prevLayers,
         {
-          id: `layer_${Date.now()}_${Math.random().toString(36)}`,
+          id: `layer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
           name: layerName,
           type: getLayerType(l),
           visible: true,
