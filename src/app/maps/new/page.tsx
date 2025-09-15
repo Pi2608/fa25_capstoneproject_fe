@@ -41,6 +41,24 @@ interface LayerInfo {
   order: number;
 }
 
+interface GeoJSONLayer extends LLayer {
+  feature?: {
+    type?: string;
+    properties?: Record<string, any>;
+    geometry?: {
+      type?: string;
+      coordinates?: any;
+    };
+  };
+}
+
+interface ExtendedLayer extends GeoJSONLayer {
+  _mRadius?: number;     // Circle
+  _latlng?: any;         // Marker
+  _latlngs?: any[];      // Polyline/Polygon
+  _bounds?: any;         // Rectangle
+}
+
 type PMCreateEvent = LeafletEvent & { layer: LLayer };
 type BaseKey = "osm" | "sat" | "dark";
 
@@ -64,14 +82,13 @@ function NewMapPageInner() {
   const [baseLayer, setBaseLayer] = useState<BaseKey>("osm");
   const [showLayerPanel, setShowLayerPanel] = useState(true);
   const [layers, setLayers] = useState<LayerInfo[]>([]);
-  const [layerCounter, setLayerCounter] = useState(0);
 
   const isMapValid = useCallback((): boolean => {
     const map = mapRef.current as (LMap & { _removed?: boolean; _loaded?: boolean }) | null;
     return !!(map && !map._removed && (map._loaded ?? true));
   }, []);
 
-  const getLayerType = useCallback((layer: any): string => {
+  const getLayerType = useCallback((layer: ExtendedLayer): string => {
     if (layer.feature?.geometry?.type) {
       return layer.feature.geometry.type;
     }
@@ -88,8 +105,9 @@ function NewMapPageInner() {
   const addLayerToList = useCallback((layer: LLayer | LFeatureGroup) => {
     if ("eachLayer" in layer && typeof layer.eachLayer === "function") {
       // Nếu là FeatureGroup (GeoJSON nhiều feature)
-      layer.eachLayer((subLayer: any) => {
-        const props = subLayer.feature?.properties || {};
+      layer.eachLayer((subLayer: LLayer) => {
+        const sub = subLayer as ExtendedLayer;
+        const props = sub.feature?.properties || {};
         const layerName = props.name || props.Name || `Layer ${Date.now()}`;
 
         setLayers(prevLayers => [
@@ -97,7 +115,7 @@ function NewMapPageInner() {
           {
             id: `layer_${Date.now()}_${Math.random().toString(36)}`,
             name: layerName, // đặt tên từ attribute name
-            type: getLayerType(subLayer),
+            type: getLayerType(sub),
             visible: true,
             layer: subLayer,
             order: prevLayers.length,
@@ -106,7 +124,8 @@ function NewMapPageInner() {
       });
     } else {
       // Nếu là layer đơn (Marker, Polygon, Circle…)
-      const props = (layer as any).feature?.properties || {};
+      const l = layer as ExtendedLayer;
+      const props = l.feature?.properties || {};
       const layerName = props.name || props.Name || `Layer ${Date.now()}`;
 
       setLayers(prevLayers => [
@@ -114,7 +133,7 @@ function NewMapPageInner() {
         {
           id: `layer_${Date.now()}_${Math.random().toString(36)}`,
           name: layerName,
-          type: getLayerType(layer),
+          type: getLayerType(l),
           visible: true,
           layer,
           order: prevLayers.length,
