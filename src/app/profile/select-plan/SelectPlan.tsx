@@ -4,6 +4,7 @@
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
+  type PaymentGateway,
   getPlans,
   type Plan,
   processPayment,
@@ -14,6 +15,7 @@ import {
   getJson,
 } from "@/lib/api";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
+import PaymentMethodPopup from "./PaymentMethodPopup";
 
 type MyMembership = {
   planId: number;
@@ -49,9 +51,10 @@ export default function SelectPlanPage() {
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
-
+  
   const [popup, setPopup] = useState<{ type: "success" | "cancel"; msg: string } | null>(null);
-
+  const [showPaymentPopup, setShowPaymentPopup] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -127,8 +130,8 @@ export default function SelectPlanPage() {
         orderCode: orderCode ?? "",
         purpose: "membership",
         transactionId,
-        userId: "08ddedf7-64e8-40ca-8fff-4d303167014d", // test
-        orgId: "550e8400-e29b-41d4-a716-446655440000", // test
+        userId: "08ddf705-7b38-41a8-8b65-80141dc31d21",
+        orgId: "550e8400-e29b-41d4-a716-446655440000",
         planId: Number(localStorage.getItem("planId")) || 0,
         autoRenew: true,
       };
@@ -153,26 +156,48 @@ export default function SelectPlanPage() {
   }, [searchParams]);
 
   const handleSelectPlan = async (plan: Plan) => {
-    try {
-      if (!isLoggedIn) {
-        router.push("/login");
-        return;
-      }
+    if (!isLoggedIn) {
+      router.push("/login");
+      return;
+    }
+    
+    setSelectedPlan(plan);
+    setShowPaymentPopup(true);
+  };
 
+  const handlePaymentClick = () => {
+    if (!selected) return;
+    if (!isLoggedIn) {
+      router.push("/login");
+      return;
+    }
+    
+    const isFree = (selected.priceMonthly ?? 0) <= 0;
+    if (isFree) {
+      alert("Bạn đã chọn gói miễn phí!");
+      return;
+    }
+    
+    setSelectedPlan(selected);
+    setShowPaymentPopup(true);
+  };
+
+  const handleSelectPaymentMethod = async (method: PaymentGateway) => {
+    if (!selectedPlan) return;
+    
+    try {
       const req: ProcessPaymentReq = {
-        paymentGateway: "payOS",
+        paymentGateway: method,
         purpose: "membership",
         // total: plan.priceMonthly,
-        total: 0.1, // test
-        PlanId: plan.planId,
-        UserId: "08ddedf7-64e8-40ca-8fff-4d303167014d", // test
+        total: 0.5, // test
+        PlanId: selectedPlan.planId,
+        UserId: "08ddf705-7b38-41a8-8b65-80141dc31d21", // test
         AutoRenew: true,
       };
 
       const res: ProcessPaymentRes = await processPayment(req);
-
-      localStorage.setItem("planId", String(plan.planId));
-
+      localStorage.setItem("planId", String(selectedPlan.planId));
       window.location.href = res.approvalUrl;
     } catch (err) {
       alert(safeMessage(err));
@@ -250,19 +275,19 @@ export default function SelectPlanPage() {
     if (isCurrent)
       return (
         <span className="inline-flex items-center rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-300">
-          Đang dùng
+          In use
         </span>
       );
     if (isPending)
       return (
         <span className="inline-flex items-center rounded-xl border border-yellow-400/40 bg-yellow-500/10 px-3 py-1.5 text-xs font-semibold text-yellow-300">
-          Đang chờ thanh toán
+          Pending payment
         </span>
       );
     if (isExpired)
       return (
         <span className="inline-flex items-center rounded-xl border border-zinc-400/30 bg-zinc-600/10 px-3 py-1.5 text-xs font-semibold text-zinc-300">
-          Hết hạn
+          Expired
         </span>
       );
     return null;
@@ -270,9 +295,9 @@ export default function SelectPlanPage() {
 
   return (
     <main className="relative text-zinc-100">
-      <h1 className="text-2xl font-semibold">Chọn gói</h1>
+      <h1 className="text-2xl font-semibold">Plans</h1>
       <p className="mt-1 text-zinc-400">
-        Các gói đơn giản, mở rộng theo nhu cầu. Không phí ẩn.
+        Simple plans, scalable as needed. No hidden fees.
       </p>
 
       {hint && (
@@ -288,93 +313,133 @@ export default function SelectPlanPage() {
       )}
 
       {loading ? (
-        <div className="mt-6 text-sm text-zinc-400">Đang tải gói…</div>
+        <div className="mt-6 text-sm text-zinc-400">Fetching plans…</div>
       ) : (
-        <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {plans.map((p) => {
-            const isFree = (p.priceMonthly ?? 0) <= 0;
-            const isSelected = selected?.planId === p.planId;
-            const isSubmitting = isPlanSubmitting(p.planId);
-            const isCurrentActive = currentId === p.planId && status === "active";
-            const isCurrentPending = currentId === p.planId && status === "pending";
+        <>
+          <div className="mt-6 grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            {plans.map((p) => {
+              const isFree = (p.priceMonthly ?? 0) <= 0;
+              const isSelected = selected?.planId === p.planId;
+              const isSubmitting = isPlanSubmitting(p.planId);
+              const isCurrentActive = currentId === p.planId && status === "active";
+              const isCurrentPending = currentId === p.planId && status === "pending";
 
-            return (
-              <div
-                key={p.planId}
-                className={[
-                  "relative rounded-2xl border p-6 bg-zinc-900/50 backdrop-blur-sm shadow-lg",
-                  "transition hover:-translate-y-0.5 hover:ring-1 hover:ring-emerald-400/30",
-                  isSelected ? "border-emerald-400/60 ring-1 ring-emerald-400/40" : "border-white/10",
-                ].join(" ")}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="text-lg font-semibold">{p.planName}</div>
-                  {renderStatusBadge(p)}
-                </div>
+              return (
+                <div
+                  key={p.planId}
+                  className={[
+                    "relative rounded-2xl border p-6 bg-zinc-900/50 backdrop-blur-sm shadow-lg",
+                    "transition hover:-translate-y-0.5 hover:ring-1 hover:ring-emerald-400/30",
+                    isSelected ? "border-emerald-400/60 ring-1 ring-emerald-400/40" : "border-white/10",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-lg font-semibold">{p.planName}</div>
+                    {renderStatusBadge(p)}
+                  </div>
 
-                <p className="mt-1 text-sm text-zinc-400">{p.description}</p>
+                  <p className="mt-1 text-sm text-zinc-400">{p.description}</p>
 
-                <div className="mt-5">
-                  <span className="text-2xl font-bold text-emerald-400">
-                    {isFree ? "$0.00" : formatUSD(p.priceMonthly)}
-                  </span>
-                  <span className="ml-1 text-sm text-zinc-400">/tháng</span>
-                </div>
-
-                <div className="mt-5 flex gap-3">
-                  {isCurrentActive ? (
-                    <span className="inline-flex items-center rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300">
-                      Đang dùng
+                  <div className="mt-5">
+                    <span className="text-2xl font-bold text-emerald-400">
+                      {isFree ? "$0.00" : formatUSD(p.priceMonthly)}
                     </span>
-                  ) : (
-                    <>
+                    <span className="ml-1 text-sm text-zinc-400">/month</span>
+                  </div>
+
+                  <div className="mt-5">
+                    {isCurrentActive ? (
+                      <span className="inline-flex items-center justify-center w-full rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-300">
+                        In use
+                      </span>
+                    ) : (
                       <button
                         onClick={() => setSelected(p)}
                         disabled={isSubmitting}
                         className={[
-                          "flex-1 rounded-xl border px-4 py-2 text-sm font-medium transition",
+                          "w-full rounded-xl border px-4 py-2 text-sm font-medium transition",
                           isSelected
-                            ? "border-emerald-400/70 text-emerald-300"
-                            : "border-white/10 text-zinc-300 hover:text-white",
+                            ? "border-emerald-400/70 bg-emerald-500/10 text-emerald-300"
+                            : "border-white/10 text-zinc-300 hover:text-white hover:border-zinc-600",
                           isSubmitting ? "opacity-60 cursor-not-allowed" : "",
                         ].join(" ")}
                       >
-                        {isSelected ? "Đã chọn" : "Chọn gói"}
+                        {isSelected ? "Selected" : "Select"}
                       </button>
+                    )}
+                  </div>
 
-                      {!isFree && (
-                        <button
-                          onClick={() => handleSelectPlan(p)}
-                          disabled={isSubmitting}
-                          className="flex-1 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 text-sm font-semibold text-zinc-950"
-                        >
-                          {isSubmitting
-                            ? "Đang chuyển tới PayOS"
-                            : isCurrentPending && currentId === p.planId
-                              ? "Tiếp tục thanh toán"
-                              : "Đăng ký"}
-                        </button>
-                      )}
-                    </>
+                  {isCurrentPending && currentId === p.planId && (
+                    <div className="mt-3 text-center">
+                      <span className="text-xs text-yellow-400">
+                        You have one pending payment
+                      </span>
+                    </div>
                   )}
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+
+          {/* Single Payment Button */}
+          <div className="mt-8 flex justify-center">
+            <button
+              onClick={handlePaymentClick}
+              disabled={!selected || !isLoggedIn || (currentId === selected?.planId && status === "active")}
+              className={[
+                "px-4 py-2 rounded-xl font-semibold text-md transition-all min-w-[200px]",
+                selected && isLoggedIn && !(currentId === selected?.planId && status === "active")
+                  ? "bg-emerald-500 hover:bg-emerald-400 text-zinc-900 shadow-lg hover:shadow-xl hover:-translate-y-0.5"
+                  : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
+              ].join(" ")}
+            >
+              {!isLoggedIn 
+                ? "Login to select plan"
+                : !selected
+                  ? "Select a plan to continue"
+                  : currentId === selected?.planId && status === "active"
+                    ? "You are using this plan"
+                    : currentId === selected?.planId && status === "pending"
+                      ? "Continue pending payment"
+                      : (selected.priceMonthly ?? 0) <= 0
+                        ? "Choose Free Plan"
+                        : "Proceed to Payment"
+              }
+            </button>
+          </div>
+
+          {selected && (
+            <div className="mt-4 text-center">
+              <p className="text-sm text-zinc-400">
+                Selected: <span className="text-emerald-400 font-medium">{selected.planName}</span>
+                {(selected.priceMonthly ?? 0) > 0 && (
+                  <span> - {formatUSD(selected.priceMonthly)}/month</span>
+                )}
+              </p>
+            </div>
+          )}
+        </>
       )}
 
       {paidPlans.length > 0 && (
-        <p className="mt-6 text-xs text-zinc-500">
-          * Chỉ các gói trả phí mới yêu cầu thanh toán. Gói Free không cần đăng ký.
+        <p className="mt-6 text-xs text-zinc-500 text-center">
+          * Payment is required only for paid plans. The Free plan comes with no registration needed.
         </p>
       )}
+
+      <PaymentMethodPopup
+        isOpen={showPaymentPopup}
+        onClose={() => setShowPaymentPopup(false)}
+        onSelectMethod={handleSelectPaymentMethod}
+        planName={selectedPlan?.planName}
+        planPrice={selectedPlan?.priceMonthly}
+      />
 
       {popup && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
           <div className="bg-zinc-900 text-white rounded-xl p-6 max-w-sm">
             <h2 className="text-3xl font-semibold mb-4">
-              {popup.type === "success" ? "Thành công" : "Thanh toán thất bại"}
+              {popup.type === "success" ? "Payment success" : "Payment failed"}
             </h2>
             <p>{popup.msg}</p>
             <button
@@ -385,7 +450,7 @@ export default function SelectPlanPage() {
               }}
               className="mt-4 px-4 py-2 rounded bg-emerald-500 text-black"
             >
-              Đóng
+              Close
             </button>
           </div>
         </div>

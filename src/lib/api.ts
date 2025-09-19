@@ -349,7 +349,7 @@ export async function getActiveUserAccessTools(): Promise<UserAccessTool[]> {
 }
 
 export type CancelPaymentWithContextReq = {
-  paymentGateway: "paypal" | "payOS";
+  paymentGateway: PaymentGateway;
   purpose?: {
     userId?: string;
     planId?: number;
@@ -474,9 +474,12 @@ export function resetPassword(req: ResetPasswordReq) {
 // }
 
 // ==== Transactions (PayOS) ====
+
+export type PaymentGateway = "vnPay" | "payOS" | "stripe";
+export type PaymentPurpose = "membership" | "order";
 export interface ProcessPaymentReq {
-  paymentGateway: "PayPal" | "payOS";
-  purpose: "membership" | "order";
+  paymentGateway: PaymentGateway;
+  purpose: PaymentPurpose;
   total?: number;
   PlanId?: number;
   UserId?: string;
@@ -493,7 +496,7 @@ export interface ProcessPaymentRes {
   transactionId?: string;
   provider?: string;
 
-  paymentGateway?: "PayPal" | "payOS";
+  paymentGateway?: PaymentGateway;
   sessionId: string;
   qrCode?: string;
   orderCode: string;
@@ -525,9 +528,6 @@ export function confirmPayment(body: ConfirmPaymentReq) {
   );
 }
 
-export type PaymentGateway = "PayPal" | "payOS";
-export type PaymentPurpose = "membership" | "order";
-
 // export interface ConfirmPaymentWithContextReq {
 //   transactionId: string;
 //   token: string;
@@ -553,11 +553,6 @@ export interface ConfirmPaymentWithContextReq {
   planId: number,
   autoRenew: true
 }
-
-// export interface ConfirmPaymentWithContextRes {
-//   success: boolean;
-//   message?: string;
-// }
 
 export interface ConfirmPaymentWithContextRes {
   membershipId: string,
