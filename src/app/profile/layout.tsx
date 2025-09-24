@@ -185,6 +185,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 <SidebarLink href="/profile/recents" label="Recents" />
                 <SidebarLink href="/profile/drafts" label="Drafts" />
                 <SidebarLink href="/profile/invite" label="Invite Members" />
+                <SidebarLink href="/profile/settings" label="Settings" />
               </div>
             </div>
 
@@ -228,7 +229,6 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                   <SidebarLink href="/organizations" label="View all organizations" />
                 )}
 
-                <SidebarLink href="/profile/settings" label="Settings" />
                 <SidebarLink href="/profile/help" label="Help" />
               </div>
             </div>

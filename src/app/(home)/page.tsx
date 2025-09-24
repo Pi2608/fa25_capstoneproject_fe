@@ -191,12 +191,11 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
           <Link href="/" className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-md bg-emerald-400 shadow" />
-            <span className="text-lg md:text-xl font-bold tracking-tight text-white">CustomMapOSM</span>
+            <span className="text-lg md:text-xl font-bold tracking-tight text-white">IMOS</span>
           </Link>
           <nav className="hidden md:flex items-center gap-8">
             <NavDropdown label="Services" items={SERVICES} />
             <Link href="/tutorial" className="text-white/90 text-base md:text-lg font-semibold hover:text-emerald-400 transition">Tutorials</Link>
-            {/* <Link href="/templates" className="text-white/90 text-base md:text-lg font-semibold hover:text-emerald-400 transition">Templates</Link> */}
             <Link href="/pricing" className="text-white/90 text-base md:text-lg font-semibold hover:text-emerald-400 transition">Pricing</Link>
             <NavDropdown label="Resources" items={RESOURCES} />
             <Link href="/community" className="text-white/90 text-base md:text-lg font-semibold hover:text-emerald-400 transition">Community</Link>
