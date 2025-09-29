@@ -377,7 +377,7 @@ export async function cancelPaymentWithContext(
 ) {
   console.log("cancelPaymentWithContext", payload);
   return postJson<CancelPaymentWithContextReq, CancelPaymentRes>(
-    "/transaction/cancel-payment-with-context",
+    `/Transaction/cancel-payment-with-context?`,
     payload
   );
 }
@@ -798,22 +798,31 @@ export async function createMapTemplateFromGeoJson(args: {
 
 /* ---------- LAYERS ---------- */
 export interface AddLayerToMapRequest {
-  layerId?: string;
-  layerName?: string;
-  sourceType?: string;
-  styleJson?: unknown;
+  isVisible: true,
+  zIndex: number,
+  customStyle: string,
+  filterConfig: string
 }
 export interface AddLayerToMapResponse { mapLayerId: string; }
 export function addLayerToMap(mapId: string, body: AddLayerToMapRequest) {
   return postJson<AddLayerToMapRequest, AddLayerToMapResponse>(`/maps/${mapId}/layers`, body);
 }
 
-export interface UpdateMapLayerRequest { layerName?: string; styleJson?: unknown; visible?: boolean; opacity?: number; }
+export interface UpdateMapLayerRequest { 
+  isVisible: true,
+  zIndex: number,
+  customStyle: string,
+  filterConfig: string
+}
+
 export interface UpdateMapLayerResponse { mapLayerId: string; }
+
 export function updateMapLayer(mapId: string, layerId: string, body: UpdateMapLayerRequest) {
   return putJson<UpdateMapLayerRequest, UpdateMapLayerResponse>(`/maps/${mapId}/layers/${layerId}`, body);
 }
-export interface RemoveLayerFromMapResponse { removed?: boolean; }
+
+export interface RemoveLayerFromMapResponse { message: string; }
+
 export function removeLayerFromMap(mapId: string, layerId: string) {
   return delJson<RemoveLayerFromMapResponse>(`/maps/${mapId}/layers/${layerId}`);
 }
@@ -843,11 +852,17 @@ export interface MapFeatureResponse {
   properties?: Record<string, unknown>;
 }
 export interface CreateMapFeatureRequest {
-  mapId?: string;
-  layerId?: string;
-  category?: string;
-  geometry: unknown;
+  mapId: string;
+  layerId: string;
+  name?: string;
+  description?: string;
+  featureCategory: "data" | "annotation" | string;
+  annotationType: "marker" | "polygon" | "polyline" | "circle" | string;
+  geometryType: "point" | "polygon" | "linestring" | string;
   properties?: Record<string, unknown>;
+  coordinates: string;
+  style?: string;
+  isVisible: boolean;
 }
 export function createMapFeature(mapId: string, body: CreateMapFeatureRequest) {
   return postJson<CreateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features`, body);
