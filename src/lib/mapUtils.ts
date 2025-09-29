@@ -51,13 +51,14 @@ export function addLayerToList(
 ): LayerInfo[] {
   const newLayers: LayerInfo[] = [];
 
-  if ("eachLayer" in layer && typeof layer.eachLayer === "function") {
-    layer.eachLayer((subLayer: Layer) => {
+  if ("eachLayer" in layer && typeof (layer as FeatureGroup).eachLayer === "function") {
+    const fg = layer as FeatureGroup;
+    fg.eachLayer((subLayer: Layer) => {
       const sub = subLayer as ExtendedLayer;
       const props = sub.feature?.properties ?? {};
       const layerName =
-        (props.name as string) ||
-        (props.Name as string) ||
+        (typeof props.name === "string" && props.name) ||
+        (typeof props.Name === "string" && props.Name) ||
         `Layer ${Date.now()}`;
       newLayers.push({
         id: `layer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -72,8 +73,8 @@ export function addLayerToList(
     const l = layer as ExtendedLayer;
     const props = l.feature?.properties ?? {};
     const layerName =
-      (props.name as string) ||
-      (props.Name as string) ||
+      (typeof props.name === "string" && props.name) ||
+      (typeof props.Name === "string" && props.Name) ||
       `Layer ${Date.now()}`;
     newLayers.push({
       id: `layer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
@@ -140,7 +141,7 @@ export function renameLayer(
 
 // Chuỗi hóa GeoJSON từ Layer
 export function serializeLayer(layer: ExtendedLayer): string {
-  // @ts-ignore
+  // @ts-expect-error
   const geojson = layer.toGeoJSON?.() ?? {};
   return JSON.stringify(geojson);
 }
