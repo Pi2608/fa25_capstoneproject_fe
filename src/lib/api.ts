@@ -611,6 +611,8 @@ export interface CreateMapResponse {
 export function createMap(req: CreateMapRequest) {
   const body = {
     OrgId: req.orgId,
+    OrganizationId: req.orgId,
+    orgId: req.orgId,
     Name: req.name,
     Description: req.description,
     IsPublic: req.isPublic,
@@ -794,6 +796,27 @@ export async function createMapTemplateFromGeoJson(args: {
     body: form,
     headers: { Accept: "application/json" },
   });
+}
+
+export type FavoriteTemplate = {
+  templateId: string;
+  favoriteAt?: string;
+};
+
+export async function getMyFavoriteTemplates(): Promise<string[]> {
+  const res = await getJson<{ templates: FavoriteTemplate[] } | FavoriteTemplate[]>(
+    "/user-favorite-templates/my"
+  );
+  if (Array.isArray(res)) return res.map(x => x.templateId);
+  return res.templates?.map(x => x.templateId) ?? [];
+}
+
+export async function toggleFavoriteTemplate(templateId: string, favorite: boolean): Promise<void> {
+  if (favorite) {
+    await postJson<{ templateId: string }, { ok?: boolean }>("/user-favorite-templates", { templateId });
+  } else {
+    await delJson<{ ok?: boolean }>(`/user-favorite-templates/${templateId}`);
+  }
 }
 
 /* ---------- LAYERS ---------- */
@@ -1014,6 +1037,7 @@ export function updateMemberRole(body: UpdateMemberRoleReqDto) {
     headers: { "Content-Type": "application/json" },
   });
 }
+
 export function removeMember(body: RemoveMemberReqDto) {
   return delJson<RemoveMemberResDto>("/organizations/members/remove", {
     body: JSON.stringify(body),
@@ -1050,7 +1074,7 @@ export function cancelInvite(body: CancelInviteOrganizationReqDto) {
 /* ------------------ Transfer ownership ------------------ */
 export function transferOwnership(body: TransferOwnershipReqDto) {
   return postJson<TransferOwnershipReqDto, TransferOwnershipResDto>(
-    "/organizations/ownership/transfer",
+    "/organizations/transfer-ownership",
     body
   );
 }

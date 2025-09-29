@@ -9,7 +9,7 @@ import {
   type LoginResponse,
   getPlans,
   createOrRenewMembership,
-  type Plan,
+  type Plan, setAuthTokens
 } from "@/lib/api";
 import { authStore } from "@/contexts/auth-store";
 import {
@@ -221,7 +221,8 @@ export default function LoginClient() {
       const token = data.accessToken ?? (data as unknown as { token?: string }).token;
       if (!token) throw new Error("Login response missing token");
 
-      authStore.setToken(token);
+      setAuthTokens({ accessToken: token });
+      authStore.setToken?.(token); 
       await ensureFreeMembership();
 
       setBanner({ type: "success", text: "Signed in successfully." });
@@ -274,22 +275,21 @@ export default function LoginClient() {
       <div className={styles.brandBar}>
         <div className={styles.logoDot} />
         <div className={styles.brandWrap}>
-          <span className={styles.brand}>CustomMapOSM</span>
+          <span className={styles.brand}>IMOS</span>
           <span className={styles.tagline}>Your maps — fast &amp; simple</span>
         </div>
       </div>
 
       <section className={styles.card}>
         <h1 className={styles.title}>Welcome back</h1>
-        {/* <p className={styles.sub}>Sign in to continue</p> */}
 
         {banner && (
           <div
             className={`${styles.banner} ${banner.type === "error"
-                ? styles.bannerError
-                : banner.type === "success"
-                  ? styles.bannerSuccess
-                  : styles.bannerInfo
+              ? styles.bannerError
+              : banner.type === "success"
+                ? styles.bannerSuccess
+                : styles.bannerInfo
               }`}
             role={banner.type === "error" ? "alert" : "status"}
             aria-live="polite"
@@ -318,47 +318,47 @@ export default function LoginClient() {
           </label>
 
           <label className={styles.label}>
-  Password
-  <div className={styles.pwdWrap}>
-    <input
-      className={`${styles.input} ${styles.inputPwd} ${errors.password ? styles.inputError : ""}`}
-      type={showPwd ? "text" : "password"}
-      value={password}
-      onChange={(e) => {
-        setPassword(e.target.value);
-        if (errors.password) setErrors((p) => ({ ...p, password: undefined }));
-      }}
-      onBlur={validate}
-      placeholder="••••••••"
-      aria-invalid={!!errors.password}
-      autoComplete="current-password"
-    />
+            Password
+            <div className={styles.pwdWrap}>
+              <input
+                className={`${styles.input} ${styles.inputPwd} ${errors.password ? styles.inputError : ""}`}
+                type={showPwd ? "text" : "password"}
+                value={password}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  if (errors.password) setErrors((p) => ({ ...p, password: undefined }));
+                }}
+                onBlur={validate}
+                placeholder="••••••••"
+                aria-invalid={!!errors.password}
+                autoComplete="current-password"
+              />
 
-    <button
-      type="button"
-      onClick={() => setShowPwd((v) => !v)}
-      aria-label={showPwd ? "Hide password" : "Show password"}
-      aria-pressed={showPwd}
-      title={showPwd ? "Hide password" : "Show password"}
-      className={styles.eyeBtn}
-    >
-      {showPwd ? (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          <path d="M10.58 10.58a3 3 0 004.24 4.24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          <path d="M17.94 17.94C16.26 18.95 14.23 19.5 12 19.5 6.5 19.5 2.27 15.64 1 12c.49-1.39 1.47-2.92 2.86-4.3M9.88 4.62C10.56 4.53 11.27 4.5 12 4.5 17.5 4.5 21.73 8.36 23 12c-.37 1.03-1.02 2.18-1.95 3.25" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ) : (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M1 12s4.5-7.5 11-7.5S23 12 23 12s-4.5 7.5-11 7.5S1 12 1 12z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-          <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
-        </svg>
-      )}
-    </button>
-  </div>
+              <button
+                type="button"
+                onClick={() => setShowPwd((v) => !v)}
+                aria-label={showPwd ? "Hide password" : "Show password"}
+                aria-pressed={showPwd}
+                title={showPwd ? "Hide password" : "Show password"}
+                className={styles.eyeBtn}
+              >
+                {showPwd ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M10.58 10.58a3 3 0 004.24 4.24" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M17.94 17.94C16.26 18.95 14.23 19.5 12 19.5 6.5 19.5 2.27 15.64 1 12c.49-1.39 1.47-2.92 2.86-4.3M9.88 4.62C10.56 4.53 11.27 4.5 12 4.5 17.5 4.5 21.73 8.36 23 12c-.37 1.03-1.02 2.18-1.95 3.25" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="M1 12s4.5-7.5 11-7.5S23 12 23 12s-4.5 7.5-11 7.5S1 12 1 12z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" />
+                  </svg>
+                )}
+              </button>
+            </div>
 
-  {errors.password && <div className={styles.fieldError}>{errors.password}</div>}
-</label>
+            {errors.password && <div className={styles.fieldError}>{errors.password}</div>}
+          </label>
 
 
           <button

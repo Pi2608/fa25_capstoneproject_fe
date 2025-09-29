@@ -10,9 +10,12 @@ import {
   processPayment,
   type ProcessPaymentReq,
   type ProcessPaymentRes,
+  getMyOrganizations,
+  type MyOrganizationDto,
 } from "@/lib/api"
 
 type JwtPayload = Record<string, unknown>
+
 function getMyIdentityFromToken(): { userId?: string | null } {
   if (typeof window === "undefined") return { userId: null }
   const token = localStorage.getItem("token")
@@ -23,7 +26,6 @@ function getMyIdentityFromToken(): { userId?: string | null } {
     const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/")
     const json = typeof atob === "function" ? atob(b64) : Buffer.from(b64, "base64").toString("utf8")
     const p = JSON.parse(json) as JwtPayload
-
     const userId =
       (typeof p.userId === "string" && p.userId) ||
       (typeof p.uid === "string" && p.uid) ||
@@ -32,7 +34,6 @@ function getMyIdentityFromToken(): { userId?: string | null } {
       (typeof p["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] === "string" &&
         (p["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] as string)) ||
       null
-
     return { userId }
   } catch {
     return { userId: null }
@@ -53,12 +54,48 @@ function formatUSD(n?: number | null) {
   return `$${v.toFixed(2)}`
 }
 
+function pickOrgIdFromCreateRes(x: unknown): string | null {
+  if (!x || typeof x !== "object") return null
+  const o = x as Record<string, unknown>
+  const cands: unknown[] = []
+  if (typeof o.orgId === "string") cands.push(o.orgId)
+  if (typeof o.organizationId === "string") cands.push(o.organizationId)
+  if (o.organization && typeof o.organization === "object") {
+    const org = o.organization as Record<string, unknown>
+    if (typeof org.orgId === "string") cands.push(org.orgId)
+    if (typeof org.organizationId === "string") cands.push(org.organizationId)
+  }
+  if (o.data && typeof o.data === "object") {
+    const d = o.data as Record<string, unknown>
+    if (typeof d.orgId === "string") cands.push(d.orgId)
+    if (typeof d.organizationId === "string") cands.push(d.organizationId)
+  }
+  for (const c of cands) if (typeof c === "string" && c.trim()) return c
+  return null
+}
+
+function pickNewestOrgId(list: MyOrganizationDto[], name: string, abb: string): string | null {
+  const exact =
+    list.find(
+      (o) =>
+        (o.orgName ?? "").trim().toLowerCase() === name.trim().toLowerCase() &&
+        (o.abbreviation ?? "").trim().toUpperCase() === abb.trim().toUpperCase()
+    ) ?? null
+  if (exact?.orgId) return exact.orgId
+  const sorted = [...list].sort((a, b) => {
+    const ad = new Date(a.joinedAt ?? 0).getTime()
+    const bd = new Date(b.joinedAt ?? 0).getTime()
+    return ad - bd
+  })
+  const newest = sorted.length ? sorted[sorted.length - 1] : undefined
+  return newest?.orgId ?? null
+}
+
 export default function CreateOrganizationPage() {
   const router = useRouter()
 
   const [orgName, setOrgName] = useState("")
   const [abbreviation, setAbbreviation] = useState("")
-
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -71,12 +108,18 @@ export default function CreateOrganizationPage() {
   const me = useMemo(getMyIdentityFromToken, [])
   const myUserId = me.userId ?? undefined
 
+  function gotoOrgOrProfile(targetId: string | null) {
+    if (targetId && targetId.trim()) {
+      router.push(`/profile/organizations/${targetId}?justCreated=1`)
+    } else {
+      router.push("/profile")
+    }
+  }
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (submitting) return
-
     setError(null)
-
     if (!orgName.trim()) {
       setError("Organization name is required.")
       return
@@ -85,7 +128,6 @@ export default function CreateOrganizationPage() {
       setError("Abbreviation is required.")
       return
     }
-
     setSubmitting(true)
     try {
       const payload: OrganizationReqDto = {
@@ -93,21 +135,20 @@ export default function CreateOrganizationPage() {
         abbreviation: abbreviation.trim().toUpperCase(),
       }
       const res = await createOrganization(payload)
-
-      const oid =
-        (res as { orgId?: string })?.orgId ??
-        (res as { organizationId?: string })?.organizationId ??
-        (res as { result?: string })?.result ??
-        null
-
+      let oid = pickOrgIdFromCreateRes(res)
       if (!oid) {
-        router.push("/profile")
-        return
+        try {
+          const mine = await getMyOrganizations()
+          const list = Array.isArray(mine.organizations) ? mine.organizations : []
+          oid = pickNewestOrgId(list, payload.orgName, payload.abbreviation)
+        } catch {
+          oid = null
+        }
       }
-
       setCreatedOrgId(oid)
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && oid) {
         window.dispatchEvent(new Event("orgs-changed"))
+        sessionStorage.setItem("lastCreatedOrgId", oid)
       }
     } catch (err) {
       setError(toMessage(err, "Failed to create organization."))
@@ -140,7 +181,10 @@ export default function CreateOrganizationPage() {
 
   async function subscribe(plan: Plan) {
     try {
-      if (!createdOrgId) return
+      if (!createdOrgId) {
+        router.push("/profile")
+        return
+      }
       const req: ProcessPaymentReq = {
         paymentGateway: "payOS",
         purpose: "membership",
@@ -163,14 +207,12 @@ export default function CreateOrganizationPage() {
     return (
       <main className="max-w-2xl mx-auto px-6 py-10 text-white">
         <h1 className="text-2xl font-bold mb-6">Create Organization</h1>
-
         <form onSubmit={onSubmit} className="space-y-6 bg-zinc-900/50 rounded-xl border border-white/10 p-6">
           {error && (
             <div role="alert" className="text-sm rounded-md border border-red-400/40 bg-red-500/10 px-3 py-2 text-red-200">
               {error}
             </div>
           )}
-
           <div>
             <label htmlFor="org-name" className="block text-sm mb-2">Organization Name *</label>
             <input
@@ -184,7 +226,6 @@ export default function CreateOrganizationPage() {
               className="w-full rounded-md px-3 py-2 bg-zinc-800 border border-white/10 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 disabled:opacity-60"
             />
           </div>
-
           <div>
             <label htmlFor="org-abb" className="block text-sm mb-2">Abbreviation *</label>
             <input
@@ -199,7 +240,6 @@ export default function CreateOrganizationPage() {
               className="w-full rounded-md px-3 py-2 bg-zinc-800 border border-white/10 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 disabled:opacity-60"
             />
           </div>
-
           <div className="flex gap-3">
             <button
               type="submit"
@@ -210,7 +250,7 @@ export default function CreateOrganizationPage() {
             </button>
             <button
               type="button"
-              onClick={() => history.back()}
+              onClick={() => router.push("/profile")}
               disabled={disabled}
               className="px-4 py-2 rounded-lg bg-zinc-700 hover:bg-zinc-600 transition disabled:opacity-60"
             >
@@ -226,13 +266,11 @@ export default function CreateOrganizationPage() {
     <main className="max-w-5xl mx-auto px-6 py-10 text-white">
       <h1 className="text-2xl font-bold">Choose Plan</h1>
       <p className="text-zinc-400 mt-1">Organization created successfully. Select a plan for this organization.</p>
-
       {plansErr && (
         <div className="mt-4 rounded-md border border-red-400/40 bg-red-500/10 px-3 py-2 text-red-200 text-sm">
           {plansErr}
         </div>
       )}
-
       {loadingPlans ? (
         <div className="mt-6 text-sm text-zinc-400">Loading plans…</div>
       ) : (
@@ -247,27 +285,24 @@ export default function CreateOrganizationPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="text-lg font-semibold">{p.planName}</div>
                 </div>
-
                 <p className="mt-1 text-sm text-zinc-400">{p.description}</p>
-
                 <div className="mt-5">
                   <span className="text-2xl font-bold text-emerald-400">
                     {isFree ? "$0.00" : formatUSD(p.priceMonthly)}
                   </span>
                   <span className="ml-1 text-sm text-zinc-400">/month</span>
                 </div>
-
                 <div className="mt-5 flex gap-3">
                   {isFree ? (
                     <button
-                      onClick={() => router.push(`/organizations/${createdOrgId}?justCreated=1`)}
+                      onClick={() => gotoOrgOrProfile(createdOrgId)}
                       className="flex-1 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950"
                     >
                       Continue with Free
                     </button>
                   ) : (
                     <button
-                      onClick={() => subscribe(p)}
+                      onClick={() => void subscribe(p)}
                       className="flex-1 rounded-xl bg-emerald-500/90 hover:bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950"
                     >
                       Subscribe
@@ -279,10 +314,9 @@ export default function CreateOrganizationPage() {
           })}
         </div>
       )}
-
       <div className="mt-8">
         <button
-          onClick={() => router.push(`/organizations/${createdOrgId}?justCreated=1`)}
+          onClick={() => gotoOrgOrProfile(createdOrgId)}
           className="rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 px-4 py-2 text-sm"
         >
           Skip for now
