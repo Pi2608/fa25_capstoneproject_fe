@@ -141,7 +141,7 @@ export function renameLayer(
 
 // Chuỗi hóa GeoJSON từ Layer
 export function serializeLayer(layer: ExtendedLayer): string {
-  // @ts-expect-error
+  // @ts-expect-error: ExtendedLayer may not declare toGeoJSON but Leaflet layers have it
   const geojson = layer.toGeoJSON?.() ?? {};
   return JSON.stringify(geojson);
 }
