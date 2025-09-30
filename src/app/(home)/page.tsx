@@ -57,7 +57,8 @@ function NavDropdown({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 text-white/90 text-base md:text-lg font-semibold hover:text-emerald-400 transition"
+        className="inline-flex items-center gap-1 text-gray-700 dark:text-gray-100
+                   font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 transition"
       >
         {label}
         <svg className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -69,7 +70,10 @@ function NavDropdown({
         data-menu
         role="menu"
         tabIndex={-1}
-        className={`${open ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 -translate-x-1/2 mt-4 w-[640px] max-w-[90vw] rounded-2xl bg-zinc-900/90 backdrop-blur-md ring-1 ring-white/10 shadow-2xl p-4 md:p-5`}
+        className={`${open ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 -translate-x-1/2 mt-4 w-[640px] max-w-[90vw]
+                    rounded-2xl p-4 md:p-5 backdrop-blur-md shadow-2xl
+                    bg-white/80 ring-1 ring-black/10
+                    dark:bg-zinc-900/90 dark:ring-white/10`}
         onMouseEnter={() => setOpen(true)}
         onMouseLeave={() => setOpen(false)}
       >
@@ -78,19 +82,23 @@ function NavDropdown({
             <Link
               key={it.label}
               href={it.href}
-              className="group flex items-start gap-3 rounded-xl p-3 md:p-4 hover:bg-white/10 focus:bg-white/10 outline-none transition"
+              className="group flex items-start gap-3 rounded-xl p-3 md:p-4
+                         hover:bg-emerald-50 dark:hover:bg-white/10 transition"
               onClick={() => setOpen(false)}
             >
-              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/30">
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-emerald-400">
+              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full
+                               bg-emerald-500/15 ring-1 ring-emerald-400/30">
+                <svg viewBox="0 0 24 24" className="h-4 w-4 text-emerald-500 dark:text-emerald-400">
                   <path fill="currentColor" d="M12 2a10 10 0 100 20 10 10 0 000-20Zm1 5v5l4 2-.7 1.2L11 13V7h2Z" />
                 </svg>
               </span>
               <div className="leading-tight">
-                <div className="text-[15px] md:text-[16px] font-semibold text-white group-hover:text-emerald-400">
+                <div className="text-[15px] md:text-[16px] font-semibold
+                                text-gray-900 dark:text-white
+                                group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
                   {it.label}
                 </div>
-                {it.desc && <p className="text-sm text-white/70 mt-1">{it.desc}</p>}
+                {it.desc && <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{it.desc}</p>}
               </div>
             </Link>
           ))}
@@ -133,6 +141,7 @@ export default function HomePage() {
     const reduce =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
     const ctx = gsap.context(() => {
       const base = { ease: "power2.out", duration: reduce ? 0 : 0.9 } as const;
       gsap.set([".hero-title", ".hero-subtitle", ".hero-cta"], { autoAlpha: 0, y: 20 });
@@ -140,6 +149,7 @@ export default function HomePage() {
         .to(".hero-title", { autoAlpha: 1, y: 0, ...base })
         .to(".hero-subtitle", { autoAlpha: 1, y: 0, ...base }, "<0.08")
         .to(".hero-cta", { autoAlpha: 1, y: 0, ...base }, "<0.08");
+
       gsap.set(".tpl-card", { autoAlpha: 0, y: 24 });
       ScrollTrigger.batch(".tpl-card", {
         start: "top 80%",
@@ -181,35 +191,83 @@ export default function HomePage() {
         });
       });
     });
+
     return () => ctx.revert();
   }, []);
 
   return (
-    <main className="relative min-h-screen text-white">
+    <main className="relative min-h-screen text-gray-900 dark:text-white transition-colors">
+      <div className="absolute inset-0 -z-20 bg-white dark:bg-[#070b0b]" aria-hidden />
+      <div
+        className="absolute inset-0 -z-10
+                   bg-[radial-gradient(1000px_520px_at_50%_-120px,rgba(16,185,129,0.18),transparent_60%)]
+                   dark:bg-[radial-gradient(1000px_520px_at_50%_-120px,rgba(16,185,129,0.12),transparent_60%)]"
+        aria-hidden
+      />
+      <div
+        className="absolute inset-0 -z-10
+                   bg-[linear-gradient(to_bottom,rgba(16,185,129,0.08),transparent_35%)]
+                   dark:bg-[linear-gradient(to_bottom,rgba(16,185,129,0.06),transparent_35%)]"
+        aria-hidden
+      />
+
       <header className="sticky top-0 z-40">
-        <div className="pointer-events-none absolute inset-x-0 -z-10 h-20 bg-gradient-to-b from-black/30 to-transparent" />
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+        <div
+          className="pointer-events-none absolute inset-x-0 h-20 -z-10
+                     bg-[linear-gradient(to_bottom,rgba(255,255,255,0.85),transparent)]
+                     dark:bg-[linear-gradient(to_bottom,rgba(7,11,11,0.65),transparent)]"
+          aria-hidden
+        />
+        <div className="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
           <Link href="/" className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-md bg-emerald-400 shadow" />
-            <span className="text-lg md:text-xl font-bold tracking-tight text-white">IMOS</span>
+            <div className="h-6 w-6 rounded-md bg-emerald-500 shadow" />
+            <span className="text-lg md:text-xl font-bold tracking-tight">IMOS</span>
           </Link>
+
           <nav className="hidden md:flex items-center gap-8">
             <NavDropdown label="Services" items={SERVICES} />
-            <Link href="/tutorial" className="text-white/90 text-base md:text-lg font-semibold hover:text-emerald-400 transition">Tutorials</Link>
-            <Link href="/pricing" className="text-white/90 text-base md:text-lg font-semibold hover:text-emerald-400 transition">Pricing</Link>
+            <Link href="/tutorial" className="font-semibold text-gray-700 hover:text-emerald-600
+                                              dark:text-gray-200 dark:hover:text-emerald-400 transition">
+              Tutorials
+            </Link>
+            <Link href="/pricing" className="font-semibold text-gray-700 hover:text-emerald-600
+                                             dark:text-gray-200 dark:hover:text-emerald-400 transition">
+              Pricing
+            </Link>
             <NavDropdown label="Resources" items={RESOURCES} />
-            <Link href="/community" className="text-white/90 text-base md:text-lg font-semibold hover:text-emerald-400 transition">Community</Link>
+            <Link href="/community" className="font-semibold text-gray-700 hover:text-emerald-600
+                                              dark:text-gray-200 dark:hover:text-emerald-400 transition">
+              Community
+            </Link>
           </nav>
+
           <div className="hidden md:flex items-center gap-3">
             {!isLoggedIn ? (
               <>
-                <Link href="/login" className="rounded-lg px-3 py-2 text-base font-semibold text-white/90 hover:text-white">Log in</Link>
-                <Link href="/register" className="rounded-lg bg-emerald-500 px-4 py-2 text-base font-bold text-zinc-950 shadow hover:bg-emerald-400 transition">Get Started</Link>
+                <Link href="/login" className="rounded-lg px-3 py-2 font-semibold 
+                                               text-gray-700 hover:text-emerald-600
+                                               dark:text-gray-200 dark:hover:text-emerald-400 transition">
+                  Log in
+                </Link>
+                <Link href="/register" className="rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white 
+                                                  shadow hover:bg-emerald-400 transition">
+                  Get Started
+                </Link>
               </>
             ) : (
               <>
-                <Link href="/profile" className="rounded-lg bg-emerald-500 px-4 py-2 text-base font-bold text-zinc-950 shadow hover:bg-emerald-400 transition">Profile</Link>
-                <button onClick={onLogout} className="rounded-lg px-3 py-2 text-base font-semibold text-white/90 hover:text-red-400">Log out</button>
+                <Link href="/profile" className="rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white 
+                                                  shadow hover:bg-emerald-400 transition">
+                  Profile
+                </Link>
+                <button
+                  onClick={onLogout}
+                  className="rounded-lg px-3 py-2 font-semibold 
+                             text-gray-700 hover:text-red-500
+                             dark:text-gray-200 dark:hover:text-red-400 transition"
+                >
+                  Log out
+                </button>
               </>
             )}
           </div>
@@ -218,49 +276,76 @@ export default function HomePage() {
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
         <section className="min-h-[60vh] md:min-h-[70vh] flex flex-col items-center justify-center text-center space-y-6">
-          <h1 className="hero-title text-4xl md:text-5xl font-bold leading-tight tracking-tight text-white">Create maps. Customize easily.</h1>
-          <p className="hero-subtitle text-lg text-gray-200 max-w-xl leading-relaxed">
+          <h1 className="hero-title text-4xl md:text-5xl font-extrabold leading-tight tracking-tight">
+            Create maps. Customize easily.
+          </h1>
+          <p className="hero-subtitle text-lg text-gray-600 dark:text-gray-300 max-w-xl leading-relaxed">
             Build interactive, high-quality maps in minutes — perfect for planning, reporting, and exploration.
           </p>
-          <Link href="/service" className="hero-cta inline-block px-6 py-3 bg-emerald-500 text-white rounded-lg font-medium hover:bg-emerald-400 transition-colors">
+          <Link
+            href="/service"
+            className="hero-cta inline-block px-6 py-3 bg-emerald-500 text-white 
+                       rounded-lg font-medium hover:bg-emerald-400 transition-colors"
+          >
             Start now
           </Link>
         </section>
       </div>
 
-      <section className="relative z-10 max-w-7xl mx-auto px-6 py-20 space-y-24 text-white">
+      <section className="relative z-10 max-w-7xl mx-auto px-6 py-20 space-y-24">
         <div className="text-center space-y-6">
           <h2 className="section-title text-3xl font-bold">Featured Templates</h2>
-          <p className="text-gray-300 max-w-2xl mx-auto">Choose from many ready-to-use map templates for different fields.</p>
+          <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+            Choose from many ready-to-use map templates for different fields.
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pt-6">
-            <Link href="/templates/urban-planning" className="tpl-card bg-white/10 rounded-xl p-6 h-40 hover:bg-white/20 transition flex items-center justify-center font-bold text-lg">Urban Planning</Link>
-            <Link href="/templates/field-survey" className="tpl-card bg-white/10 rounded-xl p-6 h-40 hover:bg-white/20 transition flex items-center justify-center font-bold text-lg">Field Survey</Link>
-            <Link href="/templates/research-report" className="tpl-card bg-white/10 rounded-xl p-6 h-40 hover:bg-white/20 transition flex items-center justify-center font-bold text-lg">Research Report</Link>
+            {[
+              ["Urban Planning", "/templates/urban-planning"],
+              ["Field Survey", "/templates/field-survey"],
+              ["Research Report", "/templates/research-report"],
+            ].map(([label, href]) => (
+              <Link
+                key={href}
+                href={href as string}
+                className="tpl-card rounded-xl p-6 h-40 flex items-center justify-center font-bold text-lg
+                           bg-gray-50 hover:bg-gray-100 
+                           dark:bg-white/10 dark:hover:bg-white/20 transition"
+              >
+                {label}
+              </Link>
+            ))}
           </div>
         </div>
 
         <div className="text-center space-y-6">
           <h2 className="section-title text-3xl font-bold">How it works</h2>
-          <p className="text-gray-300 max-w-2xl mx-auto">Just 3 steps to get a complete map.</p>
+          <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+            Just 3 steps to get a complete map.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left pt-6">
-            <div className="step bg-white/10 rounded-xl p-6 hover:bg-white/20 transition">
-              <h4 className="font-semibold mb-2">1. Choose a template</h4>
-              <p className="text-sm text-gray-300">Start from a pre-made template or a blank page.</p>
-            </div>
-            <div className="step bg-white/10 rounded-xl p-6 hover:bg-white/20 transition">
-              <h4 className="font-semibold mb-2">2. Customize the map</h4>
-              <p className="text-sm text-gray-300">Add data, markers, layers, and personalize the look.</p>
-            </div>
-            <div className="step bg-white/10 rounded-xl p-6 hover:bg-white/20 transition">
-              <h4 className="font-semibold mb-2">3. Export & Share</h4>
-              <p className="text-sm text-gray-300">Download or embed the map to use anywhere.</p>
-            </div>
+            {[
+              ["1. Choose a template", "Start from a pre-made template or a blank page."],
+              ["2. Customize the map", "Add data, markers, layers, and personalize the look."],
+              ["3. Export & Share", "Download or embed the map to use anywhere."],
+            ].map(([title, desc]) => (
+              <div
+                key={title}
+                className="step rounded-xl p-6 transition 
+                           bg-gray-50 hover:bg-gray-100 
+                           dark:bg-white/10 dark:hover:bg-white/20"
+              >
+                <h4 className="font-semibold mb-2">{title}</h4>
+                <p className="text-sm text-gray-600 dark:text-gray-300">{desc}</p>
+              </div>
+            ))}
           </div>
         </div>
 
         <div className="text-center space-y-6">
           <h2 className="section-title text-3xl font-bold">Trusted by professionals</h2>
-          <p className="text-gray-300 max-w-2xl mx-auto">Used by teams of engineers, educators, NGOs, and governments.</p>
+          <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+            Used by teams of engineers, educators, NGOs, and governments.
+          </p>
         </div>
       </section>
     </main>
