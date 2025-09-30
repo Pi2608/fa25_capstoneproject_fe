@@ -11,6 +11,7 @@ import {
   type UserAccessTool,
 } from "@/lib/api";
 import type { FeatureCollection as GeoFeatureCollection, Geometry, GeoJsonProperties, Position } from "geojson";
+import { addLayerToList, removeLayerFromList, toggleLayerVisibility, renameLayer, LayerInfo, ExtendedLayer } from "@/lib/mapUtils";
 
 type LNS = typeof import("leaflet");
 type LMap = import("leaflet").Map;
@@ -50,15 +51,6 @@ type MapWithPM = LMap & {
   };
 };
 
-interface LayerInfo {
-  id: string;
-  name: string;
-  type: string;
-  visible: boolean;
-  layer: LLayer;
-  order: number;
-}
-
 interface GeoJSONLayer extends LLayer {
   feature?: {
     type?: string;
@@ -68,13 +60,6 @@ interface GeoJSONLayer extends LLayer {
       coordinates?: Position | Position[] | Position[][] | Position[][][];
     };
   };
-}
-
-interface ExtendedLayer extends GeoJSONLayer {
-  _mRadius?: number;
-  _latlng?: LatLng;
-  _latlngs?: LatLng[] | LatLng[][] | LatLng[][][];
-  _bounds?: LatLngBounds;
 }
 
 type PMCreateEvent = LeafletEvent & { layer: LLayer };
@@ -176,87 +161,6 @@ function NewMapPageInner() {
     return "Unknown";
   }, []);
 
-  const addLayerToList = useCallback(
-    (layer: LLayer | LFeatureGroup) => {
-      if ("eachLayer" in layer && typeof (layer as LFeatureGroup).eachLayer === "function") {
-        const fg = layer as LFeatureGroup;
-        fg.eachLayer((subLayer: LLayer) => {
-          const sub = subLayer as ExtendedLayer;
-          const props = sub.feature?.properties ?? {};
-          const layerName =
-            (typeof props.name === "string" && props.name) ||
-            (typeof props.Name === "string" && props.Name) ||
-            `Layer ${Date.now()}`;
-          setLayers((prevLayers) => [
-            ...prevLayers,
-            {
-              id: `layer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-              name: layerName,
-              type: getLayerType(sub),
-              visible: true,
-              layer: subLayer,
-              order: prevLayers.length,
-            },
-          ]);
-        });
-      } else {
-        const l = layer as ExtendedLayer;
-        const props = l.feature?.properties ?? {};
-        const layerName =
-          (typeof props.name === "string" && props.name) ||
-          (typeof props.Name === "string" && props.Name) ||
-          `Layer ${Date.now()}`;
-        setLayers((prevLayers) => [
-          ...prevLayers,
-          {
-            id: `layer_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            name: layerName,
-            type: getLayerType(l),
-            visible: true,
-            layer,
-            order: prevLayers.length,
-          },
-        ]);
-      }
-    },
-    [getLayerType]
-  );
-
-  const removeLayerFromList = useCallback((layerId: string) => {
-    setLayers((prev) => {
-      const layerInfo = prev.find((l) => l.id === layerId);
-      if (layerInfo && sketchRef.current) {
-        sketchRef.current.removeLayer(layerInfo.layer);
-      }
-      return prev.filter((l) => l.id !== layerId);
-    });
-  }, []);
-
-  const toggleLayerVisibility = useCallback((layerId: string) => {
-    setLayers((prev) =>
-      prev.map((layerInfo) => {
-        if (layerInfo.id === layerId) {
-          const newVisible = !layerInfo.visible;
-          if (sketchRef.current) {
-            if (newVisible) {
-              sketchRef.current.addLayer(layerInfo.layer);
-            } else {
-              sketchRef.current.removeLayer(layerInfo.layer);
-            }
-          }
-          return { ...layerInfo, visible: newVisible };
-        }
-        return layerInfo;
-      })
-    );
-  }, []);
-
-  const renameLayer = useCallback((layerId: string, newName: string) => {
-    setLayers((prev) =>
-      prev.map((layerInfo) => (layerInfo.id === layerId ? { ...layerInfo, name: newName.trim() || layerInfo.name } : layerInfo))
-    );
-  }, []);
-
   const applyBaseLayer = useCallback((kind: BaseKey) => {
     const L = LRef.current;
     const map = mapRef.current as (LMap & { _loaded?: boolean }) | null;
@@ -278,6 +182,7 @@ function NewMapPageInner() {
       });
     } else {
       layer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        minZoom:0, 
         maxZoom: 20,
         attribution: "© OpenStreetMap contributors",
       });
@@ -354,7 +259,7 @@ function NewMapPageInner() {
             style: { color: "red", weight: 2, fillOpacity: 0.1 },
           });
           geoLayer.addTo(mapRef.current);
-          addLayerToList(geoLayer);
+          setLayers((prev) => addLayerToList(prev, geoLayer));
           const gj = geoLayer as unknown as LFeatureGroup;
           mapRef.current.fitBounds(gj.getBounds());
         }
@@ -480,12 +385,12 @@ function NewMapPageInner() {
       await import("@geoman-io/leaflet-geoman-free");
       if (!alive || !mapEl.current) return;
       LRef.current = L;
-      const map = L.map(mapEl.current, { zoomControl: false }).setView([10.78, 106.69], 13);
+
+      const map = L.map(mapEl.current, { minZoom: 2 , zoomControl: false }).setView([10.78, 106.69], 13);
       mapRef.current = map;
       const sketch = L.featureGroup().addTo(map);
       sketchRef.current = sketch;
       (map as unknown as MapWithPM).pm.addControls({
-        position: "topleft",
         drawMarker: false,
         drawPolyline: false,
         drawRectangle: false,
@@ -502,7 +407,7 @@ function NewMapPageInner() {
       map.on("pm:create", (e: LeafletEvent) => {
         const evt = e as PMCreateEvent;
         sketch.addLayer(evt.layer);
-        addLayerToList(evt.layer);
+        setLayers(prev => addLayerToList(prev, evt.layer));
       });
       map.whenReady(() => setReady(true));
     })();
@@ -756,56 +661,6 @@ function NewMapPageInner() {
           )}
         </div>
       </div>
-
-      {showLayerPanel && (
-        <div className="absolute top-15 right-1 z-[3000] w-80 max-h-[65vh] overflow-hidden pointer-events-auto">
-          <div className="rounded-2xl bg-black/90 backdrop-blur-md ring-1 ring-white/20 shadow-2xl">
-            <div className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold text-white">Layers</h3>
-                <button onClick={() => setShowLayerPanel(false)} className="text-white/60 hover:text-white text-xl leading-none">
-                  ×
-                </button>
-              </div>
-
-              {layers.length === 0 ? (
-                <div className="text-white/60 text-sm text-center py-8">No layers yet. Draw something on the map!</div>
-              ) : (
-                <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-2">
-                  {layers.map((layerInfo) => (
-                    <div key={layerInfo.id} className="bg-white/10 rounded-lg p-3 border border-white/20">
-                      <div className="flex items-center justify-between mb-2">
-                        <input
-                          type="text"
-                          value={layerInfo.name}
-                          onChange={(e) => renameLayer(layerInfo.id, e.target.value)}
-                          className="bg-transparent text-white text-sm font-medium border-none outline-none flex-1 mr-2"
-                          onBlur={(e) => renameLayer(layerInfo.id, e.target.value)}
-                        />
-                        <button
-                          onClick={() => toggleLayerVisibility(layerInfo.id)}
-                          className={`text-xs px-2 py-1 rounded ${layerInfo.visible ? "bg-green-600 text-white" : "bg-gray-600 text-gray-300"}`}
-                        >
-                          {layerInfo.visible ? "Show" : "Hide"}
-                        </button>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-white/60">
-                        <span>{layerInfo.type}</span>
-                        <div className="flex gap-1">
-                          <button onClick={() => removeLayerFromList(layerInfo.id)} className="px-2 py-1 bg-red-600/80 rounded hover:bg-red-600">
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {showSettings && (
         <div className="fixed top-0 right-0 h-full w-[360px] z-[4000] bg-zinc-900/95 backdrop-blur-md ring-1 ring-white/10 shadow-2xl">
