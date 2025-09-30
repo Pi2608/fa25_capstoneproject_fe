@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
+import CustomersClient from "../customers/CustomersClient";
 
-export const metadata: Metadata = { title: "Customers — CustomMapOSM" };
+export const metadata: Metadata = {
+  title: "Customers — CustomMapOSM",
+  description:
+    "Stories from schools and teams using CustomMapOSM to create interactive lesson maps and story maps.",
+};
 
-export default function CustomersPage() {
-  return (
-    <main className="mx-auto max-w-7xl px-6 py-10 text-zinc-100">
-      <h1 className="text-3xl font-semibold">Customers</h1>
-      <p className="mt-2 text-zinc-400">Stories from teams using CustomMapOSM.</p>
-    </main>
-  );
+export default function Page() {
+  return <CustomersClient />;
 }
