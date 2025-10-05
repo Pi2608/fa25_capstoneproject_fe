@@ -463,7 +463,7 @@ export function resetPassword(req: ResetPasswordReq) {
 //   successUrl: string;
 //   cancelUrl: string;
 //   context?: {
-//     PlanId?: number;
+//     PlanId?: number; 
 //     OrgId?: string;
 //     AutoRenew?: boolean;
 //     MembershipId?: string;
@@ -821,21 +821,22 @@ export async function toggleFavoriteTemplate(templateId: string, favorite: boole
 
 /* ---------- LAYERS ---------- */
 export interface AddLayerToMapRequest {
-  isVisible: true,
-  zIndex: number,
-  customStyle: string,
-  filterConfig: string
+  layerId: string;
+  isVisible: boolean;
+  zIndex: number;
+  customStyle: string;
+  filterConfig: string;
 }
 export interface AddLayerToMapResponse { mapLayerId: string; }
 export function addLayerToMap(mapId: string, body: AddLayerToMapRequest) {
   return postJson<AddLayerToMapRequest, AddLayerToMapResponse>(`/maps/${mapId}/layers`, body);
 }
 
-export interface UpdateMapLayerRequest { 
-  isVisible: true,
-  zIndex: number,
-  customStyle: string,
-  filterConfig: string
+export interface UpdateMapLayerRequest {
+  isVisible: boolean;
+  zIndex: number;
+  customStyle: string;
+  filterConfig: string;
 }
 
 export interface UpdateMapLayerResponse { mapLayerId: string; }
@@ -874,20 +875,23 @@ export interface MapFeatureResponse {
   geometry?: unknown;
   properties?: Record<string, unknown>;
 }
+
 export interface CreateMapFeatureRequest {
-  mapId: string;
   layerId: string;
-  name?: string;
+  name: string;
   description?: string;
   featureCategory: "data" | "annotation" | string;
-  annotationType: "marker" | "polygon" | "polyline" | "circle" | string;
-  geometryType: "point" | "polygon" | "linestring" | string;
-  properties?: Record<string, unknown>;
+  annotationType: "marker" | "polygon" | "line" | "circle" | "text" | "note" | "link" | "video" | "highlighter" | "route";
+  geometryType: "point" | "linestring" | "polygon" | "circle";
   coordinates: string;
-  style?: string;
+  properties: string;
+  style: string;
   isVisible: boolean;
+  zIndex: number;
 }
+
 export function createMapFeature(mapId: string, body: CreateMapFeatureRequest) {
+  console.log(body)
   return postJson<CreateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features`, body);
 }
 export function getMapFeatures(mapId: string) {
@@ -899,14 +903,25 @@ export function getMapFeaturesByCategory(mapId: string, category: string) {
 export function getMapFeaturesByLayer(mapId: string, layerId: string) {
   return getJson<MapFeatureResponse[]>(`/maps/${mapId}/features/by-layer/${layerId}`);
 }
-export interface UpdateMapFeatureRequest { layerId?: string; category?: string; geometry?: unknown; properties?: Record<string, unknown>; }
+export interface UpdateMapFeatureRequest {
+  name: string;
+  description: string;
+  featureCategory: "data" | "annotation";
+  annotationType: "marker" | "polygon" | "line" | "circle" | "text" | "note" | "link" | "video" | "highlighter" | "route";
+  geometryType: "point" | "linestring" | "polygon" | "circle";
+  coordinates: string;
+  properties: string;
+  style: string;
+  isVisible: boolean;
+  zIndex: number;
+  layerId: string;
+}
 export function updateMapFeature(mapId: string, featureId: string, body: UpdateMapFeatureRequest) {
   return putJson<UpdateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features/${featureId}`, body);
 }
 export function deleteMapFeature(mapId: string, featureId: string) {
   return delJson<{ deleted: boolean }>(`/maps/${mapId}/features/${featureId}`);
 }
-
 
 export type OrganizationReqDto = {
 

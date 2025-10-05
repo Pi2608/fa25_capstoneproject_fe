@@ -1,5 +1,17 @@
 import type { Map, Layer, FeatureGroup, LatLng, LatLngBounds } from "leaflet";
 import type { Position } from "geojson";
+import {
+  addLayerToMap,
+  updateMapLayer,
+  removeLayerFromMap,
+  createMapFeature,
+  updateMapFeature,
+  deleteMapFeature,
+  type AddLayerToMapRequest,
+  type UpdateMapLayerRequest,
+  type CreateMapFeatureRequest,
+  type UpdateMapFeatureRequest
+} from "@/lib/api";
 
 export interface GeoJSONLayer extends Layer {
   feature?: {
@@ -144,4 +156,109 @@ export function serializeLayer(layer: ExtendedLayer): string {
   // @ts-expect-error: ExtendedLayer may not declare toGeoJSON but Leaflet layers have it
   const geojson = layer.toGeoJSON?.() ?? {};
   return JSON.stringify(geojson);
+}
+
+
+// Đảm bảo map có ít nhất 1 layer, nếu chưa thì tạo
+export async function ensureLayer(
+  mapId: string,
+  layers: LayerInfo[],
+  setLayers: React.Dispatch<React.SetStateAction<LayerInfo[]>>
+): Promise<string> {
+  if (layers.length > 0) return layers[0].id;
+
+  const req: AddLayerToMapRequest = {
+    // layerId: crypto.randomUUID(),
+    layerId: "11111111-1111-1111-1111-111111111111",
+    isVisible: true,
+    zIndex: 1000,
+    customStyle: "{}",
+    filterConfig: "{}"
+  };
+
+  const res = await addLayerToMap(mapId, req);
+  setLayers(prev => [
+    ...prev,
+    {
+      id: res.mapLayerId,
+      name: "Default Layer",
+      type: "default",
+      visible: true,
+      layer: {} as Layer, // placeholder
+      order: prev.length
+    }
+  ]);
+  return res.mapLayerId;
+}
+
+// Tạo feature từ Leaflet layer
+export async function saveFeature(
+  mapId: string,
+  leafletLayer: ExtendedLayer,
+  layers: LayerInfo[],
+  setLayers: React.Dispatch<React.SetStateAction<LayerInfo[]>>
+) {
+  const layerId = await ensureLayer(mapId, layers, setLayers);
+
+  let geometryType: CreateMapFeatureRequest["geometryType"] = "point";
+  let coordinates = "[]";
+
+  if (leafletLayer._latlng) {
+    geometryType = "point";
+    coordinates = JSON.stringify([leafletLayer._latlng.lng, leafletLayer._latlng.lat]);
+  } else if (leafletLayer._latlngs) {
+    if (Array.isArray(leafletLayer._latlngs[0])) {
+      geometryType = "polygon";
+      coordinates = JSON.stringify(
+        (leafletLayer._latlngs[0] as LatLng[]).map(p => [p.lng, p.lat])
+      );
+    } else {
+      geometryType = "linestring";
+      coordinates = JSON.stringify(
+        (leafletLayer._latlngs as LatLng[]).map(p => [p.lng, p.lat])
+      );
+    }
+  }
+
+  const req: CreateMapFeatureRequest = {
+    layerId,
+    name: "New Feature",
+    description: "",
+    featureCategory: "data",
+    annotationType: "marker",
+    geometryType,
+    coordinates,
+    properties: "{}",
+    style: "{}",
+    isVisible: true,
+    zIndex: 0
+  };
+
+  return await createMapFeature(mapId, req);
+}
+
+// Update layer server-side
+export async function syncUpdateLayer(mapId: string, layerId: string, newName: string) {
+  const req: UpdateMapLayerRequest = {
+    isVisible: true,
+    zIndex: 1000,
+    customStyle: JSON.stringify({ name: newName }),
+    filterConfig: "{}"
+  };
+  return await updateMapLayer(mapId, layerId, req);
+}
+
+// Remove layer server-side
+export async function syncRemoveLayer(mapId: string, layerId: string) {
+  return await removeLayerFromMap(mapId, layerId);
+}
+
+// Update feature server-side
+export async function syncUpdateFeature(mapId: string, featureId: string, data: UpdateMapFeatureRequest) {
+  return await updateMapFeature(mapId, featureId, data);
+}
+
+// Remove feature server-side
+export async function syncRemoveFeature(mapId: string, featureId: string) {
+  return await deleteMapFeature(mapId, featureId);
 }

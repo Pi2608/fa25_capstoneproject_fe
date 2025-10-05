@@ -10,16 +10,11 @@ import {
   updateMap,
   type UpdateMapRequest,
   getActiveUserAccessTools,
-  type UserAccessTool,
-  addLayerToMap, 
-  type AddLayerToMapRequest,
-  updateMapLayer,
-  type UpdateMapLayerRequest,
-  type UpdateMapLayerResponse,
-  removeLayerFromMap,
-  type RemoveLayerFromMapResponse
+  type UserAccessTool
 } from "@/lib/api";
 import type { Position } from "geojson";
+import { saveFeature, addLayerToList, renameLayer, removeLayerFromList, toggleLayerVisibility } from "@/lib/mapUtils";
+import { LayerPanel, type LayerPanelProps } from "@/components/map/MapControls";
 
 type BaseKey = "osm" | "sat" | "dark";
 
@@ -289,8 +284,14 @@ export default function EditMapPage() {
         removalMode: false,
       });
 
-      map.on("pm:create", (e: PMCreateEvent) => {
+      map.on("pm:create", async (e: PMCreateEvent) => {
         sketch.addLayer(e.layer);
+        const newFeature = await saveFeature(
+          detail.id,
+          e.layer as ExtendedLayer,
+          layers,
+          setLayers
+        );
       });
     })();
 
@@ -370,7 +371,8 @@ export default function EditMapPage() {
   const GuardBtn: React.FC<
     React.PropsWithChildren<{ can: boolean; title: string; onClick?: () => void; disabled?: boolean }>
   > = ({ can, title, onClick, disabled, children }) => {
-    if (!can) return null;
+    // if (!can) return null;
+    if (can) return null;
     return (
       <button
         className="px-3 py-2 rounded-md bg-transparent text-white text-sm hover:bg-emerald-500"
@@ -575,6 +577,21 @@ export default function EditMapPage() {
       </div>
 
       <div ref={mapEl} className="absolute inset-0" />
+
+      <LayerPanel
+        layers={layers}
+        showLayerPanel={showLayerPanel}
+        setShowLayerPanel={setShowLayerPanel}
+        renameLayer={(id: string, name: string) => setLayers(prev => renameLayer(prev, id, name))}
+        toggleLayerVisibility={(id: string) => setLayers(prev => toggleLayerVisibility(prev, id, mapRef.current, sketchRef.current))}
+        removeLayerFromList={(id: string) =>
+          setLayers(prev => removeLayerFromList(prev, id, mapRef.current, sketchRef.current))
+        }
+        clearLayers={() => {
+          sketchRef.current?.clearLayers();
+          setLayers([]);
+        }}
+      />
 
       <style jsx global>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }

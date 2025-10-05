@@ -3,7 +3,6 @@ import { LayerInfo } from "@/lib/mapUtils";
 // ---------------- LayerPanel ----------------
 export interface LayerPanelProps {
   layers: LayerInfo[];
-  ready: boolean;
   showLayerPanel: boolean;
   setShowLayerPanel: (val: boolean) => void;
   renameLayer: (id: string, name: string) => void;
@@ -14,7 +13,6 @@ export interface LayerPanelProps {
 
 export function LayerPanel({
   layers,
-  ready,
   showLayerPanel,
   setShowLayerPanel,
   renameLayer,
@@ -25,7 +23,7 @@ export function LayerPanel({
   return (
     <>
       {!showLayerPanel && (
-        <div className="absolute top-15 right-1 z-[3000] pointer-events-auto">
+        <div className="absolute top-30 right-1 z-[3000] pointer-events-auto">
           <button
             onClick={() => setShowLayerPanel(true)}
             className="flex w-10 h-10 justify-center items-center rounded-full bg-black/80 backdrop-blur-md ring-1 ring-white/20 shadow-2xl text-white hover:bg-black/70"
@@ -37,7 +35,7 @@ export function LayerPanel({
         </div>
       )}
       {showLayerPanel && (
-        <div className="absolute top-15 right-1 z-[3000] w-80 max-h-[65vh] overflow-hidden pointer-events-auto bg-black/80 text-white rounded shadow-lg">
+        <div className="absolute top-30 right-1 z-[3000] w-80 max-h-[65vh] overflow-hidden pointer-events-auto bg-black/80 text-white rounded shadow-lg">
           <div className="flex justify-between items-center px-3 py-2 border-b border-gray-600">
             <span className="font-semibold">Layers</span>
             <button
@@ -49,9 +47,9 @@ export function LayerPanel({
             </button>
           </div>
           <div className="max-h-[50vh] overflow-y-auto">
-            {layers.map(layer => (
+            {layers.map((layer, index) => (
               <div
-                key={layer.id}
+                key={`layer.id-${index}`}
                 className="flex items-center justify-between px-3 py-1 border-b border-gray-700"
               >
                 <input
@@ -87,7 +85,6 @@ export function LayerPanel({
                 <button
                   onClick={() => removeLayerFromList(layer.id)}
                   className="px-2 py-1 bg-red-600/80 rounded hover:bg-red-600"
-                  disabled={!ready}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                     <path fill="currentColor" d="M7.616 20q-.672 0-1.144-.472T6 18.385V6H5V5h4v-.77h6V5h4v1h-1v12.385q0 .69-.462 1.153T16.384 20zM17 6H7v12.385q0 .269.173.442t.443.173h8.769q.23 0 .423-.192t.192-.424zM9.808 17h1V8h-1zm3.384 0h1V8h-1zM7 6v13z"/>
@@ -101,7 +98,6 @@ export function LayerPanel({
               <button
                 onClick={clearLayers}
                 className="px-2 py-1 rounded bg-red-600 text-white w-full cursor-pointer"
-                disabled={!ready}
               >
                 Clear all
               </button>
