@@ -1,112 +1,460 @@
-import { LayerInfo } from "@/lib/mapUtils";
+import { useState, useRef } from "react";
+import { FeatureData, toggleLayerVisibility, toggleFeatureVisibility, addDataLayerToMap, updateDataLayerInMap, removeDataLayerFromMap, createFeatureInMap, updateFeatureInMap, deleteFeatureFromMap } from "@/utils/mapUtils";
+import { RawLayer, MapFeatureResponse, CreateMapFeatureRequest, UpdateMapFeatureRequest } from "@/lib/api";
+import type { Map as LMap, FeatureGroup } from "leaflet";
 
-// ---------------- LayerPanel ----------------
-export interface LayerPanelProps {
-  layers: LayerInfo[];
-  ready: boolean;
-  showLayerPanel: boolean;
-  setShowLayerPanel: (val: boolean) => void;
-  renameLayer: (id: string, name: string) => void;
-  toggleLayerVisibility: (id: string) => void;
-  removeLayerFromList: (id: string) => void;
-  clearLayers: () => void;
+// ---------------- StylePanel ----------------
+export interface StylePanelProps {
+  selectedLayer: FeatureData | RawLayer | null;
+  showStylePanel: boolean;
+  setShowStylePanel: (val: boolean) => void;
+  onUpdateLayer?: (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => Promise<void>;
+  onUpdateFeature?: (featureId: string, updates: UpdateMapFeatureRequest) => Promise<void>;
 }
 
-export function LayerPanel({
-  layers,
-  ready,
-  showLayerPanel,
-  setShowLayerPanel,
-  renameLayer,
-  toggleLayerVisibility,
-  removeLayerFromList,
-  clearLayers
-}: LayerPanelProps) {
+export function StylePanel({
+  selectedLayer,
+  showStylePanel,
+  setShowStylePanel,
+  onUpdateLayer,
+  onUpdateFeature
+}: StylePanelProps) {
+  const [activeTab, setActiveTab] = useState<"Style" | "Attributes">("Style");
+  const [style, setStyle] = useState({
+    color: "#ff0000",
+    fill: 21,
+    stroke: 100,
+    width: 2,
+    lineStyle: "Solid",
+    // areaStyle: "Solid"
+  });
+
+  if (!selectedLayer) return null;
+
+  const isFeature = 'featureId' in selectedLayer;
+  const layerName = isFeature ? selectedLayer.name : selectedLayer.name;
+
   return (
     <>
-      {!showLayerPanel && (
-        <div className="absolute top-15 right-1 z-[3000] pointer-events-auto">
+      {showStylePanel && (
+        <div className="absolute top-15 right-1 z-[3000] w-80 max-h-[75vh] overflow-hidden pointer-events-auto bg-black/80 text-white rounded shadow-lg">
+          {/* Header */}
+          <div className="flex justify-between items-center px-4 py-3 border-b border-gray-600">
+            <div className="font-semibold text-lg">{layerName}</div>
+            <button
+              onClick={() => setShowStylePanel(false)}
+              className="px-2 py-1 rounded hover:bg-gray-500 cursor-pointer"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M6 16h2v2c0 .55.45 1 1 1s1-.45 1-1v-3c0-.55-.45-1-1-1H6c-.55 0-1 .45-1 1s.45 1 1 1m2-8H6c-.55 0-1 .45-1 1s.45 1 1 1h3c.55 0 1-.45 1-1V6c0-.55-.45-1-1-1s-1 .45-1 1zm7 11c.55 0 1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1h-3c-.55 0-1 .45-1 1v3c0 .55.45 1 1 1m1-11V6c0-.55-.45-1-1-1s-1 .45-1 1v3c0 .55.45 1 1 1h3c.55 0 1-.45 1-1s-.45-1-1-1z"/>
+              </svg>
+            </button>
+          </div>
+
+          {/* Description */}
+          <div className="px-4 py-2">
+            <input
+              type="text"
+              placeholder="Add a description"
+              className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 text-sm text-white placeholder-white/50"
+            />
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex items-center gap-2 px-4 py-2">
+            <button className="p-2 rounded hover:bg-white/10">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2m-2 15l-5-5l1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+            </button>
+            <button className="p-2 rounded hover:bg-white/10">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+              </svg>
+            </button>
+            <div className="ml-auto">
+              <button className="p-2 rounded hover:bg-white/10">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
+                  <path fill="currentColor" d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2s-2 .9-2 2s.9 2 2 2m0 2c-1.1 0-2 .9-2 2s.9 2 2 2s2-.9 2-2s-.9-2-2-2m0 6c-1.1 0-2 .9-2 2s.9 2 2 2s2-.9 2-2s-.9-2-2-2z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-gray-600">
+            <button
+              onClick={() => setActiveTab("Style")}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === "Style" 
+                  ? "text-white border-b-2 border-white" 
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Style
+            </button>
+            <button
+              onClick={() => setActiveTab("Attributes")}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === "Attributes" 
+                  ? "text-white border-b-2 border-white" 
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Attributes
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="p-4 space-y-4 max-h-[40vh] overflow-y-auto">
+            {activeTab === "Style" ? (
+              <>
+                {/* Color */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Color</label>
+                  <div className="flex items-center gap-2">
+                    <div 
+                      className="w-6 h-6 rounded border border-white/20 cursor-pointer"
+                      style={{ backgroundColor: style.color }}
+                      onClick={() => {
+                        const newColor = prompt("Enter color (hex):", style.color);
+                        if (newColor) setStyle(prev => ({ ...prev, color: newColor }));
+                      }}
+                    />
+                    <span className="text-sm capitalize">{style.color}</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                      <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"/>
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Fill */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Fill</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={style.fill}
+                      onChange={(e) => setStyle(prev => ({ ...prev, fill: parseInt(e.target.value) }))}
+                      className="flex-1"
+                    />
+                    <span className="text-sm w-12 text-right">{style.fill}%</span>
+                  </div>
+                </div>
+
+                {/* Stroke */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Stroke</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={style.stroke}
+                      onChange={(e) => setStyle(prev => ({ ...prev, stroke: parseInt(e.target.value) }))}
+                      className="flex-1"
+                    />
+                    <span className="text-sm w-12 text-right">{style.stroke}%</span>
+                  </div>
+                </div>
+
+                {/* Width */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Width</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      value={style.width}
+                      onChange={(e) => setStyle(prev => ({ ...prev, width: parseInt(e.target.value) }))}
+                      className="flex-1"
+                    />
+                    <span className="text-sm w-12 text-right">{style.width}</span>
+                  </div>
+                </div>
+
+                {/* Style */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">Style</label>
+                  <select
+                    value={style.lineStyle}
+                    onChange={(e) => setStyle(prev => ({ ...prev, lineStyle: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 text-sm text-white"
+                  >
+                    <option value="Solid">Solid</option>
+                    <option value="Dashed">Dashed</option>
+                    <option value="Dotted">Dotted</option>
+                  </select>
+                </div>
+
+                {/* Area */}
+                {/* <div>
+                  <label className="block text-sm font-medium mb-2">Area</label>
+                  <select
+                    value={style.areaStyle}
+                    onChange={(e) => setStyle(prev => ({ ...prev, areaStyle: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-md bg-white/5 border border-white/10 text-sm text-white"
+                  >
+                    <option value="Solid">Solid</option>
+                    <option value="Hatched">Hatched</option>
+                    <option value="Crosshatched">Crosshatched</option>
+                  </select>
+                </div> */}
+              </>
+            ) : (
+              <div className="text-sm text-white/70">
+                Attributes panel - Feature properties and metadata
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ---------------- DataLayersPanel (List Panel) ----------------
+export interface DataLayersPanelProps {
+  features: FeatureData[];
+  layers: RawLayer[];
+  showDataLayersPanel: boolean;
+  setShowDataLayersPanel: (val: boolean) => void;
+  map: LMap | null;
+  dataLayerRefs: React.MutableRefObject<Map<string, L.Layer>>;
+  onLayerVisibilityChange?: (layerId: string, isVisible: boolean) => void;
+  onFeatureVisibilityChange?: (featureId: string, isVisible: boolean) => void;
+  onSelectLayer?: (layer: FeatureData | RawLayer) => void;
+  // CRUD operations
+  onAddDataLayer?: (layerId: string, isVisible?: boolean, zIndex?: number) => Promise<void>;
+  onUpdateDataLayer?: (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => Promise<void>;
+  onRemoveDataLayer?: (layerId: string) => Promise<void>;
+  onDeleteFeature?: (featureId: string) => Promise<void>;
+}
+
+export function DataLayersPanel({
+  features,
+  layers,
+  showDataLayersPanel,
+  setShowDataLayersPanel,
+  map,
+  dataLayerRefs,
+  onLayerVisibilityChange,
+  onFeatureVisibilityChange,
+  onSelectLayer,
+  onAddDataLayer,
+  onUpdateDataLayer,
+  onRemoveDataLayer,
+  onDeleteFeature
+}: DataLayersPanelProps) {
+  const [activeTab, setActiveTab] = useState<"Segment" | "List">("List");
+
+  return (
+    <>
+      {!showDataLayersPanel && (
+        <div className="absolute top-15 left-1 z-[3000] pointer-events-auto">
           <button
-            onClick={() => setShowLayerPanel(true)}
+            onClick={() => setShowDataLayersPanel(true)}
             className="flex w-10 h-10 justify-center items-center rounded-full bg-black/80 backdrop-blur-md ring-1 ring-white/20 shadow-2xl text-white hover:bg-black/70"
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-              <path fill="currentColor" d="M12.5 4.252a.75.75 0 0 0-1.005-.705l-6.84 2.475A1.75 1.75 0 0 0 3.5 7.667v6.082a.75.75 0 0 0 1.005.705L5 14.275v1.595a2.25 2.25 0 0 1-3-2.12V7.666A3.25 3.25 0 0 1 4.144 4.61l6.84-2.475A2.25 2.25 0 0 1 14 4.252v.177l-1.5.543zm4 3a.75.75 0 0 0-1.005-.705L8.325 9.14a1.25 1.25 0 0 0-.825 1.176v6.432a.75.75 0 0 0 1.005.705L9 17.275v1.596a2.25 2.25 0 0 1-3-2.122v-6.432A2.75 2.75 0 0 1 7.814 7.73l7.17-2.595A2.25 2.25 0 0 1 18 7.252v.177l-1.5.543zm2.995 2.295a.75.75 0 0 1 1.005.705v6.783a.75.75 0 0 1-.495.705l-7.5 2.714a.75.75 0 0 1-1.005-.705v-6.783a.75.75 0 0 1 .495-.705zm2.505.705a2.25 2.25 0 0 0-3.016-2.116l-7.5 2.714A2.25 2.25 0 0 0 10 12.966v6.783a2.25 2.25 0 0 0 3.016 2.116l7.5-2.714A2.25 2.25 0 0 0 22 17.035z"/>
+              <path fill="currentColor" d="M12 2L2 7l10 5l10-5l-10-5zM2 17l10 5l10-5M2 12l10 5l10-5"/>
             </svg>
           </button>
         </div>
       )}
-      {showLayerPanel && (
-        <div className="absolute top-15 right-1 z-[3000] w-80 max-h-[65vh] overflow-hidden pointer-events-auto bg-black/80 text-white rounded shadow-lg">
-          <div className="flex justify-between items-center px-3 py-2 border-b border-gray-600">
-            <span className="font-semibold">Layers</span>
+      {showDataLayersPanel && (
+        <div className="absolute top-15 left-1 z-[3000] w-80 max-h-[65vh] overflow-hidden pointer-events-auto bg-black/80 text-white rounded shadow-lg">
+          {/* Tabs */}
+          <div className="flex border-b border-gray-600">
             <button
-              onClick={() => setShowLayerPanel(false)}
-              className="px-2 py-1 rounded hover:bg-gray-500 cursor-pointer"
+              onClick={() => setActiveTab("Segment")}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === "Segment" 
+                  ? "text-white border-b-2 border-white" 
+                  : "text-gray-400 hover:text-white"
+              }`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M6 16h2v2c0 .55.45 1 1 1s1-.45 1-1v-3c0-.55-.45-1-1-1H6c-.55 0-1 .45-1 1s.45 1 1 1m2-8H6c-.55 0-1 .45-1 1s.45 1 1 1h3c.55 0 1-.45 1-1V6c0-.55-.45-1-1-1s-1 .45-1 1zm7 11c.55 0 1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1h-3c-.55 0-1 .45-1 1v3c0 .55.45 1 1 1m1-11V6c0-.55-.45-1-1-1s-1 .45-1 1v3c0 .55.45 1 1 1h3c.55 0 1-.45 1-1s-.45-1-1-1z"/>
-              </svg>
+              Segment
             </button>
-          </div>
-          <div className="max-h-[50vh] overflow-y-auto">
-            {layers.map(layer => (
-              <div
-                key={layer.id}
-                className="flex items-center justify-between px-3 py-1 border-b border-gray-700"
-              >
-                <input
-                  type="text"
-                  defaultValue={layer.name}
-                  onBlur={e => renameLayer(layer.id, e.target.value)}
-                  className="bg-transparent text-white text-sm font-medium border-none outline-none flex-1 mr-2"
-                />
-                <button
-                  onClick={() => toggleLayerVisibility(layer.id)}
-                  className={`text-xs px-2 py-1 rounded ${
-                    layer.visible
-                      ? "bg-green-600 text-white"
-                      : "bg-gray-600 text-gray-300"
-                  }`}
-                >
-                  {layer.visible ? 
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
-                      <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5">
-                        <path d="M15 12a3 3 0 1 1-6 0a3 3 0 0 1 6 0"/>
-                        <path d="M2 12c1.6-4.097 5.336-7 10-7s8.4 2.903 10 7c-1.6 4.097-5.336 7-10 7s-8.4-2.903-10-7"/>
-                      </g>
-                    </svg>
-                  :
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
-                      <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5">
-                        <path strokeLinejoin="round" d="M10.73 5.073A11 11 0 0 1 12 5c4.664 0 8.4 2.903 10 7a11.6 11.6 0 0 1-1.555 2.788M6.52 6.519C4.48 7.764 2.9 9.693 2 12c1.6 4.097 5.336 7 10 7a10.44 10.44 0 0 0 5.48-1.52m-7.6-7.6a3 3 0 1 0 4.243 4.243"/>
-                        <path d="m4 4l16 16"/>
-                      </g>
-                    </svg>
-                  }
-                </button>
-                <button
-                  onClick={() => removeLayerFromList(layer.id)}
-                  className="px-2 py-1 bg-red-600/80 rounded hover:bg-red-600"
-                  disabled={!ready}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M7.616 20q-.672 0-1.144-.472T6 18.385V6H5V5h4v-.77h6V5h4v1h-1v12.385q0 .69-.462 1.153T16.384 20zM17 6H7v12.385q0 .269.173.442t.443.173h8.769q.23 0 .423-.192t.192-.424zM9.808 17h1V8h-1zm3.384 0h1V8h-1zM7 6v13z"/>
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-          {layers.length > 0 && (
-            <div className="px-3 py-2 border-t border-gray-600">
+            <button
+              onClick={() => setActiveTab("List")}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === "List" 
+                  ? "text-white border-b-2 border-white" 
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              List
+            </button>
+            <div className="ml-auto px-4 py-2">
               <button
-                onClick={clearLayers}
-                className="px-2 py-1 rounded bg-red-600 text-white w-full cursor-pointer"
-                disabled={!ready}
+                onClick={() => setShowDataLayersPanel(false)}
+                className="px-2 py-1 rounded hover:bg-gray-500 cursor-pointer"
               >
-                Clear all
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                  <path fill="currentColor" d="M6 16h2v2c0 .55.45 1 1 1s1-.45 1-1v-3c0-.55-.45-1-1-1H6c-.55 0-1 .45-1 1s.45 1 1 1m2-8H6c-.55 0-1 .45-1 1s.45 1 1 1h3c.55 0 1-.45 1-1V6c0-.55-.45-1-1-1s-1 .45-1 1zm7 11c.55 0 1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1h-3c-.55 0-1 .45-1 1v3c0 .55.45 1 1 1m1-11V6c0-.55-.45-1-1-1s-1 .45-1 1v3c0 .55.45 1 1 1h3c.55 0 1-.45 1-1s-.45-1-1-1z"/>
+                </svg>
               </button>
             </div>
-          )}
+          </div>
+
+          {/* Content */}
+          <div className="max-h-[50vh] overflow-y-auto">
+            {activeTab === "List" ? (
+              <>
+                {/* Elements Section */}
+                <div className="px-4 py-2">
+                  <div className="text-sm font-medium text-white/70 mb-2">Elements</div>
+                  {features.map((feature) => (
+                    <div
+                      key={feature.featureId}
+                      className="flex items-center justify-between px-2 py-1 hover:bg-white/5 rounded cursor-pointer"
+                      onClick={() => onSelectLayer?.(feature)}
+                    >
+                      <div className="flex items-center gap-2 flex-1">
+                        {/* Icon based on type */}
+                        <div className="w-4 h-4">
+                          {feature.type.toLocaleLowerCase() === "marker" || feature.type.toLocaleLowerCase() === "point" && (
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 21s-6-4.5-6-10a6 6 0 1 1 12 0c0 5.5-6 10-6 10z" />
+                              <circle cx="12" cy="11" r="2.5" />
+                            </svg>
+                          )}
+                          {feature.type.toLocaleLowerCase() === "line" && (
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="5" cy="7" r="2" />
+                              <circle cx="19" cy="17" r="2" />
+                              <path d="M7 8.5 17 15.5" />
+                            </svg>
+                          )}
+                          {feature.type.toLocaleLowerCase() === "polygon" && (
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M7 4h10l4 6-4 10H7L3 10 7 4z" />
+                            </svg>
+                          )}
+                          {feature.type.toLocaleLowerCase() === "circle" && (
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="10"/>
+                            </svg>
+                          )}
+                        </div>
+                        <span className="text-sm">{feature.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            feature.featureId && onFeatureVisibilityChange?.(feature.featureId, !feature.isVisible);
+                          }}
+                          className="p-1 rounded hover:bg-white/10"
+                        >
+                          {feature.isVisible ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                              <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5">
+                                <path d="M15 12a3 3 0 1 1-6 0a3 3 0 0 1 6 0"/>
+                                <path d="M2 12c1.6-4.097 5.336-7 10-7s8.4 2.903 10 7c-1.6 4.097-5.336 7-10 7s-8.4-2.903-10-7"/>
+                              </g>
+                            </svg>
+                          ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                              <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5">
+                                <path strokeLinejoin="round" d="M10.73 5.073A11 11 0 0 1 12 5c4.664 0 8.4 2.903 10 7a11.6 11.6 0 0 1-1.555 2.788M6.52 6.519C4.48 7.764 2.9 9.693 2 12c1.6 4.097 5.336 7 10 7a10.44 10.44 0 0 0 5.48-1.52m-7.6-7.6a3 3 0 1 0 4.243 4.243"/>
+                                <path d="m4 4l16 16"/>
+                              </g>
+                            </svg>
+                          )}
+                        </button>
+                        {onDeleteFeature && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Delete "${feature.name}"?`)) {
+                                feature.featureId && onDeleteFeature(feature.featureId);
+                              }
+                            }}
+                            className="p-1 rounded hover:bg-red-500/20 text-red-400"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                              <path fill="currentColor" d="M7.616 20q-.672 0-1.144-.472T6 18.385V6H5V5h4v-.77h6V5h4v1h-1v12.385q0 .69-.462 1.153T16.384 20zM17 6H7v12.385q0 .269.173.442t.443.173h8.769q.23 0 .423-.192t.192-.424zM9.808 17h1V8h-1zm3.384 0h1V8h-1zM7 6v13z"/>
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Layers Section */}
+                <div className="px-4 py-2 border-t border-gray-600">
+                  <div className="text-sm font-medium text-white/70 mb-2">Layers</div>
+                  {layers.map((layer) => (
+                    <div
+                      key={layer.id}
+                      className="flex items-center justify-between px-2 py-1 hover:bg-white/5 rounded cursor-pointer"
+                      onClick={() => onSelectLayer?.(layer)}
+                    >
+                      <div className="flex items-center gap-2 flex-1">
+                        <div className="w-4 h-4">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2L2 7l10 5l10-5l-10-5zM2 17l10 5l10-5M2 12l10 5l10-5"/>
+                          </svg>
+                        </div>
+                        <span className="text-sm">{layer.name}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onLayerVisibilityChange?.(layer.id, !layer.isVisible);
+                          }}
+                          className="p-1 rounded hover:bg-white/10"
+                        >
+                          {layer.isVisible ? (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                              <g fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5">
+                                <path d="M15 12a3 3 0 1 1-6 0a3 3 0 0 1 6 0"/>
+                                <path d="M2 12c1.6-4.097 5.336-7 10-7s8.4 2.903 10 7c-1.6 4.097-5.336 7-10 7s-8.4-2.903-10-7"/>
+                              </g>
+                            </svg>
+                          ) : (
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                              <g fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5">
+                                <path strokeLinejoin="round" d="M10.73 5.073A11 11 0 0 1 12 5c4.664 0 8.4 2.903 10 7a11.6 11.6 0 0 1-1.555 2.788M6.52 6.519C4.48 7.764 2.9 9.693 2 12c1.6 4.097 5.336 7 10 7a10.44 10.44 0 0 0 5.48-1.52m-7.6-7.6a3 3 0 1 0 4.243 4.243"/>
+                                <path d="m4 4l16 16"/>
+                              </g>
+                            </svg>
+                          )}
+                        </button>
+                        {onRemoveDataLayer && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (confirm(`Remove "${layer.name}" from map?`)) {
+                                onRemoveDataLayer(layer.id);
+                              }
+                            }}
+                            className="p-1 rounded hover:bg-red-500/20 text-red-400"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                              <path fill="currentColor" d="M7.616 20q-.672 0-1.144-.472T6 18.385V6H5V5h4v-.77h6V5h4v1h-1v12.385q0 .69-.462 1.153T16.384 20zM17 6H7v12.385q0 .269.173.442t.443.173h8.769q.23 0 .423-.192t.192-.424zM9.808 17h1V8h-1zm3.384 0h1V8h-1zM7 6v13z"/>
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  
+                </div>
+              </>
+            ) : (
+              <div className="p-4 text-sm text-white/70">
+                Segment panel - Visual representation of map symbols
+              </div>
+            )}
+          </div>
         </div>
       )}
     </>

@@ -11,7 +11,7 @@ import {
   type UserAccessTool,
 } from "@/lib/api";
 import type { FeatureCollection as GeoFeatureCollection, Geometry, GeoJsonProperties, Position } from "geojson";
-import { addLayerToList, removeLayerFromList, toggleLayerVisibility, renameLayer, LayerInfo, ExtendedLayer } from "@/lib/mapUtils";
+import { addLayerToList, removeLayerFromList, toggleLayerVisibility, renameLayer, LayerInfo, ExtendedLayer } from "@/utils/mapUtils";
 
 type LNS = typeof import("leaflet");
 type LMap = import("leaflet").Map;
@@ -573,13 +573,13 @@ function NewMapPageInner() {
                     if (file) handleUploadFile(file);
                   }}
                 />
-                <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M7 17a4 4 0 0 1 .6-7.95A5.5 5.5 0 0 1 18.5 9a4.5 4.5 0 0 1 1.5 8.74" />
-                  <path d="M12 15V3M8.5 6.5L12 3l3.5 3.5" />
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                  <path fill="currentColor" fillRule="evenodd" d="M12 2a6 6 0 0 0-5.476 3.545a23 23 0 0 1-.207.452l-.02.001C6.233 6 6.146 6 6 6a4 4 0 1 0 0 8h.172l2-2H6a2 2 0 1 1 0-4h.064c.208 0 .45.001.65-.04a1.9 1.9 0 0 0 .7-.27c.241-.156.407-.35.533-.527a2.4 2.4 0 0 0 .201-.36q.08-.167.196-.428l.004-.01a4.001 4.001 0 0 1 7.304 0l.005.01q.115.26.195.428c.046.097.114.238.201.36c.126.176.291.371.533.528c.242.156.487.227.7.27c.2.04.442.04.65.04L18 8a2 2 0 1 1 0 4h-2.172l2 2H18a4 4 0 0 0 0-8c-.146 0-.233 0-.297-.002h-.02l-.025-.053a24 24 0 0 1-.182-.4A6 6 0 0 0 12 2m5.702 4.034" clipRule="evenodd"/>
+                  <path fill="currentColor" d="m12 12l-.707-.707l.707-.707l.707.707zm1 9a1 1 0 1 1-2 0zm-5.707-5.707l4-4l1.414 1.414l-4 4zm5.414-4l4 4l-1.414 1.414l-4-4zM13 12v9h-2v-9z"/>
                 </svg>
               </label>
 
-              <button
+              {/* <button
                 className="px-3 py-2 rounded-md bg-transparent text-white text-sm hover:bg-emerald-500"
                 title="Toggle Layers panel"
                 onClick={() => setShowLayerPanel((v) => !v)}
@@ -588,7 +588,7 @@ function NewMapPageInner() {
                   <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
                   <path d="M19.4 15l.6-1.1l-.6-1.1a1 1 0 0 0-.2-1.1l-1.2-1.2l-1.1.6l-1.1-.6l-1.2 1.2l.6 1.1l-.6 1.1l1.2 1.2l1.1-.6l1.1.6l1.2-1.2a1 1 0 0 0 .2-1.1Z" />
                 </svg>
-              </button>
+              </button> */}
             </div>
 
             <div className="flex items-center justify-end gap-2 overflow-x-auto no-scrollbar">
