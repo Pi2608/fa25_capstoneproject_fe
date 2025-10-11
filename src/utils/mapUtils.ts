@@ -568,7 +568,6 @@ export async function loadFeaturesToMap(
         const coords = coordinates as [number, number, number];
         layer = L.circle([coords[1], coords[0]], { radius: coords[2] }) as ExtendedLayer;
       }
-      console.log("layer", layer);
       if (layer) {
         const isVisible = feature.isVisible;
 
@@ -585,6 +584,7 @@ export async function loadFeaturesToMap(
           featureId: feature.featureId,
         });
       }
+      console.log("featureDataList", featureDataList);
     }
 
     return featureDataList;

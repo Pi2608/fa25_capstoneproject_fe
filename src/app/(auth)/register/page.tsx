@@ -38,7 +38,9 @@ function splitVietnameseName(fullName: string): NameParts {
   const clean = fullName.replace(/\s+/g, " ").trim();
   if (!clean) return { firstName: "", lastName: "" };
   const parts = clean.split(" ");
-  if (parts.length === 1) return { firstName: parts[0], lastName: parts[0] };
+  if (parts.length < 2) {
+    throw new Error("Please enter your full name");
+  }
   const lastName = parts[0] ?? "";
   const firstName = parts.slice(1).join(" ");
   return { firstName, lastName };
@@ -172,7 +174,14 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      const { firstName, lastName } = splitVietnameseName(name);
+      let firstName: string, lastName: string;
+      try {
+        ({ firstName, lastName } = splitVietnameseName(name));
+      } catch (error) {
+        setBanner({ type: "error", text: error instanceof Error ? error.message : "Please enter your full name" });
+        setLoading(false);
+        return;
+      }
       await postJson("/auth/verify-email", {
         firstName,
         lastName,
@@ -403,7 +412,12 @@ export default function RegisterPage() {
                       } else {
                         ({ firstName, lastName } = splitVietnameseName(name));
                       }
-                    } catch {
+                    } catch (error) {
+                      if (error instanceof Error && error.message === "Please enter your full name") {
+                        setBanner({ type: "error", text: "Please enter your full name" });
+                        setLoading(false);
+                        return;
+                      }
                       ({ firstName, lastName } = splitVietnameseName(name));
                     }
                     await postJson("/auth/verify-email", { firstName, lastName, email, phone: phone || null, password });

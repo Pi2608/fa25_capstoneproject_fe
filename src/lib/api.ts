@@ -1091,7 +1091,7 @@ export function deleteOrganization(orgId: string) {
 
 /* ------------------ My orgs & invitations ------------------ */
 export function getMyOrganizations() {
-  return getJson<GetMyOrganizationsResDto>("/organizations/mine");
+  return getJson<GetMyOrganizationsResDto>("/organizations");
 }
 export function getMyInvitations() {
   return getJson<GetInvitationsResDto>("/organizations/my-invitations");
