@@ -377,7 +377,7 @@ export async function cancelPaymentWithContext(
 ) {
   console.log("cancelPaymentWithContext", payload);
   return postJson<CancelPaymentWithContextReq, CancelPaymentRes>(
-    "/transaction/cancel-payment-with-context",
+    `/Transaction/cancel-payment-with-context?`,
     payload
   );
 }
@@ -463,7 +463,7 @@ export function resetPassword(req: ResetPasswordReq) {
 //   successUrl: string;
 //   cancelUrl: string;
 //   context?: {
-//     PlanId?: number;
+//     PlanId?: number; 
 //     OrgId?: string;
 //     AutoRenew?: boolean;
 //     MembershipId?: string;
@@ -621,6 +621,7 @@ export function createMap(req: CreateMapRequest) {
     InitialZoom: req.initialZoom,
     BaseMapProvider: req.baseMapProvider,
   };
+  console.log("createMap: ", body);
   return postJson<typeof body, CreateMapResponse>("/maps", body);
 }
 
@@ -667,6 +668,29 @@ export async function getOrganizationMaps(orgId: string): Promise<MapDto[]> {
 }
 
 // ==== Map detail types ====
+export interface RawLayer {
+  id: string;
+  name: string;
+  layerTypeId: number;
+  layerTypeName: string;
+  layerTypeIcon: string;
+  sourceName: string;
+  filePath: string;
+  layerData: string;
+  layerStyle: string;
+  isPublic: boolean;
+  createdAt: string;
+  updatedAt: string | null;
+  ownerId: string;
+  ownerName: string;
+  mapLayerId: string;
+  isVisible: boolean;
+  zIndex: number;
+  layerOrder: number;
+  customStyle: string;
+  filterConfig: string;
+}
+
 export interface MapDetail {
   id: string;
   mapName: string;
@@ -675,6 +699,7 @@ export interface MapDetail {
   initialLatitude: number;
   initialLongitude: number;
   initialZoom: number;
+  layers: RawLayer[];
 }
 
 type MapDetailRawWrapped = {
@@ -686,6 +711,7 @@ type MapDetailRawWrapped = {
     initialLatitude: number;
     initialLongitude: number;
     initialZoom: number;
+    layers: RawLayer[];
   };
 };
 
@@ -702,6 +728,7 @@ export async function getMapDetail(mapId: string): Promise<MapDetail> {
       initialLatitude: m.initialLatitude,
       initialLongitude: m.initialLongitude,
       initialZoom: m.initialZoom,
+      layers: m.layers,
     };
   }
 
@@ -791,6 +818,22 @@ export async function createMapTemplateFromGeoJson(args: {
   if (args.layerName) form.append("layerName", args.layerName);
   if (args.category) form.append("category", args.category);
   form.append("isPublic", String(!!args.isPublic));
+  async function formDataToObject(form: FormData) {
+    const obj: Record<string, string | { name: string; size: number; type: string }> = {};
+    for (const [key, value] of form.entries()) {
+      if (value instanceof File) {
+        obj[key] = {
+          name: value.name,
+          size: value.size,
+          type: value.type,
+        };
+      } else {
+        obj[key] = value;
+      }
+    }
+    return obj;
+  }
+  
   return apiFetch<CreateMapTemplateResponse>("/maps/create-template", {
     method: "POST",
     body: form,
@@ -821,22 +864,32 @@ export async function toggleFavoriteTemplate(templateId: string, favorite: boole
 
 /* ---------- LAYERS ---------- */
 export interface AddLayerToMapRequest {
-  layerId?: string;
-  layerName?: string;
-  sourceType?: string;
-  styleJson?: unknown;
+  layerId: string;
+  isVisible?: boolean;
+  zIndex?: number;
+  customStyle?: string | null;
+  filterConfig?: string | null;
 }
 export interface AddLayerToMapResponse { mapLayerId: string; }
 export function addLayerToMap(mapId: string, body: AddLayerToMapRequest) {
   return postJson<AddLayerToMapRequest, AddLayerToMapResponse>(`/maps/${mapId}/layers`, body);
 }
 
-export interface UpdateMapLayerRequest { layerName?: string; styleJson?: unknown; visible?: boolean; opacity?: number; }
-export interface UpdateMapLayerResponse { mapLayerId: string; }
+export interface UpdateMapLayerRequest {
+  isVisible?: boolean | null;
+  zIndex?: number | null;
+  customStyle?: string | null;
+  filterConfig?: string | null;
+}
+
+export interface UpdateMapLayerResponse { message?: string; }
+
 export function updateMapLayer(mapId: string, layerId: string, body: UpdateMapLayerRequest) {
   return putJson<UpdateMapLayerRequest, UpdateMapLayerResponse>(`/maps/${mapId}/layers/${layerId}`, body);
 }
-export interface RemoveLayerFromMapResponse { removed?: boolean; }
+
+export interface RemoveLayerFromMapResponse { message?: string; }
+
 export function removeLayerFromMap(mapId: string, layerId: string) {
   return delJson<RemoveLayerFromMapResponse>(`/maps/${mapId}/layers/${layerId}`);
 }
@@ -861,17 +914,35 @@ export interface MapFeatureResponse {
   featureId: string;
   mapId: string;
   layerId?: string | null;
-  category?: string | null;
-  geometry?: unknown;
-  properties?: Record<string, unknown>;
+  name?: string | null;
+  description?: string | null;
+  featureCategory: "Data" | "Annotation";
+  annotationType?: "Marker" | "Highlighter" | "Text" | "Note" | "Link" | "Video" | null;
+  geometryType: "Point" | "LineString" | "Polygon" | "Circle";
+  coordinates: string;
+  properties?: string | null;
+  style?: string | null;
+  isVisible: boolean;
+  zIndex: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string | null;
 }
+
 export interface CreateMapFeatureRequest {
-  mapId?: string;
-  layerId?: string;
-  category?: string;
-  geometry: unknown;
-  properties?: Record<string, unknown>;
+  layerId?: string | null;
+  name?: string | null;
+  description?: string | null;
+  featureCategory: "Data" | "Annotation";
+  annotationType?: "Marker" | "Highlighter" | "Text" | "Note" | "Link" | "Video" | null;
+  geometryType: "Point" | "LineString" | "Polygon" | "Circle";
+  coordinates: string;
+  properties?: string | null;
+  style?: string | null;
+  isVisible?: boolean | null;
+  zIndex?: number | null;
 }
+
 export function createMapFeature(mapId: string, body: CreateMapFeatureRequest) {
   return postJson<CreateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features`, body);
 }
@@ -884,7 +955,19 @@ export function getMapFeaturesByCategory(mapId: string, category: string) {
 export function getMapFeaturesByLayer(mapId: string, layerId: string) {
   return getJson<MapFeatureResponse[]>(`/maps/${mapId}/features/by-layer/${layerId}`);
 }
-export interface UpdateMapFeatureRequest { layerId?: string; category?: string; geometry?: unknown; properties?: Record<string, unknown>; }
+export interface UpdateMapFeatureRequest {
+  name?: string | null;
+  description?: string | null;
+  featureCategory?: "Data" | "Annotation" | null;
+  annotationType?: "Marker" | "Highlighter" | "Text" | "Note" | "Link" | "Video" | null;
+  geometryType?: "Point" | "LineString" | "Polygon" | "Circle" | null;
+  coordinates?: string | null;
+  properties?: string | null;
+  style?: string | null;
+  isVisible?: boolean | null;
+  zIndex?: number | null;
+  layerId?: string | null;
+}
 export function updateMapFeature(mapId: string, featureId: string, body: UpdateMapFeatureRequest) {
   return putJson<UpdateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features/${featureId}`, body);
 }
@@ -892,6 +975,9 @@ export function deleteMapFeature(mapId: string, featureId: string) {
   return delJson<{ deleted: boolean }>(`/maps/${mapId}/features/${featureId}`);
 }
 
+export function getMapFeatureById(mapId: string, featureId: string) {
+  return getJson<MapFeatureResponse>(`/maps/${mapId}/features/${featureId}`);
+}
 
 export type OrganizationReqDto = {
 
@@ -1005,7 +1091,7 @@ export function deleteOrganization(orgId: string) {
 
 /* ------------------ My orgs & invitations ------------------ */
 export function getMyOrganizations() {
-  return getJson<GetMyOrganizationsResDto>("/organizations/mine");
+  return getJson<GetMyOrganizationsResDto>("/organizations");
 }
 export function getMyInvitations() {
   return getJson<GetInvitationsResDto>("/organizations/my-invitations");

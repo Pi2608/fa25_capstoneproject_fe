@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
-import type { Map as LMap, TileLayer, LatLngTuple, Layer, FeatureGroup } from "leaflet";
+import type { Map as LMap, TileLayer, LatLngTuple, Layer, FeatureGroup, LatLng, LatLngBounds } from "leaflet";
 import {
   getMapDetail,
   type MapDetail,
@@ -11,7 +11,27 @@ import {
   type UpdateMapRequest,
   getActiveUserAccessTools,
   type UserAccessTool,
+  getMapById,
+  type RawLayer,
+  type UpdateMapFeatureRequest,
 } from "@/lib/api";
+import type { Position } from "geojson";
+import { 
+  saveFeature, 
+  loadFeaturesToMap, 
+  deleteFeatureFromDB, 
+  type FeatureData, 
+  renderAllDataLayers, 
+  updateLayerStyle, 
+  updateFeatureStyle,
+  handleLayerVisibilityChange,
+  handleFeatureVisibilityChange,
+  handleUpdateLayerStyle,
+  handleUpdateFeatureStyle,
+  handleDeleteFeature,
+  handleSelectLayer
+} from "@/utils/mapUtils";
+import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
 
 type BaseKey = "osm" | "sat" | "dark";
 
@@ -25,13 +45,14 @@ type MapWithPM = LMap & {
       drawPolygon?: boolean;
       drawCircle?: boolean;
       drawCircleMarker?: boolean;
+      drawText?: boolean;
       editMode?: boolean;
       dragMode?: boolean;
       cutPolygon?: boolean;
       removalMode?: boolean;
       rotateMode?: boolean;
     }) => void;
-    enableDraw: (
+      enableDraw: (
       shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text"
     ) => void;
     toggleGlobalEditMode: () => void;
@@ -57,23 +78,51 @@ function normalizeToolName(
   return null;
 }
 
+interface GeoJSONLayer extends Layer {
+  feature?: {
+    type?: string;
+    properties?: Record<string, unknown>;
+    geometry?: {
+      type?: string;
+      coordinates?: Position | Position[] | Position[][] | Position[][][];
+    };
+  };
+}
+
+interface ExtendedLayer extends GeoJSONLayer {
+  _mRadius?: number;                                // Circle
+  _latlng?: LatLng;                                 // Marker
+  _latlngs?: LatLng[] | LatLng[][] | LatLng[][][];  // Polyline / Polygon / MultiPolygon
+  _bounds?: LatLngBounds;                           // Rectangle
+}
+
 export default function EditMapPage() {
   const params = useParams<{ mapId: string }>();
   const mapId = params?.mapId ?? "";
   const sp = useSearchParams();
 
   const [detail, setDetail] = useState<MapDetail | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(true);
   const [err, setErr] = useState<string | null>(null);
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [busySaveMeta, setBusySaveMeta] = useState<boolean>(false);
+  const [busySaveView, setBusySaveView] = useState<boolean>(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const [name, setName] = useState<string>("");
+  const [description, setDescription] = useState<string>("");
   const [baseKey, setBaseKey] = useState<BaseKey>("osm");
+  const [showStylePanel, setShowStylePanel] = useState(false);
+  const [showDataLayersPanel, setShowDataLayersPanel] = useState(true);
+  const [features, setFeatures] = useState<FeatureData[]>([]);
+  const [locating, setLocating] = useState(false);
+  const [selectedLayer, setSelectedLayer] = useState<FeatureData | RawLayer | null>(null);
 
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapWithPM | null>(null);
   const baseRef = useRef<TileLayer | null>(null);
   const sketchRef = useRef<FeatureGroup | null>(null);
+  const dataLayerRefs = useRef<Map<string, L.Layer>>(new Map());
 
   const [toolsLoading, setToolsLoading] = useState(true);
   const [allowed, setAllowed] = useState<Set<string>>(new Set());
@@ -91,9 +140,49 @@ export default function EditMapPage() {
     };
   }, [allowed]);
 
-  const [busySaveMeta, setBusySaveMeta] = useState(false);
-  const [busySaveView, setBusySaveView] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const applyBaseLayer = useCallback((key: BaseKey) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (baseRef.current) {
+      map.removeLayer(baseRef.current);
+      baseRef.current = null;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      const L = (await import("leaflet")).default;
+      if (cancelled) return;
+      
+      let layer: TileLayer;
+      if (key === "sat") {
+        layer = L.tileLayer(
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          { maxZoom: 20, attribution: "Tiles © Esri" }
+        );
+      } else if (key === "dark") {
+        layer = L.tileLayer(
+          "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+          { maxZoom: 20, attribution: "© OpenStreetMap contributors © CARTO" }
+        );
+      } else {
+        layer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+          maxZoom: 20,
+          attribution: "© OpenStreetMap contributors",
+        });
+      }
+      
+      if (!cancelled && map) {
+        layer.addTo(map);
+        baseRef.current = layer;
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!mapId) return;
@@ -107,7 +196,13 @@ export default function EditMapPage() {
         setDetail(m);
         setName(m.mapName ?? "");
         setDescription(m.description ?? "");
-        setBaseKey(m.baseMapProvider === "Satellite" ? "sat" : m.baseMapProvider === "Dark" ? "dark" : "osm");
+        setBaseKey(
+          m.baseMapProvider === "Satellite"
+            ? "sat"
+            : m.baseMapProvider === "Dark"
+              ? "dark"
+              : "osm"
+        );
       } catch (e) {
         if (!alive) return;
         setErr(e instanceof Error ? e.message : "Không tải được bản đồ");
@@ -143,89 +238,183 @@ export default function EditMapPage() {
     };
   }, []);
 
-  const applyBaseLayer = useCallback((key: BaseKey) => {
-    const map = mapRef.current;
-    if (!map) return;
-    if (baseRef.current) {
-      map.removeLayer(baseRef.current);
-      baseRef.current = null;
-    }
-    (async () => {
-      const L = (await import("leaflet")).default;
-      let layer: TileLayer;
-      if (key === "sat") {
-        layer = L.tileLayer(
-          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-          { maxZoom: 20, attribution: "Tiles © Esri" }
-        );
-      } else if (key === "dark") {
-        layer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-          maxZoom: 20,
-          attribution: "© OpenStreetMap contributors © CARTO",
-        });
-      } else {
-        layer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          maxZoom: 20,
-          attribution: "© OpenStreetMap contributors",
-        });
-      }
-      layer.addTo(map);
-      baseRef.current = layer;
-    })();
-  }, []);
-
   useEffect(() => {
-    if (!detail || !mapEl.current || mapRef.current) return;
-    const el = mapEl.current;
-    (async () => {
-      const L = (await import("leaflet")).default;
-      await import("@geoman-io/leaflet-geoman-free");
+      if (!detail || !mapEl.current || mapRef.current) return;
 
-      const center: LatLngTuple = [detail.initialLatitude, detail.initialLongitude];
+      let alive = true;
+      const el = mapEl.current;
 
-      const map = L.map(el as HTMLElement, { zoomControl: false }).setView(center, detail.initialZoom) as MapWithPM;
-      mapRef.current = map;
+      (async () => {
+        const L = (await import("leaflet")).default;
+        await import("@geoman-io/leaflet-geoman-free");
+        if (!alive || !el) return;
 
-      applyBaseLayer(detail.baseMapProvider === "Satellite" ? "sat" : detail.baseMapProvider === "Dark" ? "dark" : "osm");
+        const map = L.map(el, { zoomControl: false })
+          .setView([detail.initialLatitude, detail.initialLongitude], detail.initialZoom) as MapWithPM;
+
+        mapRef.current = map;
+        if (!alive) return;
+
+        applyBaseLayer(
+          detail.baseMapProvider === "Satellite"
+            ? "sat"
+            : detail.baseMapProvider === "Dark"
+            ? "dark"
+            : "osm"
+        );
 
       const sketch = L.featureGroup().addTo(map);
       sketchRef.current = sketch;
 
+      const loadedFeatures = await loadFeaturesToMap(
+        detail.id,
+        L,
+        sketch
+      );
+      setFeatures(loadedFeatures);
+
       map.pm.addControls({
-        position: "topleft",
         drawMarker: false,
         drawPolyline: false,
         drawRectangle: false,
         drawPolygon: false,
         drawCircle: false,
         drawCircleMarker: false,
+        drawText: false,
         editMode: false,
         dragMode: false,
         cutPolygon: false,
-        removalMode: false,
         rotateMode: false,
+        removalMode: false,
       });
 
-      map.on("pm:create", (e: PMCreateEvent) => {
+      map.on("pm:create", async (e: PMCreateEvent) => {
         sketch.addLayer(e.layer);
+        await saveFeature(
+          detail.id,
+          detail?.layers[0].id,
+          e.layer as ExtendedLayer,
+          features,
+          setFeatures
+        );
       });
     })();
 
     return () => {
+      alive = false;
       mapRef.current?.remove();
-      mapRef.current = null;
-      baseRef.current = null;
-      sketchRef.current = null;
     };
-  }, [detail, applyBaseLayer]);
+  }, [detail]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !detail?.layers) return;
+
+    const abortController = new AbortController();
+
+    renderAllDataLayers(map, detail.layers, dataLayerRefs, abortController.signal);
+
+    return () => {
+      abortController.abort();
+    };
+  }, [detail?.layers]);
 
   useEffect(() => {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
 
-  const clearSketch = useCallback(() => {
-    sketchRef.current?.clearLayers();
+  // Geoman custom actions
+  const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text" ) => {
+    mapRef.current?.pm.enableDraw(shape);
+  };
+
+  const toggleEdit = () => {
+    mapRef.current?.pm.toggleGlobalEditMode();
+  };
+
+  const toggleDelete = () => {
+    mapRef.current?.pm.toggleGlobalRemovalMode();
+  };
+
+  const toggleDrag = () => {
+    mapRef.current?.pm.toggleGlobalDragMode();
+  };
+
+  const enableCutPolygon = () => {
+    mapRef.current?.pm.enableGlobalCutMode();
+  };
+
+  const toggleRotate = () => {
+    mapRef.current?.pm.toggleGlobalRotateMode();
+  };
+
+  const goMyLocation = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const target: LatLngTuple = [pos.coords.latitude, pos.coords.longitude];
+        map.stop();
+        map.invalidateSize();
+        map.setView(target, Math.max(map.getZoom(), 16));
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    );
   }, []);
+
+  const clearSketch = useCallback(async () => {
+    if (!detail) return;
+  
+    for (const feature of features) {
+      if (feature.featureId) {
+        await deleteFeatureFromDB(detail.id, feature.featureId);
+      }
+    }
+    
+    sketchRef.current?.clearLayers();
+      setFeatures([]);
+  }, [detail, features]);
+
+  // CRUD operation
+  const onLayerVisibilityChange = useCallback(async (layerId: string, isVisible: boolean) => {
+    if (!detail || !mapRef.current) return;
+    await handleLayerVisibilityChange(detail.id, layerId, isVisible, mapRef.current, detail.layers, dataLayerRefs);
+  }, [detail]);
+
+  const onFeatureVisibilityChange = useCallback(async (featureId: string, isVisible: boolean) => {
+    if (!detail) return;
+    await handleFeatureVisibilityChange(detail.id, featureId, isVisible, features, setFeatures, mapRef.current, sketchRef.current);
+  }, [detail, features]);
+
+  const onSelectLayer = useCallback((layer: FeatureData | RawLayer) => {
+    handleSelectLayer(layer, setSelectedLayer, setShowStylePanel);
+  }, []);
+
+  const onUpdateLayer = useCallback(async (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => {
+    if (!detail || !mapRef.current) return;
+    await handleUpdateLayerStyle(detail.id, layerId, updates, mapRef.current, detail.layers, dataLayerRefs);
+  }, [detail]);
+
+  const onUpdateFeature = useCallback(async (featureId: string, updates: UpdateMapFeatureRequest) => {
+    if (!detail) return;
+    // Convert UpdateMapFeatureRequest to the type expected by handleUpdateFeatureStyle
+    const convertedUpdates = {
+      name: updates.name ?? undefined,
+      style: updates.style ?? undefined,
+      properties: updates.properties ?? undefined,
+      isVisible: updates.isVisible ?? undefined,
+      zIndex: updates.zIndex ?? undefined,
+    };
+    await handleUpdateFeatureStyle(detail.id, featureId, convertedUpdates);
+  }, [detail]);
+
+  const onDeleteFeature = useCallback(async (featureId: string) => {
+    if (!detail) return;
+    await handleDeleteFeature(detail.id, featureId, features, setFeatures, mapRef.current, sketchRef.current);
+  }, [detail, features]);
 
   const saveMeta = useCallback(async () => {
     if (!detail) return;
@@ -235,7 +424,8 @@ export default function EditMapPage() {
       const body: UpdateMapRequest = {
         name: (name ?? "").trim() || "Untitled Map",
         description: (description ?? "").trim() || undefined,
-        baseMapProvider: baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
+        baseMapProvider:
+          baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
       };
       await updateMap(detail.id, body);
       setFeedback("Đã lưu thông tin bản đồ.");
@@ -243,7 +433,7 @@ export default function EditMapPage() {
       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveMeta(false);
-      setTimeout(() => setFeedback(null), 1600);
+      setTimeout(() => setFeedback(null), 1800);
     }
   }, [detail, name, description, baseKey]);
 
@@ -253,7 +443,10 @@ export default function EditMapPage() {
     setFeedback(null);
     try {
       const c = mapRef.current.getCenter();
-      const view = { center: [c.lat, c.lng] as [number, number], zoom: mapRef.current.getZoom() };
+      const view = {
+        center: [c.lat, c.lng] as [number, number],
+        zoom: mapRef.current.getZoom(),
+      };
       const body: UpdateMapRequest = { viewState: JSON.stringify(view) };
       await updateMap(detail.id, body);
       setFeedback("Đã lưu vị trí hiển thị.");
@@ -261,15 +454,9 @@ export default function EditMapPage() {
       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveView(false);
-      setTimeout(() => setFeedback(null), 1600);
+      setTimeout(() => setFeedback(null), 1800);
     }
   }, [detail]);
-
-  const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text") => {
-    mapRef.current?.pm.enableDraw(shape);
-  };
-  const enableCutPolygon = () => mapRef.current?.pm.enableGlobalCutMode();
-  const toggleRotate = () => mapRef.current?.pm.toggleGlobalRotateMode?.();
 
   const GuardBtn: React.FC<
     React.PropsWithChildren<{ can: boolean; title: string; onClick?: () => void; disabled?: boolean }>
@@ -410,10 +597,28 @@ export default function EditMapPage() {
         </div>
       </div>
 
-      {loading && <div className="p-4 text-zinc-400">Đang tải…</div>}
-      {err && <div className="p-4 text-red-400">{err}</div>}
-
       <div ref={mapEl} className="absolute inset-0" />
+
+      <DataLayersPanel
+        features={features}
+        layers={detail?.layers || []} 
+        showDataLayersPanel={showDataLayersPanel}
+        setShowDataLayersPanel={setShowDataLayersPanel}
+        map={mapRef.current}
+        dataLayerRefs={dataLayerRefs}
+        onLayerVisibilityChange={onLayerVisibilityChange}
+        onFeatureVisibilityChange={onFeatureVisibilityChange}
+        onSelectLayer={onSelectLayer}
+        onDeleteFeature={onDeleteFeature}
+      />
+
+      <StylePanel
+        selectedLayer={selectedLayer}
+        showStylePanel={showStylePanel}
+        setShowStylePanel={setShowStylePanel}
+        onUpdateLayer={onUpdateLayer}
+        onUpdateFeature={onUpdateFeature}
+      />
 
       <style jsx global>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
