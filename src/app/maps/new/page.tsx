@@ -11,7 +11,7 @@ import {
   type UserAccessTool,
 } from "@/lib/api";
 import type { FeatureCollection as GeoFeatureCollection, Geometry, GeoJsonProperties, Position } from "geojson";
-import { addLayerToList, removeLayerFromList, toggleLayerVisibility, renameLayer, LayerInfo, ExtendedLayer } from "@/lib/mapUtils";
+import { addLayerToList, removeLayerFromList, toggleLayerVisibility, renameLayer, LayerInfo, ExtendedLayer } from "@/utils/mapUtils";
 
 type LNS = typeof import("leaflet");
 type LMap = import("leaflet").Map;
