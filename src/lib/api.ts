@@ -161,6 +161,10 @@ export function delJson<TRes>(path: string, init?: RequestInit) {
   return apiFetch<TRes>(path, { ...(init ?? {}), method: "DELETE" });
 }
 
+export function patchJson<TReq, TRes>(path: string, body: TReq, init?: RequestInit) {
+  return apiFetch<TRes>(path, { ...(init ?? {}), method: "PATCH", body: JSON.stringify(body) });
+}
+
 export type LoginRequest = { email: string; password: string };
 export type LoginResponse = { accessToken?: string; token?: string; refreshToken?: string };
 
@@ -596,10 +600,9 @@ export interface CreateMapRequest {
   name: string;
   description?: string;
   isPublic: boolean;
-  initialLatitude: number;
-  initialLongitude: number;
-  initialZoom: number;
-  baseMapProvider: BaseMapProvider;
+  defaultBounds?: string; // GeoJSON Polygon or null
+  viewState?: string; // JSON object {"center":[lat,lng],"zoom":zoom}
+  baseMapProvider?: BaseMapProvider;
 }
 
 export interface CreateMapResponse {
@@ -609,19 +612,41 @@ export interface CreateMapResponse {
 }
 
 export function createMap(req: CreateMapRequest) {
+  let center: [number, number] = [10.78, 106.69]; 
+  let zoom = 13;
+
+  if (req.viewState) {
+    try {
+      const vs = JSON.parse(req.viewState) as Partial<ViewState>;
+      const c = vs?.center;
+      const z = vs?.zoom;
+      if (
+        Array.isArray(c) &&
+        c.length === 2 &&
+        typeof c[0] === "number" &&
+        typeof c[1] === "number"
+      ) {
+        center = [c[0], c[1]];
+      }
+      if (typeof z === "number") {
+        zoom = z;
+      }
+    } catch {
+
+    }
+  }
+
   const body = {
     OrgId: req.orgId,
-    OrganizationId: req.orgId,
-    orgId: req.orgId,
+    OrganizationId: req.orgId, 
     Name: req.name,
-    Description: req.description,
+    Description: req.description ?? null,
     IsPublic: req.isPublic,
-    InitialLatitude: req.initialLatitude,
-    InitialLongitude: req.initialLongitude,
-    InitialZoom: req.initialZoom,
-    BaseMapProvider: req.baseMapProvider,
+    ViewState: JSON.stringify({ Center: center, Zoom: zoom }),
+    BaseMapProvider: req.baseMapProvider ?? "OSM",
+    GeographicBounds: req.defaultBounds ?? null, 
   };
-  console.log("createMap: ", body);
+
   return postJson<typeof body, CreateMapResponse>("/maps", body);
 }
 
@@ -707,7 +732,11 @@ type MapDetailRawWrapped = {
     id: string;
     name: string;
     description?: string | null;
-    baseMapProvider: BaseMapProvider;
+    baseLayer: BaseMapProvider;
+    viewState: {
+      center?: [number, number];
+      zoom?: number;
+    }
     initialLatitude: number;
     initialLongitude: number;
     initialZoom: number;
@@ -724,15 +753,76 @@ export async function getMapDetail(mapId: string): Promise<MapDetail> {
       id: m.id,
       mapName: m.name,
       description: m.description ?? "",
-      baseMapProvider: m.baseMapProvider,
+      baseMapProvider: m.baseLayer,
       initialLatitude: m.initialLatitude,
       initialLongitude: m.initialLongitude,
-      initialZoom: m.initialZoom,
-      layers: m.layers,
+      initialZoom: m.viewState.zoom ?? 10,
+      layers: m.layers ?? [],
     };
   }
 
   return res as MapDetail;
+}
+/* ---------- ZONE OPERATIONS ---------- */
+
+/**
+ * Copy a feature/zone from one layer to another
+ */
+export async function copyZoneToLayer(
+  mapId: string,
+  sourceLayerId: string,
+  targetLayerId: string,
+  featureIndex: number
+): Promise<boolean> {
+  try {
+    const response = await postJson(
+      `/maps/${mapId}/layers/${sourceLayerId}/copy-feature`,
+      {
+        targetLayerId,
+        featureIndex
+      }
+    );
+    return true;
+  } catch (error) {
+    console.error('Failed to copy zone to layer:', error);
+    return false;
+  }
+}
+
+/**
+ * Delete a feature/zone from a layer's GeoJSON data
+ */
+export async function deleteZoneFromLayer(
+  mapId: string,
+  layerId: string,
+  featureIndex: number
+): Promise<boolean> {
+  try {
+    await delJson(`/maps/${mapId}/layers/${layerId}/features/${featureIndex}`);
+    return true;
+  } catch (error) {
+    console.error('Failed to delete zone from layer:', error);
+    return false;
+  }
+}
+
+/**
+ * Update layer data (for manual GeoJSON updates)
+ */
+export async function updateLayerData(
+  mapId: string,
+  layerId: string,
+  geoJsonData: GeoJSON.FeatureCollection
+): Promise<boolean> {
+  try {
+    await putJson(`/maps/${mapId}/layers/${layerId}/data`, {
+      layerData: JSON.stringify(geoJsonData)
+    });
+    return true;
+  } catch (error) {
+    console.error('Failed to update layer data:', error);
+    return false;
+  }
 }
 
 /* ---------- TEMPLATES ---------- */
@@ -833,7 +923,7 @@ export async function createMapTemplateFromGeoJson(args: {
     }
     return obj;
   }
-  
+
   return apiFetch<CreateMapTemplateResponse>("/maps/create-template", {
     method: "POST",
     body: form,
@@ -885,7 +975,7 @@ export interface UpdateMapLayerRequest {
 export interface UpdateMapLayerResponse { message?: string; }
 
 export function updateMapLayer(mapId: string, layerId: string, body: UpdateMapLayerRequest) {
-  return putJson<UpdateMapLayerRequest, UpdateMapLayerResponse>(`/maps/${mapId}/layers/${layerId}`, body);
+  return patchJson<UpdateMapLayerRequest, UpdateMapLayerResponse>(`/maps/${mapId}/layers/${layerId}`, body);
 }
 
 export interface RemoveLayerFromMapResponse { message?: string; }
@@ -1190,4 +1280,284 @@ export async function askAI(messages: AIMessage[]): Promise<string | null> {
   } catch {
     return null;
   }
+}
+
+// ====================== USER APIs ======================
+export interface UpdateUserPersonalInfoRequest {
+  fullName: string;
+  phone: string;
+}
+
+export interface UpdateUserPersonalInfoResponse {
+  userId: string;
+  email: string;
+  fullName: string;
+  phone: string;
+  updatedAt: string;
+}
+
+export async function updateMyPersonalInfo(
+  data: UpdateUserPersonalInfoRequest
+): Promise<UpdateUserPersonalInfoResponse> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/user/me/personal-info`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${localStorage.getItem("token")}`,
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(err || "Failed to update personal info");
+  }
+
+  return res.json();
+}
+
+/* ------------------ Map Layer Operations ------------------ */
+
+export type LayerInfo = {
+  layerId: string;
+  layerName: string;
+  description?: string;
+  layerType: string;
+  featureCount: number;
+  isVisible: boolean;
+  zIndex: number;
+};
+
+export type CopyFeatureToLayerRequest = {
+  targetLayerId?: string; // For existing layer
+  newLayerName?: string; // For new layer
+  featureIndex: number;
+};
+
+export type CopyFeatureToLayerResponse = {
+  success: boolean;
+  message: string;
+  targetLayerId: string;
+  targetLayerName: string;
+  targetLayerFeatureCount: number;
+  newLayerCreated: boolean;
+};
+
+export async function getMapLayers(mapId: string): Promise<LayerInfo[]> {
+  const res = await getJson<LayerInfo[]>(`/maps/${mapId}/layers`);
+  return res || [];
+}
+
+export async function copyFeatureToLayer(
+  mapId: string,
+  sourceLayerId: string,
+  request: CopyFeatureToLayerRequest
+): Promise<CopyFeatureToLayerResponse> {
+  console.log("🌐 API call: copyFeatureToLayer");
+  console.log("📍 URL:", `/maps/${mapId}/layers/${sourceLayerId}/copy-feature`);
+  console.log("📦 Request body:", request);
+
+  const res = await postJson<CopyFeatureToLayerRequest, CopyFeatureToLayerResponse>(
+    `/maps/${mapId}/layers/${sourceLayerId}/copy-feature`,
+    request
+  );
+
+  console.log("✅ API response:", res);
+  return res;
+}
+
+export async function deleteFeatureFromLayer(
+  mapId: string,
+  layerId: string,
+  featureIndex: number
+): Promise<void> {
+  await delJson(`/maps/${mapId}/layers/${layerId}/features/${featureIndex}`);
+}
+
+/*  USAGE / QUOTA (per-user in org)  */
+
+export type UsageResourceType =
+  | "Maps"
+  | "Layers"
+  | "Members"
+  | "StorageBytes"
+  | string;
+
+export interface CheckQuotaRequest {
+  resourceType: UsageResourceType;
+  requestedAmount: number;
+}
+
+export interface CheckQuotaResponse {
+  isAllowed: boolean;
+  resourceType?: UsageResourceType;
+  requestedAmount?: number;
+  remaining?: number;
+  limit?: number | null;
+  message?: string;
+}
+
+export interface UserUsageResponse {
+  userId?: string;
+  orgId?: string;
+  period?: string | null;
+  lastReset?: string | null;
+
+  mapsUsed?: number;
+  mapsLimit?: number | null;
+  layersUsed?: number;
+  layersLimit?: number | null;
+  membersUsed?: number;
+  membersLimit?: number | null;
+  storageUsedBytes?: number;
+  storageLimitBytes?: number | null;
+
+  [k: string]: unknown;
+}
+
+export function getUserUsage(orgId: string) {
+  return getJson<UserUsageResponse>(`/usage/user/${encodeURIComponent(orgId)}`);
+}
+
+export function checkUserQuota(orgId: string, req: CheckQuotaRequest) {
+  return postJson<CheckQuotaRequest, CheckQuotaResponse>(
+    `/usage/user/${encodeURIComponent(orgId)}/check-quota`,
+    req
+  );
+}
+
+export function consumeUserQuota(
+  orgId: string,
+  req: CheckQuotaRequest
+) {
+  return postJson<CheckQuotaRequest, { success: true; message?: string }>(
+    `/usage/user/${encodeURIComponent(orgId)}/consume`,
+    req
+  );
+}
+
+/* (Notifications)*/
+
+export type NotificationType =
+  | "Info"
+  | "Warning"
+  | "Success"
+  | "Error"
+  | string;
+
+export interface NotificationItem {
+  notificationId: number;
+  title?: string;
+  message?: string;
+  type?: NotificationType;
+  isRead?: boolean;
+  createdAt?: string;
+  linkUrl?: string | null;
+  orgId?: string | null;
+}
+
+export interface GetUserNotificationsResponse {
+  notifications: NotificationItem[];
+  page: number;
+  pageSize: number;
+  totalItems?: number;
+  totalPages?: number;
+}
+
+export interface MarkNotificationReadResponse {
+  ok?: boolean;
+  notificationId?: number;
+  message?: string;
+}
+
+export interface MarkAllNotificationsReadResponse {
+  ok?: boolean;
+  affected?: number;
+  message?: string;
+}
+
+function asNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "" && !Number.isNaN(Number(v))) return Number(v);
+  return null;
+}
+
+function unwrapNotificationsEnvelope(res: unknown): GetUserNotificationsResponse {
+  const base: GetUserNotificationsResponse = {
+    notifications: [],
+    page: 1,
+    pageSize: 20,
+    totalItems: undefined,
+    totalPages: undefined,
+  };
+
+  if (res && typeof res === "object") {
+    const o = res as Record<string, unknown>;
+    const list =
+      (Array.isArray(o.notifications) ? (o.notifications as unknown[]) :
+        Array.isArray(o.items) ? (o.items as unknown[]) :
+          Array.isArray(o.data) ? (o.data as unknown[]) : []) as unknown[];
+
+    const mapped: NotificationItem[] = list.map((x) => {
+      const it = (x ?? {}) as Record<string, unknown>;
+      const id =
+        asNumber(it.notificationId) ??
+        asNumber(it.id) ??
+        0;
+      return {
+        notificationId: id ?? 0,
+        title: typeof it.title === "string" ? it.title : undefined,
+        message: typeof it.message === "string" ? it.message : undefined,
+        type: typeof it.type === "string" ? it.type : undefined,
+        isRead: typeof it.isRead === "boolean" ? it.isRead : undefined,
+        createdAt: typeof it.createdAt === "string" ? it.createdAt : undefined,
+        linkUrl: typeof it.linkUrl === "string" ? it.linkUrl : null,
+        orgId: typeof it.orgId === "string" ? it.orgId : null,
+      };
+    });
+
+    const page = asNumber(o.page) ?? 1;
+    const pageSize = asNumber(o.pageSize) ?? 20;
+    const totalItems = asNumber(o.totalItems) ?? asNumber(o.total);
+    const totalPages = asNumber(o.totalPages);
+
+    return {
+      notifications: mapped,
+      page,
+      pageSize,
+      totalItems: totalItems ?? undefined,
+      totalPages: totalPages ?? undefined,
+    };
+  }
+
+  return base;
+}
+
+export async function getUserNotifications(page = 1, pageSize = 20): Promise<GetUserNotificationsResponse> {
+  const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) }).toString();
+  const res = await getJson<unknown>(`/notifications?${q}`);
+  return unwrapNotificationsEnvelope(res);
+}
+
+export async function getUnreadNotificationCount(): Promise<number> {
+  const res = await getJson<unknown>(`/notifications/unread-count`);
+  if (res && typeof res === "object") {
+    const o = res as Record<string, unknown>;
+    const n = o.unreadCount;
+    if (typeof n === "number" && Number.isFinite(n)) return n;
+    if (typeof n === "string" && n.trim() !== "" && !Number.isNaN(Number(n))) return Number(n);
+  }
+  return 0;
+}
+
+export function markNotificationAsRead(notificationId: number) {
+  return apiFetch<MarkNotificationReadResponse>(`/notifications/${encodeURIComponent(notificationId)}/read`, {
+    method: "PUT",
+  });
+}
+
+export function markAllNotificationsAsRead() {
+  return apiFetch<MarkAllNotificationsReadResponse>(`/notifications/mark-all-read`, {
+    method: "PUT",
+  });
 }

@@ -10,6 +10,7 @@ import {
   getJson,
   getMyOrganizations,
   type MyOrganizationDto,
+  getUnreadNotificationCount,
 } from "@/lib/api";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
 
@@ -18,40 +19,52 @@ type MyMembership = {
   status: "active" | "expired" | "pending" | string;
 };
 
-const SidebarLink = ({ href, label }: { href: string; label: string }) => {
+const SidebarLink = ({ href, label, right }: { href: string; label: string; right?: ReactNode }) => {
   const pathname = usePathname();
   const active = pathname === href;
-
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
       className={[
-        "relative block px-3 py-2 text-sm rounded-lg transition-colors",
+        "relative flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors",
         "outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60",
         active
           ? "text-emerald-300 bg-emerald-500/10 ring-1 ring-emerald-400/30"
           : "text-zinc-300 hover:text-white hover:bg-white/5",
       ].join(" ")}
     >
-      {active && (
-        <span
-          aria-hidden
-          className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded bg-emerald-400/80"
-        />
-      )}
-      {label}
+      <span className="truncate">
+        {active && (
+          <span
+            aria-hidden
+            className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded bg-emerald-400/80"
+          />
+        )}
+        {label}
+      </span>
+      {right}
     </Link>
   );
 };
 
-export default function ProfileLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname(); 
-  const { isLoggedIn } = useAuthStatus();
-
-  const isFullScreenMap = /\/profile\/organizations\/[^/]+\/maps\/new\/?$/.test(
-    pathname || ""
+function Bell({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className}>
+      <path
+        d="M12 3a6 6 0 00-6 6v2.586l-.707 1.414A1 1 0 006.172 14h11.656a1 1 0 00.879-1.5L18 11.586V9a6 6 0 00-6-6z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+      <path d="M9 18a3 3 0 006 0" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
   );
+}
+
+export default function ProfileLayout({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
+  const { isLoggedIn } = useAuthStatus();
+  const isFullScreenMap = /\/profile\/organizations\/[^/]+\/maps\/new\/?$/.test(pathname || "");
 
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [planLabel, setPlanLabel] = useState<string | null>(null);
@@ -60,21 +73,21 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
   const [orgs, setOrgs] = useState<MyOrganizationDto[] | null>(null);
   const [orgsErr, setOrgsErr] = useState<string | null>(null);
 
+  const [unread, setUnread] = useState<number>(0);
+
   useEffect(() => {
     let alive = true;
 
-    async function loadPlanBadge() {
+    async function taiGoiThanhVien() {
       if (!isLoggedIn) {
         setPlanLabel(null);
         setPlanStatus(null);
         return;
       }
-
       try {
         const ps = await getPlans();
         if (!alive) return;
         setPlans(ps);
-
         try {
           const me = await getJson<MyMembership>("/membership/me");
           if (!alive) return;
@@ -85,17 +98,16 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
             return;
           }
         } catch {}
-
         const free = ps.find((p) => p.priceMonthly === 0);
-        setPlanLabel(free?.planName ?? "Free");
+        setPlanLabel(free?.planName ?? "Miễn phí");
         setPlanStatus("active");
       } catch {
-        setPlanLabel("Free");
+        setPlanLabel("Miễn phí");
         setPlanStatus("active");
       }
     }
 
-    async function loadOrgs() {
+    async function taiToChuc() {
       if (!isLoggedIn) {
         setOrgs(null);
         setOrgsErr(null);
@@ -104,9 +116,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       try {
         const res = await getMyOrganizations();
         if (!alive) return;
-
         let items: MyOrganizationDto[] = [];
-
         if (
           typeof res === "object" &&
           res !== null &&
@@ -116,36 +126,61 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
         } else if (Array.isArray(res)) {
           items = res as MyOrganizationDto[];
         }
-
         setOrgs(items);
         setOrgsErr(null);
       } catch {
         if (!alive) return;
-        setOrgsErr("Failed to load organizations.");
+        setOrgsErr("Không thể tải danh sách tổ chức.");
         setOrgs([]);
       }
     }
 
-    loadPlanBadge();
-    loadOrgs();
+    async function taiThongBaoChuaDoc() {
+      if (!isLoggedIn) {
+        setUnread(0);
+        return;
+      }
+      try {
+        const n = await getUnreadNotificationCount();
+        if (!alive) return;
+        setUnread(n || 0);
+      } catch {
+        if (!alive) return;
+        setUnread(0);
+      }
+    }
+
+    taiGoiThanhVien();
+    taiToChuc();
+    taiThongBaoChuaDoc();
 
     const onAuthChanged = () => {
-      loadPlanBadge();
-      loadOrgs();
+      taiGoiThanhVien();
+      taiToChuc();
+      taiThongBaoChuaDoc();
     };
     const onOrgsChanged = () => {
-      loadOrgs();
+      taiToChuc();
+    };
+    const onNotifChanged = () => {
+      taiThongBaoChuaDoc();
     };
 
+    let timer: number | undefined;
     if (typeof window !== "undefined") {
       window.addEventListener("auth-changed", onAuthChanged);
       window.addEventListener("orgs-changed", onOrgsChanged as EventListener);
+      window.addEventListener("notifications-changed", onNotifChanged as EventListener);
+      timer = window.setInterval(taiThongBaoChuaDoc, 30000);
     }
+
     return () => {
       alive = false;
       if (typeof window !== "undefined") {
         window.removeEventListener("auth-changed", onAuthChanged);
         window.removeEventListener("orgs-changed", onOrgsChanged as EventListener);
+        window.removeEventListener("notifications-changed", onNotifChanged as EventListener);
+        if (timer) clearInterval(timer);
       }
     };
   }, [isLoggedIn]);
@@ -154,17 +189,9 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
     return (
       <main className="fixed inset-0 m-0 p-0 overflow-hidden bg-black">
         {children}
-
         <style jsx global>{`
-          html,
-          body {
-            height: 100%;
-            overflow: hidden;
-          }
-          .leaflet-container {
-            width: 100%;
-            height: 100%;
-          }
+          html, body { height: 100%; overflow: hidden; }
+          .leaflet-container { width: 100%; height: 100%; }
         `}</style>
       </main>
     );
@@ -177,59 +204,58 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
           <div>
             <div className="mb-6">
               <div className="text-[11px] uppercase tracking-widest text-emerald-300/70 mb-2">
-                General
+                Chung
               </div>
               <div className="space-y-1">
-                <SidebarLink href="/" label="Home" />
-                <SidebarLink href="/profile" label="Personal Information" />
-                <SidebarLink href="/profile/recents" label="Recents" />
-                <SidebarLink href="/profile/drafts" label="Drafts" />
-                <SidebarLink href="/profile/invite" label="Invite Members" />
-                <SidebarLink href="/profile/settings" label="Settings" />
+                <SidebarLink href="/" label="Trang chủ" />
+                <SidebarLink href="/profile" label="Thông tin cá nhân" />
+                <SidebarLink href="/profile/recents" label="Gần đây" />
+                <SidebarLink href="/profile/drafts" label="Bản nháp" />
+                <SidebarLink href="/profile/invite" label="Mời thành viên" />
+                <SidebarLink
+                  href="/profile/notifications"
+                  label="Thông báo"
+                  right={
+                    unread > 0 ? (
+                      <span className="ml-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-500/20 px-2 text-[11px] font-semibold text-emerald-300 ring-1 ring-emerald-400/30">
+                        {unread > 99 ? "99+" : unread}
+                      </span>
+                    ) : null
+                  }
+                />
+                <SidebarLink href="/profile/settings" label="Cài đặt" />
               </div>
             </div>
 
             <div className="mb-6">
               <div className="text-[11px] uppercase tracking-widest text-emerald-300/70 mb-2">
-                Projects
+                Tổ chức
               </div>
               <div className="space-y-1">
-                <SidebarLink
-                  href="/profile/create-project"
-                  label="Create Organization"
-                />
-
+                <SidebarLink href="/profile/create-project" label="Tạo tổ chức" />
                 {orgs === null && (
                   <>
                     <div className="h-8 rounded-md bg-white/5 animate-pulse" />
                     <div className="h-8 rounded-md bg-white/5 animate-pulse" />
                   </>
                 )}
-
                 {orgsErr && (
                   <div className="px-3 py-2 text-xs rounded-md border border-red-400/40 bg-red-500/10 text-red-200">
                     {orgsErr}
                   </div>
                 )}
-
                 {orgs && !orgsErr && orgs.length === 0 && (
                   <div className="px-3 py-2 text-xs rounded-md border border-white/10 bg-white/5 text-zinc-300">
-                    No organizations yet. Create your first one!
+                    Chưa có tổ chức nào. Hãy tạo tổ chức đầu tiên!
                   </div>
                 )}
-
                 {(orgs ?? []).slice(0, 5).map((o) => (
-                  <SidebarLink
-                    key={o.orgId}
-                    href={`/profile/organizations/${o.orgId}`}
-                    label={o.orgName}
-                  />
+                  <SidebarLink key={o.orgId} href={`/profile/organizations/${o.orgId}`} label={o.orgName} />
                 ))}
                 {(orgs ?? []).length > 5 && (
-                  <SidebarLink href="/organizations" label="View all organizations" />
+                  <SidebarLink href="/organizations" label="Xem tất cả tổ chức" />
                 )}
-
-                <SidebarLink href="/profile/help" label="Help" />
+                <SidebarLink href="/profile/help" label="Trợ giúp" />
               </div>
             </div>
           </div>
@@ -238,15 +264,13 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
             {isLoggedIn && (
               <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-zinc-400">Current Plan</span>
+                  <span className="text-[12px] text-zinc-400">Gói hiện tại</span>
                   {planLabel ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-emerald-300">
-                        {planLabel}
-                      </span>
+                      <span className="text-sm font-semibold text-emerald-300">{planLabel}</span>
                       {planStatus === "active" && (
                         <span className="rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 text-[11px] font-semibold">
-                          Active
+                          Đang hoạt động
                         </span>
                       )}
                     </div>
@@ -259,13 +283,13 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
 
             <div>
               <div className="text-[11px] uppercase tracking-widest text-emerald-300/80 mb-2">
-                Upgrade
+                Nâng cấp
               </div>
               <Link
                 href="/profile/select-plan"
                 className="block w-full text-center text-sm font-semibold rounded-lg px-4 py-2 bg-gradient-to-r from-emerald-400 to-emerald-500 text-zinc-950 shadow-lg shadow-emerald-900/30 ring-1 ring-emerald-300/40 hover:from-emerald-300 hover:to-emerald-400 transition"
               >
-                Choose Plan
+                Chọn gói
               </Link>
             </div>
 
@@ -273,7 +297,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
               href="/login"
               className="block w-full text-center text-sm font-medium rounded-lg px-4 py-2 bg-red-500/90 hover:bg-red-400 ring-1 ring-transparent hover:ring-red-300/40 transition"
             >
-              Log out
+              Đăng xuất
             </Link>
           </div>
         </aside>
@@ -286,16 +310,26 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 CustomMapOSM
               </span>
             </div>
-            <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-3">
+              <Link
+                href="/profile/notifications"
+                className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                aria-label="Thông báo"
+              >
+                <Bell className="h-5 w-5" />
+                {unread > 0 && (
+                  <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-500 text-[11px] font-bold text-zinc-950 px-1">
+                    {unread > 99 ? "99+" : unread}
+                  </span>
+                )}
+              </Link>
               {isLoggedIn && planLabel && (
                 <span className="hidden xs:flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5">
-                  <span className="text-[11px] text-zinc-400">Plan:</span>
-                  <span className="text-[12px] font-semibold text-emerald-300">
-                    {planLabel}
-                  </span>
+                  <span className="text-[11px] text-zinc-400">Gói:</span>
+                  <span className="text-[12px] font-semibold text-emerald-300">{planLabel}</span>
                   {planStatus === "active" && (
                     <span className="ml-1 rounded bg-emerald-500/15 border border-emerald-400/30 px-1 text-[10px] text-emerald-300">
-                      Active
+                      Đang hoạt động
                     </span>
                   )}
                 </span>
@@ -304,7 +338,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 href="/profile/select-plan"
                 className="rounded px-2 py-1 font-semibold bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
               >
-                Choose Plan
+                Chọn gói
               </Link>
             </div>
           </div>

@@ -63,7 +63,14 @@ interface GeoJSONLayer extends LLayer {
 }
 
 type PMCreateEvent = LeafletEvent & { layer: LLayer };
-type BaseKey = "osm" | "sat" | "dark";
+type BaseKey = "mt-streets4" | "sat" | "dark";
+
+const BASE_PROVIDER_MAP: Record<BaseKey, CreateMapRequest["baseMapProvider"]> = {
+  "mt-streets4": "OSM",
+  sat: "Satellite",
+  dark: "Dark",
+};
+
 
 const TEMPLATE_CATEGORIES = ["General", "Hazard", "Population", "LandUse", "Transportation", "Environment", "Business"] as const;
 type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
@@ -102,7 +109,7 @@ function NewMapPageInner() {
   const [mapName, setMapName] = useState("Untitled Map");
   const [description, setDescription] = useState("");
   const [isPublic, setIsPublic] = useState(false);
-  const [baseLayer, setBaseLayer] = useState<BaseKey>("osm");
+  const [baseLayer, setBaseLayer] = useState<BaseKey>("mt-streets4");
   const [showLayerPanel, setShowLayerPanel] = useState(true);
   const [layers, setLayers] = useState<LayerInfo[]>([]);
 
@@ -123,6 +130,9 @@ function NewMapPageInner() {
   const [maxZoom, setMaxZoom] = useState<number>(20);
   const [viewersCanOpenTable, setViewersCanOpenTable] = useState(true);
   const [openTableDefault, setOpenTableDefault] = useState<"None" | "Left" | "Right">("None");
+  const [autoCreated, setAutoCreated] = useState(false);
+  const [baseLoaded, setBaseLoaded] = useState(false);
+
 
   const perms = useMemo(() => {
     const has = (n: string) => allowed.has(n);
@@ -160,33 +170,98 @@ function NewMapPageInner() {
     if (layer._bounds !== undefined) return "Rectangle";
     return "Unknown";
   }, []);
+  
+  const createBoundsFromCenterAndZoom = useCallback((center: LatLng, zoom: number) => {
+    const latDiff = 180 / Math.pow(2, zoom);
+    const lngDiff = 360 / Math.pow(2, zoom);
+    const minLat = center.lat - latDiff / 2;
+    const maxLat = center.lat + latDiff / 2;
+    const minLng = center.lng - lngDiff / 2;
+    const maxLng = center.lng + lngDiff / 2;
+
+    return JSON.stringify({
+      type: "Polygon",
+      coordinates: [[
+        [minLng, minLat],
+        [maxLng, minLat],
+        [maxLng, maxLat],
+        [minLng, maxLat],
+        [minLng, minLat],
+      ]],
+    });
+  }, []);
+
+
+  const quickCreateAndGo = useCallback(async () => {
+    if (autoCreated) return;
+    if (!isMapValid()) return;
+
+    setAutoCreated(true);
+    setSaving(true);
+    try {
+      const map = mapRef.current!;
+      const center = map.getCenter();
+      const zoomRaw = map.getZoom();
+      const zoom = Math.max(1, Math.min(20, typeof zoomRaw === "number" ? zoomRaw : 13));
+
+      const baseForApi = BASE_PROVIDER_MAP[baseLayer];
+
+      const defaultBounds = createBoundsFromCenterAndZoom(center, zoom);
+      const viewState = JSON.stringify({ center: [center.lat, center.lng], zoom });
+
+      const created = await createMap({
+        name: (mapName.trim() || "Untitled Map"),
+        description: description.trim(),
+        isPublic,
+        defaultBounds: defaultBounds || undefined,
+        viewState,
+        baseMapProvider: baseForApi,
+        orgId,
+      });
+
+      router.replace(`/maps/${created.mapId}?created=1&name=${encodeURIComponent((mapName || "Untitled Map").trim())}`);
+    } catch {
+      setAutoCreated(false);
+      setNotice({ text: "Failed to auto-create map. Please try again.", type: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }, [autoCreated, isMapValid, baseLayer, mapName, description, isPublic, orgId, router]);
 
   const applyBaseLayer = useCallback((kind: BaseKey) => {
     const L = LRef.current;
     const map = mapRef.current as (LMap & { _loaded?: boolean }) | null;
     if (!L || !map) return;
+
     if (baseRef.current) {
       map.removeLayer(baseRef.current);
       baseRef.current = null;
     }
-    let layer: LTileLayer;
-    if (kind === "sat") {
-      layer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-        maxZoom: 20,
-        attribution: "Tiles © Esri",
-      });
-    } else if (kind === "dark") {
-      layer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        maxZoom: 20,
-        attribution: "© OpenStreetMap contributors © CARTO",
-      });
+
+    const key = process.env.NEXT_PUBLIC_MAPTILER_KEY!;
+    const attribution =
+      '© <a href="https://www.maptiler.com/copyright/" target="_blank">MapTiler</a> ' +
+      '© <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap contributors</a>';
+
+    const opts: L.TileLayerOptions = {
+      minZoom: 0,
+      maxZoom: 20,
+      tileSize: 512,
+      zoomOffset: -1,
+      attribution,
+      crossOrigin: true,
+    };
+
+    let url: string;
+    if (kind === "mt-streets4") {
+      url = `https://api.maptiler.com/maps/streets-v4/tiles/512/{z}/{x}/{y}.png?key=${key}`;
+    } else if (kind === "sat") {
+      url = `https://api.maptiler.com/maps/satellite/tiles/512/{z}/{x}/{y}.jpg?key=${key}`;
     } else {
-      layer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        minZoom:0, 
-        maxZoom: 20,
-        attribution: "© OpenStreetMap contributors",
-      });
+      url = `https://api.maptiler.com/maps/dark-v2/tiles/512/{z}/{x}/{y}.png?key=${key}`;
     }
+
+    const layer = L.tileLayer(url, opts);
     if ((map as { _loaded?: boolean })._loaded === false) {
       map.whenReady(() => {
         layer.addTo(map);
@@ -270,6 +345,7 @@ function NewMapPageInner() {
     reader.readAsText(file);
   };
 
+
   const saveMap = useCallback(async () => {
     if (!mapName.trim()) {
       setNotice({ text: "Enter a map name before saving.", type: "error" });
@@ -286,16 +362,21 @@ function NewMapPageInner() {
       const center = map.getCenter();
       const zoomRaw = map.getZoom();
       const zoom = Math.max(1, Math.min(20, typeof zoomRaw === "number" ? zoomRaw : 13));
-      const baseForApi: CreateMapRequest["baseMapProvider"] =
-        baseLayer === "osm" ? "OSM" : baseLayer === "sat" ? "Satellite" : "Dark";
+
+      const baseForApi = BASE_PROVIDER_MAP[baseLayer];
+
+      const defaultBounds = createBoundsFromCenterAndZoom(center, zoom);
+      const viewState = JSON.stringify({
+        center: [center.lat, center.lng],
+        zoom: zoom
+      });
 
       const body: CreateMapRequest = {
         name: mapName.trim(),
         description: description.trim(),
         isPublic,
-        initialLatitude: center.lat,
-        initialLongitude: center.lng,
-        initialZoom: zoom,
+        defaultBounds: defaultBounds || undefined,
+        viewState,
         baseMapProvider: baseForApi,
         orgId,
       };
@@ -303,6 +384,7 @@ function NewMapPageInner() {
       const created = await createMap(body);
       const id = created.mapId;
 
+      // Nếu lưu Template thì xử lý luôn rồi mới chuyển trang
       if (asTemplate) {
         const exported = exportSketchToGeoJson();
         if (!exported || exported.featureCount === 0 || !exported.geojsonText) {
@@ -325,8 +407,8 @@ function NewMapPageInner() {
         }
       }
 
-      setCreatedId(id);
-      setNotice({ text: "Map saved. You can open it in the editor.", type: "success" });
+      // 👉 chuyển thẳng sang editor của map vừa tạo
+      router.replace(`/maps/${id}?created=1&name=${encodeURIComponent(mapName.trim())}`);
     } catch (err: unknown) {
       const msg =
         typeof err === "object" && err !== null && "message" in err
@@ -341,7 +423,6 @@ function NewMapPageInner() {
     description,
     baseLayer,
     orgId,
-    router,
     isMapValid,
     asTemplate,
     exportSketchToGeoJson,
@@ -351,6 +432,8 @@ function NewMapPageInner() {
     templateCategory,
     templatePublic,
     isPublic,
+    createBoundsFromCenterAndZoom,
+    router,
   ]);
 
   const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text") => {
@@ -377,6 +460,12 @@ function NewMapPageInner() {
     const val = sp?.get("org") || sp?.get("orgId") || undefined;
     setOrgId(val || undefined);
   }, [sp]);
+  useEffect(() => {
+    if (ready && baseLoaded && !autoCreated) {
+      const t = setTimeout(() => { void quickCreateAndGo(); }, 0);
+      return () => clearTimeout(t);
+    }
+  }, [ready, baseLoaded, autoCreated, quickCreateAndGo]);
 
   useEffect(() => {
     let alive = true;
@@ -386,7 +475,7 @@ function NewMapPageInner() {
       if (!alive || !mapEl.current) return;
       LRef.current = L;
 
-      const map = L.map(mapEl.current, { minZoom: 2 , zoomControl: false }).setView([10.78, 106.69], 13);
+      const map = L.map(mapEl.current, { minZoom: 2, zoomControl: false }).setView([10.78, 106.69], 13);
       mapRef.current = map;
       const sketch = L.featureGroup().addTo(map);
       sketchRef.current = sketch;
@@ -574,8 +663,8 @@ function NewMapPageInner() {
                   }}
                 />
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-                  <path fill="currentColor" fillRule="evenodd" d="M12 2a6 6 0 0 0-5.476 3.545a23 23 0 0 1-.207.452l-.02.001C6.233 6 6.146 6 6 6a4 4 0 1 0 0 8h.172l2-2H6a2 2 0 1 1 0-4h.064c.208 0 .45.001.65-.04a1.9 1.9 0 0 0 .7-.27c.241-.156.407-.35.533-.527a2.4 2.4 0 0 0 .201-.36q.08-.167.196-.428l.004-.01a4.001 4.001 0 0 1 7.304 0l.005.01q.115.26.195.428c.046.097.114.238.201.36c.126.176.291.371.533.528c.242.156.487.227.7.27c.2.04.442.04.65.04L18 8a2 2 0 1 1 0 4h-2.172l2 2H18a4 4 0 0 0 0-8c-.146 0-.233 0-.297-.002h-.02l-.025-.053a24 24 0 0 1-.182-.4A6 6 0 0 0 12 2m5.702 4.034" clipRule="evenodd"/>
-                  <path fill="currentColor" d="m12 12l-.707-.707l.707-.707l.707.707zm1 9a1 1 0 1 1-2 0zm-5.707-5.707l4-4l1.414 1.414l-4 4zm5.414-4l4 4l-1.414 1.414l-4-4zM13 12v9h-2v-9z"/>
+                  <path fill="currentColor" fillRule="evenodd" d="M12 2a6 6 0 0 0-5.476 3.545a23 23 0 0 1-.207.452l-.02.001C6.233 6 6.146 6 6 6a4 4 0 1 0 0 8h.172l2-2H6a2 2 0 1 1 0-4h.064c.208 0 .45.001.65-.04a1.9 1.9 0 0 0 .7-.27c.241-.156.407-.35.533-.527a2.4 2.4 0 0 0 .201-.36q.08-.167.196-.428l.004-.01a4.001 4.001 0 0 1 7.304 0l.005.01q.115.26.195.428c.046.097.114.238.201.36c.126.176.291.371.533.528c.242.156.487.227.7.27c.2.04.442.04.65.04L18 8a2 2 0 1 1 0 4h-2.172l2 2H18a4 4 0 0 0 0-8c-.146 0-.233 0-.297-.002h-.02l-.025-.053a24 24 0 0 1-.182-.4A6 6 0 0 0 12 2m5.702 4.034" clipRule="evenodd" />
+                  <path fill="currentColor" d="m12 12l-.707-.707l.707-.707l.707.707zm1 9a1 1 0 1 1-2 0zm-5.707-5.707l4-4l1.414 1.414l-4 4zm5.414-4l4 4l-1.414 1.414l-4-4zM13 12v9h-2v-9z" />
                 </svg>
               </label>
 
@@ -709,7 +798,7 @@ function NewMapPageInner() {
                       onChange={(e) => setBaseLayer(e.target.value as BaseKey)}
                       className="w-full rounded-md bg-white/5 border border-white/10 px-2 py-2 text-sm"
                     >
-                      <option value="osm">OSM</option>
+                      <option value="mt-streets4">Streets v4 (MapTiler)</option>
                       <option value="sat">Satellite</option>
                       <option value="dark">Dark</option>
                     </select>
