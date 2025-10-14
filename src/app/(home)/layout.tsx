@@ -1,4 +1,3 @@
-import ChatAIWidget from "@/components/chat/ChatAIWidget";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
@@ -16,7 +15,6 @@ export default function HomeLayout({ children }: { children: React.ReactNode }) 
       ].join(" ")}
     >
       {children}
-      <ChatAIWidget />
     </main>
   );
 }

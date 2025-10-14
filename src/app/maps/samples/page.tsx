@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createMapFromTemplate, createMap } from "@/lib/api";
+import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
 
 type Sample = {
   key: string;
@@ -126,14 +127,12 @@ export default function SamplesPage() {
         const res = await createMapFromTemplate({ templateId: s.templateId });
         router.push(`/maps/${res.mapId}`);
       } else if (s.preset) {
+        const presetData = convertPresetToNewFormat(s.preset);
         const r = await createMap({
           name: s.preset.name,
           description: s.blurb,
           isPublic: false,
-          baseMapProvider: s.preset.baseMapProvider ?? "OSM",
-          initialLatitude: s.preset.initialLatitude,
-          initialLongitude: s.preset.initialLongitude,
-          initialZoom: s.preset.initialZoom,
+          ...presetData,
         });
         router.push(`/maps/${r.mapId}`);
       } else {

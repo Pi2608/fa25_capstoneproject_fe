@@ -8,6 +8,7 @@ import {
   createMap,
   type MapDto,
 } from "@/lib/api";
+import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name";
@@ -153,8 +154,34 @@ export default function RecentsPage() {
     return () => { alive = false; };
   }, []);
 
-  const clickNewMap = useCallback(() => {
-    router.push("/maps/new");
+  const clickNewMap = useCallback(async () => {
+    const center = { lat: 10.78, lng: 106.69 };
+    const zoom = 13;
+
+    const latDiff = 180 / Math.pow(2, zoom);
+    const lngDiff = 360 / Math.pow(2, zoom);
+    const defaultBounds = JSON.stringify({
+      type: "Polygon",
+      coordinates: [[
+        [center.lng - lngDiff / 2, center.lat - latDiff / 2],
+        [center.lng + lngDiff / 2, center.lat - latDiff / 2],
+        [center.lng + lngDiff / 2, center.lat + latDiff / 2],
+        [center.lng - lngDiff / 2, center.lat + latDiff / 2],
+        [center.lng - lngDiff / 2, center.lat - latDiff / 2],
+      ]]
+    });
+    const viewState = JSON.stringify({ center: [center.lat, center.lng], zoom });
+
+    const created = await createMap({
+      name: "Untitled Map",
+      description: "",
+      isPublic: false,
+      defaultBounds,
+      viewState,
+      baseMapProvider: "OSM",
+    });
+
+    router.push(`/maps/${created.mapId}?created=1&name=${encodeURIComponent("Untitled Map")}`);
   }, [router]);
 
   const sortedMaps = useMemo(() => {
@@ -179,14 +206,12 @@ export default function RecentsPage() {
         const r = await createMapFromTemplate({ templateId: s.templateId });
         router.push(`/maps/${r.mapId}`);
       } else if (s.preset) {
+        const presetData = convertPresetToNewFormat(s.preset);
         const r2 = await createMap({
           name: s.preset.name,
           description: s.blurb,
           isPublic: false,
-          baseMapProvider: s.preset.baseMapProvider ?? "OSM",
-          initialLatitude: s.preset.initialLatitude,
-          initialLongitude: s.preset.initialLongitude,
-          initialZoom: s.preset.initialZoom,
+          ...presetData,
         });
         router.push(`/maps/${r2.mapId}`);
       } else {
