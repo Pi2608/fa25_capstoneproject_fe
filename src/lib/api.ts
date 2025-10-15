@@ -352,41 +352,6 @@ export async function getActiveUserAccessTools(): Promise<UserAccessTool[]> {
   return (data ?? []).map(mapUserAccessTool);
 }
 
-export type CancelPaymentWithContextReq = {
-  paymentGateway: PaymentGateway;
-  purpose?: {
-    userId?: string;
-    planId?: number;
-    email?: string;
-    [k: string]: unknown;
-  };
-  paymentId?: string;
-  payerId?: string;
-  token?: string;
-  intent?: string;
-  secret?: string;
-  orderCode?: string;
-  signature?: string;
-  transactionId?: string;
-};
-
-
-export type CancelPaymentRes = {
-  ok: boolean;
-  message?: string;
-};
-
-export async function cancelPaymentWithContext(
-  payload: CancelPaymentWithContextReq
-) {
-  console.log("cancelPaymentWithContext", payload);
-  return postJson<CancelPaymentWithContextReq, CancelPaymentRes>(
-    `/Transaction/cancel-payment-with-context?`,
-    payload
-  );
-}
-
-
 /** ===== MEMBERSHIP ===== */
 export type MembershipResponse = {
   membershipId: string;
@@ -433,6 +398,8 @@ export async function createOrRenewMembership(payload: { planId: number }) {
     throw err;
   }
 }
+
+
 
 /** ===== Forgot / Reset Password ===== */
 export type ResetPasswordVerifyReq = { email: string };
@@ -912,6 +879,7 @@ export interface MapFeatureResponse {
 }
 
 export interface CreateMapFeatureRequest {
+  mapId: string;
   layerId?: string | null;
   name?: string | null;
   description?: string | null;
@@ -926,7 +894,8 @@ export interface CreateMapFeatureRequest {
 }
 
 export function createMapFeature(mapId: string, body: CreateMapFeatureRequest) {
-  return postJson<CreateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features`, body);
+  const requestBody = { ...body, mapId };
+  return postJson<CreateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features`, requestBody);
 }
 export function getMapFeatures(mapId: string) {
   return getJson<MapFeatureResponse[]>(`/maps/${mapId}/features`);
@@ -960,6 +929,8 @@ export function deleteMapFeature(mapId: string, featureId: string) {
 export function getMapFeatureById(mapId: string, featureId: string) {
   return getJson<MapFeatureResponse>(`/maps/${mapId}/features/${featureId}`);
 }
+
+
 
 export type OrganizationReqDto = {
 

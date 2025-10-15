@@ -18,6 +18,8 @@ import {
   updateMemberRole,
   createMap,
   type CreateMapRequest,
+  getMyMembership,
+  type CurrentMembershipDto,
 } from "@/lib/api";
 type MapRow = Awaited<ReturnType<typeof getOrganizationMaps>>[number];
 
@@ -102,6 +104,8 @@ export default function OrgDetailPage() {
   const [tools, setTools] = useState<UserAccessTool[]>([]);
   const [maps, setMaps] = useState<MapRow[]>([]);
   const [creatingMap, setCreatingMap] = useState(false);
+  const [membership, setMembership] = useState<CurrentMembershipDto | null>(null);
+  const [loadingMembership, setLoadingMembership] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -234,6 +238,32 @@ export default function OrgDetailPage() {
       }
     }
     if (orgId) void loadAll();
+    return () => {
+      alive = false;
+    };
+  }, [orgId]);
+
+  // Load membership data
+  useEffect(() => {
+    let alive = true;
+    async function loadMembership() {
+      if (!orgId) return;
+      
+      try {
+        setLoadingMembership(true);
+        const membershipData = await getMyMembership(orgId);
+        if (!alive) return;
+        setMembership(membershipData);
+      } catch (error) {
+        if (!alive) return;
+        console.log("No membership found for organization:", error);
+        setMembership(null);
+      } finally {
+        if (alive) setLoadingMembership(false);
+      }
+    }
+    
+    void loadMembership();
     return () => {
       alive = false;
     };
@@ -422,7 +452,12 @@ export default function OrgDetailPage() {
       )}
 
       <div className="flex items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl sm:text-3xl font-semibold">{org.orgName}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl sm:text-3xl font-semibold">{org.orgName}</h1>
+          <span className="text-xs text-zinc-400 bg-emerald-500/20 rounded-full px-2 py-1">
+            <h3 className="text-sm font-semibold text-emerald-300">{membership?.planName}</h3>
+          </span>
+        </div>
 
         <div className="flex items-center gap-2 relative">
           <div className="relative">

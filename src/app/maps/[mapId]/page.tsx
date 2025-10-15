@@ -27,6 +27,11 @@ import {
   handleUpdateFeatureStyle,
   handleDeleteFeature,
   handleSelectLayer,
+  getStylePreset,
+  createCustomStyle,
+  applyStyleToFeature,
+  applyStyleToDataLayer,
+  extractLayerStyle
 } from "@/utils/mapUtils";
 import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
 
@@ -119,42 +124,37 @@ export default function EditMapPage() {
 
   const [toolsLoading, setToolsLoading] = useState(true);
   const [allowed, setAllowed] = useState<Set<string>>(new Set());
-  const perms = useMemo(() => {
-    const has = (n: string) => allowed.has(n);
-    return {
-      marker: has("Marker"),
-      line: has("Line") || has("Route"),
-      polygon: has("Polygon"),
-      rectangle: has("Polygon"),
-      circle: has("Circle"),
-      text: has("Text"),
-      cut: has("Polygon"),
-      rotate: has("Polygon"),
-    };
-  }, [allowed]);
 
   const applyBaseLayer = useCallback((key: BaseKey) => {
-    const map = mapRef.current;
-    if (!map) return;
+    if (!mapRef.current) return;
     if (baseRef.current) {
-      map.removeLayer(baseRef.current);
-      baseRef.current = null;
+      try {
+        mapRef.current.removeLayer(baseRef.current);
+        baseRef.current = null;
+      } catch (error) {
+        console.warn("Failed to remove existing baseLayer:", error);
+        baseRef.current = null;
+      }
     }
     let cancelled = false;
     (async () => {
-      const L = (await import("leaflet")).default;
-      if (cancelled) return;
-      let layer: TileLayer;
-      if (key === "sat") {
-        layer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 20, attribution: "Tiles © Esri" });
-      } else if (key === "dark") {
-        layer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 20, attribution: "© OpenStreetMap contributors © CARTO" });
-      } else {
-        layer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 20, attribution: "© OpenStreetMap contributors" });
-      }
-      if (!cancelled && map) {
-        layer.addTo(map);
-        baseRef.current = layer;
+      try {
+        const L = (await import("leaflet")).default;
+        if (cancelled) return;
+        let layer: TileLayer;
+        if (key === "sat") {
+          layer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 20, attribution: "Tiles © Esri" });
+        } else if (key === "dark") {
+          layer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 20, attribution: "© OpenStreetMap contributors © CARTO" });
+        } else {
+          layer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 20, attribution: "© OpenStreetMap contributors" });
+        }
+        if (!cancelled && mapRef.current) {
+          layer.addTo(mapRef.current);
+          baseRef.current = layer;
+        }
+      } catch (error) {
+        console.error("Failed to apply baseLayer:", error);
       }
     })();
     return () => {
@@ -170,6 +170,7 @@ export default function EditMapPage() {
         setLoading(true);
         setErr(null);
         const m = await getMapDetail(mapId);
+        console.log(m);
         if (!alive) return;
         setDetail(m);
         setName(m.mapName ?? "");
@@ -262,6 +263,7 @@ export default function EditMapPage() {
       map.on("pm:create", async (e: PMCreateEvent) => {
         sketch.addLayer(e.layer);
         await saveFeature(detail.id, detail?.layers[0].id, e.layer as ExtendedLayer, loaded, setFeatures);
+        await refreshMapDetail();
       });
     })();
     return () => {
@@ -284,7 +286,51 @@ export default function EditMapPage() {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
 
-  const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text") => {
+  // Refresh map detail from API
+  const refreshMapDetail = useCallback(async () => {
+    if (!mapId) return;
+    
+    try {
+      const updatedDetail = await getMapDetail(mapId);
+      setDetail(updatedDetail);
+      
+      // Preserve current baseLayer
+      const currentBaseKey = baseKey;
+      
+      // Reload features from database
+      if (mapRef.current && sketchRef.current) {
+        const L = (await import("leaflet")).default;
+        const loadedFeatures = await loadFeaturesToMap(
+          updatedDetail.id,
+          L,
+          sketchRef.current
+        );
+        setFeatures(loadedFeatures);
+      }
+      
+      // Re-render data layers
+      if (mapRef.current && updatedDetail.layers) {
+        await renderAllDataLayers(mapRef.current, updatedDetail.layers, dataLayerRefs);
+      }
+      
+      // Ensure baseLayer is still applied
+      if (mapRef.current && baseRef.current) {
+        // BaseLayer should still be there, but let's make sure
+        if (!mapRef.current.hasLayer(baseRef.current)) {
+          try {
+            applyBaseLayer(currentBaseKey);
+          } catch (error) {
+            console.warn("Failed to reapply baseLayer:", error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to refresh map detail:", error);
+    }
+  }, [mapId, baseKey, applyBaseLayer]);
+
+  // Geoman custom actions
+  const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text" ) => {
     mapRef.current?.pm.enableDraw(shape);
   };
   const toggleEdit = () => mapRef.current?.pm.toggleGlobalEditMode();
@@ -300,10 +346,24 @@ export default function EditMapPage() {
     }
     sketchRef.current?.clearLayers();
     setFeatures([]);
-  }, [detail, features]);
+    // Refresh map detail to get updated data
+    await refreshMapDetail();
+  }, [detail, features, refreshMapDetail]);
 
   const onLayerVisibilityChange = useCallback(async (layerId: string, isVisible: boolean) => {
     if (!detail || !mapRef.current) return;
+    
+    // Update local state immediately
+    setDetail(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        layers: prev.layers.map(layer => 
+          layer.id === layerId ? { ...layer, isVisible } : layer
+        )
+      };
+    });
+    
     await handleLayerVisibilityChange(detail.id, layerId, isVisible, mapRef.current, detail.layers, dataLayerRefs);
   }, [detail]);
 
@@ -338,6 +398,55 @@ export default function EditMapPage() {
     await handleDeleteFeature(detail.id, featureId, features, setFeatures, mapRef.current, sketchRef.current);
   }, [detail, features]);
 
+  // Style management functions
+  const applyPresetStyleToFeature = useCallback(async (featureId: string, layerType: string, presetName: string) => {
+    if (!detail) return;
+    
+    const feature = features.find(f => f.featureId === featureId);
+    if (!feature) return;
+    
+    const presetStyle = getStylePreset(layerType, presetName);
+    await applyStyleToFeature(detail.id, featureId, feature.layer, presetStyle, features, setFeatures, refreshMapDetail);
+  }, [detail, features, setFeatures, refreshMapDetail]);
+
+  const applyCustomStyleToFeature = useCallback(async (featureId: string, styleOptions: {
+    color?: string;
+    fillColor?: string;
+    weight?: number;
+    opacity?: number;
+    fillOpacity?: number;
+    radius?: number;
+    dashArray?: string;
+  }) => {
+    if (!detail) return;
+    
+    const feature = features.find(f => f.featureId === featureId);
+    if (!feature) return;
+    
+    const customStyle = createCustomStyle(styleOptions);
+    await applyStyleToFeature(detail.id, featureId, feature.layer, customStyle, features, setFeatures, refreshMapDetail);
+  }, [detail, features, setFeatures, refreshMapDetail]);
+
+  const applyStyleToLayer = useCallback(async (layerId: string, styleOptions: {
+    color?: string;
+    fillColor?: string;
+    weight?: number;
+    opacity?: number;
+    fillOpacity?: number;
+  }) => {
+    if (!detail) return;
+    
+    const customStyle = createCustomStyle(styleOptions);
+    await applyStyleToDataLayer(detail.id, layerId, customStyle, refreshMapDetail);
+  }, [detail, refreshMapDetail]);
+
+  const getCurrentFeatureStyle = useCallback((featureId: string) => {
+    const feature = features.find(f => f.featureId === featureId);
+    if (!feature) return {};
+    
+    return extractLayerStyle(feature.layer);
+  }, [features]);
+
   const saveMeta = useCallback(async () => {
     if (!detail) return;
     setBusySaveMeta(true);
@@ -349,13 +458,15 @@ export default function EditMapPage() {
       };
       await updateMap(detail.id, body);
       setFeedback("Đã lưu thông tin bản đồ.");
+      // Refresh map detail to get updated data
+      await refreshMapDetail();
     } catch (e) {
       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveMeta(false);
       setTimeout(() => setFeedback(null), 1600);
     }
-  }, [detail, name, baseKey]);
+  }, [detail, name, baseKey, refreshMapDetail]);
 
   const saveView = useCallback(async () => {
     if (!detail || !mapRef.current) return;
@@ -367,18 +478,19 @@ export default function EditMapPage() {
       const body: UpdateMapRequest = { viewState: JSON.stringify(view) };
       await updateMap(detail.id, body);
       setFeedback("Đã lưu vị trí hiển thị.");
+      // Refresh map detail to get updated data
+      await refreshMapDetail();
     } catch (e) {
       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveView(false);
       setTimeout(() => setFeedback(null), 1600);
     }
-  }, [detail]);
+  }, [detail, refreshMapDetail]);
 
   const GuardBtn: React.FC<
-    React.PropsWithChildren<{ can: boolean; title: string; onClick?: () => void; disabled?: boolean }>
-  > = ({ can, title, onClick, disabled, children }) => {
-    if (!can) return null;
+    React.PropsWithChildren<{ title: string; onClick?: () => void; disabled?: boolean }>
+  > = ({ title, onClick, disabled, children }) => {
     return (
       <button
         className="px-2 py-1.5 rounded-md bg-transparent text-white text-xs hover:bg-emerald-500/20"
@@ -409,47 +521,47 @@ export default function EditMapPage() {
               />
             </div>
             <div className="flex items-center justify-center gap-1.5 overflow-x-auto no-scrollbar">
-              <GuardBtn can={perms.marker} title="Vẽ điểm" onClick={() => enableDraw("Marker")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ điểm" onClick={() => enableDraw("Marker")} disabled={toolsLoading || !mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 21s-6-4.5-6-10a6 6 0 1 1 12 0c0 5.5-6 10-6 10z" />
                   <circle cx="12" cy="11" r="2.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn can={perms.line} title="Vẽ đường" onClick={() => enableDraw("Line")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ đường" onClick={() => enableDraw("Line")} disabled={toolsLoading || !mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="5" cy="7" r="2" />
                   <circle cx="19" cy="17" r="2" />
                   <path d="M7 8.5 17 15.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn can={perms.polygon} title="Vẽ vùng" onClick={() => enableDraw("Polygon")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ vùng" onClick={() => enableDraw("Polygon")} disabled={toolsLoading || !mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M7 4h10l4 6-4 10H7L3 10 7 4z" />
                 </svg>
               </GuardBtn>
-              <GuardBtn can={perms.rectangle} title="Vẽ hình chữ nhật" onClick={() => enableDraw("Rectangle")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ hình chữ nhật" onClick={() => enableDraw("Rectangle")} disabled={toolsLoading || !mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="5" y="6" width="14" height="12" rx="1.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn can={perms.circle} title="Vẽ hình tròn" onClick={() => enableDraw("Circle")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ hình tròn" onClick={() => enableDraw("Circle")} disabled={toolsLoading || !mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="8.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn can={perms.text} title="Thêm chữ" onClick={() => enableDraw("Text")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Thêm chữ" onClick={() => enableDraw("Text")} disabled={toolsLoading || !mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 6h16M12 6v12" />
                 </svg>
               </GuardBtn>
-              <GuardBtn can={perms.cut} title="Cắt polygon" onClick={enableCutPolygon} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Cắt polygon" onClick={enableCutPolygon} disabled={toolsLoading || !mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="5.5" cy="8" r="2" />
                   <circle cx="5.5" cy="16" r="2" />
                   <path d="M8 9l12 8M8 15l12-8" />
                 </svg>
               </GuardBtn>
-              <GuardBtn can={perms.rotate} title="Xoay đối tượng" onClick={toggleRotate} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Xoay đối tượng" onClick={toggleRotate} disabled={toolsLoading || !mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 11a8 8 0 1 1-2.2-5.5" />
                   <path d="M20 4v7h-7" />
@@ -457,18 +569,25 @@ export default function EditMapPage() {
               </GuardBtn>
             </div>
             <div className="flex items-center justify-end gap-1.5 overflow-x-auto no-scrollbar">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-white/70">Base</span>
-                <select
-                  value={baseKey}
-                  onChange={(e) => setBaseKey(e.target.value as BaseKey)}
-                  className="px-2 py-1.5 rounded-md bg-white text-black text-xs"
-                >
-                  <option value="osm">OSM</option>
-                  <option value="sat">Satellite</option>
-                  <option value="dark">Dark</option>
-                </select>
-              </div>
+              <input
+                type="file"
+                accept=".geojson,.json"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    console.log("File selected:", file.name);
+                  }
+                }}
+                className="hidden"
+                id="upload-layer"
+              />
+              <label
+                htmlFor="upload-layer"
+                className="rounded-lg px-3 py-1.5 text-xs bg-emerald-600 text-zinc-950 hover:bg-emerald-500 cursor-pointer"
+                title="Upload GeoJSON file to add as layer"
+              >
+                Upload Layer
+              </label>
               <button
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-zinc-700 hover:bg-zinc-600 disabled:opacity-60"
                 onClick={saveView}
@@ -510,6 +629,8 @@ export default function EditMapPage() {
         onFeatureVisibilityChange={onFeatureVisibilityChange}
         onSelectLayer={onSelectLayer}
         onDeleteFeature={onDeleteFeature}
+        onBaseLayerChange={setBaseKey}
+        currentBaseLayer={baseKey}
       />
 
       <StylePanel

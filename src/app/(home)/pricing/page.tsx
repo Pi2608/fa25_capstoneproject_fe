@@ -9,6 +9,15 @@ import {
   getJson,
   getPlans,
   type Plan,
+  subscribeToPlan,
+  type SubscribeRequest,
+  type SubscribeResponse,
+  getMyOrganizations,
+  type MyOrganizationDto,
+  getMyInvitations,
+  type InvitationDto,
+  getMyMembership,
+  type CurrentMembershipDto,
 } from "@/lib/api";
 
 function safeMessage(err: unknown) {
@@ -49,6 +58,42 @@ export default function PricingPage() {
       return;
     }
     router.push(`/profile/select-plan?planId=${plan.planId}`);
+    try {
+      if (!isLoggedIn) {
+        router.push("/login");
+        return;
+      }
+
+      // Check if user has an organization
+      if (organizations.length === 0) {
+        setShowOrgSelection(true);
+        return;
+      }
+
+      // Check if plan is disabled
+      if (isPlanDisabled(plan)) {
+        return; // Don't allow selection of disabled plans
+      }
+
+      if (!selectedOrg) {
+        setShowOrgSelection(true);
+        return;
+      }
+
+      const req: SubscribeRequest = {
+        userId: "08ddf705-7b38-41a8-8b65-80141dc31d21", // test - should get from auth context
+        orgId: selectedOrg.orgId,
+        planId: plan.planId,
+        paymentMethod: "payOS",
+        autoRenew: true,
+      };
+
+      const res: SubscribeResponse = await subscribeToPlan(req);
+      localStorage.setItem("planId", String(plan.planId));
+      window.location.href = res.paymentUrl;
+    } catch (err) {
+      alert(safeMessage(err));
+    }
   };
 
   useEffect(() => {
@@ -89,13 +134,66 @@ export default function PricingPage() {
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
+  // Organization state
+  const [organizations, setOrganizations] = useState<MyOrganizationDto[]>([]);
+  const [invitations, setInvitations] = useState<InvitationDto[]>([]);
+  const [selectedOrg, setSelectedOrg] = useState<MyOrganizationDto | null>(null);
+  const [showOrgSelection, setShowOrgSelection] = useState(false);
+  
+  // Membership state by organization
+  const [orgMemberships, setOrgMemberships] = useState<Record<string, CurrentMembershipDto | null>>({});
+  const [loadingMemberships, setLoadingMemberships] = useState(false);
+
+  // Load memberships for all organizations
+  const loadOrgMemberships = async (orgs: MyOrganizationDto[]) => {
+    if (orgs.length === 0) return;
+    
+    setLoadingMemberships(true);
+    const memberships: Record<string, CurrentMembershipDto | null> = {};
+    
+    try {
+      await Promise.all(
+        orgs.map(async (org) => {
+          try {
+            const membership = await getMyMembership(org.orgId);
+            memberships[org.orgId] = membership;
+          } catch (error) {
+            console.log(`No membership found for org ${org.orgId}:`, error);
+            memberships[org.orgId] = null;
+          }
+        })
+      );
+      
+      setOrgMemberships(memberships);
+    } catch (error) {
+      console.error("Error loading memberships:", error);
+    } finally {
+      setLoadingMemberships(false);
+    }
+  };
+
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const data = await getPlans();
+        // Load plans and organizations in parallel
+        const [data, orgsRes, invitesRes] = await Promise.all([
+          getPlans(),
+          isLoggedIn ? getMyOrganizations().catch(() => ({ organizations: [] })) : Promise.resolve({ organizations: [] }),
+          isLoggedIn ? getMyInvitations().catch(() => ({ invitations: [] })) : Promise.resolve({ invitations: [] })
+        ]);
+        
         if (!alive) return;
         setPlans(data);
+        setOrganizations(orgsRes.organizations || []);
+        setInvitations(invitesRes.invitations || []);
+
+        // Auto-select first organization if user has one
+        if (orgsRes.organizations && orgsRes.organizations.length > 0) {
+          setSelectedOrg(orgsRes.organizations[0]);
+          // Load memberships for all organizations
+          loadOrgMemberships(orgsRes.organizations);
+        }
 
         if (isLoggedIn) {
           try {
@@ -138,10 +236,52 @@ export default function PricingPage() {
 
   const currentId = currentPlan?.planId ?? null;
 
+  // Get current plan for a specific organization
+  const getCurrentPlanForOrg = (orgId: string): Plan | null => {
+    const membership = orgMemberships[orgId];
+    if (!membership) return null;
+    
+    return plans.find(p => p.planId === membership.planId) || null;
+  };
+
+  // Get membership status for a specific organization
+  const getMembershipStatusForOrg = (orgId: string): string | null => {
+    const membership = orgMemberships[orgId];
+    return membership?.status || null;
+  };
+
+  // Check if a plan should be disabled for the selected organization
+  const isPlanDisabled = (plan: Plan): boolean => {
+    if (!selectedOrg) return false;
+    
+    const currentPlan = getCurrentPlanForOrg(selectedOrg.orgId);
+    const membershipStatus = getMembershipStatusForOrg(selectedOrg.orgId);
+    
+    // If no current membership, all plans are available
+    if (!currentPlan || !membershipStatus) return false;
+    
+    // If current plan is active, disable current plan and lower-tier plans
+    if (membershipStatus === "active") {
+      const currentPlanPrice = currentPlan.priceMonthly || 0;
+      const planPrice = plan.priceMonthly || 0;
+      
+      // Disable if it's the same plan or a lower-tier plan
+      return planPrice <= currentPlanPrice;
+    }
+    
+    // If membership is pending or expired, allow all plans
+    return false;
+  };
+
   const renderStatusBadge = (p: Plan) => {
-    const isCurrent = currentId === p.planId && status === "active";
-    const isPending = currentId === p.planId && status === "pending";
-    const isExpired = currentId === p.planId && status === "expired";
+    if (!selectedOrg) return null;
+    
+    const currentPlan = getCurrentPlanForOrg(selectedOrg.orgId);
+    const membershipStatus = getMembershipStatusForOrg(selectedOrg.orgId);
+    
+    const isCurrent = currentPlan?.planId === p.planId && membershipStatus === "active";
+    const isPending = currentPlan?.planId === p.planId && membershipStatus === "pending";
+    const isExpired = currentPlan?.planId === p.planId && membershipStatus === "expired";
 
     if (isCurrent)
       return (
@@ -166,7 +306,7 @@ export default function PricingPage() {
 
   return (
     <main className="relative min-h-screen text-white">
-      <div className="absolute inset-0 -z-10">
+      {/* <div className="absolute inset-0 -z-10">
         <Image
           src="/bg.avif"
           alt="Nền bản đồ"
@@ -178,7 +318,7 @@ export default function PricingPage() {
           className="object-cover"
         />
         <div className="absolute inset-0 bg-black/20" />
-      </div>
+      </div> */}
 
       <header className="sticky top-0 z-40">
         <div className="pointer-events-none absolute inset-x-0 -z-10 h-20 bg-gradient-to-b from-black/30 to-transparent" />
@@ -286,6 +426,87 @@ export default function PricingPage() {
           </div>
         )}
 
+        {/* Organization Selection */}
+        {isLoggedIn && organizations.length > 0 && (
+          <div className="mb-6 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
+            <h3 className="text-sm font-medium text-zinc-300 mb-2">Selected Organization</h3>
+            <div className="flex items-center gap-3">
+              <div className="flex-1">
+                <p className="text-zinc-100 font-medium">{selectedOrg?.orgName}</p>
+                {selectedOrg && (
+                  <div className="mt-1">
+                    {loadingMemberships ? (
+                      <p className="text-xs text-zinc-500">Loading membership...</p>
+                    ) : (
+                      (() => {
+                        const membership = orgMemberships[selectedOrg.orgId];
+                        const currentPlan = getCurrentPlanForOrg(selectedOrg.orgId);
+                        const membershipStatus = getMembershipStatusForOrg(selectedOrg.orgId);
+                        
+                        if (membership && currentPlan) {
+                          return (
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                membershipStatus === "active" 
+                                  ? "bg-emerald-500/20 text-emerald-300" 
+                                  : membershipStatus === "pending"
+                                  ? "bg-yellow-500/20 text-yellow-300"
+                                  : "bg-zinc-500/20 text-zinc-400"
+                              }`}>
+                                {membershipStatus === "active" ? "Active" : 
+                                 membershipStatus === "pending" ? "Pending" : 
+                                 membershipStatus || "No Plan"}
+                              </span>
+                              <span className="text-xs text-zinc-400">
+                                {currentPlan.planName} - ${currentPlan.priceMonthly}/month
+                              </span>
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <span className="text-xs text-zinc-500">No membership plan</span>
+                          );
+                        }
+                      })()
+                    )}
+                  </div>
+                )}
+              </div>
+              {organizations.length > 1 && (
+                <button
+                  onClick={() => setShowOrgSelection(true)}
+                  className="px-3 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 rounded-lg transition-colors"
+                >
+                  Change
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {isLoggedIn && organizations.length === 0 && (
+          <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+            <h3 className="text-amber-200 font-medium mb-2">No Organization Found</h3>
+            <p className="text-sm text-amber-300 mb-3">
+              You need to be part of an organization to purchase a membership plan.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => router.push("/profile/create-org")}
+                className="px-3 py-1 text-xs bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded-lg transition-colors"
+              >
+                Create Organization
+              </button>
+              <button
+                onClick={() => router.push("/profile/organizations")}
+                className="px-3 py-1 text-xs border border-amber-500/50 text-amber-300 hover:bg-amber-500/10 rounded-lg transition-colors"
+              >
+                Join Organization
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {(loading ? Array.from({ length: 4 }) : plans).map((p, i) => {
             if (loading) {
@@ -305,9 +526,13 @@ export default function PricingPage() {
             const plan = p as Plan;
             const isPopular = popularIds.has(plan.planId);
             const isFree = (plan.priceMonthly ?? 0) === 0;
+            const isDisabled = isPlanDisabled(plan);
 
-            const isCurrentActive = currentId === plan.planId && status === "active";
-            const isCurrentPending = currentId === plan.planId && status === "pending";
+            // Use selected organization's membership status
+            const currentPlan = selectedOrg ? getCurrentPlanForOrg(selectedOrg.orgId) : null;
+            const membershipStatus = selectedOrg ? getMembershipStatusForOrg(selectedOrg.orgId) : null;
+            const isCurrentActive = currentPlan?.planId === plan.planId && membershipStatus === "active";
+            const isCurrentPending = currentPlan?.planId === plan.planId && membershipStatus === "pending";
 
             return (
               <div
@@ -315,7 +540,9 @@ export default function PricingPage() {
                 className={[
                   "relative rounded-2xl border p-6",
                   "bg-zinc-900/60 backdrop-blur-sm border-white/10",
-                  "shadow-lg transition hover:-translate-y-0.5 hover:ring-1 hover:ring-emerald-400/30",
+                  isDisabled 
+                    ? "opacity-60 cursor-not-allowed" 
+                    : "shadow-lg transition hover:-translate-y-0.5 hover:ring-1 hover:ring-emerald-400/30",
                   isPopular ? "ring-1 ring-emerald-400/30" : "",
                 ].join(" ")}
               >
@@ -347,12 +574,24 @@ export default function PricingPage() {
                       <span className="inline-flex w-full items-center justify-center rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-300">
                         Đang dùng
                       </span>
+                    ) : isDisabled ? (
+                      <div className="w-full">
+                        <button
+                          disabled={true}
+                          className="w-full rounded-xl border border-zinc-600 bg-zinc-700 text-zinc-500 px-4 py-2.5 text-sm font-medium cursor-not-allowed"
+                        >
+                          Không khả dụng
+                        </button>
+                        <p className="text-xs text-zinc-500 mt-1 text-center">
+                          Bạn đang sử dụng gói này hoặc gói cao hơn
+                        </p>
+                      </div>
                     ) : (
                       <button
                         className="w-full rounded-xl py-2.5 font-medium text-zinc-950 bg-emerald-500/90 hover:bg-emerald-400 shadow-lg shadow-emerald-900/20 transition"
                         onClick={() => handleSelectPlan(plan)}
                       >
-                        {isCurrentPending && currentId === plan.planId
+                        {isCurrentPending && currentPlan?.planId === plan.planId
                           ? "Tiếp tục thanh toán"
                           : "Chọn gói"}
                       </button>
@@ -370,6 +609,78 @@ export default function PricingPage() {
           </p>
         )}
       </section>
+
+      {/* Organization Selection Popup */}
+      {showOrgSelection && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-6 max-w-md w-full mx-4">
+            <h2 className="text-xl font-semibold mb-4">Select Organization</h2>
+            <div className="space-y-3 mb-6">
+              {organizations.map((org) => {
+                const membership = orgMemberships[org.orgId];
+                const currentPlan = getCurrentPlanForOrg(org.orgId);
+                const membershipStatus = getMembershipStatusForOrg(org.orgId);
+                
+                return (
+                  <div
+                    key={org.orgId}
+                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                      selectedOrg?.orgId === org.orgId
+                        ? "border-emerald-400/60 bg-emerald-500/10"
+                        : "border-zinc-700 hover:border-zinc-600"
+                    }`}
+                    onClick={() => setSelectedOrg(org)}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <p className="font-medium">{org.orgName}</p>
+                        <p className="text-sm text-zinc-400">Role: {org.myRole}</p>
+                        {membership && currentPlan ? (
+                          <div className="mt-1 flex items-center gap-2">
+                            <span className={`text-xs px-2 py-1 rounded-full ${
+                              membershipStatus === "active" 
+                                ? "bg-emerald-500/20 text-emerald-300" 
+                                : membershipStatus === "pending"
+                                ? "bg-yellow-500/20 text-yellow-300"
+                                : "bg-zinc-500/20 text-zinc-400"
+                            }`}>
+                              {membershipStatus === "active" ? "Active" : 
+                               membershipStatus === "pending" ? "Pending" : 
+                               membershipStatus || "No Plan"}
+                            </span>
+                            <span className="text-xs text-zinc-400">
+                              {currentPlan.planName}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-zinc-500 mt-1">No membership plan</span>
+                        )}
+                      </div>
+                      {selectedOrg?.orgId === org.orgId && (
+                        <div className="w-4 h-4 rounded-full bg-emerald-400"></div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowOrgSelection(false)}
+                className="flex-1 px-4 py-2 border border-zinc-600 text-zinc-300 rounded-lg hover:bg-zinc-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => setShowOrgSelection(false)}
+                className="flex-1 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-zinc-900 rounded-lg transition-colors"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

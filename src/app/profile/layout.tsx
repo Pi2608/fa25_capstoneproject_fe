@@ -232,7 +232,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 Tổ chức
               </div>
               <div className="space-y-1">
-                <SidebarLink href="/profile/create-project" label="Tạo tổ chức" />
+                <SidebarLink href="/profile/create-org" label="Tạo tổ chức" />
                 {orgs === null && (
                   <>
                     <div className="h-8 rounded-md bg-white/5 animate-pulse" />
