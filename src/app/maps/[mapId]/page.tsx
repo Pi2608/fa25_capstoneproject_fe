@@ -368,7 +368,7 @@ export default function EditMapPage() {
       isVisible: updates.isVisible ?? undefined,
       zIndex: updates.zIndex ?? undefined,
     };
-    await handleUpdateFeatureStyle(detail.id, featureId, convertedUpdates, refreshMapDetail);
+    await handleUpdateFeatureStyle(detail.id, featureId, converted, refreshMapDetail);
   }, [detail, refreshMapDetail]);
 
   const onDeleteFeature = useCallback(async (featureId: string) => {
@@ -444,7 +444,7 @@ export default function EditMapPage() {
       setBusySaveMeta(false);
       setTimeout(() => setFeedback(null), 1600);
     }
-  }, [detail, name, description, baseKey, refreshMapDetail]);
+  }, [detail, name, baseKey, refreshMapDetail]);
 
   const saveView = useCallback(async () => {
     if (!detail || !mapRef.current) return;

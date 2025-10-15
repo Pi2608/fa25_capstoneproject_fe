@@ -269,11 +269,6 @@ export default function OrgDetailPage() {
     };
   }, [orgId]);
 
-  const refreshMembers = useCallback(async () => {
-    const memRes = await getOrganizationMembers(orgId);
-    setMembers(memRes);
-  }, [orgId]);
-
   const onInvite = useCallback(async () => {
     const emails = inviteInput
       .split(/[,\s]+/)
