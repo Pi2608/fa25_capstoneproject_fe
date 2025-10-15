@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import {
   createOrganization,
@@ -95,7 +95,8 @@ function pickNewestOrgId(list: MyOrganizationDto[], name: string, abb: string): 
   return newest?.orgId ?? null
 }
 
-export default function CreateOrganizationPage() {
+// Component that handles search params
+function CreateOrganizationPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -405,5 +406,21 @@ export default function CreateOrganizationPage() {
         </div>
       )}
     </main>
+  )
+}
+
+// Main export with Suspense boundary
+export default function CreateOrganizationPage() {
+  return (
+    <Suspense fallback={
+      <main className="max-w-2xl mx-auto px-6 py-10 text-white">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-400 border-t-transparent"></div>
+          <span className="ml-3 text-zinc-400">Loading...</span>
+        </div>
+      </main>
+    }>
+      <CreateOrganizationPageContent />
+    </Suspense>
   )
 }
