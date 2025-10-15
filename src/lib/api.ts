@@ -477,116 +477,6 @@ export function resetPassword(req: ResetPasswordReq) {
 //   };
 // }
 
-// ==== Transactions (PayOS) ====
-
-export type PaymentGateway = "vnPay" | "payOS" | "stripe";
-export type PaymentPurpose = "membership" | "order";
-export interface ProcessPaymentReq {
-  paymentGateway: PaymentGateway;
-  purpose: PaymentPurpose;
-  total?: number;
-  PlanId?: number;
-  UserId?: string;
-  OrgId?: string;
-  AutoRenew?: boolean;
-  MembershipId?: string;
-  AddonKey?: string;
-  Quantity?: number;
-}
-
-// Response trả về khi tạo giao dịch
-export interface ProcessPaymentRes {
-  approvalUrl: string;
-  transactionId?: string;
-  provider?: string;
-
-  paymentGateway?: PaymentGateway;
-  sessionId: string;
-  qrCode?: string;
-  orderCode: string;
-}
-
-export function processPayment(body: ProcessPaymentReq) {
-  return postJson<ProcessPaymentReq, ProcessPaymentRes>(
-    "/transaction/process-payment",
-    body
-  );
-}
-
-export interface ConfirmPaymentReq {
-  transactionId: string;
-  token: string;
-  payerId: string;
-  paymentId: string;
-}
-
-export interface ConfirmPaymentRes {
-  success: boolean;
-  message?: string;
-}
-
-export function confirmPayment(body: ConfirmPaymentReq) {
-  return postJson<ConfirmPaymentReq, ConfirmPaymentRes>(
-    "/transaction/confirm-payment",
-    body
-  );
-}
-
-// export interface ConfirmPaymentWithContextReq {
-//   transactionId: string;
-//   token: string;
-//   payerId: string;
-//   paymentId: string;
-//   paymentGateway: PaymentGateway;
-//   purpose: PaymentPurpose;
-//   membershipContext: {
-//     userId: string;
-//     planId: number;
-//     email?: string;
-//   };
-// }
-
-export interface ConfirmPaymentWithContextReq {
-  paymentGateway: PaymentGateway,
-  paymentId: string,
-  orderCode: string,
-  purpose: string,
-  transactionId: string,
-  userId: string,
-  orgId: string,
-  planId: number,
-  autoRenew: true
-}
-
-export interface ConfirmPaymentWithContextRes {
-  membershipId: string,
-  transactionId: string,
-  accessToolsGranted: true
-}
-
-export function confirmPaymentWithContext(body: ConfirmPaymentWithContextReq) {
-  console.log("confirmPaymentWithContext", body);
-  return postJson<ConfirmPaymentWithContextReq, ConfirmPaymentWithContextRes>(
-    "/transaction/confirm-payment-with-context",
-    body
-  );
-}
-
-export function getTransactionById(transactionId: string) {
-  return getJson(`/transaction/${transactionId}`);
-}
-
-export interface Transaction {
-  transactionId: string;
-  amount: number;
-  status: string;
-  purpose: string;
-  paymentGatewayId?: string;
-  transactionReference?: string;
-  transactionDate?: string;
-  createdAt?: string;
-}
-
 
 /** =========================================================
 MAPS / TEMPLATES / LAYERS / FEATURES
@@ -655,6 +545,7 @@ export type MapDto = {
   name: string;
   ownerId?: string;
   description?: string;
+  previewImageUrl?: string | null;
   createdAt: string;
 };
 
@@ -665,6 +556,7 @@ export function getMapById(mapId: string) {
 export interface UpdateMapRequest {
   name?: string;
   description?: string;
+  previewImageUrl?: string | null;
   isPublic?: boolean;
   baseMapProvider?: BaseMapProvider;
   geographicBounds?: string;
@@ -1560,4 +1452,152 @@ export function markAllNotificationsAsRead() {
   return apiFetch<MarkAllNotificationsReadResponse>(`/notifications/mark-all-read`, {
     method: "PUT",
   });
+}
+
+// PAYMENT API //
+export type PaymentGateway = "vnPay" | "payOS" | "stripe" | "payPal";
+export type PaymentPurpose = "membership" | "addon" | "upgrade";
+
+// Subscribe to a plan
+export interface SubscribeRequest {
+  userId: string;
+  orgId: string;
+  planId: number;
+  paymentMethod: PaymentGateway;
+  autoRenew: boolean;
+}
+
+export interface SubscribeResponse {
+  transactionId: string;
+  paymentUrl: string;
+  status: string;
+  message: string;
+  paymentGateway: PaymentGateway;
+  qrCode?: string;
+  orderCode?: string;
+}
+
+export function subscribeToPlan(body: SubscribeRequest) {
+  return postJson<SubscribeRequest, SubscribeResponse>(
+    "/payment/subscribe",
+    body
+  );
+}
+
+// Upgrade to a different plan
+export interface UpgradeRequest {
+  userId: string;
+  orgId: string;
+  newPlanId: number;
+  paymentMethod: PaymentGateway;
+  autoRenew: boolean;
+}
+
+export interface UpgradeResponse {
+  transactionId: string;
+  paymentUrl: string;
+  status: string;
+  message: string;
+  proRatedAmount?: number;
+  paymentGateway: PaymentGateway;
+  qrCode?: string;
+  orderCode?: string;
+}
+
+export function upgradePlan(body: UpgradeRequest) {
+  return postJson<UpgradeRequest, UpgradeResponse>(
+    "/payment/upgrade",
+    body
+  );
+}
+
+// Confirm payment (webhook/callback)
+export interface PaymentConfirmationRequest {
+  paymentGateway: PaymentGateway;
+  purpose: string;
+  transactionId: string;
+  status: "success" | "failed" | "cancelled";
+  paymentId: string;
+  orderCode?: string;
+}
+
+export interface PaymentConfirmationResponse {
+  transactionId: string;
+  status: string;
+  message: string;
+  membershipUpdated: boolean;
+  notificationSent: boolean;
+}
+
+export function confirmPayment(body: PaymentConfirmationRequest) {
+  return postJson<PaymentConfirmationRequest, PaymentConfirmationResponse>(
+    "/payment/confirm",
+    body
+  );
+}
+
+// Cancel payment
+export interface CancelPaymentRequest {
+  paymentGateway: PaymentGateway;
+  paymentId: string;
+  orderCode: string;
+  transactionId: string;
+}
+
+export interface CancelPaymentResponse {
+  status: string;
+  gatewayName: string;
+}
+
+export function cancelPayment(body: CancelPaymentRequest) {
+  return postJson<CancelPaymentRequest, CancelPaymentResponse>(
+    "/payment/cancel",
+    body
+  );
+}
+
+// Get payment history
+export interface PaymentHistoryItem {
+  transactionId: string;
+  amount: number;
+  status: string;
+  purpose: string;
+  transactionDate: string;
+  createdAt: string;
+  transactionReference?: string;
+  paymentGateway?: {
+    gatewayId: string;
+    name: string;
+  };
+  membership?: {
+    membershipId: string;
+    startDate: string;
+    endDate?: string;
+    status: string;
+    autoRenew: boolean;
+    plan?: {
+      planId: number;
+      planName: string;
+      description: string;
+      priceMonthly: number;
+      durationMonths: number;
+    };
+    organization?: {
+      orgId: string;
+      orgName: string;
+      abbreviation: string;
+    };
+  };
+}
+
+export interface PaymentHistoryResponse {
+payments: PaymentHistoryItem[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  hasMore: boolean;
+}
+
+export function getPaymentHistory(page = 1, pageSize = 20) {
+  return getJson<PaymentHistoryResponse>(`/payment/history?page=${page}&pageSize=${pageSize}`);
 }
