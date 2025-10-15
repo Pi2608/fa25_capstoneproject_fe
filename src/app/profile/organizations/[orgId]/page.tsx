@@ -14,6 +14,10 @@ import {
   getUserAccessTools,
   type UserAccessTool,
   getOrganizationMaps,
+  removeMember,
+  updateMemberRole,
+  createMap,
+  type CreateMapRequest,
   getMyMembership,
   type CurrentMembershipDto,
 } from "@/lib/api";
@@ -99,6 +103,7 @@ export default function OrgDetailPage() {
   const [members, setMembers] = useState<GetOrganizationMembersResDto | null>(null);
   const [tools, setTools] = useState<UserAccessTool[]>([]);
   const [maps, setMaps] = useState<MapRow[]>([]);
+  const [creatingMap, setCreatingMap] = useState(false);
   const [membership, setMembership] = useState<CurrentMembershipDto | null>(null);
   const [loadingMembership, setLoadingMembership] = useState(false);
 
@@ -110,11 +115,18 @@ export default function OrgDetailPage() {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
 
+  const [removeDialog, setRemoveDialog] = useState<{
+    open: boolean;
+    memberId?: string | null;
+    label?: string | null;
+  }>({ open: false });
+
   const [moreOpen, setMoreOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [openMemberMenu, setOpenMemberMenu] = useState<string | null>(null);
 
   const [permMsg, setPermMsg] = useState<string | null>(null);
 
@@ -123,7 +135,9 @@ export default function OrgDetailPage() {
   const [sortKey, setSortKey] = useState<SortKey>("dateCreated");
   const [toolsOpen, setToolsOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
-
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
+  const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
+  const [removeBusyId, setRemoveBusyId] = useState<string | null>(null);
   const title = useMemo(() => org?.orgName ?? "—", [org?.orgName]);
 
   const me = useMemo(getMyIdentityFromToken, []);
@@ -142,6 +156,59 @@ export default function OrgDetailPage() {
       return Boolean(matchById || matchByEmail);
     });
   }, [members, myEmail, myId]);
+
+  const refreshMembers = useCallback(async () => {
+    const memRes = await getOrganizationMembers(orgId);
+    setMembers(memRes);
+  }, [orgId]);
+
+  const ROLE_OPTIONS = ["Owner", "Admin", "Member", "Viewer"] as const;
+
+  const onChangeRole = useCallback(
+    async (memberId?: string | null, currentRole?: string | null, newRole?: string) => {
+      if (!memberId || !newRole || newRole === currentRole) return;
+      if (!isOwner) { setInviteMsg("Bạn không có quyền đổi quyền. Hãy hỏi Owner/Admin."); return; }
+
+      try {
+        setRoleBusyId(memberId);
+        await updateMemberRole({ orgId, memberId, newRole });
+        await refreshMembers();
+        setInviteMsg("Đã cập nhật quyền thành viên.");
+      } catch (e) {
+        setInviteMsg(safeMessage(e));
+      } finally {
+        setRoleBusyId(null);
+      }
+    },
+    [isOwner, orgId, refreshMembers]
+  );
+
+  const askRemoveMember = useCallback(
+    (memberId?: string | null, label?: string | null) => {
+      if (!memberId) { setInviteMsg("Không xác định được thành viên để xoá."); return; }
+      if (!isOwner) { setInviteMsg("Bạn không có quyền xoá thành viên. Hãy hỏi Owner/Admin."); return; }
+      setRemoveDialog({ open: true, memberId, label });
+    },
+    [isOwner]
+  );
+
+  const doRemoveMember = useCallback(async () => {
+    const memberId = removeDialog.memberId;
+    if (!memberId) return;
+
+    try {
+      setRemoveBusyId(memberId);
+      await removeMember({ orgId, memberId });
+      await refreshMembers();
+      setInviteMsg("Đã xoá thành viên.");
+    } catch (e) {
+      setInviteMsg(safeMessage(e));
+    } finally {
+      setRemoveBusyId(null);
+      setOpenMemberMenu(null);
+      setRemoveDialog({ open: false });
+    }
+  }, [removeDialog.memberId, orgId, refreshMembers]);
 
   useEffect(() => {
     let alive = true;
@@ -238,8 +305,13 @@ export default function OrgDetailPage() {
     }
   }, [inviteInput, orgId, refreshMembers]);
 
+  // ... ở trong OrgDetailPage, sau onInvite(...)
   const onDeleteOrg = useCallback(async () => {
     if (!org) return;
+    if (!isOwner) {
+      setDeleteErr("Bạn không có quyền xóa tổ chức.");
+      return;
+    }
     setDeleteBusy(true);
     setDeleteErr(null);
     try {
@@ -253,7 +325,35 @@ export default function OrgDetailPage() {
     } finally {
       setDeleteBusy(false);
     }
-  }, [org, router]);
+  }, [org, router, isOwner]);
+
+  const onRemoveMember = useCallback(
+    async (memberId?: string | null) => {
+      if (!memberId) {
+        setInviteMsg("Không xác định được thành viên để xoá.");
+        return;
+      }
+      if (!isOwner) {
+        setInviteMsg("Bạn không có quyền xoá thành viên. Hãy hỏi Owner/Admin.");
+        return;
+      }
+
+      if (!confirm("Remove this member from the project?")) return;
+
+      try {
+        setRemoveBusyId(memberId);
+        await removeMember({ orgId, memberId });
+        await refreshMembers();
+        setInviteMsg("Đã xoá thành viên.");
+      } catch (e) {
+        setInviteMsg(safeMessage(e));
+      } finally {
+        setRemoveBusyId(null);
+        setOpenMemberMenu(null);
+      }
+    },
+    [isOwner, orgId, refreshMembers]
+  );
 
   const requireOwner = useCallback(
     (action: () => void) => {
@@ -267,9 +367,40 @@ export default function OrgDetailPage() {
     [isOwner]
   );
 
+  const createAndGo = useCallback(() => {
+    requireOwner(async () => {
+      if (!orgId || creatingMap) return;
+      try {
+        setCreatingMap(true);
+
+        const body: CreateMapRequest = {
+          orgId,
+          name: "Untitled Map",
+          description: "",
+          isPublic: false,
+          baseMapProvider: "OSM",
+          defaultBounds: undefined,
+          viewState: undefined,
+        };
+
+        const created = await createMap(body);
+        const newId = created.mapId;
+        if (!newId) throw new Error("Không xác định được ID bản đồ mới.");
+
+        const n = encodeURIComponent(body.name ?? "Untitled Map");
+        router.push(`/maps/${newId}?created=1&name=${n}`);
+      } catch (e) {
+        setInviteMsg(safeMessage(e));
+      } finally {
+        setCreatingMap(false);
+      }
+    });
+  }, [orgId, creatingMap, requireOwner, router]);
+
   const clickNewMap = useCallback(() => {
-    requireOwner(() => router.push(`/maps/new?org=${orgId}`));
-  }, [orgId, router, requireOwner]);
+    void createAndGo();
+  }, [createAndGo]);
+
 
   const clickNewFolder = useCallback(() => {
     requireOwner(() => {
@@ -396,9 +527,12 @@ export default function OrgDetailPage() {
           {/* <button onClick={clickNewView} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10" title="New view">
             New view
           </button> */}
-
-          <button onClick={clickNewMap} className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400">
-            New map
+          <button
+            onClick={createAndGo}
+            className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
+            disabled={creatingMap}
+          >
+            {creatingMap ? "Creating…" : "New map"}
           </button>
 
           <div className="relative">
@@ -419,16 +553,19 @@ export default function OrgDetailPage() {
                 <button onClick={copyProjectId} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
                   Copy project ID for API
                 </button>
-                <button
-                  onClick={() => {
-                    setMoreOpen(false);
-                    setDeleteOpen(true);
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-red-300"
-                  role="menuitem"
-                >
-                  Delete project…
-                </button>
+
+                {isOwner && (
+                  <button
+                    onClick={() => {
+                      setMoreOpen(false);
+                      setDeleteOpen(true);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-red-300"
+                    role="menuitem"
+                  >
+                    Delete project…
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -442,10 +579,11 @@ export default function OrgDetailPage() {
           <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
             <p className="text-zinc-400 mb-4">No maps in this project yet.</p>
             <button
-              onClick={clickNewMap}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
+              onClick={createAndGo}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400 disabled:opacity-60"
+              disabled={creatingMap}
             >
-              Create a map here
+              {creatingMap ? "Creating…" : "Create a map here"}
             </button>
           </div>
         )}
@@ -612,18 +750,62 @@ export default function OrgDetailPage() {
           </div>
           <div className="divide-y divide-white/10 text-sm max-h-56 overflow-auto rounded-md border border-white/5">
             {memberRows.map((m) => {
-              const roleLabel = (m.role ?? m.memberType ?? "") || "";
+              const key = (m.memberId ?? m.email ?? Math.random().toString(36)) as string;
+              const roleLabel = (m.role ?? m.memberType ?? "") || "Member";
+              const expanded = expandedMemberId === key;
+
               return (
-                <div key={m.memberId ?? m.email ?? Math.random().toString(36)} className="flex items-center justify-between py-2 px-2">
-                  <div>
-                    <div className="font-medium text-zinc-100">{m.fullName || m.email || "—"}</div>
-                    <div className="text-xs text-zinc-400">{m.email ?? "—"}</div>
+                <div key={key} className="px-2">
+                  <div className="flex items-center justify-between py-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-zinc-100 truncate">{m.fullName || m.email || "—"}</div>
+                      <div className="text-xs text-zinc-400 truncate">{m.email ?? "—"}</div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setExpandedMemberId(expanded ? null : key)}
+                      className="ml-3 shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                      title="Role / Remove"
+                    >
+                      {roleLabel} <span aria-hidden>▾</span>
+                    </button>
                   </div>
-                  <span className="text-xs text-zinc-400">{roleLabel}</span>
+
+                  {expanded && (
+                    <div className="mb-2 rounded-md border border-white/10 bg-zinc-900/70 p-2">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-zinc-400">Role</label>
+                        <select
+                          className="flex-1 rounded-md bg-zinc-800 border border-white/10 px-2 py-1 text-xs text-zinc-100"
+                          value={roleLabel}
+                          disabled={roleBusyId === m.memberId}
+                          onChange={(e) => onChangeRole(m.memberId ?? null, roleLabel, e.target.value)}
+                        >
+                          {ROLE_OPTIONS.map((r) => (
+                            <option key={r} value={r}>{r}</option>
+                          ))}
+                        </select>
+
+                        <button
+                          type="button"
+                          onClick={() => askRemoveMember(m.memberId ?? null, m.fullName || m.email || "Người dùng")}
+                          disabled={removeBusyId === m.memberId}
+                          className="shrink-0 text-xs px-2 py-1 rounded border border-red-500/30 text-red-300 hover:bg-red-500/10 disabled:opacity-60"
+                          title="Remove member"
+                        >
+                          {removeBusyId === m.memberId ? "Removing…" : "Remove"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
-            {memberRows.length === 0 && <div className="py-6 text-center text-zinc-400">No members yet</div>}
+
+            {memberRows.length === 0 && (
+              <div className="py-6 text-center text-zinc-400">No members yet</div>
+            )}
           </div>
           <div className="mt-3 flex items-center justify-between text-xs text-zinc-400">
             <span>Only invited users see this project</span>
@@ -639,7 +821,34 @@ export default function OrgDetailPage() {
         </div>
       )}
 
-      {deleteOpen && (
+      {removeDialog.open && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
+          <div className="w-[30rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
+            <h2 className="text-lg font-semibold text-white">Xoá thành viên</h2>
+            <p className="text-sm text-zinc-300 mt-2">
+              Bạn sắp xoá <span className="font-semibold">{removeDialog.label ?? "thành viên"}</span> khỏi dự án này.
+              Hành động này sẽ gỡ quyền truy cập của họ vào tất cả bản đồ trong tổ chức.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                onClick={() => setRemoveDialog({ open: false })}
+              >
+                Huỷ
+              </button>
+              <button
+                onClick={() => void doRemoveMember()}
+                disabled={removeBusyId === removeDialog.memberId}
+                className="px-3 py-2 rounded-lg bg-red-500 text-zinc-900 text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
+              >
+                {removeBusyId === removeDialog.memberId ? "Đang xoá..." : "Xoá thành viên"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isOwner && deleteOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
             <h2 className="text-lg font-semibold text-white">Delete project</h2>

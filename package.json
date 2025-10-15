@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.18.3",
+    "@maptiler/leaflet-maptilersdk": "^4.1.1",
     "axios": "^1.11.0",
     "firebase": "^12.1.0",
     "gsap": "^3.13.0",

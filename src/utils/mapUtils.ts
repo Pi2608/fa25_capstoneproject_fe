@@ -1,80 +1,14 @@
-/**
- * Map Utilities - Style Management System
- * 
- * This module provides comprehensive style management for Leaflet layers and features.
- * It includes functions to extract, apply, save, and load styles from the database.
- * 
- * ## Key Features:
- * 
- * ### 1. Style Extraction and Application
- * - `extractLayerStyle()` - Extract style properties from Leaflet layers
- * - `applyLayerStyle()` - Apply style properties to Leaflet layers
- * 
- * ### 2. Database Integration
- * - `saveFeature()` - Save features with their styles to database
- * - `updateFeatureInDB()` - Update features with new styles
- * - `updateFeatureStyleRealTime()` - Real-time style updates
- * - `applyStyleToDataLayer()` - Apply styles to data layers
- * 
- * ### 3. Style Presets
- * - `STYLE_PRESETS` - Predefined style configurations
- * - `getStylePreset()` - Get preset styles by type
- * - `createCustomStyle()` - Create validated custom styles
- * 
- * ### 4. Rendering with Styles
- * - `loadFeaturesToMap()` - Load features with stored styles
- * - `renderFeatures()` - Render features with applied styles
- * - `renderAllDataLayers()` - Render data layers with custom styles
- * 
- * ## Usage Examples:
- * 
- * ### Apply a preset style to a feature:
- * ```typescript
- * const redStyle = getStylePreset('marker', 'red');
- * await applyStyleToFeature(mapId, featureId, layer, redStyle, features, setFeatures, refreshMapDetail);
- * ```
- * 
- * ### Create and apply a custom style:
- * ```typescript
- * const customStyle = createCustomStyle({
- *   color: '#ff0000',
- *   weight: 5,
- *   opacity: 0.8,
- *   fillOpacity: 0.3
- * });
- * await applyStyleToFeature(mapId, featureId, layer, customStyle, features, setFeatures, refreshMapDetail);
- * ```
- * 
- * ### Apply style to a data layer:
- * ```typescript
- * const layerStyle = createCustomStyle({
- *   color: '#00ff00',
- *   weight: 3,
- *   fillColor: '#00ff00',
- *   fillOpacity: 0.2
- * });
- * await applyStyleToDataLayer(mapId, layerId, layerStyle, refreshMapDetail);
- * ```
- * 
- * ### Extract current style from a layer:
- * ```typescript
- * const currentStyle = extractLayerStyle(layer);
- * console.log('Current style:', currentStyle);
- * ```
- * 
- * ## Supported Style Properties:
- * - `color` - Stroke color (hex format: #RRGGBB)
- * - `fillColor` - Fill color (hex format: #RRGGBB)
- * - `weight` - Stroke width (1-20)
- * - `opacity` - Stroke opacity (0-1)
- * - `fillOpacity` - Fill opacity (0-1)
- * - `radius` - Circle radius (1-1000)
- * - `dashArray` - Dash pattern (e.g., "10, 10")
- * - `lineCap` - Line cap style ('butt', 'round', 'square')
- * - `lineJoin` - Line join style ('miter', 'round', 'bevel')
- */
-
-import type { Layer, LatLng, LatLngBounds, FeatureGroup, Map as LMap, Icon, IconOptions } from "leaflet";
+import type {
+  Layer,
+  LatLng,
+  LatLngBounds,
+  FeatureGroup,
+  Map as LMap,
+  LeafletMouseEvent,
+  PathOptions,
+  Icon,
+  IconOptions
+} from "leaflet";
 import type { Position } from "geojson";
 import {
   createMapFeature,
@@ -119,7 +53,7 @@ export type ExtendedLayer = Layer & {
       coordinates?: Position | Position[] | Position[][] | Position[][][];
     };
   };
-}
+};
 
 export interface FeatureData {
   id: string;
@@ -138,15 +72,35 @@ export interface LayerInfo {
   isVisible: boolean;
 }
 
-interface ParsedLayer extends Omit<RawLayer, "layerData" | "layerStyle" | "filterConfig" | "customStyle"> {
-  layerData: Record<string, unknown>;  
-  layerStyle: Record<string, unknown>; 
+interface ParsedLayer
+  extends Omit<
+    RawLayer,
+    "layerData" | "layerStyle" | "filterConfig" | "customStyle"
+  > {
+  layerData: Record<string, unknown>;
+  layerStyle: Record<string, unknown>;
   customStyle?: Record<string, unknown>;
   filterConfig?: Record<string, unknown>;
 }
 
 interface ParsedMapData extends Omit<MapDetail, "layers"> {
   layers: ParsedLayer[];
+}
+
+type LayerWithPopup = Layer & { bindPopup: (html: string) => void };
+function hasBindPopup(l: Layer): l is LayerWithPopup {
+  return "bindPopup" in (l as object) &&
+    typeof (l as { bindPopup?: unknown }).bindPopup === "function";
+}
+
+type LayerWithZIndex = Layer & { setZIndex: (z: number) => void };
+function hasSetZIndex(l: Layer): l is LayerWithZIndex {
+  return "setZIndex" in (l as object) &&
+    typeof (l as { setZIndex?: unknown }).setZIndex === "function";
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 // UTILITY FUNCTIONS
@@ -264,28 +218,54 @@ export function applyLayerStyle(layer: ExtendedLayer, style: Record<string, unkn
 export function validateGeometry(geometryType: string, coordinates: string): boolean {
   try {
     const coords = JSON.parse(coordinates);
-    
+
     switch (geometryType) {
       case "Point":
-        return Array.isArray(coords) && coords.length === 2 && 
-               typeof coords[0] === 'number' && typeof coords[1] === 'number';
-      
+        return (
+          Array.isArray(coords) &&
+          coords.length === 2 &&
+          typeof coords[0] === "number" &&
+          typeof coords[1] === "number"
+        );
+
       case "LineString":
-        return Array.isArray(coords) && coords.length >= 2 &&
-               coords.every((c: unknown) => Array.isArray(c) && c.length === 2 &&
-                 typeof c[0] === 'number' && typeof c[1] === 'number');
-      
+        return (
+          Array.isArray(coords) &&
+          coords.length >= 2 &&
+          coords.every(
+            (c: unknown) =>
+              Array.isArray(c) &&
+              c.length === 2 &&
+              typeof (c as unknown[])[0] === "number" &&
+              typeof (c as unknown[])[1] === "number"
+          )
+        );
+
       case "Polygon":
-        return Array.isArray(coords) && coords.length >= 1 &&
-               Array.isArray(coords[0]) && coords[0].length >= 3 &&
-               coords[0].every((c: unknown) => Array.isArray(c) && c.length === 2 &&
-                 typeof c[0] === 'number' && typeof c[1] === 'number');
-      
+        return (
+          Array.isArray(coords) &&
+          coords.length >= 1 &&
+          Array.isArray(coords[0]) &&
+          (coords[0] as unknown[]).length >= 3 &&
+          (coords[0] as unknown[]).every(
+            (c: unknown) =>
+              Array.isArray(c) &&
+              c.length === 2 &&
+              typeof (c as unknown[])[0] === "number" &&
+              typeof (c as unknown[])[1] === "number"
+          )
+        );
+
       case "Circle":
-        return Array.isArray(coords) && coords.length === 3 &&
-               typeof coords[0] === 'number' && typeof coords[1] === 'number' && 
-               typeof coords[2] === 'number' && coords[2] > 0;
-      
+        return (
+          Array.isArray(coords) &&
+          coords.length === 3 &&
+          typeof coords[0] === "number" &&
+          typeof coords[1] === "number" &&
+          typeof coords[2] === "number" &&
+          coords[2] > 0
+        );
+
       default:
         return false;
     }
@@ -294,9 +274,7 @@ export function validateGeometry(geometryType: string, coordinates: string): boo
   }
 }
 
-/**
- * Safely parse JSON string to object.
- */
+
 function safeParseJSON<T = unknown>(value: string, fallback: T = {} as T): T {
   try {
     if (!value) return fallback as T;
@@ -306,9 +284,6 @@ function safeParseJSON<T = unknown>(value: string, fallback: T = {} as T): T {
   }
 }
 
-/**
- * Get feature type from layer
- */
 export function getFeatureType(layer: ExtendedLayer): string {
   if (layer._latlng && !layer._mRadius) return "Marker";
   if (layer._mRadius) return "Circle";
@@ -321,9 +296,6 @@ export function getFeatureType(layer: ExtendedLayer): string {
   return "Unknown";
 }
 
-/**
- * Serialize layer to GeoJSON
- */
 export function serializeFeature(layer: ExtendedLayer): {
   geometryType: "Point" | "LineString" | "Polygon" | "Circle";
   coordinates: string;
@@ -331,7 +303,13 @@ export function serializeFeature(layer: ExtendedLayer): {
 } {
   const type = getFeatureType(layer);
   let geometryType: "Point" | "LineString" | "Polygon" | "Circle" = "Point";
-  let annotationType: "Marker" | "Highlighter" | "Text" | "Note" | "Link" | "Video" = "Marker";
+  let annotationType:
+    | "Marker"
+    | "Highlighter"
+    | "Text"
+    | "Note"
+    | "Link"
+    | "Video" = "Marker";
   let coordinates: Position | Position[] | Position[][] = [0, 0];
 
   if (type === "Marker") {
@@ -345,7 +323,7 @@ export function serializeFeature(layer: ExtendedLayer): {
     }
   } else if (type === "Circle") {
     geometryType = "Circle";
-    annotationType = "Marker"; // Circle is treated as a special marker
+    annotationType = "Marker";
     if (layer._latlng && layer._mRadius) {
       coordinates = [layer._latlng.lng, layer._latlng.lat, layer._mRadius];
     } else {
@@ -357,13 +335,15 @@ export function serializeFeature(layer: ExtendedLayer): {
     annotationType = "Highlighter";
     if (layer._bounds) {
       const bounds = layer._bounds;
-      coordinates = [[
-        [bounds.getWest(), bounds.getSouth()],
-        [bounds.getEast(), bounds.getSouth()],
-        [bounds.getEast(), bounds.getNorth()],
-        [bounds.getWest(), bounds.getNorth()],
-        [bounds.getWest(), bounds.getSouth()],
-      ]];
+      coordinates = [
+        [
+          [bounds.getWest(), bounds.getSouth()],
+          [bounds.getEast(), bounds.getSouth()],
+          [bounds.getEast(), bounds.getNorth()],
+          [bounds.getWest(), bounds.getNorth()],
+          [bounds.getWest(), bounds.getSouth()],
+        ],
+      ];
     } else {
       console.warn("Rectangle layer missing _bounds property");
       coordinates = [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]];
@@ -376,7 +356,10 @@ export function serializeFeature(layer: ExtendedLayer): {
       coordinates = latlngs.map((ll) => [ll.lng, ll.lat]);
     } else {
       console.warn("Line layer missing valid _latlngs property");
-      coordinates = [[0, 0], [1, 1]];
+      coordinates = [
+        [0, 0],
+        [1, 1],
+      ];
     }
   } else if (type === "Polygon") {
     geometryType = "Polygon";
@@ -402,10 +385,10 @@ export function serializeFeature(layer: ExtendedLayer): {
   };
 }
 
-/**
- * Create a GeoJSON feature from a Leaflet layer
- */
-export function createGeoJSONFeature(layer: ExtendedLayer, properties: Record<string, unknown> = {}): {
+export function createGeoJSONFeature(
+  layer: ExtendedLayer,
+  properties: Record<string, unknown> = {}
+): {
   type: "Feature";
   geometry: {
     type: string;
@@ -414,7 +397,7 @@ export function createGeoJSONFeature(layer: ExtendedLayer, properties: Record<st
   properties: Record<string, unknown>;
 } {
   const { geometryType, coordinates } = serializeFeature(layer);
-  
+
   return {
     type: "Feature",
     geometry: {
@@ -425,9 +408,7 @@ export function createGeoJSONFeature(layer: ExtendedLayer, properties: Record<st
   };
 }
 
-/**
- * Convert Leaflet layer to GeoJSON FeatureCollection
- */
+
 export function layersToGeoJSON(layers: ExtendedLayer[]): {
   type: "FeatureCollection";
   features: Array<{
@@ -441,15 +422,13 @@ export function layersToGeoJSON(layers: ExtendedLayer[]): {
 } {
   return {
     type: "FeatureCollection",
-    features: layers.map(layer => createGeoJSONFeature(layer)),
+    features: layers.map((layer) => createGeoJSONFeature(layer)),
   };
 }
 
-/**
- * Convert raw map data (with stringified layerData/layerStyle) into parsed objects.
- */
+
 export function convertMapLayers(rawData: MapDetail): ParsedMapData {
-  const parsedLayers: ParsedLayer[] = rawData.layers.map(layer => ({
+  const parsedLayers: ParsedLayer[] = rawData.layers.map((layer) => ({
     ...layer,
     layerData: safeParseJSON(layer.layerData) ?? {},
     layerStyle: safeParseJSON(layer.layerStyle) ?? {},
@@ -460,12 +439,10 @@ export function convertMapLayers(rawData: MapDetail): ParsedMapData {
   return { ...rawData, layers: parsedLayers };
 }
 
-// FEATURE LIST MANAGEMENT (LOCAL FEATURES)
 
-/**
- * Get feature list from map
- */
-export async function getFeatureList(mapId: string): Promise<MapFeatureResponse[]> {
+export async function getFeatureList(
+  mapId: string
+): Promise<MapFeatureResponse[]> {
   try {
     return await getMapFeatures(mapId);
   } catch (error) {
@@ -474,9 +451,6 @@ export async function getFeatureList(mapId: string): Promise<MapFeatureResponse[
   }
 }
 
-/**
- * Add feature to list
- */
 export function addFeatureToList(
   features: FeatureData[],
   layer: ExtendedLayer,
@@ -484,7 +458,7 @@ export function addFeatureToList(
 ): FeatureData[] {
   const type = getFeatureType(layer);
   const id = `feature-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  
+
   const newFeature: FeatureData = {
     id,
     name: name || `${type} ${features.length + 1}`,
@@ -496,9 +470,6 @@ export function addFeatureToList(
   return [...features, newFeature];
 }
 
-/**
- * Remove feature from list
- */
 export function removeFeatureFromList(
   features: FeatureData[],
   featureId: string,
@@ -506,7 +477,7 @@ export function removeFeatureFromList(
   sketchGroup?: FeatureGroup | null
 ): FeatureData[] {
   const feature = features.find((f) => f.id === featureId);
-  
+
   if (feature && map && sketchGroup) {
     sketchGroup.removeLayer(feature.layer);
   }
@@ -514,10 +485,6 @@ export function removeFeatureFromList(
   return features.filter((f) => f.id !== featureId);
 }
 
-
-/**
- * Rename feature
- */
 export function renameFeature(
   features: FeatureData[],
   featureId: string,
@@ -531,11 +498,7 @@ export function renameFeature(
   });
 }
 
-// LAYER LIST MANAGEMENT (FOR NEW MAP PAGE)
 
-/**
- * Add layer to list (for new map page)
- */
 export function addLayerToList(
   layers: LayerInfo[],
   layer: ExtendedLayer,
@@ -543,7 +506,7 @@ export function addLayerToList(
 ): LayerInfo[] {
   const type = getFeatureType(layer);
   const id = `layer-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  
+
   const newLayer: LayerInfo = {
     id,
     name: name || `${type} ${layers.length + 1}`,
@@ -555,16 +518,13 @@ export function addLayerToList(
   return [...layers, newLayer];
 }
 
-/**
- * Remove layer from list (for new map page)
- */
 export function removeLayerFromList(
   layers: LayerInfo[],
   layerId: string,
   map?: LMap | null
 ): LayerInfo[] {
   const layer = layers.find((l) => l.id === layerId);
-  
+
   if (layer && map) {
     map.removeLayer(layer.layer);
   }
@@ -572,9 +532,6 @@ export function removeLayerFromList(
   return layers.filter((l) => l.id !== layerId);
 }
 
-/**
- * Toggle layer visibility (for new map page)
- */
 export function toggleLayerVisibilityLocal(
   layers: LayerInfo[],
   layerId: string,
@@ -583,7 +540,7 @@ export function toggleLayerVisibilityLocal(
   return layers.map((l) => {
     if (l.id === layerId) {
       const newVisibility = !l.isVisible;
-      
+
       if (map) {
         if (newVisibility) {
           if (!map.hasLayer(l.layer)) {
@@ -600,9 +557,6 @@ export function toggleLayerVisibilityLocal(
   });
 }
 
-/**
- * Rename layer (for new map page)
- */
 export function renameLayer(
   layers: LayerInfo[],
   layerId: string,
@@ -616,11 +570,6 @@ export function renameLayer(
   });
 }
 
-// DATABASE OPERATIONS (LOW-LEVEL)
-
-/**
- * Save feature to database
- */
 export async function saveFeature(
   mapId: string,
   layerId: string,
@@ -629,17 +578,14 @@ export async function saveFeature(
   setFeatures: React.Dispatch<React.SetStateAction<FeatureData[]>>
 ): Promise<FeatureData | null> {
   try {
-
     const { geometryType, annotationType, coordinates } = serializeFeature(layer);
     const type = getFeatureType(layer);
 
-    // Validate coordinates before sending
-    if (!coordinates || coordinates === '[0,0]' || coordinates === '[]') {
+    if (!coordinates || coordinates === "[0,0]" || coordinates === "[]") {
       console.error("Invalid coordinates for feature:", coordinates);
       return null;
     }
 
-    // Validate geometry format
     if (!validateGeometry(geometryType, coordinates)) {
       console.error("Invalid geometry format:", { geometryType, coordinates });
       return null;
@@ -649,7 +595,7 @@ export async function saveFeature(
     const layerStyle = extractLayerStyle(layer);
 
     const body: CreateMapFeatureRequest = {
-      layerId: layerId || null, // Allow null layerId for standalone features
+      layerId: layerId || null,
       name: `${type}`,
       description: "",
       featureCategory: "Annotation",
@@ -682,9 +628,6 @@ export async function saveFeature(
   }
 }
 
-/**
- * Update feature in database
- */
 export async function updateFeatureInDB(
   mapId: string,
   featureId: string,
@@ -718,9 +661,6 @@ export async function updateFeatureInDB(
   }
 }
 
-/**
- * Delete feature from database
- */
 export async function deleteFeatureFromDB(
   mapId: string,
   featureId: string
@@ -734,12 +674,9 @@ export async function deleteFeatureFromDB(
   }
 }
 
-/**
- * Load features from database to map
- */
 export async function loadFeaturesToMap(
   mapId: string,
-  L: typeof import('leaflet'),
+  L: typeof import("leaflet"),
   sketchGroup: FeatureGroup
 ): Promise<FeatureData[]> {
   try {
@@ -748,7 +685,6 @@ export async function loadFeaturesToMap(
     const featureDataList: FeatureData[] = [];
 
     for (const feature of features) {
-      // Parse coordinates from the string format
       let coordinates: Position | Position[] | Position[][];
       try {
         coordinates = JSON.parse(feature.coordinates);
@@ -808,21 +744,16 @@ export async function loadFeaturesToMap(
   }
 }
 
-// LAYER RENDERING FUNCTIONS
 
-/**
- * Render data layers from map detail to the map
- */
 export async function renderDataLayers(
   map: LMap,
   layers: RawLayer[],
-  dataLayerRefs: React.MutableRefObject<Map<string, L.Layer>>
+  dataLayerRefs: React.MutableRefObject<Map<string, Layer>>
 ): Promise<void> {
   if (!layers || !map) return;
 
   const L = (await import("leaflet")).default;
 
-  // Clear existing data layers only (not base map)
   dataLayerRefs.current.forEach((layer) => {
     if (map.hasLayer(layer)) {
       map.removeLayer(layer);
@@ -867,16 +798,20 @@ export async function renderDataLayers(
             if (feature.properties) {
               const popupContent = Object.entries(feature.properties)
                 .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
-                .join('<br>');
-              leafletLayer.bindPopup(popupContent);
+                .join("<br>");
+              if (hasBindPopup(leafletLayer)) {
+                leafletLayer.bindPopup(popupContent);
+              }
             }
-          }
+          },
         });
 
         const dataLayerZIndex = 1000 + (layer.zIndex || 0);
-        geoJsonLayer.setZIndex(dataLayerZIndex);
+        if (hasSetZIndex(geoJsonLayer)) {
+          geoJsonLayer.setZIndex(dataLayerZIndex);
+        }
         map.addLayer(geoJsonLayer);
-        
+
         dataLayerRefs.current.set(layer.id, geoJsonLayer);
       }
     } catch (error) {
@@ -885,20 +820,16 @@ export async function renderDataLayers(
   }
 }
 
-/**
- * Render features from database to the map
- */
 export async function renderFeatures(
   map: LMap,
   features: MapFeatureResponse[],
-  featureRefs: React.MutableRefObject<Map<string, L.Layer>>,
+  featureRefs: React.MutableRefObject<Map<string, Layer>>,
   sketchGroup: FeatureGroup
 ): Promise<void> {
   if (!features || !map) return;
 
   const L = (await import("leaflet")).default;
 
-  // Clear existing feature layers only (not base map or data layers)
   featureRefs.current.forEach((layer) => {
     if (map.hasLayer(layer)) {
       map.removeLayer(layer);
@@ -909,7 +840,6 @@ export async function renderFeatures(
   });
   featureRefs.current.clear();
 
-  // Render visible features
   for (const feature of features) {
     if (!feature.isVisible) continue;
 
@@ -951,22 +881,28 @@ export async function renderFeatures(
 
         // Set high z-index for features to ensure they appear above data layers
         const featureZIndex = 2000 + (feature.zIndex || 0);
-        (layer as L.Layer & { setZIndex?: (zIndex: number) => void }).setZIndex?.(featureZIndex);
-        
-        // Add popup if feature has properties
+        if (hasSetZIndex(layer)) {
+          layer.setZIndex(featureZIndex);
+        }
+
         if (feature.properties) {
           try {
             const properties = JSON.parse(feature.properties);
             const popupContent = Object.entries(properties)
               .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
-              .join('<br>');
-            layer.bindPopup(popupContent);
+              .join("<br>");
+            if (hasBindPopup(layer)) layer.bindPopup(popupContent);
           } catch {
-            // If properties can't be parsed, show basic info
-            layer.bindPopup(`<strong>Name:</strong> ${feature.name || 'Unnamed Feature'}`);
+            if (hasBindPopup(layer)) {
+              layer.bindPopup(
+                `<strong>Name:</strong> ${feature.name || "Unnamed Feature"}`
+              );
+            }
           }
-        } else {
-          layer.bindPopup(`<strong>Name:</strong> ${feature.name || 'Unnamed Feature'}`);
+        } else if (hasBindPopup(layer)) {
+          layer.bindPopup(
+            `<strong>Name:</strong> ${feature.name || "Unnamed Feature"}`
+          );
         }
 
         sketchGroup.addLayer(layer);
@@ -978,25 +914,19 @@ export async function renderFeatures(
   }
 }
 
-// LAYER VISIBILITY TOGGLE FUNCTIONS
-
-/**
- * Toggle individual data layer visibility
- */
 export async function toggleLayerVisibility(
   map: LMap,
   layerId: string,
   isVisible: boolean,
   layers: RawLayer[],
-  dataLayerRefs: React.MutableRefObject<Map<string, L.Layer>>
+  dataLayerRefs: React.MutableRefObject<Map<string, Layer>>
 ): Promise<void> {
   if (!map) return;
 
   const existingLayer = dataLayerRefs.current.get(layerId);
 
   if (isVisible && !existingLayer) {
-    // Layer should be visible but doesn't exist, render it
-    const layer = layers.find(l => l.id === layerId);
+    const layer = layers.find((l) => l.id === layerId);
     if (!layer) return;
 
     try {
@@ -1033,16 +963,18 @@ export async function toggleLayerVisibility(
             if (feature.properties) {
               const popupContent = Object.entries(feature.properties)
                 .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
-                .join('<br>');
-              leafletLayer.bindPopup(popupContent);
+                .join("<br>");
+              if (hasBindPopup(leafletLayer)) {
+                leafletLayer.bindPopup(popupContent);
+              }
             }
-          }
+          },
         });
 
-        // Set high z-index for data layers to ensure they appear above base layers
-        // Base layers typically use z-index 0-100, so we use 1000+ for data layers
         const dataLayerZIndex = 1000 + (layer.zIndex || 0);
-        geoJsonLayer.setZIndex(dataLayerZIndex);
+        if (hasSetZIndex(geoJsonLayer)) {
+          geoJsonLayer.setZIndex(dataLayerZIndex);
+        }
         map.addLayer(geoJsonLayer);
         dataLayerRefs.current.set(layerId, geoJsonLayer);
       }
@@ -1050,7 +982,6 @@ export async function toggleLayerVisibility(
       console.warn(`Failed to render layer ${layer.name}:`, error);
     }
   } else if (!isVisible && existingLayer) {
-    // Only remove data layers, never base layers
     if (map.hasLayer(existingLayer)) {
       map.removeLayer(existingLayer);
     }
@@ -1058,9 +989,6 @@ export async function toggleLayerVisibility(
   }
 }
 
-/**
- * Toggle individual feature visibility (for local features)
- */
 export function toggleFeatureVisibilityLocal(
   features: FeatureData[],
   featureId: string,
@@ -1070,7 +998,7 @@ export function toggleFeatureVisibilityLocal(
   return features.map((f) => {
     if (f.id === featureId) {
       const newVisibility = !f.isVisible;
-      
+
       if (map && sketchGroup) {
         if (newVisibility) {
           if (!sketchGroup.hasLayer(f.layer)) {
@@ -1087,15 +1015,12 @@ export function toggleFeatureVisibilityLocal(
   });
 }
 
-/**
- * Toggle individual feature visibility
- */
 export async function toggleFeatureVisibility(
   map: LMap,
   featureId: string,
   isVisible: boolean,
   features: MapFeatureResponse[],
-  featureRefs: React.MutableRefObject<Map<string, L.Layer>>,
+  featureRefs: React.MutableRefObject<Map<string, Layer>>,
   sketchGroup: FeatureGroup
 ): Promise<void> {
   if (!map) return;
@@ -1103,8 +1028,7 @@ export async function toggleFeatureVisibility(
   const existingFeature = featureRefs.current.get(featureId);
 
   if (isVisible && !existingFeature) {
-    // Feature should be visible but doesn't exist, render it
-    const feature = features.find(f => f.featureId === featureId);
+    const feature = features.find((f) => f.featureId === featureId);
     if (!feature) return;
 
     try {
@@ -1146,21 +1070,28 @@ export async function toggleFeatureVisibility(
 
         // Set high z-index for features to ensure they appear above data layers
         const featureZIndex = 2000 + (feature.zIndex || 0);
-        (layer as L.Layer & { setZIndex?: (zIndex: number) => void }).setZIndex?.(featureZIndex);
-        
-        // Add popup if feature has properties
+        if (hasSetZIndex(layer)) {
+          layer.setZIndex(featureZIndex);
+        }
+
         if (feature.properties) {
           try {
             const properties = JSON.parse(feature.properties);
             const popupContent = Object.entries(properties)
               .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
-              .join('<br>');
-            layer.bindPopup(popupContent);
+              .join("<br>");
+            if (hasBindPopup(layer)) layer.bindPopup(popupContent);
           } catch {
-            layer.bindPopup(`<strong>Name:</strong> ${feature.name || 'Unnamed Feature'}`);
+            if (hasBindPopup(layer)) {
+              layer.bindPopup(
+                `<strong>Name:</strong> ${feature.name || "Unnamed Feature"}`
+              );
+            }
           }
-        } else {
-          layer.bindPopup(`<strong>Name:</strong> ${feature.name || 'Unnamed Feature'}`);
+        } else if (hasBindPopup(layer)) {
+          layer.bindPopup(
+            `<strong>Name:</strong> ${feature.name || "Unnamed Feature"}`
+          );
         }
 
         sketchGroup.addLayer(layer);
@@ -1170,7 +1101,6 @@ export async function toggleFeatureVisibility(
       console.warn(`Failed to render feature ${feature.name}:`, error);
     }
   } else if (!isVisible && existingFeature) {
-    // Only remove features, never base layers or data layers
     if (sketchGroup.hasLayer(existingFeature)) {
       sketchGroup.removeLayer(existingFeature);
     }
@@ -1178,11 +1108,7 @@ export async function toggleFeatureVisibility(
   }
 }
 
-// CRUD OPERATIONS (LOW-LEVEL API CALLS)
 
-/**
- * CRUD operations for data layers
- */
 export async function addDataLayerToMap(
   mapId: string,
   layerId: string,
@@ -1196,7 +1122,7 @@ export async function addDataLayerToMap(
       isVisible,
       zIndex,
       customStyle: null,
-      filterConfig: null
+      filterConfig: null,
     });
     return true;
   } catch (error) {
@@ -1239,9 +1165,6 @@ export async function removeDataLayerFromMap(
   }
 }
 
-/**
- * CRUD operations for features
- */
 export async function createFeatureInMap(
   mapId: string,
   featureData: CreateMapFeatureRequest
@@ -1283,19 +1206,15 @@ export async function deleteFeatureFromMap(
   }
 }
 
-// HIGH-LEVEL MAP MANAGEMENT FUNCTIONS
 
-/**
- * Render features from database to the map (high-level wrapper)
- */
 export async function renderFeaturesCallback(
   mapId: string,
   map: LMap,
-  featureRefs: React.MutableRefObject<Map<string, L.Layer>>,
+  featureRefs: React.MutableRefObject<Map<string, Layer>>,
   sketchGroup: FeatureGroup
 ): Promise<void> {
   if (!mapId || !map || !sketchGroup) return;
-  
+
   try {
     const { getMapFeatures } = await import("@/lib/api");
     const dbFeatures = await getMapFeatures(mapId);
@@ -1305,31 +1224,32 @@ export async function renderFeaturesCallback(
   }
 }
 
-/**
- * Toggle individual feature visibility (high-level wrapper)
- */
 export async function toggleFeatureVisibilityCallback(
   mapId: string,
   featureId: string,
   isVisible: boolean,
   map: LMap,
-  featureRefs: React.MutableRefObject<Map<string, L.Layer>>,
+  featureRefs: React.MutableRefObject<Map<string, Layer>>,
   sketchGroup: FeatureGroup
 ): Promise<void> {
   if (!mapId || !map || !sketchGroup) return;
-  
+
   try {
     const { getMapFeatures } = await import("@/lib/api");
     const dbFeatures = await getMapFeatures(mapId);
-    await toggleFeatureVisibility(map, featureId, isVisible, dbFeatures, featureRefs, sketchGroup);
+    await toggleFeatureVisibility(
+      map,
+      featureId,
+      isVisible,
+      dbFeatures,
+      featureRefs,
+      sketchGroup
+    );
   } catch (error) {
     console.error("Failed to toggle feature visibility:", error);
   }
 }
 
-/**
- * Add data layer to map (high-level wrapper with state management)
- */
 export async function handleAddDataLayer(
   mapId: string,
   layerId: string,
@@ -1338,7 +1258,7 @@ export async function handleAddDataLayer(
   onSuccess?: () => Promise<void>
 ): Promise<boolean> {
   if (!mapId) return false;
-  
+
   const success = await addDataLayerToMap(mapId, layerId, isVisible, zIndex);
   if (success && onSuccess) {
     try {
@@ -1350,17 +1270,24 @@ export async function handleAddDataLayer(
   return success;
 }
 
-/**
- * Update data layer in map (high-level wrapper with state management)
- */
 export async function handleUpdateDataLayer(
   mapId: string,
   layerId: string,
-  updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string },
-  onSuccess?: (updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => Promise<void>
+  updates: {
+    isVisible?: boolean;
+    zIndex?: number;
+    customStyle?: string;
+    filterConfig?: string;
+  },
+  onSuccess?: (updates: {
+    isVisible?: boolean;
+    zIndex?: number;
+    customStyle?: string;
+    filterConfig?: string;
+  }) => Promise<void>
 ): Promise<boolean> {
   if (!mapId) return false;
-  
+
   const success = await updateDataLayerInMap(mapId, layerId, updates);
   if (success && onSuccess) {
     try {
@@ -1372,16 +1299,13 @@ export async function handleUpdateDataLayer(
   return success;
 }
 
-/**
- * Remove data layer from map (high-level wrapper with state management)
- */
 export async function handleRemoveDataLayer(
   mapId: string,
   layerId: string,
   onSuccess?: () => Promise<void>
 ): Promise<boolean> {
   if (!mapId) return false;
-  
+
   const success = await removeDataLayerFromMap(mapId, layerId);
   if (success && onSuccess) {
     try {
@@ -1393,22 +1317,20 @@ export async function handleRemoveDataLayer(
   return success;
 }
 
-/**
- * Render all data layers from map detail to the map (with proper error handling)
- */
 export async function renderAllDataLayers(
   map: LMap,
   layers: RawLayer[],
-  dataLayerRefs: React.MutableRefObject<Map<string, L.Layer>>,
-  signal?: AbortSignal // ✅ Add this
+  dataLayerRefs: React.MutableRefObject<Map<string, Layer>>,
+  signal?: AbortSignal
 ): Promise<void> {
-  if (!map || !layers) return;
+  if (!map || !layers) {
+    return;
+  }
 
   const L = (await import("leaflet")).default;
-  
-  if (signal?.aborted) return; // ✅ Check cancellation
 
-  // Clear existing data layers
+  if (signal?.aborted) return;
+
   dataLayerRefs.current.forEach((layer) => {
     if (map.hasLayer(layer)) {
       map.removeLayer(layer);
@@ -1416,10 +1338,11 @@ export async function renderAllDataLayers(
   });
   dataLayerRefs.current.clear();
 
-  // Render visible layers
   for (const layer of layers) {
-    if (signal?.aborted) break; // ✅ Check in loop
-    if (!layer.isVisible) continue;
+    if (signal?.aborted) break;
+    if (!layer.isVisible) {
+      continue;
+    }
 
     try {
       const layerData = JSON.parse(layer.layerData || '{}');
@@ -1454,18 +1377,45 @@ export async function renderAllDataLayers(
             if (feature.properties) {
               const popupContent = Object.entries(feature.properties)
                 .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
-                .join('<br>');
-              leafletLayer.bindPopup(popupContent);
+                .join("<br>");
+              if (hasBindPopup(leafletLayer)) {
+                leafletLayer.bindPopup(popupContent);
+              }
             }
-          }
+
+            type LayerWithMeta = Layer & {
+              _feature?: GeoJSON.Feature;
+              _layerId?: string;
+              _layerName?: string;
+            };
+            const meta = leafletLayer as LayerWithMeta;
+            meta._feature = feature;
+            meta._layerId = layer.id;
+            meta._layerName = layer.name;
+
+            leafletLayer.on("contextmenu", (e: LeafletMouseEvent) => {
+              const original = e.originalEvent as MouseEvent;
+              original.preventDefault();
+
+              const event = new CustomEvent("zone-contextmenu", {
+                detail: {
+                  feature,
+                  layerId: layer.id,
+                  layerName: layer.name,
+                  x: original.clientX,
+                  y: original.clientY,
+                  leafletLayer,
+                },
+              });
+              window.dispatchEvent(event);
+            });
+          },
         });
 
-        if (signal?.aborted) break; // ✅ Check before adding
+        if (signal?.aborted) break;
 
-        const dataLayerZIndex = 1000 + (layer.zIndex || 0);
-        geoJsonLayer.setZIndex(dataLayerZIndex);
         map.addLayer(geoJsonLayer);
-        
+
         dataLayerRefs.current.set(layer.id, geoJsonLayer);
       }
     } catch (error) {
@@ -1474,9 +1424,6 @@ export async function renderAllDataLayers(
   }
 }
 
-/**
- * Update layer style in database and re-render
- */
 export async function updateLayerStyle(
   mapId: string,
   layerId: string,
@@ -1487,13 +1434,12 @@ export async function updateLayerStyle(
   },
   map: LMap,
   layers: RawLayer[],
-  dataLayerRefs: React.MutableRefObject<Map<string, L.Layer>>
+  dataLayerRefs: React.MutableRefObject<Map<string, Layer>>
 ): Promise<boolean> {
   try {
     const { updateMapLayer } = await import("@/lib/api");
     await updateMapLayer(mapId, layerId, styleUpdates);
-    
-    // Re-render the layer with new style
+
     await renderAllDataLayers(map, layers, dataLayerRefs);
     return true;
   } catch (error) {
@@ -1502,9 +1448,6 @@ export async function updateLayerStyle(
   }
 }
 
-/**
- * Update feature style in database
- */
 export async function updateFeatureStyle(
   mapId: string,
   featureId: string,
@@ -1526,11 +1469,6 @@ export async function updateFeatureStyle(
   }
 }
 
-// HIGH-LEVEL CRUD OPERATION HANDLERS
-
-/**
- * Handle layer visibility change with database update and re-rendering
- */
 export async function handleLayerVisibilityChange(
   mapId: string,
   layerId: string,
@@ -1541,13 +1479,11 @@ export async function handleLayerVisibilityChange(
   onRefresh?: () => Promise<void>
 ): Promise<void> {
   if (!map) return;
-  
+
   try {
     const { updateMapLayer } = await import("@/lib/api");
-    console.log("mapId", mapId, "layerId", layerId, "isVisible", isVisible);
     await updateMapLayer(mapId, layerId, { isVisible });
-    
-    // Re-render layers
+
     if (layers) {
       await renderAllDataLayers(map, layers, dataLayerRefs);
     }
@@ -1561,9 +1497,6 @@ export async function handleLayerVisibilityChange(
   }
 }
 
-/**
- * Handle feature visibility change with database update and local state update
- */
 export async function handleFeatureVisibilityChange(
   mapId: string,
   featureId: string,
@@ -1576,7 +1509,6 @@ export async function handleFeatureVisibilityChange(
 ): Promise<void> {
   try {
     const { updateMapFeature } = await import("@/lib/api");
-    console.log("mapId", mapId, "featureId", featureId, "isVisible", isVisible);
     await updateMapFeature(mapId, featureId, { isVisible });
     
     // Update local state
@@ -1591,9 +1523,6 @@ export async function handleFeatureVisibilityChange(
   }
 }
 
-/**
- * Handle layer style updates with database update and re-rendering
- */
 export async function handleUpdateLayerStyle(
   mapId: string,
   layerId: string,
@@ -1608,7 +1537,7 @@ export async function handleUpdateLayerStyle(
   onRefresh?: () => Promise<void>
 ): Promise<void> {
   if (!map) return;
-  
+
   try {
     await updateLayerStyle(mapId, layerId, updates, map, layers, dataLayerRefs);
     
@@ -1621,9 +1550,6 @@ export async function handleUpdateLayerStyle(
   }
 }
 
-/**
- * Handle feature style updates with database update
- */
 export async function handleUpdateFeatureStyle(
   mapId: string,
   featureId: string,
@@ -1648,9 +1574,6 @@ export async function handleUpdateFeatureStyle(
   }
 }
 
-/**
- * Handle feature deletion with database update and local state update
- */
 export async function handleDeleteFeature(
   mapId: string,
   featureId: string,
@@ -1674,12 +1597,11 @@ export async function handleDeleteFeature(
   }
 }
 
-/**
- * Handle layer selection for editing
- */
 export function handleSelectLayer(
   layer: FeatureData | RawLayer | null,
-  setSelectedLayer: React.Dispatch<React.SetStateAction<FeatureData | RawLayer | null>>,
+  setSelectedLayer: React.Dispatch<
+    React.SetStateAction<FeatureData | RawLayer | null>
+  >,
   setShowLayerPanel: React.Dispatch<React.SetStateAction<boolean>>
 ): void {
   setSelectedLayer(layer);
