@@ -1006,6 +1006,7 @@ export interface MapFeatureResponse {
 }
 
 export interface CreateMapFeatureRequest {
+  mapId: string;
   layerId?: string | null;
   name?: string | null;
   description?: string | null;
@@ -1020,7 +1021,8 @@ export interface CreateMapFeatureRequest {
 }
 
 export function createMapFeature(mapId: string, body: CreateMapFeatureRequest) {
-  return postJson<CreateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features`, body);
+  const requestBody = { ...body, mapId };
+  return postJson<CreateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features`, requestBody);
 }
 export function getMapFeatures(mapId: string) {
   return getJson<MapFeatureResponse[]>(`/maps/${mapId}/features`);
@@ -1054,6 +1056,8 @@ export function deleteMapFeature(mapId: string, featureId: string) {
 export function getMapFeatureById(mapId: string, featureId: string) {
   return getJson<MapFeatureResponse>(`/maps/${mapId}/features/${featureId}`);
 }
+
+
 
 export type OrganizationReqDto = {
 

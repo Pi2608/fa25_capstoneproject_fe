@@ -595,6 +595,7 @@ export async function saveFeature(
     const layerStyle = extractLayerStyle(layer);
 
     const body: CreateMapFeatureRequest = {
+      mapId,
       layerId: layerId || null,
       name: `${type}`,
       description: "",
@@ -996,7 +997,7 @@ export function toggleFeatureVisibilityLocal(
   sketchGroup?: FeatureGroup | null
 ): FeatureData[] {
   return features.map((f) => {
-    if (f.id === featureId) {
+    if (f.featureId === featureId || f.id === featureId) {
       const newVisibility = !f.isVisible;
 
       if (map && sketchGroup) {
