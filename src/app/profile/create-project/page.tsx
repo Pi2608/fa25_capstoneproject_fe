@@ -7,16 +7,16 @@ import {
   type OrganizationReqDto,
   getPlans,
   type Plan,
-  processPayment,
-  type ProcessPaymentReq,
-  type ProcessPaymentRes,
   getMyOrganizations,
   type MyOrganizationDto,
+  subscribeToPlan,
+  type SubscribeRequest,
+  type SubscribeResponse,
 } from "@/lib/api"
 
 type JwtPayload = Record<string, unknown>
 
-function getMyIdentityFromToken(): { userId?: string | null } {
+function getMyIdentityFromToken(): { userId: string | null } {
   if (typeof window === "undefined") return { userId: null }
   const token = localStorage.getItem("token")
   if (!token) return { userId: null }
@@ -24,7 +24,8 @@ function getMyIdentityFromToken(): { userId?: string | null } {
   if (parts.length !== 3) return { userId: null }
   try {
     const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/")
-    const json = typeof atob === "function" ? atob(b64) : Buffer.from(b64, "base64").toString("utf8")
+    const json =
+      typeof atob === "function" ? atob(b64) : Buffer.from(b64, "base64").toString("utf8")
     const p = JSON.parse(json) as JwtPayload
     const userId =
       (typeof p.userId === "string" && p.userId) ||
@@ -105,8 +106,7 @@ export default function CreateOrganizationPage() {
   const [loadingPlans, setLoadingPlans] = useState(false)
   const [plansErr, setPlansErr] = useState<string | null>(null)
 
-  const me = useMemo(getMyIdentityFromToken, [])
-  const myUserId = me.userId ?? undefined
+  const myUserId = useMemo(() => getMyIdentityFromToken().userId, [])
 
   function gotoOrgOrProfile(targetId: string | null) {
     if (targetId && targetId.trim()) {
@@ -185,18 +185,30 @@ export default function CreateOrganizationPage() {
         router.push("/profile")
         return
       }
-      const req: ProcessPaymentReq = {
-        paymentGateway: "payOS",
-        purpose: "membership",
-        total: plan.priceMonthly ?? 0,
-        PlanId: plan.planId,
-        OrgId: createdOrgId,
-        UserId: myUserId,
-        AutoRenew: true,
+      if (!myUserId) {
+        alert("Session expired. Please log in again.")
+        router.push("/login?returnUrl=/profile/create-project")
+        return
       }
-      const res: ProcessPaymentRes = await processPayment(req)
+
+      const req: SubscribeRequest = {
+        userId: myUserId,       
+        orgId: createdOrgId,     
+        planId: plan.planId,
+        paymentMethod: "payOS",
+        autoRenew: true,
+      }
+
+      const res: SubscribeResponse = await subscribeToPlan(req)
+
       localStorage.setItem("planId", String(plan.planId))
-      window.location.href = res.approvalUrl
+
+      if (res.paymentUrl) {
+        window.location.href = res.paymentUrl
+      } else {
+        // free / đã active
+        gotoOrgOrProfile(createdOrgId)
+      }
     } catch (e) {
       alert(toMessage(e))
     }

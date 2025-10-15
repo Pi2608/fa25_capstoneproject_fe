@@ -8,10 +8,7 @@ import { useAuthStatus } from "@/contexts/useAuthStatus";
 import {
   getJson,
   getPlans,
-  processPayment,
   type Plan,
-  type ProcessPaymentReq,
-  type ProcessPaymentRes,
 } from "@/lib/api";
 
 function safeMessage(err: unknown) {
@@ -47,31 +44,11 @@ export default function PricingPage() {
   };
 
   const handleSelectPlan = async (plan: Plan) => {
-    try {
-      if (!isLoggedIn) {
-        router.push("/login");
-        return;
-      }
-
-      const req: ProcessPaymentReq = {
-        paymentGateway: "payOS",
-        purpose: "membership",
-        total: 0.5, 
-        PlanId: plan.planId,
-        UserId: "08ddec7d-cf40-429c-8e03-e930f337ca69", 
-        AutoRenew: true,
-      };
-
-      const res: ProcessPaymentRes = await processPayment(req);
-
-      localStorage.setItem("transactionId", res.sessionId);
-      localStorage.setItem("orderCode", res.orderCode);
-      localStorage.setItem("planId", String(plan.planId));
-
-      window.location.href = res.approvalUrl;
-    } catch (err) {
-      alert(safeMessage(err));
+    if (!isLoggedIn) {
+      router.push("/login");
+      return;
     }
+    router.push(`/profile/select-plan?planId=${plan.planId}`);
   };
 
   useEffect(() => {
