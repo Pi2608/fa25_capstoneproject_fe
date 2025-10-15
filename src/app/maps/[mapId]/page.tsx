@@ -29,7 +29,12 @@ import {
   handleUpdateLayerStyle,
   handleUpdateFeatureStyle,
   handleDeleteFeature,
-  handleSelectLayer
+  handleSelectLayer,
+  getStylePreset,
+  createCustomStyle,
+  applyStyleToFeature,
+  applyStyleToDataLayer,
+  extractLayerStyle
 } from "@/utils/mapUtils";
 import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
 
@@ -192,6 +197,7 @@ export default function EditMapPage() {
         setLoading(true);
         setErr(null);
         const m = await getMapDetail(mapId);
+        console.log(m);
         if (!alive) return;
         setDetail(m);
         setName(m.mapName ?? "");
@@ -297,6 +303,8 @@ export default function EditMapPage() {
           features,
           setFeatures
         );
+        // Refresh map detail to get updated data
+        await refreshMapDetail();
       });
     })();
 
@@ -322,6 +330,34 @@ export default function EditMapPage() {
   useEffect(() => {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
+
+  // Refresh map detail from API
+  const refreshMapDetail = useCallback(async () => {
+    if (!mapId) return;
+    
+    try {
+      const updatedDetail = await getMapDetail(mapId);
+      setDetail(updatedDetail);
+      
+      // Reload features from database
+      if (mapRef.current && sketchRef.current) {
+        const L = (await import("leaflet")).default;
+        const loadedFeatures = await loadFeaturesToMap(
+          updatedDetail.id,
+          L,
+          sketchRef.current
+        );
+        setFeatures(loadedFeatures);
+      }
+      
+      // Re-render data layers
+      if (mapRef.current && updatedDetail.layers) {
+        await renderAllDataLayers(mapRef.current, updatedDetail.layers, dataLayerRefs);
+      }
+    } catch (error) {
+      console.error("Failed to refresh map detail:", error);
+    }
+  }, [mapId]);
 
   // Geoman custom actions
   const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text" ) => {
@@ -375,19 +411,21 @@ export default function EditMapPage() {
     }
     
     sketchRef.current?.clearLayers();
-      setFeatures([]);
-  }, [detail, features]);
+    setFeatures([]);
+    // Refresh map detail to get updated data
+    await refreshMapDetail();
+  }, [detail, features, refreshMapDetail]);
 
   // CRUD operation
   const onLayerVisibilityChange = useCallback(async (layerId: string, isVisible: boolean) => {
     if (!detail || !mapRef.current) return;
-    await handleLayerVisibilityChange(detail.id, layerId, isVisible, mapRef.current, detail.layers, dataLayerRefs);
-  }, [detail]);
+    await handleLayerVisibilityChange(detail.id, layerId, isVisible, mapRef.current, detail.layers, dataLayerRefs, refreshMapDetail);
+  }, [detail, refreshMapDetail]);
 
   const onFeatureVisibilityChange = useCallback(async (featureId: string, isVisible: boolean) => {
     if (!detail) return;
-    await handleFeatureVisibilityChange(detail.id, featureId, isVisible, features, setFeatures, mapRef.current, sketchRef.current);
-  }, [detail, features]);
+    await handleFeatureVisibilityChange(detail.id, featureId, isVisible, features, setFeatures, mapRef.current, sketchRef.current, refreshMapDetail);
+  }, [detail, features, refreshMapDetail]);
 
   const onSelectLayer = useCallback((layer: FeatureData | RawLayer) => {
     handleSelectLayer(layer, setSelectedLayer, setShowStylePanel);
@@ -395,8 +433,8 @@ export default function EditMapPage() {
 
   const onUpdateLayer = useCallback(async (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => {
     if (!detail || !mapRef.current) return;
-    await handleUpdateLayerStyle(detail.id, layerId, updates, mapRef.current, detail.layers, dataLayerRefs);
-  }, [detail]);
+    await handleUpdateLayerStyle(detail.id, layerId, updates, mapRef.current, detail.layers, dataLayerRefs, refreshMapDetail);
+  }, [detail, refreshMapDetail]);
 
   const onUpdateFeature = useCallback(async (featureId: string, updates: UpdateMapFeatureRequest) => {
     if (!detail) return;
@@ -408,13 +446,62 @@ export default function EditMapPage() {
       isVisible: updates.isVisible ?? undefined,
       zIndex: updates.zIndex ?? undefined,
     };
-    await handleUpdateFeatureStyle(detail.id, featureId, convertedUpdates);
-  }, [detail]);
+    await handleUpdateFeatureStyle(detail.id, featureId, convertedUpdates, refreshMapDetail);
+  }, [detail, refreshMapDetail]);
 
   const onDeleteFeature = useCallback(async (featureId: string) => {
     if (!detail) return;
-    await handleDeleteFeature(detail.id, featureId, features, setFeatures, mapRef.current, sketchRef.current);
-  }, [detail, features]);
+    await handleDeleteFeature(detail.id, featureId, features, setFeatures, mapRef.current, sketchRef.current, refreshMapDetail);
+  }, [detail, features, refreshMapDetail]);
+
+  // Style management functions
+  const applyPresetStyleToFeature = useCallback(async (featureId: string, layerType: string, presetName: string) => {
+    if (!detail) return;
+    
+    const feature = features.find(f => f.featureId === featureId);
+    if (!feature) return;
+    
+    const presetStyle = getStylePreset(layerType, presetName);
+    await applyStyleToFeature(detail.id, featureId, feature.layer, presetStyle, features, setFeatures, refreshMapDetail);
+  }, [detail, features, setFeatures, refreshMapDetail]);
+
+  const applyCustomStyleToFeature = useCallback(async (featureId: string, styleOptions: {
+    color?: string;
+    fillColor?: string;
+    weight?: number;
+    opacity?: number;
+    fillOpacity?: number;
+    radius?: number;
+    dashArray?: string;
+  }) => {
+    if (!detail) return;
+    
+    const feature = features.find(f => f.featureId === featureId);
+    if (!feature) return;
+    
+    const customStyle = createCustomStyle(styleOptions);
+    await applyStyleToFeature(detail.id, featureId, feature.layer, customStyle, features, setFeatures, refreshMapDetail);
+  }, [detail, features, setFeatures, refreshMapDetail]);
+
+  const applyStyleToLayer = useCallback(async (layerId: string, styleOptions: {
+    color?: string;
+    fillColor?: string;
+    weight?: number;
+    opacity?: number;
+    fillOpacity?: number;
+  }) => {
+    if (!detail) return;
+    
+    const customStyle = createCustomStyle(styleOptions);
+    await applyStyleToDataLayer(detail.id, layerId, customStyle, refreshMapDetail);
+  }, [detail, refreshMapDetail]);
+
+  const getCurrentFeatureStyle = useCallback((featureId: string) => {
+    const feature = features.find(f => f.featureId === featureId);
+    if (!feature) return {};
+    
+    return extractLayerStyle(feature.layer);
+  }, [features]);
 
   const saveMeta = useCallback(async () => {
     if (!detail) return;
@@ -429,13 +516,15 @@ export default function EditMapPage() {
       };
       await updateMap(detail.id, body);
       setFeedback("Đã lưu thông tin bản đồ.");
+      // Refresh map detail to get updated data
+      await refreshMapDetail();
     } catch (e) {
       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveMeta(false);
       setTimeout(() => setFeedback(null), 1800);
     }
-  }, [detail, name, description, baseKey]);
+  }, [detail, name, description, baseKey, refreshMapDetail]);
 
   const saveView = useCallback(async () => {
     if (!detail || !mapRef.current) return;
@@ -450,13 +539,15 @@ export default function EditMapPage() {
       const body: UpdateMapRequest = { viewState: JSON.stringify(view) };
       await updateMap(detail.id, body);
       setFeedback("Đã lưu vị trí hiển thị.");
+      // Refresh map detail to get updated data
+      await refreshMapDetail();
     } catch (e) {
       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveView(false);
       setTimeout(() => setFeedback(null), 1800);
     }
-  }, [detail]);
+  }, [detail, refreshMapDetail]);
 
   const GuardBtn: React.FC<
     React.PropsWithChildren<{ can: boolean; title: string; onClick?: () => void; disabled?: boolean }>

@@ -1,4 +1,80 @@
-import type { Layer, LatLng, LatLngBounds, FeatureGroup, Map as LMap } from "leaflet";
+/**
+ * Map Utilities - Style Management System
+ * 
+ * This module provides comprehensive style management for Leaflet layers and features.
+ * It includes functions to extract, apply, save, and load styles from the database.
+ * 
+ * ## Key Features:
+ * 
+ * ### 1. Style Extraction and Application
+ * - `extractLayerStyle()` - Extract style properties from Leaflet layers
+ * - `applyLayerStyle()` - Apply style properties to Leaflet layers
+ * 
+ * ### 2. Database Integration
+ * - `saveFeature()` - Save features with their styles to database
+ * - `updateFeatureInDB()` - Update features with new styles
+ * - `updateFeatureStyleRealTime()` - Real-time style updates
+ * - `applyStyleToDataLayer()` - Apply styles to data layers
+ * 
+ * ### 3. Style Presets
+ * - `STYLE_PRESETS` - Predefined style configurations
+ * - `getStylePreset()` - Get preset styles by type
+ * - `createCustomStyle()` - Create validated custom styles
+ * 
+ * ### 4. Rendering with Styles
+ * - `loadFeaturesToMap()` - Load features with stored styles
+ * - `renderFeatures()` - Render features with applied styles
+ * - `renderAllDataLayers()` - Render data layers with custom styles
+ * 
+ * ## Usage Examples:
+ * 
+ * ### Apply a preset style to a feature:
+ * ```typescript
+ * const redStyle = getStylePreset('marker', 'red');
+ * await applyStyleToFeature(mapId, featureId, layer, redStyle, features, setFeatures, refreshMapDetail);
+ * ```
+ * 
+ * ### Create and apply a custom style:
+ * ```typescript
+ * const customStyle = createCustomStyle({
+ *   color: '#ff0000',
+ *   weight: 5,
+ *   opacity: 0.8,
+ *   fillOpacity: 0.3
+ * });
+ * await applyStyleToFeature(mapId, featureId, layer, customStyle, features, setFeatures, refreshMapDetail);
+ * ```
+ * 
+ * ### Apply style to a data layer:
+ * ```typescript
+ * const layerStyle = createCustomStyle({
+ *   color: '#00ff00',
+ *   weight: 3,
+ *   fillColor: '#00ff00',
+ *   fillOpacity: 0.2
+ * });
+ * await applyStyleToDataLayer(mapId, layerId, layerStyle, refreshMapDetail);
+ * ```
+ * 
+ * ### Extract current style from a layer:
+ * ```typescript
+ * const currentStyle = extractLayerStyle(layer);
+ * console.log('Current style:', currentStyle);
+ * ```
+ * 
+ * ## Supported Style Properties:
+ * - `color` - Stroke color (hex format: #RRGGBB)
+ * - `fillColor` - Fill color (hex format: #RRGGBB)
+ * - `weight` - Stroke width (1-20)
+ * - `opacity` - Stroke opacity (0-1)
+ * - `fillOpacity` - Fill opacity (0-1)
+ * - `radius` - Circle radius (1-1000)
+ * - `dashArray` - Dash pattern (e.g., "10, 10")
+ * - `lineCap` - Line cap style ('butt', 'round', 'square')
+ * - `lineJoin` - Line join style ('miter', 'round', 'bevel')
+ */
+
+import type { Layer, LatLng, LatLngBounds, FeatureGroup, Map as LMap, Icon, IconOptions } from "leaflet";
 import type { Position } from "geojson";
 import {
   createMapFeature,
@@ -13,6 +89,21 @@ import {
 } from "@/lib/api";
 
 // TYPE DEFINITIONS
+
+// Icon interface for proper typing
+interface LeafletIcon {
+  options: IconOptions;
+}
+
+// Layer with radius method for circles
+interface CircleLayer extends Layer {
+  setRadius(radius: number): void;
+}
+
+// Layer with icon methods for markers
+interface MarkerLayer extends Layer {
+  setIcon(icon: Icon): void;
+}
 
 // Extended Layer types
 export type ExtendedLayer = Layer & {
@@ -59,6 +150,113 @@ interface ParsedMapData extends Omit<MapDetail, "layers"> {
 }
 
 // UTILITY FUNCTIONS
+
+/**
+ * Extract style properties from a Leaflet layer
+ */
+export function extractLayerStyle(layer: ExtendedLayer): Record<string, unknown> {
+  const style: Record<string, unknown> = {};
+  
+  // Common style properties for all layer types
+  if (layer.options) {
+    const options = layer.options as Record<string, unknown>;
+    
+    // Color properties
+    if (options.color !== undefined) style.color = options.color;
+    if (options.fillColor !== undefined) style.fillColor = options.fillColor;
+    if (options.stroke !== undefined) style.stroke = options.stroke;
+    if (options.fill !== undefined) style.fill = options.fill;
+    
+    // Opacity properties
+    if (options.opacity !== undefined) style.opacity = options.opacity;
+    if (options.fillOpacity !== undefined) style.fillOpacity = options.fillOpacity;
+    
+    // Weight and size properties
+    if (options.weight !== undefined) style.weight = options.weight;
+    if (options.radius !== undefined) style.radius = options.radius;
+    
+    // Line properties
+    if (options.dashArray !== undefined) style.dashArray = options.dashArray;
+    if (options.lineCap !== undefined) style.lineCap = options.lineCap;
+    if (options.lineJoin !== undefined) style.lineJoin = options.lineJoin;
+    
+    // Icon properties (for markers)
+    if (options.icon !== undefined) {
+      const icon = options.icon as LeafletIcon;
+      if (icon.options) {
+        style.iconSize = icon.options.iconSize;
+        style.iconAnchor = icon.options.iconAnchor;
+        style.popupAnchor = icon.options.popupAnchor;
+        style.className = icon.options.className;
+      }
+    }
+  }
+  
+  // Layer-specific properties
+  if ('_mRadius' in layer && layer._mRadius !== undefined) {
+    style.radius = layer._mRadius;
+  }
+  
+  return style;
+}
+
+/**
+ * Apply style properties to a Leaflet layer
+ */
+export function applyLayerStyle(layer: ExtendedLayer, style: Record<string, unknown>): void {
+  if (!style || Object.keys(style).length === 0) return;
+  
+  try {
+    // Apply common style properties
+    const styleOptions: Record<string, unknown> = {};
+    
+    if (style.color !== undefined) styleOptions.color = style.color;
+    if (style.fillColor !== undefined) styleOptions.fillColor = style.fillColor;
+    if (style.stroke !== undefined) styleOptions.stroke = style.stroke;
+    if (style.fill !== undefined) styleOptions.fill = style.fill;
+    if (style.opacity !== undefined) styleOptions.opacity = style.opacity;
+    if (style.fillOpacity !== undefined) styleOptions.fillOpacity = style.fillOpacity;
+    if (style.weight !== undefined) styleOptions.weight = style.weight;
+    if (style.dashArray !== undefined) styleOptions.dashArray = style.dashArray;
+    if (style.lineCap !== undefined) styleOptions.lineCap = style.lineCap;
+    if (style.lineJoin !== undefined) styleOptions.lineJoin = style.lineJoin;
+    
+    // Apply radius for circles
+    if (style.radius !== undefined && 'setRadius' in layer) {
+      (layer as CircleLayer).setRadius(style.radius as number);
+    }
+    
+    // Apply style using setStyle method if available
+    if ('setStyle' in layer && typeof layer.setStyle === 'function') {
+      layer.setStyle(styleOptions);
+    } else {
+      // Fallback: manually set options
+      Object.assign(layer.options, styleOptions);
+      if ('redraw' in layer && typeof layer.redraw === 'function') {
+        layer.redraw();
+      }
+    }
+    
+    // Handle icon styles for markers
+    if (style.iconSize || style.iconAnchor || style.popupAnchor || style.className) {
+      const L = (window as { L?: typeof import('leaflet') }).L;
+      if (L && L.Icon) {
+        const iconOptions: Partial<IconOptions> = {};
+        if (style.iconSize) iconOptions.iconSize = style.iconSize as [number, number];
+        if (style.iconAnchor) iconOptions.iconAnchor = style.iconAnchor as [number, number];
+        if (style.popupAnchor) iconOptions.popupAnchor = style.popupAnchor as [number, number];
+        if (style.className) iconOptions.className = style.className as string;
+        
+        const customIcon = new L.Icon.Default(iconOptions);
+        if ('setIcon' in layer && typeof layer.setIcon === 'function') {
+          (layer as MarkerLayer).setIcon(customIcon as Icon);
+        }
+      }
+    }
+  } catch (error) {
+    console.warn("Failed to apply layer style:", error);
+  }
+}
 
 /**
  * Validate geometry coordinates
@@ -447,6 +645,9 @@ export async function saveFeature(
       return null;
     }
 
+    // Extract style from layer
+    const layerStyle = extractLayerStyle(layer);
+
     const body: CreateMapFeatureRequest = {
       layerId: layerId || null, // Allow null layerId for standalone features
       name: `${type}`,
@@ -456,7 +657,7 @@ export async function saveFeature(
       geometryType: geometryType,
       coordinates,
       properties: JSON.stringify({}),
-      style: JSON.stringify({}),
+      style: JSON.stringify(layerStyle),
       isVisible: true,
       zIndex: features.length,
     };
@@ -491,6 +692,9 @@ export async function updateFeatureInDB(
 ): Promise<boolean> {
   try {
     const { geometryType, annotationType, coordinates } = serializeFeature(feature.layer);
+    
+    // Extract current style from layer
+    const layerStyle = extractLayerStyle(feature.layer);
 
     const body: UpdateMapFeatureRequest = {
       name: feature.name,
@@ -500,7 +704,7 @@ export async function updateFeatureInDB(
       geometryType: geometryType,
       coordinates,
       properties: JSON.stringify({}),
-      style: JSON.stringify({}),
+      style: JSON.stringify(layerStyle),
       isVisible: feature.isVisible,
       zIndex: 0,
       layerId: null,
@@ -571,6 +775,16 @@ export async function loadFeaturesToMap(
       if (layer) {
         const isVisible = feature.isVisible;
 
+        // Apply stored style if available
+        if (feature.style) {
+          try {
+            const storedStyle = JSON.parse(feature.style);
+            applyLayerStyle(layer, storedStyle);
+          } catch (error) {
+            console.warn("Failed to parse feature style:", error);
+          }
+        }
+
         if (isVisible) {
           sketchGroup.addLayer(layer);
         }
@@ -623,8 +837,31 @@ export async function renderDataLayers(
       const layerData = JSON.parse(layer.layerData || '{}');
       
       if (layerData.type === 'FeatureCollection' && layerData.features) {
+        // Parse layer style and custom style
+        let layerStyle = {};
+        let customStyle = {};
+        
+        try {
+          if (layer.layerStyle) {
+            layerStyle = JSON.parse(layer.layerStyle);
+          }
+        } catch (error) {
+          console.warn("Failed to parse layer style:", error);
+        }
+        
+        try {
+          if (layer.customStyle) {
+            customStyle = JSON.parse(layer.customStyle);
+          }
+        } catch (error) {
+          console.warn("Failed to parse custom style:", error);
+        }
+        
+        // Merge layer style with custom style (custom style takes precedence)
+        const finalStyle = { ...layerStyle, ...customStyle };
+
         const geoJsonLayer = L.geoJSON(layerData, {
-          style: layer.layerStyle ? JSON.parse(layer.layerStyle) : undefined,
+          style: Object.keys(finalStyle).length > 0 ? finalStyle : undefined,
           onEachFeature: (feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
             // Add popup if feature has properties
             if (feature.properties) {
@@ -702,6 +939,16 @@ export async function renderFeatures(
       }
 
       if (layer) {
+        // Apply stored style if available
+        if (feature.style) {
+          try {
+            const storedStyle = JSON.parse(feature.style);
+            applyLayerStyle(layer, storedStyle);
+          } catch (error) {
+            console.warn("Failed to parse feature style:", error);
+          }
+        }
+
         // Set high z-index for features to ensure they appear above data layers
         const featureZIndex = 2000 + (feature.zIndex || 0);
         (layer as L.Layer & { setZIndex?: (zIndex: number) => void }).setZIndex?.(featureZIndex);
@@ -757,8 +1004,31 @@ export async function toggleLayerVisibility(
       const layerData = JSON.parse(layer.layerData || '{}');
       
       if (layerData.type === 'FeatureCollection' && layerData.features) {
+        // Parse layer style and custom style
+        let layerStyle = {};
+        let customStyle = {};
+        
+        try {
+          if (layer.layerStyle) {
+            layerStyle = JSON.parse(layer.layerStyle);
+          }
+        } catch (error) {
+          console.warn("Failed to parse layer style:", error);
+        }
+        
+        try {
+          if (layer.customStyle) {
+            customStyle = JSON.parse(layer.customStyle);
+          }
+        } catch (error) {
+          console.warn("Failed to parse custom style:", error);
+        }
+        
+        // Merge layer style with custom style (custom style takes precedence)
+        const finalStyle = { ...layerStyle, ...customStyle };
+
         const geoJsonLayer = L.geoJSON(layerData, {
-          style: layer.layerStyle ? JSON.parse(layer.layerStyle) : undefined,
+          style: Object.keys(finalStyle).length > 0 ? finalStyle : undefined,
           onEachFeature: (feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
             if (feature.properties) {
               const popupContent = Object.entries(feature.properties)
@@ -864,6 +1134,16 @@ export async function toggleFeatureVisibility(
       }
 
       if (layer) {
+        // Apply stored style if available
+        if (feature.style) {
+          try {
+            const storedStyle = JSON.parse(feature.style);
+            applyLayerStyle(layer, storedStyle);
+          } catch (error) {
+            console.warn("Failed to parse feature style:", error);
+          }
+        }
+
         // Set high z-index for features to ensure they appear above data layers
         const featureZIndex = 2000 + (feature.zIndex || 0);
         (layer as L.Layer & { setZIndex?: (zIndex: number) => void }).setZIndex?.(featureZIndex);
@@ -1145,8 +1425,31 @@ export async function renderAllDataLayers(
       const layerData = JSON.parse(layer.layerData || '{}');
       
       if (layerData.type === 'FeatureCollection' && layerData.features) {
+        // Parse layer style and custom style
+        let layerStyle = {};
+        let customStyle = {};
+        
+        try {
+          if (layer.layerStyle) {
+            layerStyle = JSON.parse(layer.layerStyle);
+          }
+        } catch (error) {
+          console.warn("Failed to parse layer style:", error);
+        }
+        
+        try {
+          if (layer.customStyle) {
+            customStyle = JSON.parse(layer.customStyle);
+          }
+        } catch (error) {
+          console.warn("Failed to parse custom style:", error);
+        }
+        
+        // Merge layer style with custom style (custom style takes precedence)
+        const finalStyle = { ...layerStyle, ...customStyle };
+
         const geoJsonLayer = L.geoJSON(layerData, {
-          style: layer.layerStyle ? JSON.parse(layer.layerStyle) : undefined,
+          style: Object.keys(finalStyle).length > 0 ? finalStyle : undefined,
           onEachFeature: (feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
             if (feature.properties) {
               const popupContent = Object.entries(feature.properties)
@@ -1234,7 +1537,8 @@ export async function handleLayerVisibilityChange(
   isVisible: boolean,
   map: LMap,
   layers: RawLayer[],
-  dataLayerRefs: React.MutableRefObject<Map<string, L.Layer>>
+  dataLayerRefs: React.MutableRefObject<Map<string, L.Layer>>,
+  onRefresh?: () => Promise<void>
 ): Promise<void> {
   if (!map) return;
   
@@ -1246,6 +1550,11 @@ export async function handleLayerVisibilityChange(
     // Re-render layers
     if (layers) {
       await renderAllDataLayers(map, layers, dataLayerRefs);
+    }
+    
+    // Call refresh callback if provided
+    if (onRefresh) {
+      await onRefresh();
     }
   } catch (error) {
     console.error("Failed to update layer visibility:", error);
@@ -1262,7 +1571,8 @@ export async function handleFeatureVisibilityChange(
   features: FeatureData[],
   setFeatures: React.Dispatch<React.SetStateAction<FeatureData[]>>,
   map?: LMap | null,
-  sketchGroup?: FeatureGroup | null
+  sketchGroup?: FeatureGroup | null,
+  onRefresh?: () => Promise<void>
 ): Promise<void> {
   try {
     const { updateMapFeature } = await import("@/lib/api");
@@ -1271,6 +1581,11 @@ export async function handleFeatureVisibilityChange(
     
     // Update local state
     setFeatures(prev => toggleFeatureVisibilityLocal(prev, featureId, map, sketchGroup));
+    
+    // Call refresh callback if provided
+    if (onRefresh) {
+      await onRefresh();
+    }
   } catch (error) {
     console.error("Failed to update feature visibility:", error);
   }
@@ -1289,12 +1604,18 @@ export async function handleUpdateLayerStyle(
   },
   map: LMap,
   layers: RawLayer[],
-  dataLayerRefs: React.MutableRefObject<Map<string, L.Layer>>
+  dataLayerRefs: React.MutableRefObject<Map<string, L.Layer>>,
+  onRefresh?: () => Promise<void>
 ): Promise<void> {
   if (!map) return;
   
   try {
     await updateLayerStyle(mapId, layerId, updates, map, layers, dataLayerRefs);
+    
+    // Call refresh callback if provided
+    if (onRefresh) {
+      await onRefresh();
+    }
   } catch (error) {
     console.error("Failed to update layer:", error);
   }
@@ -1312,10 +1633,16 @@ export async function handleUpdateFeatureStyle(
     properties?: string;
     isVisible?: boolean;
     zIndex?: number;
-  }
+  },
+  onRefresh?: () => Promise<void>
 ): Promise<void> {
   try {
     await updateFeatureStyle(mapId, featureId, updates);
+    
+    // Call refresh callback if provided
+    if (onRefresh) {
+      await onRefresh();
+    }
   } catch (error) {
     console.error("Failed to update feature:", error);
   }
@@ -1330,12 +1657,18 @@ export async function handleDeleteFeature(
   features: FeatureData[],
   setFeatures: React.Dispatch<React.SetStateAction<FeatureData[]>>,
   map?: LMap | null,
-  sketchGroup?: FeatureGroup | null
+  sketchGroup?: FeatureGroup | null,
+  onRefresh?: () => Promise<void>
 ): Promise<void> {
   try {
     await deleteFeatureFromDB(mapId, featureId);
     console.log("Delete featureId", featureId);
     setFeatures(prev => removeFeatureFromList(prev, featureId, map, sketchGroup));
+    
+    // Call refresh callback if provided
+    if (onRefresh) {
+      await onRefresh();
+    }
   } catch (error) {
     console.error("Failed to delete feature:", error);
   }
@@ -1351,4 +1684,308 @@ export function handleSelectLayer(
 ): void {
   setSelectedLayer(layer);
   setShowLayerPanel(true);
+}
+
+/**
+ * Update feature style in real-time and save to database
+ */
+export async function updateFeatureStyleRealTime(
+  mapId: string,
+  featureId: string,
+  layer: ExtendedLayer,
+  features: FeatureData[],
+  setFeatures: React.Dispatch<React.SetStateAction<FeatureData[]>>,
+  onRefresh?: () => Promise<void>
+): Promise<void> {
+  try {
+    // Extract current style from layer
+    const layerStyle = extractLayerStyle(layer);
+    
+    // Update feature in database
+    const { updateMapFeature } = await import("@/lib/api");
+    await updateMapFeature(mapId, featureId, {
+      style: JSON.stringify(layerStyle)
+    });
+    
+    // Update local state
+    setFeatures(prev => prev.map(f => 
+      f.featureId === featureId 
+        ? { ...f, layer }
+        : f
+    ));
+    
+    // Call refresh callback if provided
+    if (onRefresh) {
+      await onRefresh();
+    }
+  } catch (error) {
+    console.error("Failed to update feature style:", error);
+  }
+}
+
+/**
+ * Update layer style in real-time and save to database
+ */
+export async function updateLayerStyleRealTime(
+  mapId: string,
+  layerId: string,
+  customStyle: Record<string, unknown>,
+  onRefresh?: () => Promise<void>
+): Promise<void> {
+  try {
+    // Update layer in database
+    const { updateMapLayer } = await import("@/lib/api");
+    await updateMapLayer(mapId, layerId, {
+      customStyle: JSON.stringify(customStyle)
+    });
+    
+    // Call refresh callback if provided
+    if (onRefresh) {
+      await onRefresh();
+    }
+  } catch (error) {
+    console.error("Failed to update layer style:", error);
+  }
+}
+
+/**
+ * Apply style to layer and update database
+ */
+export async function applyStyleToFeature(
+  mapId: string,
+  featureId: string,
+  layer: ExtendedLayer,
+  style: Record<string, unknown>,
+  features: FeatureData[],
+  setFeatures: React.Dispatch<React.SetStateAction<FeatureData[]>>,
+  onRefresh?: () => Promise<void>
+): Promise<void> {
+  try {
+    // Apply style to layer
+    applyLayerStyle(layer, style);
+    
+    // Update feature in database
+    const { updateMapFeature } = await import("@/lib/api");
+    await updateMapFeature(mapId, featureId, {
+      style: JSON.stringify(style)
+    });
+    
+    // Update local state
+    setFeatures(prev => prev.map(f => 
+      f.featureId === featureId 
+        ? { ...f, layer }
+        : f
+    ));
+    
+    // Call refresh callback if provided
+    if (onRefresh) {
+      await onRefresh();
+    }
+  } catch (error) {
+    console.error("Failed to apply style to feature:", error);
+  }
+}
+
+/**
+ * Apply style to data layer and update database
+ */
+export async function applyStyleToDataLayer(
+  mapId: string,
+  layerId: string,
+  style: Record<string, unknown>,
+  onRefresh?: () => Promise<void>
+): Promise<void> {
+  try {
+    // Update layer in database
+    const { updateMapLayer } = await import("@/lib/api");
+    await updateMapLayer(mapId, layerId, {
+      customStyle: JSON.stringify(style)
+    });
+    
+    // Call refresh callback if provided
+    if (onRefresh) {
+      await onRefresh();
+    }
+  } catch (error) {
+    console.error("Failed to apply style to data layer:", error);
+  }
+}
+
+// COMMON STYLE PRESETS
+
+/**
+ * Common style presets for different layer types
+ */
+export const STYLE_PRESETS = {
+  // Marker styles
+  marker: {
+    default: {
+      color: '#3388ff',
+      fillColor: '#3388ff',
+      fillOpacity: 0.8,
+      radius: 8
+    },
+    red: {
+      color: '#ff0000',
+      fillColor: '#ff0000',
+      fillOpacity: 0.8,
+      radius: 8
+    },
+    green: {
+      color: '#00ff00',
+      fillColor: '#00ff00',
+      fillOpacity: 0.8,
+      radius: 8
+    },
+    blue: {
+      color: '#0000ff',
+      fillColor: '#0000ff',
+      fillOpacity: 0.8,
+      radius: 8
+    }
+  },
+  
+  // Line styles
+  line: {
+    default: {
+      color: '#3388ff',
+      weight: 3,
+      opacity: 0.8
+    },
+    dashed: {
+      color: '#3388ff',
+      weight: 3,
+      opacity: 0.8,
+      dashArray: '10, 10'
+    },
+    thick: {
+      color: '#3388ff',
+      weight: 6,
+      opacity: 0.8
+    },
+    thin: {
+      color: '#3388ff',
+      weight: 1,
+      opacity: 0.8
+    }
+  },
+  
+  // Polygon styles
+  polygon: {
+    default: {
+      color: '#3388ff',
+      weight: 2,
+      opacity: 0.8,
+      fillColor: '#3388ff',
+      fillOpacity: 0.3
+    },
+    filled: {
+      color: '#3388ff',
+      weight: 2,
+      opacity: 0.8,
+      fillColor: '#3388ff',
+      fillOpacity: 0.6
+    },
+    outline: {
+      color: '#3388ff',
+      weight: 3,
+      opacity: 1,
+      fillColor: '#3388ff',
+      fillOpacity: 0.1
+    },
+    transparent: {
+      color: '#3388ff',
+      weight: 2,
+      opacity: 0.5,
+      fillColor: '#3388ff',
+      fillOpacity: 0.1
+    }
+  },
+  
+  // Circle styles
+  circle: {
+    default: {
+      color: '#3388ff',
+      weight: 2,
+      opacity: 0.8,
+      fillColor: '#3388ff',
+      fillOpacity: 0.3
+    },
+    filled: {
+      color: '#3388ff',
+      weight: 2,
+      opacity: 0.8,
+      fillColor: '#3388ff',
+      fillOpacity: 0.6
+    },
+    outline: {
+      color: '#3388ff',
+      weight: 3,
+      opacity: 1,
+      fillColor: '#3388ff',
+      fillOpacity: 0.1
+    }
+  }
+};
+
+/**
+ * Get style preset for a specific layer type
+ */
+export function getStylePreset(layerType: string, presetName: string = 'default'): Record<string, unknown> {
+  const typePresets = STYLE_PRESETS[layerType as keyof typeof STYLE_PRESETS];
+  if (!typePresets) return {};
+  
+  return typePresets[presetName as keyof typeof typePresets] || typePresets.default || {};
+}
+
+/**
+ * Create a custom style object with validation
+ */
+export function createCustomStyle(styleOptions: {
+  color?: string;
+  fillColor?: string;
+  weight?: number;
+  opacity?: number;
+  fillOpacity?: number;
+  radius?: number;
+  dashArray?: string;
+  lineCap?: 'butt' | 'round' | 'square';
+  lineJoin?: 'miter' | 'round' | 'bevel';
+}): Record<string, unknown> {
+  const style: Record<string, unknown> = {};
+  
+  // Validate and add color properties
+  if (styleOptions.color && /^#[0-9A-F]{6}$/i.test(styleOptions.color)) {
+    style.color = styleOptions.color;
+  }
+  if (styleOptions.fillColor && /^#[0-9A-F]{6}$/i.test(styleOptions.fillColor)) {
+    style.fillColor = styleOptions.fillColor;
+  }
+  
+  // Validate and add numeric properties
+  if (styleOptions.weight && styleOptions.weight > 0 && styleOptions.weight <= 20) {
+    style.weight = styleOptions.weight;
+  }
+  if (styleOptions.opacity && styleOptions.opacity >= 0 && styleOptions.opacity <= 1) {
+    style.opacity = styleOptions.opacity;
+  }
+  if (styleOptions.fillOpacity && styleOptions.fillOpacity >= 0 && styleOptions.fillOpacity <= 1) {
+    style.fillOpacity = styleOptions.fillOpacity;
+  }
+  if (styleOptions.radius && styleOptions.radius > 0 && styleOptions.radius <= 1000) {
+    style.radius = styleOptions.radius;
+  }
+  
+  // Validate and add string properties
+  if (styleOptions.dashArray) {
+    style.dashArray = styleOptions.dashArray;
+  }
+  if (styleOptions.lineCap && ['butt', 'round', 'square'].includes(styleOptions.lineCap)) {
+    style.lineCap = styleOptions.lineCap;
+  }
+  if (styleOptions.lineJoin && ['miter', 'round', 'bevel'].includes(styleOptions.lineJoin)) {
+    style.lineJoin = styleOptions.lineJoin;
+  }
+  
+  return style;
 }
