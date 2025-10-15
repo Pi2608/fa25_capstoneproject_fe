@@ -1,15 +1,19 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   createOrganization,
   type OrganizationReqDto,
   getPlans,
   type Plan,
-  processPayment,
-  type ProcessPaymentReq,
-  type ProcessPaymentRes,
+  subscribeToPlan,
+  type SubscribeRequest,
+  type SubscribeResponse,
+  confirmPayment,
+  type PaymentConfirmationRequest,
+  cancelPayment,
+  type CancelPaymentRequest,
   getMyOrganizations,
   type MyOrganizationDto,
 } from "@/lib/api"
@@ -93,6 +97,7 @@ function pickNewestOrgId(list: MyOrganizationDto[], name: string, abb: string): 
 
 export default function CreateOrganizationPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [orgName, setOrgName] = useState("")
   const [abbreviation, setAbbreviation] = useState("")
@@ -104,6 +109,8 @@ export default function CreateOrganizationPage() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [loadingPlans, setLoadingPlans] = useState(false)
   const [plansErr, setPlansErr] = useState<string | null>(null)
+
+  const [popup, setPopup] = useState<{ type: "success" | "cancel"; msg: string } | null>(null)
 
   const me = useMemo(getMyIdentityFromToken, [])
   const myUserId = me.userId ?? undefined
@@ -179,24 +186,77 @@ export default function CreateOrganizationPage() {
     }
   }, [createdOrgId])
 
+  // Handle payment confirmation from PayOS redirect
+  useEffect(() => {
+    const transactionId = searchParams?.get("transactionId") ?? null
+    const code = searchParams?.get("code") ?? null
+    const cancel = searchParams?.get("cancel") ?? null
+    const status = searchParams?.get("status") ?? null
+    const orderCode = searchParams?.get("orderCode") ?? null
+    const paymentId = searchParams?.get("id") ?? null // PayOS sends 'id' parameter
+
+    if (!transactionId) return
+
+    let finalStatus: "success" | "cancel" | null = null
+
+    console.log({ transactionId, code, cancel, status, orderCode, paymentId })
+
+    // PayOS success: code=00, cancel=false, status=PAID
+    if (code === "00" && cancel === "false" && status?.toUpperCase() === "PAID") {
+      finalStatus = "success"
+    }
+    // PayOS cancel: cancel=true OR status=CANCELLED
+    else if (cancel === "true" || status?.toUpperCase() === "CANCELLED") {
+      finalStatus = "cancel"
+    }
+
+    console.log({ finalStatus })
+
+    if (finalStatus === "success") {
+      const req: PaymentConfirmationRequest = {
+        paymentGateway: "payOS",
+        paymentId: paymentId ?? "",
+        orderCode: orderCode ?? "",
+        purpose: "membership",
+        transactionId,
+        status: "success",
+      }
+
+      confirmPayment(req)
+        .then(() => setPopup({ type: "success", msg: "Thanh toán thành công!" }))
+        .catch((res) => { setPopup({ type: "cancel", msg: "Thanh toán thất bại." }); console.log(res); })
+    }
+
+    if (finalStatus === "cancel") {
+      const req: CancelPaymentRequest = {
+        paymentGateway: "payOS",
+        transactionId,
+        paymentId: paymentId ?? "",
+        orderCode: orderCode ?? "",
+      }
+
+      cancelPayment(req)
+        .then(() => setPopup({ type: "cancel", msg: "Bạn đã hủy thanh toán." }))
+        .catch(() => setPopup({ type: "cancel", msg: "Có lỗi khi hủy giao dịch." }))
+    }
+  }, [searchParams])
+
   async function subscribe(plan: Plan) {
     try {
-      if (!createdOrgId) {
+      if (!createdOrgId || !myUserId) {
         router.push("/profile")
         return
       }
-      const req: ProcessPaymentReq = {
-        paymentGateway: "payOS",
-        purpose: "membership",
-        total: plan.priceMonthly ?? 0,
-        PlanId: plan.planId,
-        OrgId: createdOrgId,
-        UserId: myUserId,
-        AutoRenew: true,
+      const req: SubscribeRequest = {
+        userId: myUserId,
+        orgId: createdOrgId,
+        planId: plan.planId,
+        paymentMethod: "payOS",
+        autoRenew: true,
       }
-      const res: ProcessPaymentRes = await processPayment(req)
+      const res: SubscribeResponse = await subscribeToPlan(req)
       localStorage.setItem("planId", String(plan.planId))
-      window.location.href = res.approvalUrl
+      window.location.href = res.paymentUrl
     } catch (e) {
       alert(toMessage(e))
     }
@@ -322,6 +382,28 @@ export default function CreateOrganizationPage() {
           Skip for now
         </button>
       </div>
+
+      {/* Payment Result Popup */}
+      {popup && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+          <div className="bg-zinc-900 text-white rounded-xl p-6 max-w-sm">
+            <h2 className="text-3xl font-semibold mb-4">
+              {popup.type === "success" ? "Payment success" : "Payment failed"}
+            </h2>
+            <p>{popup.msg}</p>
+            <button
+              onClick={() => {
+                setPopup(null)
+                router.replace("/profile/create-org")
+                localStorage.removeItem("planId")
+              }}
+              className="mt-4 px-4 py-2 rounded bg-emerald-500 text-black"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
