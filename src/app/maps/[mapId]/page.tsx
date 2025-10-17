@@ -260,11 +260,10 @@ export default function EditMapPage() {
         removalMode: false,
       });
 
-      map.on("pm:create", async (e: PMCreateEvent) => {
-        sketch.addLayer(e.layer);
-        await saveFeature(detail.id, detail?.layers[0].id, e.layer as ExtendedLayer, loaded, setFeatures);
-        await refreshMapDetail();
-      });
+       map.on("pm:create", async (e: PMCreateEvent) => {
+         sketch.addLayer(e.layer);
+         await saveFeature(detail.id, detail?.layers[0].id, e.layer as ExtendedLayer, loaded, setFeatures);
+       });
     })();
     return () => {
       alive = false;
@@ -346,25 +345,35 @@ export default function EditMapPage() {
     }
     sketchRef.current?.clearLayers();
     setFeatures([]);
-    // Refresh map detail to get updated data
-    await refreshMapDetail();
-  }, [detail, features, refreshMapDetail]);
+  }, [detail, features]);
 
   const onLayerVisibilityChange = useCallback(async (layerId: string, isVisible: boolean) => {
     if (!detail || !mapRef.current) return;
     
     // Update local state immediately
+    const updatedLayers = detail.layers.map(layer => 
+      layer.id === layerId ? { ...layer, isVisible } : layer
+    );
+    
     setDetail(prev => {
       if (!prev) return prev;
       return {
         ...prev,
-        layers: prev.layers.map(layer => 
-          layer.id === layerId ? { ...layer, isVisible } : layer
-        )
+        layers: updatedLayers
       };
     });
     
-    await handleLayerVisibilityChange(detail.id, layerId, isVisible, mapRef.current, detail.layers, dataLayerRefs);
+    try {
+      // Update database
+      const { updateMapLayer } = await import("@/lib/api");
+      await updateMapLayer(detail.id, layerId, { isVisible });
+      
+      // Use targeted layer visibility toggle instead of re-rendering all layers
+      const { toggleLayerVisibility } = await import("@/utils/mapUtils");
+      await toggleLayerVisibility(mapRef.current, layerId, isVisible, updatedLayers, dataLayerRefs);
+    } catch (error) {
+      console.error("Failed to update layer visibility:", error);
+    }
   }, [detail]);
 
   const onFeatureVisibilityChange = useCallback(async (featureId: string, isVisible: boolean) => {
@@ -406,8 +415,8 @@ export default function EditMapPage() {
     if (!feature) return;
     
     const presetStyle = getStylePreset(layerType, presetName);
-    await applyStyleToFeature(detail.id, featureId, feature.layer, presetStyle, features, setFeatures, refreshMapDetail);
-  }, [detail, features, setFeatures, refreshMapDetail]);
+    await applyStyleToFeature(detail.id, featureId, feature.layer, presetStyle, features, setFeatures);
+  }, [detail, features, setFeatures]);
 
   const applyCustomStyleToFeature = useCallback(async (featureId: string, styleOptions: {
     color?: string;
@@ -424,8 +433,8 @@ export default function EditMapPage() {
     if (!feature) return;
     
     const customStyle = createCustomStyle(styleOptions);
-    await applyStyleToFeature(detail.id, featureId, feature.layer, customStyle, features, setFeatures, refreshMapDetail);
-  }, [detail, features, setFeatures, refreshMapDetail]);
+    await applyStyleToFeature(detail.id, featureId, feature.layer, customStyle, features, setFeatures);
+  }, [detail, features, setFeatures]);
 
   const applyStyleToLayer = useCallback(async (layerId: string, styleOptions: {
     color?: string;
@@ -437,8 +446,8 @@ export default function EditMapPage() {
     if (!detail) return;
     
     const customStyle = createCustomStyle(styleOptions);
-    await applyStyleToDataLayer(detail.id, layerId, customStyle, refreshMapDetail);
-  }, [detail, refreshMapDetail]);
+    await applyStyleToDataLayer(detail.id, layerId, customStyle);
+  }, [detail]);
 
   const getCurrentFeatureStyle = useCallback((featureId: string) => {
     const feature = features.find(f => f.featureId === featureId);
@@ -447,26 +456,24 @@ export default function EditMapPage() {
     return extractLayerStyle(feature.layer);
   }, [features]);
 
-  const saveMeta = useCallback(async () => {
-    if (!detail) return;
-    setBusySaveMeta(true);
-    setFeedback(null);
-    try {
-      const body: UpdateMapRequest = {
-        name: (name ?? "").trim() || "Untitled Map",
-        baseMapProvider: baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
-      };
-      await updateMap(detail.id, body);
-      setFeedback("Đã lưu thông tin bản đồ.");
-      // Refresh map detail to get updated data
-      await refreshMapDetail();
-    } catch (e) {
-      setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
-    } finally {
-      setBusySaveMeta(false);
-      setTimeout(() => setFeedback(null), 1600);
-    }
-  }, [detail, name, baseKey, refreshMapDetail]);
+   const saveMeta = useCallback(async () => {
+     if (!detail) return;
+     setBusySaveMeta(true);
+     setFeedback(null);
+     try {
+       const body: UpdateMapRequest = {
+         name: (name ?? "").trim() || "Untitled Map",
+         baseMapProvider: baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
+       };
+       await updateMap(detail.id, body);
+       setFeedback("Đã lưu thông tin bản đồ.");
+     } catch (e) {
+       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
+     } finally {
+       setBusySaveMeta(false);
+       setTimeout(() => setFeedback(null), 1600);
+     }
+   }, [detail, name, baseKey]);
 
   const saveView = useCallback(async () => {
     if (!detail || !mapRef.current) return;
@@ -478,15 +485,13 @@ export default function EditMapPage() {
       const body: UpdateMapRequest = { viewState: JSON.stringify(view) };
       await updateMap(detail.id, body);
       setFeedback("Đã lưu vị trí hiển thị.");
-      // Refresh map detail to get updated data
-      await refreshMapDetail();
     } catch (e) {
       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveView(false);
       setTimeout(() => setFeedback(null), 1600);
     }
-  }, [detail, refreshMapDetail]);
+  }, [detail]);
 
   const GuardBtn: React.FC<
     React.PropsWithChildren<{ title: string; onClick?: () => void; disabled?: boolean }>
@@ -575,6 +580,7 @@ export default function EditMapPage() {
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) {
+                    // TODO: Handle file upload for adding layer from template
                     console.log("File selected:", file.name);
                   }
                 }}
@@ -583,7 +589,7 @@ export default function EditMapPage() {
               />
               <label
                 htmlFor="upload-layer"
-                className="rounded-lg px-3 py-1.5 text-xs bg-emerald-600 text-zinc-950 hover:bg-emerald-500 cursor-pointer"
+                className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 cursor-pointer"
                 title="Upload GeoJSON file to add as layer"
               >
                 Upload Layer

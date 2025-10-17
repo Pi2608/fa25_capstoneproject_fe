@@ -462,7 +462,7 @@ export function DataLayersPanel({
                       onClick={() => onBaseLayerChange?.("osm")}
                       className={`px-3 py-1 text-xs rounded ${
                         currentBaseLayer === "osm" 
-                          ? "bg-emerald-600 text-zinc-950 hover:bg-emerald-500" 
+                          ? "bg-blue-600 text-white" 
                           : "bg-gray-600 text-gray-300 hover:bg-gray-500"
                       }`}
                     >
@@ -472,7 +472,7 @@ export function DataLayersPanel({
                       onClick={() => onBaseLayerChange?.("sat")}
                       className={`px-3 py-1 text-xs rounded ${
                         currentBaseLayer === "sat" 
-                          ? "bg-emerald-600 text-zinc-950 hover:bg-emerald-500" 
+                          ? "bg-blue-600 text-white" 
                           : "bg-gray-600 text-gray-300 hover:bg-gray-500"
                       }`}
                     >
@@ -482,7 +482,7 @@ export function DataLayersPanel({
                       onClick={() => onBaseLayerChange?.("dark")}
                       className={`px-3 py-1 text-xs rounded ${
                         currentBaseLayer === "dark" 
-                          ? "bg-emerald-600 text-zinc-950 hover:bg-emerald-500" 
+                          ? "bg-blue-600 text-white" 
                           : "bg-gray-600 text-gray-300 hover:bg-gray-500"
                       }`}
                     >
