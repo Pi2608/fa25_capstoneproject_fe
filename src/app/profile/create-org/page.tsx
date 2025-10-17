@@ -1,22 +1,26 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useState, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   createOrganization,
   type OrganizationReqDto,
   getPlans,
   type Plan,
-  getMyOrganizations,
-  type MyOrganizationDto,
   subscribeToPlan,
   type SubscribeRequest,
   type SubscribeResponse,
+  confirmPayment,
+  type PaymentConfirmationRequest,
+  cancelPayment,
+  type CancelPaymentRequest,
+  getMyOrganizations,
+  type MyOrganizationDto,
 } from "@/lib/api"
 
 type JwtPayload = Record<string, unknown>
 
-function getMyIdentityFromToken(): { userId: string | null } {
+function getMyIdentityFromToken(): { userId?: string | null } {
   if (typeof window === "undefined") return { userId: null }
   const token = localStorage.getItem("token")
   if (!token) return { userId: null }
@@ -24,8 +28,7 @@ function getMyIdentityFromToken(): { userId: string | null } {
   if (parts.length !== 3) return { userId: null }
   try {
     const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/")
-    const json =
-      typeof atob === "function" ? atob(b64) : Buffer.from(b64, "base64").toString("utf8")
+    const json = typeof atob === "function" ? atob(b64) : Buffer.from(b64, "base64").toString("utf8")
     const p = JSON.parse(json) as JwtPayload
     const userId =
       (typeof p.userId === "string" && p.userId) ||
@@ -92,8 +95,10 @@ function pickNewestOrgId(list: MyOrganizationDto[], name: string, abb: string): 
   return newest?.orgId ?? null
 }
 
-export default function CreateOrganizationPage() {
+// Component that handles search params
+function CreateOrganizationPageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [orgName, setOrgName] = useState("")
   const [abbreviation, setAbbreviation] = useState("")
@@ -106,7 +111,10 @@ export default function CreateOrganizationPage() {
   const [loadingPlans, setLoadingPlans] = useState(false)
   const [plansErr, setPlansErr] = useState<string | null>(null)
 
-  const myUserId = useMemo(() => getMyIdentityFromToken().userId, [])
+  const [popup, setPopup] = useState<{ type: "success" | "cancel"; msg: string } | null>(null)
+
+  const me = useMemo(getMyIdentityFromToken, [])
+  const myUserId = me.userId ?? undefined
 
   function gotoOrgOrProfile(targetId: string | null) {
     if (targetId && targetId.trim()) {
@@ -179,36 +187,77 @@ export default function CreateOrganizationPage() {
     }
   }, [createdOrgId])
 
+  // Handle payment confirmation from PayOS redirect
+  useEffect(() => {
+    const transactionId = searchParams?.get("transactionId") ?? null
+    const code = searchParams?.get("code") ?? null
+    const cancel = searchParams?.get("cancel") ?? null
+    const status = searchParams?.get("status") ?? null
+    const orderCode = searchParams?.get("orderCode") ?? null
+    const paymentId = searchParams?.get("id") ?? null // PayOS sends 'id' parameter
+
+    if (!transactionId) return
+
+    let finalStatus: "success" | "cancel" | null = null
+
+    console.log({ transactionId, code, cancel, status, orderCode, paymentId })
+
+    // PayOS success: code=00, cancel=false, status=PAID
+    if (code === "00" && cancel === "false" && status?.toUpperCase() === "PAID") {
+      finalStatus = "success"
+    }
+    // PayOS cancel: cancel=true OR status=CANCELLED
+    else if (cancel === "true" || status?.toUpperCase() === "CANCELLED") {
+      finalStatus = "cancel"
+    }
+
+    console.log({ finalStatus })
+
+    if (finalStatus === "success") {
+      const req: PaymentConfirmationRequest = {
+        paymentGateway: "payOS",
+        paymentId: paymentId ?? "",
+        orderCode: orderCode ?? "",
+        purpose: "membership",
+        transactionId,
+        status: "success",
+      }
+
+      confirmPayment(req)
+        .then(() => setPopup({ type: "success", msg: "Thanh toán thành công!" }))
+        .catch((res) => { setPopup({ type: "cancel", msg: "Thanh toán thất bại." }); console.log(res); })
+    }
+
+    if (finalStatus === "cancel") {
+      const req: CancelPaymentRequest = {
+        paymentGateway: "payOS",
+        transactionId,
+        paymentId: paymentId ?? "",
+        orderCode: orderCode ?? "",
+      }
+
+      cancelPayment(req)
+        .then(() => setPopup({ type: "cancel", msg: "Bạn đã hủy thanh toán." }))
+        .catch(() => setPopup({ type: "cancel", msg: "Có lỗi khi hủy giao dịch." }))
+    }
+  }, [searchParams])
+
   async function subscribe(plan: Plan) {
     try {
-      if (!createdOrgId) {
+      if (!createdOrgId || !myUserId) {
         router.push("/profile")
         return
       }
-      if (!myUserId) {
-        alert("Session expired. Please log in again.")
-        router.push("/login?returnUrl=/profile/create-project")
-        return
-      }
-
       const req: SubscribeRequest = {
-        userId: myUserId,       
-        orgId: createdOrgId,     
+        userId: myUserId,
+        orgId: createdOrgId,
         planId: plan.planId,
         paymentMethod: "payOS",
         autoRenew: true,
       }
-
       const res: SubscribeResponse = await subscribeToPlan(req)
-
       localStorage.setItem("planId", String(plan.planId))
-
-      if (res.paymentUrl) {
-        window.location.href = res.paymentUrl
-      } else {
-        // free / đã active
-        gotoOrgOrProfile(createdOrgId)
-      }
+      window.location.href = res.paymentUrl
     } catch (e) {
       alert(toMessage(e))
     }
@@ -334,6 +383,43 @@ export default function CreateOrganizationPage() {
           Skip for now
         </button>
       </div>
+
+      {/* Payment Result Popup */}
+      {popup && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+          <div className="bg-zinc-900 text-white rounded-xl p-6 max-w-sm">
+            <h2 className="text-3xl font-semibold mb-4">
+              {popup.type === "success" ? "Payment success" : "Payment failed"}
+            </h2>
+            <p>{popup.msg}</p>
+            <button
+              onClick={() => {
+                setPopup(null)
+                router.replace("/profile/create-org")
+                localStorage.removeItem("planId")
+              }}
+              className="mt-4 px-4 py-2 rounded bg-emerald-500 text-black"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </main>
+  )
+}
+
+export default function CreateOrganizationPage() {
+  return (
+    <Suspense fallback={
+      <main className="max-w-2xl mx-auto px-6 py-10 text-white">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-400 border-t-transparent"></div>
+          <span className="ml-3 text-zinc-400">Loading...</span>
+        </div>
+      </main>
+    }>
+      <CreateOrganizationPageContent />
+    </Suspense>
   )
 }

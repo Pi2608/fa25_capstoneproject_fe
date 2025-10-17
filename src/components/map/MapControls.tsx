@@ -232,6 +232,9 @@ export interface DataLayersPanelProps {
   onUpdateDataLayer?: (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => Promise<void>;
   onRemoveDataLayer?: (layerId: string) => Promise<void>;
   onDeleteFeature?: (featureId: string) => Promise<void>;
+  // Base layer change
+  onBaseLayerChange?: (baseLayer: "osm" | "sat" | "dark") => void;
+  currentBaseLayer?: "osm" | "sat" | "dark";
 }
 
 export function DataLayersPanel({
@@ -247,7 +250,9 @@ export function DataLayersPanel({
   onAddDataLayer,
   onUpdateDataLayer,
   onRemoveDataLayer,
-  onDeleteFeature
+  onDeleteFeature,
+  onBaseLayerChange,
+  currentBaseLayer = "osm"
 }: DataLayersPanelProps) {
   const [activeTab, setActiveTab] = useState<"Segment" | "List">("List");
 
@@ -447,6 +452,43 @@ export function DataLayersPanel({
                     </div>
                   ))}
                   
+                </div>
+
+                {/* Base Layer Section */}
+                <div className="px-4 py-2 border-t border-gray-600">
+                  <div className="text-sm font-medium text-white/70 mb-2">Base Layer</div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => onBaseLayerChange?.("osm")}
+                      className={`px-3 py-1 text-xs rounded ${
+                        currentBaseLayer === "osm" 
+                          ? "bg-emerald-600 text-zinc-950 hover:bg-emerald-500" 
+                          : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+                      }`}
+                    >
+                      OSM
+                    </button>
+                    <button
+                      onClick={() => onBaseLayerChange?.("sat")}
+                      className={`px-3 py-1 text-xs rounded ${
+                        currentBaseLayer === "sat" 
+                          ? "bg-emerald-600 text-zinc-950 hover:bg-emerald-500" 
+                          : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+                      }`}
+                    >
+                      Satellite
+                    </button>
+                    <button
+                      onClick={() => onBaseLayerChange?.("dark")}
+                      className={`px-3 py-1 text-xs rounded ${
+                        currentBaseLayer === "dark" 
+                          ? "bg-emerald-600 text-zinc-950 hover:bg-emerald-500" 
+                          : "bg-gray-600 text-gray-300 hover:bg-gray-500"
+                      }`}
+                    >
+                      Dark
+                    </button>
+                  </div>
                 </div>
               </>
             ) : (
