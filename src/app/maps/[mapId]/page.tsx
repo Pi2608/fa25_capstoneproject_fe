@@ -12,7 +12,9 @@ import type {
   LatLng,
   LatLngBounds,
 } from "leaflet";
+
 import {
+  // Map detail & layers
   getMapDetail,
   type MapDetail,
   updateMap,
@@ -38,39 +40,51 @@ import {
   type SegmentZone,
   type SegmentLayer,
 } from "@/lib/api";
+
 import type {
   Feature as GJFeature,
   Geometry as GJGeometry,
   GeoJsonObject as GJObject,
   Position,
 } from "geojson";
+
 import {
-  saveFeature,
-  loadFeaturesToMap,
-  deleteFeatureFromDB,
+  // feature helpers
   type FeatureData,
+  getFeatureType as getFeatureTypeUtil,
+  serializeFeature,
+  extractLayerStyle,
+
+  // persistence & rendering
+  saveFeature,
+  updateFeatureInDB,
+  deleteFeatureFromDB,
+  loadFeaturesToMap,
+  loadLayerToMap,
   renderAllDataLayers,
+
+  // visibility/state helpers
+  handleLayerVisibilityChange,
   handleFeatureVisibilityChange,
+
+  // style helpers
   handleUpdateLayerStyle,
   handleUpdateFeatureStyle,
-  handleDeleteFeature,
-  handleSelectLayer,
   getStylePreset,
   createCustomStyle,
   applyStyleToFeature,
   applyStyleToDataLayer,
-  extractLayerStyle,
 } from "@/utils/mapUtils";
+
 import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
 import dynamic from "next/dynamic";
-const SegmentPanel = dynamic(
-  () => import("@/components/storymap/SegmentPanel"),
-  { ssr: false }
-);
+
+// Lazy components
+const SegmentPanel = dynamic(() => import("@/components/storymap/SegmentPanel"), { ssr: false });
 const MapPoiPanel = dynamic(() => import("@/components/poi/PoiPanel"), { ssr: false });
 import CreateZoneDialog, { type ZoneDraft } from "@/components/storymap/CreateZoneDialog";
 
-
+// ------------ Types & helpers ------------
 type BaseKey = "osm" | "sat" | "dark";
 
 type MapWithPM = LMap & {
@@ -133,17 +147,13 @@ interface GeoJSONLayer extends Layer {
     };
   };
 }
-
 interface ExtendedLayer extends GeoJSONLayer {
   _mRadius?: number;
   _latlng?: LatLng;
   _latlngs?: LatLng[] | LatLng[][] | LatLng[][][];
   _bounds?: LatLngBounds;
 }
-
-type LayerWithToGeoJSON = Layer & {
-  toGeoJSON: () => GJFeature | GJGeometry | GJObject;
-};
+type LayerWithToGeoJSON = Layer & { toGeoJSON: () => GJFeature | GJGeometry | GJObject };
 function hasToGeoJSON(x: Layer | null | undefined): x is LayerWithToGeoJSON {
   return !!x && typeof (x as unknown as { toGeoJSON?: unknown }).toGeoJSON === "function";
 }
@@ -153,11 +163,46 @@ type SafeSegmentZone = Omit<SegmentZone, "geometry" | "properties"> & {
   properties?: Record<string, unknown>;
 };
 
+const VN_CENTER: LatLngTuple = [14.058324, 108.277199];
+const VN_ZOOM = 6;
+interface ParsedViewState {
+  center: [number, number];
+  zoom: number;
+}
+
+function parseViewState(input: unknown): ParsedViewState | null {
+  if (input === null || input === undefined) return null;
+
+  try {
+    const obj = typeof input === "string" ? JSON.parse(input) : input;
+    if (
+      typeof obj === "object" &&
+      obj !== null &&
+      "center" in obj &&
+      "zoom" in obj &&
+      Array.isArray((obj as { center: unknown }).center) &&
+      (obj as { center: unknown[] }).center.length === 2 &&
+      typeof (obj as { center: unknown[] }).center[0] === "number" &&
+      typeof (obj as { center: unknown[] }).center[1] === "number" &&
+      typeof (obj as { zoom: unknown }).zoom === "number"
+    ) {
+      const c = (obj as { center: [number, number] }).center;
+      const z = (obj as { zoom: number }).zoom;
+      return { center: c, zoom: z };
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return null;
+}
+
+// ============ Component ============
 export default function EditMapPage() {
   const params = useParams<{ mapId: string }>();
   const sp = useSearchParams();
   const mapId = params?.mapId ?? "";
 
+  const [isMapReady, setIsMapReady] = useState(false);
   const [detail, setDetail] = useState<MapDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [err, setErr] = useState<string | null>(null);
@@ -173,14 +218,17 @@ export default function EditMapPage() {
 
   const [features, setFeatures] = useState<FeatureData[]>([]);
   const [selectedLayer, setSelectedLayer] = useState<FeatureData | RawLayer | null>(null);
+  const [layers, setLayers] = useState<RawLayer[]>([]);
+  const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({});
+  const [featureVisibility, setFeatureVisibility] = useState<Record<string, boolean>>({});
 
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapWithPM | null>(null);
   const baseRef = useRef<TileLayer | null>(null);
   const sketchRef = useRef<FeatureGroup | null>(null);
   const dataLayerRefs = useRef<Map<string, L.Layer>>(new Map());
-  const tempZoneLayerRef = useRef<Layer | null>(null);
 
+  const lastDrawnLayerRef = useRef<Layer | null>(null);
 
   const [toolsLoading, setToolsLoading] = useState(true);
   const [allowed, setAllowed] = useState<Set<string>>(new Set());
@@ -195,11 +243,10 @@ export default function EditMapPage() {
   const [showMapPoiPanel, setShowMapPoiPanel] = useState(false);
 
   const [segmentLayers, setSegmentLayers] = useState<SegmentLayer[]>([]);
-  const lastDrawnLayerRef = useRef<Layer | null>(null);
-
   const [zoneDialogOpen, setZoneDialogOpen] = useState(false);
   const [zoneDraft, setZoneDraft] = useState<ZoneDraft | null>(null);
 
+  // ---------- helpers ----------
   const guessZoneName = (geom: GJObject | null): string => {
     if (!geom) return "Zone mới";
     const t = geom.type;
@@ -209,22 +256,35 @@ export default function EditMapPage() {
     return "Zone mới";
   };
 
-  const applyBaseLayer = useCallback((key: BaseKey) => {
-    if (!mapRef.current) return;
-    if (baseRef.current) {
-      try {
-        mapRef.current.removeLayer(baseRef.current);
-        baseRef.current = null;
-      } catch (error) {
-        console.warn("Failed to remove existing baseLayer:", error);
-        baseRef.current = null;
-      }
+  const getZoneGeometry = useCallback((z: SegmentZone): GJObject | null => {
+    const g1 = (z as { geometry?: unknown }).geometry;
+    const g2 = (z as { zoneGeometry?: unknown }).zoneGeometry;
+    const raw = (g1 ?? g2) as unknown;
+    if (!raw) return null;
+    if (typeof raw === "string") {
+      try { return JSON.parse(raw) as GJObject; } catch { return null; }
     }
-    let cancelled = false;
+    return raw as GJObject;
+  }, []);
+
+  // ---------- base layer ----------
+  const baseTokenRef = useRef(0);
+
+  const applyBaseLayer = useCallback((key: BaseKey) => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (baseRef.current) {
+      try { map.removeLayer(baseRef.current); } catch { }
+      baseRef.current = null;
+    }
+
+    const myToken = ++baseTokenRef.current;
+
     (async () => {
       try {
         const L = (await import("leaflet")).default;
-        if (cancelled) return;
+
         let layer: TileLayer;
         if (key === "sat") {
           layer = L.tileLayer(
@@ -237,25 +297,26 @@ export default function EditMapPage() {
             { maxZoom: 20, attribution: "© OpenStreetMap contributors © CARTO" }
           );
         } else {
-          layer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            maxZoom: 20,
-            attribution: "© OpenStreetMap contributors",
-          });
+          layer = L.tileLayer(
+            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            { maxZoom: 20, attribution: "© OpenStreetMap contributors" }
+          );
         }
-        if (!cancelled && mapRef.current) {
-          layer.addTo(mapRef.current);
-          baseRef.current = layer;
-        }
+
+        if (myToken !== baseTokenRef.current) return;
+
+        const m = mapRef.current as unknown as { _panes?: { tilePane?: HTMLElement } } | null;
+        if (!m || !m._panes || !m._panes.tilePane) return; 
+
+        layer.addTo(mapRef.current!);
+        baseRef.current = layer;
       } catch (error) {
         console.error("Failed to apply baseLayer:", error);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
-  // load map detail
+  // ---------- load map detail ----------
   useEffect(() => {
     if (!mapId) return;
     let alive = true;
@@ -275,12 +336,10 @@ export default function EditMapPage() {
         if (alive) setLoading(false);
       }
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [mapId]);
 
-  // load tools
+  // ---------- load tools ----------
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -299,23 +358,19 @@ export default function EditMapPage() {
         if (alive) setToolsLoading(false);
       }
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, []);
 
-  // init map
+  // ---------- init map ----------
   useEffect(() => {
     if (!detail || !mapEl.current || mapRef.current) return;
     let alive = true;
     const el = mapEl.current;
+
     (async () => {
       const L = (await import("leaflet")).default;
       await import("@geoman-io/leaflet-geoman-free");
       if (!alive || !el) return;
-
-      const VN_CENTER: LatLngTuple = [14.058324, 108.277199];
-      const VN_ZOOM = 6;
 
       const createdFlag = sp?.get("created") === "1";
       const rawLat = Number(detail.initialLatitude ?? 0);
@@ -333,23 +388,33 @@ export default function EditMapPage() {
         minZoom: 2,
         maxZoom: 20,
       }).setView(initialCenter, initialZoom) as MapWithPM;
+
       mapRef.current = map;
       if (!alive) return;
+      setIsMapReady(true);
 
       applyBaseLayer(
-        detail.baseMapProvider === "Satellite"
-          ? "sat"
-          : detail.baseMapProvider === "Dark"
-            ? "dark"
-            : "osm"
+        detail.baseMapProvider === "Satellite" ? "sat" :
+          detail.baseMapProvider === "Dark" ? "dark" : "osm"
       );
 
       const sketch = L.featureGroup().addTo(map);
       sketchRef.current = sketch;
 
-      const loaded = await loadFeaturesToMap(detail.id, L, sketch);
-      setFeatures(loaded);
+      // Load Features from DB to sketch group
+      try {
+        const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
+        setFeatures(dbFeatures);
+        const initialFeatureVisibility: Record<string, boolean> = {};
+        dbFeatures.forEach((f) => {
+          initialFeatureVisibility[f.id] = f.isVisible ?? true;
+        });
+        setFeatureVisibility(initialFeatureVisibility);
+      } catch (error) {
+        console.error("Failed to load from database:", error);
+      }
 
+      // Geoman controls (disabled by default; toggle via buttons)
       map.pm.addControls({
         drawMarker: false,
         drawPolyline: false,
@@ -365,19 +430,46 @@ export default function EditMapPage() {
         removalMode: false,
       });
 
+      // Unified pm:create handler: save Feature + prepare Zone Draft
       map.on("pm:create", async (e: PMCreateEvent) => {
-        sketch.addLayer(e.layer);
-        await saveFeature(detail.id, detail?.layers[0].id, e.layer as ExtendedLayer, loaded, setFeatures);
+        const extLayer = e.layer as ExtendedLayer;
+        sketch.addLayer(extLayer);
+        lastDrawnLayerRef.current = extLayer;
 
-        lastDrawnLayerRef.current = e.layer;
+        // build local feature
+        const type = getFeatureTypeUtil(extLayer);
+        const localId = `feature-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        const newFeature: FeatureData = {
+          id: localId,
+          name: `${type} ${features.length + 1}`,
+          type,
+          layer: extLayer,
+          isVisible: true,
+        };
 
-        if (hasToGeoJSON(e.layer)) {
-          const gj = e.layer.toGeoJSON();
+        // Try saving to DB
+        try {
+          const saved = await saveFeature(detail.id, "", extLayer, features, setFeatures);
+          if (saved) {
+            setFeatures((prev) => [...prev, saved]);
+            setFeatureVisibility((prev) => ({ ...prev, [saved.id]: true }));
+          } else {
+            setFeatures((prev) => [...prev, newFeature]);
+            setFeatureVisibility((prev) => ({ ...prev, [newFeature.id]: true }));
+          }
+        } catch (error) {
+          console.error("Error saving to database:", error);
+          setFeatures((prev) => [...prev, newFeature]);
+          setFeatureVisibility((prev) => ({ ...prev, [newFeature.id]: true }));
+        }
+
+        // Prepare zone draft from the drawn geometry
+        if (hasToGeoJSON(extLayer)) {
+          const gj = extLayer.toGeoJSON();
           const geometry: GJObject | null =
             (gj as GJFeature).type === "Feature"
               ? ((gj as GJFeature).geometry ?? null)
               : (gj as GJObject);
-
           if (geometry) {
             setZoneDraft({ geometry, defaultName: guessZoneName(geometry) });
             setZoneDialogOpen(true);
@@ -385,47 +477,117 @@ export default function EditMapPage() {
         }
       });
 
+      // Editing existing features
+      sketch.on("pm:edit", async (e: { layer: Layer; shape: string }) => {
+        const extLayer = e.layer as ExtendedLayer;
+        const editedFeature = features.find((f) => f.layer === extLayer);
+        if (editedFeature && editedFeature.featureId) {
+          try {
+            await updateFeatureInDB(detail.id, editedFeature.featureId, editedFeature);
+            setFeatures((prev) =>
+              prev.map((f) =>
+                f.id === editedFeature.id || f.featureId === editedFeature.featureId
+                  ? { ...f, layer: extLayer }
+                  : f
+              )
+            );
+          } catch (error) {
+            console.error("Error updating feature:", error);
+          }
+        }
+      });
     })();
+
     return () => {
       alive = false;
-      mapRef.current?.remove();
+      try { mapRef.current?.remove(); } catch { }
+      baseRef.current = null;
+      sketchRef.current = null;
+      mapRef.current = null;
     };
-  }, [detail, applyBaseLayer, sp]);
 
-  // render data layers
+  }, [detail, applyBaseLayer, sp, features.length]);
+
+  // ---------- render data layers ----------
   useEffect(() => {
+    if (!mapRef.current || !detail?.layers || detail.layers.length === 0 || !isMapReady) return;
+
     const map = mapRef.current;
-    if (!map || !detail?.layers) return;
-    const abortController = new AbortController();
-    renderAllDataLayers(map, detail.layers, dataLayerRefs, abortController.signal);
-    return () => {
-      abortController.abort();
-    };
-  }, [detail?.layers]);
-
-  useEffect(() => {
-    applyBaseLayer(baseKey);
-  }, [baseKey, applyBaseLayer]);
-
-  // [StoryMap] load segments
-  useEffect(() => {
-    if (!detail?.id) return;
     let alive = true;
 
     (async () => {
+      setLayers(detail.layers);
+
+      // clear current layers
+      dataLayerRefs.current.forEach((layer) => {
+        if (map.hasLayer(layer)) map.removeLayer(layer);
+      });
+      dataLayerRefs.current.clear();
+
+      const initialLayerVisibility: Record<string, boolean> = {};
+
+      for (const layer of detail.layers) {
+        if (!alive) break;
+        const vis = layer.isVisible ?? true;
+        initialLayerVisibility[layer.id] = vis;
+        try {
+          const loaded = await loadLayerToMap(map, layer, dataLayerRefs);
+          if (loaded && !vis) {
+            const leaf = dataLayerRefs.current.get(layer.id);
+            if (leaf && map.hasLayer(leaf)) map.removeLayer(leaf);
+          }
+        } catch (error) {
+          console.error(`Error loading layer ${layer.name}:`, error);
+        }
+      }
+
+      if (alive) setLayerVisibility(initialLayerVisibility);
+    })();
+
+    return () => { alive = false; };
+  }, [detail?.layers, detail?.id, isMapReady]);
+
+  // react to layerVisibility toggles
+  useEffect(() => {
+    if (!mapRef.current) return;
+    Object.entries(layerVisibility).forEach(([layerId, isVisible]) => {
+      const layerOnMap = dataLayerRefs.current.get(layerId);
+      if (!layerOnMap) return;
+      const isOnMap = mapRef.current!.hasLayer(layerOnMap);
+      if (isVisible && !isOnMap) mapRef.current!.addLayer(layerOnMap);
+      else if (!isVisible && isOnMap) mapRef.current!.removeLayer(layerOnMap);
+    });
+  }, [layerVisibility]);
+
+  // react to featureVisibility toggles
+  useEffect(() => {
+    if (!mapRef.current || !sketchRef.current) return;
+    Object.entries(featureVisibility).forEach(([featureId, isVisible]) => {
+      const feature = features.find((f) => f.id === featureId || f.featureId === featureId);
+      if (!feature) return;
+      const isOnMap = sketchRef.current!.hasLayer(feature.layer);
+      if (isVisible && !isOnMap) sketchRef.current!.addLayer(feature.layer);
+      else if (!isVisible && isOnMap) sketchRef.current!.removeLayer(feature.layer);
+    });
+  }, [featureVisibility, features]);
+
+  // keep base layer in sync with selector
+  useEffect(() => { applyBaseLayer(baseKey); }, [baseKey, applyBaseLayer]);
+
+  // ---------- StoryMap: load segments ----------
+  useEffect(() => {
+    if (!detail?.id) return;
+    let alive = true;
+    (async () => {
       try {
         setSegmentsLoading(true);
-
         const list = await getSegments(detail.id);
         if (!alive) return;
-
         setSegments(list ?? []);
-
         if (!selectedSegmentId && (list?.length ?? 0) > 0) {
           const first = list![0] as Segment & { segmentId?: string; id?: string };
           setSelectedSegmentId(first.segmentId ?? first.id ?? null);
         }
-
       } catch (e) {
         console.error("getSegments error:", e);
         setFeedback(e instanceof Error ? `Segments lỗi: ${e.message}` : "Segments lỗi");
@@ -433,13 +595,10 @@ export default function EditMapPage() {
         if (alive) setSegmentsLoading(false);
       }
     })();
-
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [detail?.id, selectedSegmentId]);
 
-  // [StoryMap] load zones when segment changes
+  // StoryMap: load zones for selected segment
   useEffect(() => {
     if (!detail?.id || !selectedSegmentId) return;
     let alive = true;
@@ -457,11 +616,10 @@ export default function EditMapPage() {
         setZonesLoading(false);
       }
     })();
-    return () => {
-      alive = false;
-    };
+    return () => { alive = false; };
   }, [detail?.id, selectedSegmentId]);
 
+  // StoryMap: load segment layers
   useEffect(() => {
     if (!detail?.id || !selectedSegmentId) {
       setSegmentLayers([]);
@@ -480,173 +638,44 @@ export default function EditMapPage() {
     return () => { alive = false; };
   }, [detail?.id, selectedSegmentId]);
 
-
-  // Refresh map detail from API
-  const refreshMapDetail = useCallback(async () => {
-    if (!mapId) return;
-
-    try {
-      const updatedDetail = await getMapDetail(mapId);
-      setDetail(updatedDetail);
-
-      // Preserve current baseLayer
-      const currentBaseKey = baseKey;
-
-      // Reload features from database
-      if (mapRef.current && sketchRef.current) {
-        const L = (await import("leaflet")).default;
-        const loadedFeatures = await loadFeaturesToMap(
-          updatedDetail.id,
-          L,
-          sketchRef.current
-        );
-        setFeatures(loadedFeatures);
-      }
-
-      // Re-render data layers
-      if (mapRef.current && updatedDetail.layers) {
-        await renderAllDataLayers(mapRef.current, updatedDetail.layers, dataLayerRefs);
-      }
-
-      // Ensure baseLayer is still applied
-      if (mapRef.current && baseRef.current) {
-        if (!mapRef.current.hasLayer(baseRef.current)) {
-          try {
-            applyBaseLayer(currentBaseKey);
-          } catch (error) {
-            console.warn("Failed to reapply baseLayer:", error);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Failed to refresh map detail:", error);
-    }
-  }, [mapId, baseKey, applyBaseLayer]);
-
-  // Geoman custom actions
-  const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text") => {
+  // ---------- actions ----------
+  const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text") =>
     mapRef.current?.pm.enableDraw(shape);
-  };
-  const toggleEdit = () => mapRef.current?.pm.toggleGlobalEditMode();
-  const toggleDelete = () => mapRef.current?.pm.toggleGlobalRemovalMode();
-  const toggleDrag = () => mapRef.current?.pm.toggleGlobalDragMode();
-  const enableCutPolygon = () => mapRef.current?.pm.enableGlobalCutMode();
   const toggleRotate = () => mapRef.current?.pm.toggleGlobalRotateMode?.();
+  const enableCutPolygon = () => mapRef.current?.pm.enableGlobalCutMode();
 
   const clearSketch = useCallback(async () => {
     if (!detail) return;
     for (const f of features) {
-      if (f.featureId) await deleteFeatureFromDB(detail.id, f.featureId);
+      if (f.featureId) {
+        try { await deleteFeatureFromDB(detail.id, f.featureId); } catch (e) { console.error(e); }
+      }
     }
     sketchRef.current?.clearLayers();
     setFeatures([]);
+    setFeatureVisibility({});
   }, [detail, features]);
 
-  const onLayerVisibilityChange = useCallback(async (layerId: string, isVisible: boolean) => {
-    if (!detail || !mapRef.current) return;
-
-    const updatedLayers = detail.layers.map((layer) =>
-      layer.id === layerId ? { ...layer, isVisible } : layer
-    );
-
-    setDetail((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        layers: updatedLayers,
-      };
-    });
-
-    try {
-      const { updateMapLayer } = await import("@/lib/api");
-      await updateMapLayer(detail.id, layerId, { isVisible });
-      const { toggleLayerVisibility } = await import("@/utils/mapUtils");
-      await toggleLayerVisibility(mapRef.current, layerId, isVisible, updatedLayers, dataLayerRefs);
-    } catch (error) {
-      console.error("Failed to update layer visibility:", error);
-    }
-  }, [detail]);
-
-  const getZoneGeometry = useCallback((z: SegmentZone): GJObject | null => {
-    const g1 = (z as { geometry?: unknown }).geometry;
-    const g2 = (z as { zoneGeometry?: unknown }).zoneGeometry;
-
-    const raw = (g1 ?? g2) as unknown;
-    if (!raw) return null;
-
-    if (typeof raw === "string") {
-      try {
-        return JSON.parse(raw) as GJObject;
-      } catch {
-        return null;
-      }
-    }
-    return raw as GJObject;
-  }, []);
-
-  const handleZoomZone = useCallback(
-    async (zone: SegmentZone) => {
-      const geom = getZoneGeometry(zone);
-      if (!geom || !mapRef.current) return;
-      const L = (await import("leaflet")).default;
-      const gj = L.geoJSON(geom);
-      const b = gj.getBounds();
-      if (b.isValid()) mapRef.current.fitBounds(b.pad(0.2));
-    },
-    [getZoneGeometry]
-  );
-
-  const handleCopyZoneToExistingLayer = useCallback(
-    async (zone: SegmentZone, layerId: string) => {
-      if (!detail?.id) return;
-      const geom = getZoneGeometry(zone);
-      if (!geom) return;
-
-      const L = (await import("leaflet")).default;
-      const gj = L.geoJSON(geom);
-      const first = gj.getLayers()[0] as Layer | undefined;
-      if (!first) return;
-
-      await saveFeature(
+  const onLayerVisibilityChange = useCallback(
+    async (layerId: string, isVisible: boolean) => {
+      if (!detail?.id || !mapRef.current) return;
+      const layerData = layers.find((l) => l.id === layerId);
+      await handleLayerVisibilityChange(
         detail.id,
         layerId,
-        first as ExtendedLayer,
-        features,
-        setFeatures
+        isVisible,
+        mapRef.current,
+        dataLayerRefs,
+        setLayerVisibility,
+        layerData
       );
     },
-    [detail?.id, features, setFeatures, getZoneGeometry]
+    [detail?.id, layers]
   );
-
-  const handleCopyZoneToNewLayer = useCallback(
-    async (zone: SegmentZone) => {
-      if (!detail?.id) return;
-      const geom = getZoneGeometry(zone);
-      if (!geom) return;
-
-      const targetLayerId = detail.layers?.[0]?.id;
-      if (!targetLayerId) return;
-
-      const L = (await import("leaflet")).default;
-      const gj = L.geoJSON(geom);
-      const first = gj.getLayers()[0] as Layer | undefined;
-      if (!first) return;
-
-      await saveFeature(
-        detail.id,
-        targetLayerId,
-        first as ExtendedLayer,
-        features,
-        setFeatures
-      );
-    },
-    [detail?.id, detail?.layers, features, setFeatures, getZoneGeometry]
-  );
-
 
   const onFeatureVisibilityChange = useCallback(
     async (featureId: string, isVisible: boolean) => {
-      if (!detail) return;
+      if (!detail?.id) return;
       await handleFeatureVisibilityChange(
         detail.id,
         featureId,
@@ -654,34 +683,17 @@ export default function EditMapPage() {
         features,
         setFeatures,
         mapRef.current,
-        sketchRef.current
+        sketchRef.current,
+        setFeatureVisibility
       );
     },
-    [detail, features]
+    [detail?.id, features]
   );
 
   const onSelectLayer = useCallback((layer: FeatureData | RawLayer) => {
-    handleSelectLayer(layer, setSelectedLayer, setShowStylePanel);
+    setSelectedLayer(layer);
+    setShowStylePanel(true);
   }, []);
-
-  const handleSelectSegment = (id: string) => setSelectedSegmentId(id);
-
-  const handleAttachLayer = async (layerId: string) => {
-    if (!detail?.id || !selectedSegmentId) return;
-    await attachLayerToSegment(detail.id, selectedSegmentId, { layerId });
-    const list = await getSegmentLayers(detail.id, selectedSegmentId);
-    setSegmentLayers(list ?? []);
-  };
-
-  const handleDetachLayer = async (segmentLayerId: string) => {
-    if (!detail?.id || !selectedSegmentId) return;
-    const sl = segmentLayers.find(x => x.segmentLayerId === segmentLayerId);
-    if (!sl) return;
-    await detachLayerFromSegment(detail.id, selectedSegmentId, sl.layerId);
-    const list = await getSegmentLayers(detail.id, selectedSegmentId);
-    setSegmentLayers(list ?? []);
-  };
-
 
   const onUpdateLayer = useCallback(
     async (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => {
@@ -709,26 +721,25 @@ export default function EditMapPage() {
   const onDeleteFeature = useCallback(
     async (featureId: string) => {
       if (!detail) return;
-      await handleDeleteFeature(
-        detail.id,
-        featureId,
-        features,
-        setFeatures,
-        mapRef.current,
-        sketchRef.current
-      );
+      const f = features.find((x) => x.id === featureId || x.featureId === featureId);
+      if (f && mapRef.current && sketchRef.current) sketchRef.current.removeLayer(f.layer);
+      setFeatures((prev) => prev.filter((x) => x.id !== featureId && x.featureId !== featureId));
+      setFeatureVisibility((prev) => {
+        const next = { ...prev }; delete next[featureId]; return next;
+      });
+      if (f?.featureId) {
+        try { await deleteFeatureFromDB(detail.id, f.featureId); } catch (e) { console.error(e); }
+      }
     },
     [detail, features]
   );
 
-  // Style management functions
+  // style utils
   const applyPresetStyleToFeature = useCallback(
     async (featureId: string, layerType: string, presetName: string) => {
       if (!detail) return;
-
       const feature = features.find((f) => f.featureId === featureId);
       if (!feature) return;
-
       const presetStyle = getStylePreset(layerType, presetName);
       await applyStyleToFeature(detail.id, featureId, feature.layer, presetStyle, features, setFeatures);
     },
@@ -737,19 +748,12 @@ export default function EditMapPage() {
 
   const applyCustomStyleToFeature = useCallback(
     async (featureId: string, styleOptions: {
-      color?: string;
-      fillColor?: string;
-      weight?: number;
-      opacity?: number;
-      fillOpacity?: number;
-      radius?: number;
-      dashArray?: string;
+      color?: string; fillColor?: string; weight?: number; opacity?: number;
+      fillOpacity?: number; radius?: number; dashArray?: string;
     }) => {
       if (!detail) return;
-
       const feature = features.find((f) => f.featureId === featureId);
       if (!feature) return;
-
       const customStyle = createCustomStyle(styleOptions);
       await applyStyleToFeature(detail.id, featureId, feature.layer, customStyle, features, setFeatures);
     },
@@ -758,14 +762,9 @@ export default function EditMapPage() {
 
   const applyStyleToLayer = useCallback(
     async (layerId: string, styleOptions: {
-      color?: string;
-      fillColor?: string;
-      weight?: number;
-      opacity?: number;
-      fillOpacity?: number;
+      color?: string; fillColor?: string; weight?: number; opacity?: number; fillOpacity?: number;
     }) => {
       if (!detail) return;
-
       const customStyle = createCustomStyle(styleOptions);
       await applyStyleToDataLayer(detail.id, layerId, customStyle);
     },
@@ -815,12 +814,12 @@ export default function EditMapPage() {
     }
   }, [detail]);
 
-  // [StoryMap] helpers
+  // ---------- StoryMap actions ----------
+  const handleSelectSegment = (id: string) => setSelectedSegmentId(id);
+
   const createNewSegment = useCallback(async (segName: string) => {
     if (!detail?.id) return;
-    const created = await createSegment(detail.id, {
-      name: segName.trim() || "Untitled Segment",
-    });
+    const created = await createSegment(detail.id, { name: segName.trim() || "Untitled Segment" });
     const list = await getSegments(detail.id);
     setSegments(list ?? []);
     const createdId = (created as Segment & { segmentId?: string; id?: string }).segmentId ?? (created as Segment & { id?: string }).id ?? "";
@@ -842,6 +841,39 @@ export default function EditMapPage() {
     const first = (list ?? [])[0] as (Segment & { segmentId?: string; id?: string }) | undefined;
     setSelectedSegmentId(first ? (first.segmentId ?? first.id ?? null) : null);
   }, [detail?.id]);
+
+  const handleZoomZone = useCallback(async (zone: SegmentZone) => {
+    const geom = getZoneGeometry(zone);
+    if (!geom || !mapRef.current) return;
+    const L = (await import("leaflet")).default;
+    const gj = L.geoJSON(geom);
+    const b = gj.getBounds();
+    if (b.isValid()) mapRef.current.fitBounds(b.pad(0.2));
+  }, [getZoneGeometry]);
+
+  const handleCopyZoneToExistingLayer = useCallback(async (zone: SegmentZone, layerId: string) => {
+    if (!detail?.id) return;
+    const geom = getZoneGeometry(zone);
+    if (!geom) return;
+    const L = (await import("leaflet")).default;
+    const gj = L.geoJSON(geom);
+    const first = gj.getLayers()[0] as Layer | undefined;
+    if (!first) return;
+    await saveFeature(detail.id, layerId, first as ExtendedLayer, features, setFeatures);
+  }, [detail?.id, features, setFeatures, getZoneGeometry]);
+
+  const handleCopyZoneToNewLayer = useCallback(async (zone: SegmentZone) => {
+    if (!detail?.id) return;
+    const geom = getZoneGeometry(zone);
+    if (!geom) return;
+    const targetLayerId = detail.layers?.[0]?.id;
+    if (!targetLayerId) return;
+    const L = (await import("leaflet")).default;
+    const gj = L.geoJSON(geom);
+    const first = gj.getLayers()[0] as Layer | undefined;
+    if (!first) return;
+    await saveFeature(detail.id, targetLayerId, first as ExtendedLayer, features, setFeatures);
+  }, [detail?.id, detail?.layers, features, setFeatures, getZoneGeometry]);
 
   const createZoneFromLastDraw = useCallback(async (zoneName?: string) => {
     if (!detail?.id || !selectedSegmentId) return;
@@ -878,14 +910,11 @@ export default function EditMapPage() {
     setFeedback("Đã tạo Zone từ hình vẽ.");
     setShowZonesPanel(true);
   }, [detail?.id, selectedSegmentId]);
+
   const handleCreateZoneFromDialog = useCallback(async (data: {
-    name: string;
-    description?: string;
-    isPrimary: boolean;
-    geometry: GJObject;
+    name: string; description?: string; isPrimary: boolean; geometry: GJObject;
   }) => {
     if (!detail?.id || !selectedSegmentId) return;
-
     await createSegmentZone(detail.id, selectedSegmentId, {
       name: data.name,
       description: data.description,
@@ -893,52 +922,41 @@ export default function EditMapPage() {
       zoneType: "Area",
       zoneGeometry: JSON.stringify(data.geometry),
     });
-
     const z = await getSegmentZones(detail.id, selectedSegmentId);
     const safe = (z ?? []).map((it) => it as unknown as SafeSegmentZone);
     setZones(safe);
-
     setZoneDialogOpen(false);
     setZoneDraft(null);
     setFeedback("Đã tạo Zone từ hình vẽ.");
   }, [detail?.id, selectedSegmentId]);
 
+  // ---------- UI ----------
+  if (loading) {
+    return <main className="h-screen w-screen grid place-items-center text-zinc-400">Đang tải…</main>;
+  }
+  if (err || !detail) {
+    return <main className="h-screen w-screen grid place-items-center text-red-300">{err ?? "Không tải được bản đồ"}</main>;
+  }
 
   const GuardBtn: React.FC<
     React.PropsWithChildren<{ title: string; onClick?: () => void; disabled?: boolean }>
-  > = ({ title, onClick, disabled, children }) => {
-    return (
-      <button
-        className="px-2 py-1.5 rounded-md bg-transparent text-white text-xs hover:bg-emerald-500/20 disabled:opacity-60"
-        title={title}
-        onClick={onClick}
-        disabled={disabled}
-      >
-        {children}
-      </button>
-    );
-  };
-
-  if (loading) {
-    return (
-      <main className="h-screen w-screen grid place-items-center text-zinc-400">
-        Đang tải…
-      </main>
-    );
-  }
-  if (err || !detail) {
-    return (
-      <main className="h-screen w-screen grid place-items-center text-red-300">
-        {err ?? "Không tải được bản đồ"}
-      </main>
-    );
-  }
+  > = ({ title, onClick, disabled, children }) => (
+    <button
+      className="px-2 py-1.5 rounded-md bg-transparent text-white text-xs hover:bg-emerald-500/20 disabled:opacity-60"
+      title={title}
+      onClick={onClick}
+      disabled={disabled}
+    >
+      {children}
+    </button>
+  );
 
   return (
     <main className="relative h-screen w-screen overflow-hidden text-white">
       <div className="absolute top-0 left-0 z-[3000] w-full pointer-events-none">
         <div className="pointer-events-auto bg-black/70 backdrop-blur-md ring-1 ring-white/15 shadow-xl py-1 px-3">
           <div className="grid grid-cols-3 place-items-stretch gap-2">
+            {/* left: name & POI */}
             <div className="flex items-center justify-start gap-2 overflow-x-auto no-scrollbar">
               <input
                 type="text"
@@ -954,64 +972,9 @@ export default function EditMapPage() {
               >
                 Thêm POIs cho Map
               </button>
-              {/* <select
-                className="px-2.5 py-1.5 rounded-md bg-zinc-800 text-white text-sm"
-                value={selectedSegmentId ?? ""}
-                onChange={(e) => setSelectedSegmentId(e.target.value || null)}
-                disabled={segmentsLoading}
-                title="Chọn Segment"
-              >
-                {segments.map((s) => {
-                  const sid = (s as Segment & { segmentId?: string; id?: string }).segmentId ?? (s as Segment & { id?: string }).id ?? "";
-                  return (
-                    <option key={sid} value={sid}>
-                      {s.name ?? "Untitled Segment"}
-                    </option>
-                  );
-                })}
-              </select> */}
-              {/* <button
-                className="px-2.5 py-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700 text-xs"
-                onClick={() => setShowZonesPanel(v => !v)}
-                title="Ẩn/hiện danh sách Zones"
-              >
-                Zones
-              </button>
-
-              <button
-                className="px-2.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold"
-                onClick={() => createNewSegment(window.prompt("Tên segment mới?") ?? "")}
-              >
-                + Segment
-              </button>
-              <button
-                className="px-2 py-1.5 rounded-md bg-zinc-700 hover:bg-zinc-600 text-xs disabled:opacity-60"
-                onClick={() => {
-                  if (!selectedSegmentId) return;
-                  const s = segments.find((x) => {
-                    const sid = (x as Segment & { segmentId?: string; id?: string }).segmentId ?? (x as Segment & { id?: string }).id;
-                    return sid === selectedSegmentId;
-                  });
-                  const newName = window.prompt("Đổi tên segment:", s?.name ?? "");
-                  if (newName != null && selectedSegmentId) renameSegment(selectedSegmentId, newName);
-                }}
-                disabled={!selectedSegmentId}
-              >
-                Rename
-              </button>
-              <button
-                className="px-2 py-1.5 rounded-md bg-red-600 hover:bg-red-500 text-xs disabled:opacity-60"
-                onClick={() => {
-                  if (!selectedSegmentId) return;
-                  if (window.confirm("Xoá segment này?")) removeSegment(selectedSegmentId);
-                }}
-                disabled={!selectedSegmentId}
-              >
-                Delete
-              </button> */}
             </div>
 
-            {/* middle: draw tools */}
+            {/* middle: draw & storymap tools */}
             <div className="flex items-center justify-center gap-1.5 overflow-x-auto no-scrollbar">
               <GuardBtn title="Vẽ điểm" onClick={() => enableDraw("Marker")} disabled={toolsLoading || !mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1060,7 +1023,6 @@ export default function EditMapPage() {
                 </svg>
               </GuardBtn>
 
-              {/* [StoryMap] Create Zone from last drawn */}
               <GuardBtn
                 title="Biến hình vẽ cuối thành Zone của Segment đang chọn"
                 onClick={() => createZoneFromLastDraw(window.prompt("Tên Zone?") ?? undefined)}
@@ -1073,7 +1035,6 @@ export default function EditMapPage() {
               </GuardBtn>
             </div>
 
-            {/* right: actions */}
             <div className="flex items-center justify-end gap-1.5 overflow-x-auto no-scrollbar">
               <input
                 type="file"
@@ -1081,7 +1042,6 @@ export default function EditMapPage() {
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) {
-                    // TODO: handle uploading a layer template
                     console.log("File selected:", file.name);
                   }
                 }}
@@ -1119,6 +1079,7 @@ export default function EditMapPage() {
               </button>
             </div>
           </div>
+
           {feedback && (
             <div className="px-1 pt-1 text-center text-[11px] text-emerald-300">
               {feedback}
@@ -1127,30 +1088,34 @@ export default function EditMapPage() {
         </div>
       </div>
 
+      {/* Map */}
       <div ref={mapEl} className="absolute inset-0" />
-      {/* [StoryMap] Segment & Zone Panel */}
+
+      {/* Segment & Zone panel (StoryMap) */}
       <div className="absolute right-5 top-0 z-[3000] w-80 pointer-events-auto">
         {detail && (
           <SegmentPanel
             mapId={mapId}
-            layers={(detail?.layers ?? []).map(l => ({ id: l.id, name: l.name ?? "Layer" }))}
+            layers={(detail?.layers ?? []).map((l) => ({ id: l.id, name: l.name ?? "Layer" }))}
             currentLayerId={selectedLayer && "id" in (selectedLayer as RawLayer) ? (selectedLayer as RawLayer).id : ""}
             onZoomZone={handleZoomZone}
             onCopyZoneToExistingLayer={handleCopyZoneToExistingLayer}
             onCopyZoneToNewLayer={handleCopyZoneToNewLayer}
           />
-
         )}
       </div>
+
+      {/* Map-level POIs */}
       {showMapPoiPanel && (
         <div className="absolute left-3 top-14 z-[3000] w-[380px]">
           <MapPoiPanel mapId={mapId} />
         </div>
       )}
 
+      {/* Layers / Features panel */}
       <DataLayersPanel
         features={features}
-        layers={detail?.layers || []}
+        layers={layers}
         showDataLayersPanel={showDataLayersPanel}
         setShowDataLayersPanel={setShowDataLayersPanel}
         map={mapRef.current}
@@ -1163,21 +1128,7 @@ export default function EditMapPage() {
         currentBaseLayer={baseKey}
       />
 
-      {/* <SegmentPanel
-        segments={segments}
-        selectedSegmentId={selectedSegmentId}
-        onSelect={handleSelectSegment}
-        onAdd={createNewSegment}
-        onRename={renameSegment}
-        onDelete={removeSegment}
-        segmentLayers={segmentLayers}
-        allLayers={detail?.layers || []}
-        onAttach={handleAttachLayer}
-        onDetach={handleDetachLayer}
-      /> */}
-
-
-      {/* [StoryMap] Zones Panel */}
+      {/* Zones list popup */}
       {showZonesPanel && (
         <div className="absolute right-2 top-16 z-[3000] w-80 bg-black/70 backdrop-blur-md ring-1 ring-white/15 rounded-xl p-3 space-y-2">
           <div className="flex items-center justify-between">
@@ -1251,6 +1202,7 @@ export default function EditMapPage() {
         </div>
       )}
 
+      {/* Style panel */}
       <StylePanel
         selectedLayer={selectedLayer}
         showStylePanel={showStylePanel}
@@ -1258,6 +1210,8 @@ export default function EditMapPage() {
         onUpdateLayer={onUpdateLayer}
         onUpdateFeature={onUpdateFeature}
       />
+
+      {/* Create Zone dialog */}
       <CreateZoneDialog
         open={zoneDialogOpen}
         draft={zoneDraft}
@@ -1265,6 +1219,7 @@ export default function EditMapPage() {
         onCancel={() => setZoneDialogOpen(false)}
         onCreate={handleCreateZoneFromDialog}
       />
+
       <style jsx global>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

@@ -313,16 +313,16 @@ export function DataLayersPanel({
                 {/* Elements Section */}
                 <div className="px-4 py-2">
                   <div className="text-sm font-medium text-white/70 mb-2">Elements</div>
-                  {features.map((feature) => (
+                  {features.map((feature,index : number) => (
                     <div
-                      key={feature.featureId}
+                      key={`${feature.featureId}-${index}`}
                       className="flex items-center justify-between px-2 py-1 hover:bg-white/5 rounded cursor-pointer"
                       onClick={() => onSelectLayer?.(feature)}
                     >
                       <div className="flex items-center gap-2 flex-1">
                         {/* Icon based on type */}
                         <div className="w-4 h-4">
-                          {feature.type.toLocaleLowerCase() === "marker" || feature.type.toLocaleLowerCase() === "point" && (
+                          {(feature.type.toLocaleLowerCase() === "marker" || feature.type.toLocaleLowerCase() === "point") && (
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M12 21s-6-4.5-6-10a6 6 0 1 1 12 0c0 5.5-6 10-6 10z" />
                               <circle cx="12" cy="11" r="2.5" />
@@ -335,7 +335,7 @@ export function DataLayersPanel({
                               <path d="M7 8.5 17 15.5" />
                             </svg>
                           )}
-                          {feature.type.toLocaleLowerCase() === "polygon" && (
+                          {(feature.type.toLocaleLowerCase() === "polygon" || feature.type.toLocaleLowerCase() === "rectangle") && (
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                               <path d="M7 4h10l4 6-4 10H7L3 10 7 4z" />
                             </svg>
