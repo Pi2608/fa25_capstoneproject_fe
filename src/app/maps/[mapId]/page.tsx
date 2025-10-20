@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
-import type { Map as LMap, TileLayer, LatLngTuple, Layer, FeatureGroup, LatLng, LatLngBounds } from "leaflet";
+import type { Map as LMap, TileLayer, LatLngTuple, Layer, FeatureGroup, LatLng, LatLngBounds, Marker } from "leaflet";
 import {
   getMapDetail,
   type MapDetail,
@@ -15,23 +15,18 @@ import {
   type UpdateMapFeatureRequest,
 } from "@/lib/api";
 import type { Position } from "geojson";
-import {
-  saveFeature,
-  loadFeaturesToMap,
-  deleteFeatureFromDB,
+import { 
   type FeatureData,
-  renderAllDataLayers,
+  getFeatureType as getFeatureTypeUtil,
+  serializeFeature,
+  extractLayerStyle,
+  saveFeature,
+  updateFeatureInDB,
+  deleteFeatureFromDB,
+  loadFeaturesToMap,
+  loadLayerToMap,
   handleLayerVisibilityChange,
   handleFeatureVisibilityChange,
-  handleUpdateLayerStyle,
-  handleUpdateFeatureStyle,
-  handleDeleteFeature,
-  handleSelectLayer,
-  getStylePreset,
-  createCustomStyle,
-  applyStyleToFeature,
-  applyStyleToDataLayer,
-  extractLayerStyle
 } from "@/utils/mapUtils";
 import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
 
@@ -101,6 +96,7 @@ export default function EditMapPage() {
   const sp = useSearchParams();
   const mapId = params?.mapId ?? "";
 
+  const [isMapReady, setIsMapReady] = useState(false);
   const [detail, setDetail] = useState<MapDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [err, setErr] = useState<string | null>(null);
@@ -115,6 +111,9 @@ export default function EditMapPage() {
   const [showDataLayersPanel, setShowDataLayersPanel] = useState(true);
   const [features, setFeatures] = useState<FeatureData[]>([]);
   const [selectedLayer, setSelectedLayer] = useState<FeatureData | RawLayer | null>(null);
+  const [layers, setLayers] = useState<RawLayer[]>([]);
+  const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({});
+  const [featureVisibility, setFeatureVisibility] = useState<Record<string, boolean>>({})
 
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapWithPM | null>(null);
@@ -170,7 +169,6 @@ export default function EditMapPage() {
         setLoading(true);
         setErr(null);
         const m = await getMapDetail(mapId);
-        console.log(m);
         if (!alive) return;
         setDetail(m);
         setName(m.mapName ?? "");
@@ -236,14 +234,24 @@ export default function EditMapPage() {
       const map = L.map(el, { zoomControl: false, minZoom: 2, maxZoom: 20 }).setView(initialCenter, initialZoom) as MapWithPM;
       mapRef.current = map;
       if (!alive) return;
+      setIsMapReady(true);
 
       applyBaseLayer(detail.baseMapProvider === "Satellite" ? "sat" : detail.baseMapProvider === "Dark" ? "dark" : "osm");
 
       const sketch = L.featureGroup().addTo(map);
       sketchRef.current = sketch;
 
-      const loaded = await loadFeaturesToMap(detail.id, L, sketch);
-      setFeatures(loaded);
+      try {
+        const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
+        setFeatures(dbFeatures);
+        const initialFeatureVisibility: Record<string, boolean> = {};
+        dbFeatures.forEach(feature => {
+          initialFeatureVisibility[feature.id] = feature.isVisible ?? true;
+        });
+        setFeatureVisibility(initialFeatureVisibility);
+        } catch (error) {
+        console.error("Failed to load from database:", error);
+      }
 
       map.pm.addControls({
         drawMarker: false,
@@ -260,75 +268,166 @@ export default function EditMapPage() {
         removalMode: false,
       });
 
-       map.on("pm:create", async (e: PMCreateEvent) => {
-         sketch.addLayer(e.layer);
-         await saveFeature(detail.id, detail?.layers[0].id, e.layer as ExtendedLayer, loaded, setFeatures);
-       });
+      map.on("pm:create", async (e: PMCreateEvent) => {
+        const extLayer = e.layer as ExtendedLayer;
+        sketch.addLayer(e.layer);
+        
+        const type = getFeatureTypeUtil(extLayer);
+        const serialized = serializeFeature(extLayer);
+        const { geometryType, coordinates, text, annotationType } = serialized;
+        const layerStyle = extractLayerStyle(extLayer);
+        
+        const localId = `feature-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        const newFeature: FeatureData = {
+          id: localId,
+          name: `${type} ${features.length + 1}`,
+          type,
+          layer: extLayer,
+          isVisible: true,
+        };
+        
+        
+        // Save to database
+        try {
+          const savedFeature = await saveFeature(detail.id, "", extLayer, features, setFeatures);
+          if (savedFeature) {
+            setFeatures(prev => [...prev, savedFeature]);
+            setFeatureVisibility(prev => ({
+              ...prev,
+              [savedFeature.id]: true
+            }));
+          } else {
+            setFeatures(prev => [...prev, newFeature]);
+            setFeatureVisibility(prev => ({
+              ...prev,
+              [newFeature.id]: true
+            }));
+          }
+        } catch (error) {
+          console.error("Error saving to database:", error);
+          setFeatures(prev => [...prev, newFeature]);
+          setFeatureVisibility(prev => ({
+            ...prev,
+            [newFeature.id]: true
+          }));
+        }
+      });
+
+
+      sketch.on("pm:edit", async (e: { layer: Layer; shape: string }) => {
+        const extLayer = e.layer as ExtendedLayer;
+        
+        const editedFeature = features.find(f => f.layer === extLayer);
+        if (editedFeature && editedFeature.featureId) {
+          try {
+            await updateFeatureInDB(detail.id, editedFeature.featureId, editedFeature);
+            
+            const serialized = serializeFeature(extLayer);
+            const { geometryType, coordinates, text } = serialized;
+            const layerStyle = extractLayerStyle(extLayer);
+                
+            setFeatures(prev => prev.map(f => 
+              f.id === editedFeature.id || f.featureId === editedFeature.featureId
+                ? { ...f, layer: extLayer }
+                : f
+            ));
+          } catch (error) {
+            console.error("Error updating feature:", error);
+          }
+        }
+      });
+
     })();
     return () => {
       alive = false;
       mapRef.current?.remove();
+      setIsMapReady(false);
     };
-  }, [detail, applyBaseLayer, sp]);
+  }, [detail?.id, applyBaseLayer, sp]);
 
   useEffect(() => {
+    if (!mapRef.current || !detail?.layers || detail.layers.length === 0 || !isMapReady) return;
     const map = mapRef.current;
-    if (!map || !detail?.layers) return;
-    const abortController = new AbortController();
-    renderAllDataLayers(map, detail.layers, dataLayerRefs, abortController.signal);
+    
+    let alive = true;
+    
+    (async () => {
+      setLayers((detail.layers));
+      
+      dataLayerRefs.current.forEach((layer) => {
+        if (map.hasLayer(layer)) {
+          map.removeLayer(layer);
+        }
+      });
+      dataLayerRefs.current.clear();
+      
+      const initialLayerVisibility: Record<string, boolean> = {};
+      
+      for (const layer of detail.layers) {
+        if (!alive) break;
+        const isVisible = layer.isVisible ?? true;
+        initialLayerVisibility[layer.id] = isVisible;
+        
+        try {
+          const loaded = await loadLayerToMap(map, layer, dataLayerRefs);
+          if (loaded && !isVisible) {
+            const leafletLayer = dataLayerRefs.current.get(layer.id);
+            if (leafletLayer && map.hasLayer(leafletLayer)) {
+              map.removeLayer(leafletLayer);
+            }
+          }
+        } catch (error) {
+          console.error(`Error loading layer ${layer.name}:`, error);
+        }
+        
+      }
+      
+      if (alive) setLayerVisibility(initialLayerVisibility);
+    })();
+    
     return () => {
-      abortController.abort();
+      alive = false;
     };
-  }, [detail?.layers]);
+  }, [detail?.layers, detail?.id, isMapReady]);
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+    
+    Object.entries(layerVisibility).forEach(([layerId, isVisible]) => {
+      const layerOnMap = dataLayerRefs.current.get(layerId);
+      if (!layerOnMap) return;
+      
+      const isOnMap = mapRef.current!.hasLayer(layerOnMap);
+      
+      if (isVisible && !isOnMap) {
+        mapRef.current!.addLayer(layerOnMap);
+      } else if (!isVisible && isOnMap) {
+        mapRef.current!.removeLayer(layerOnMap);
+      }
+    });
+  }, [layerVisibility]);
+
+  useEffect(() => {
+    if (!mapRef.current || !sketchRef.current) return;
+    
+    Object.entries(featureVisibility).forEach(([featureId, isVisible]) => {
+      const feature = features.find(f => f.id === featureId || f.featureId === featureId);
+      if (!feature) return;
+      
+      const isOnMap = sketchRef.current!.hasLayer(feature.layer);
+      
+      if (isVisible && !isOnMap) {
+        sketchRef.current!.addLayer(feature.layer);
+      } else if (!isVisible && isOnMap) {
+        sketchRef.current!.removeLayer(feature.layer);
+      }
+    });
+  }, [featureVisibility, features]);
 
   useEffect(() => {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
 
-  // Refresh map detail from API
-  const refreshMapDetail = useCallback(async () => {
-    if (!mapId) return;
-    
-    try {
-      const updatedDetail = await getMapDetail(mapId);
-      setDetail(updatedDetail);
-      
-      // Preserve current baseLayer
-      const currentBaseKey = baseKey;
-      
-      // Reload features from database
-      if (mapRef.current && sketchRef.current) {
-        const L = (await import("leaflet")).default;
-        const loadedFeatures = await loadFeaturesToMap(
-          updatedDetail.id,
-          L,
-          sketchRef.current
-        );
-        setFeatures(loadedFeatures);
-      }
-      
-      // Re-render data layers
-      if (mapRef.current && updatedDetail.layers) {
-        await renderAllDataLayers(mapRef.current, updatedDetail.layers, dataLayerRefs);
-      }
-      
-      // Ensure baseLayer is still applied
-      if (mapRef.current && baseRef.current) {
-        // BaseLayer should still be there, but let's make sure
-        if (!mapRef.current.hasLayer(baseRef.current)) {
-          try {
-            applyBaseLayer(currentBaseKey);
-          } catch (error) {
-            console.warn("Failed to reapply baseLayer:", error);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Failed to refresh map detail:", error);
-    }
-  }, [mapId, baseKey, applyBaseLayer]);
-
-  // Geoman custom actions
   const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text" ) => {
     mapRef.current?.pm.enableDraw(shape);
   };
@@ -340,83 +439,100 @@ export default function EditMapPage() {
 
   const clearSketch = useCallback(async () => {
     if (!detail) return;
-    for (const f of features) {
-      if (f.featureId) await deleteFeatureFromDB(detail.id, f.featureId);
+    
+    // Delete all features from database
+    for (const feature of features) {
+      if (feature.featureId) {
+        try {
+          await deleteFeatureFromDB(detail.id, feature.featureId);
+        } catch (error) {
+          console.error("Error deleting from DB:", error);
+        }
+      }
     }
+    
     sketchRef.current?.clearLayers();
     setFeatures([]);
+    setFeatureVisibility({});
   }, [detail, features]);
 
   const onLayerVisibilityChange = useCallback(async (layerId: string, isVisible: boolean) => {
-    if (!detail || !mapRef.current) return;
+    if (!detail?.id || !mapRef.current) return;
     
-    // Update local state immediately
-    const updatedLayers = detail.layers.map(layer => 
-      layer.id === layerId ? { ...layer, isVisible } : layer
+    const layerData = layers.find(l => l.id === layerId);
+    
+    await handleLayerVisibilityChange(
+      detail.id,
+      layerId,
+      isVisible,
+      mapRef.current,
+      dataLayerRefs,
+      setLayerVisibility,
+      layerData
     );
-    
-    setDetail(prev => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        layers: updatedLayers
-      };
-    });
-    
-    try {
-      // Update database
-      const { updateMapLayer } = await import("@/lib/api");
-      await updateMapLayer(detail.id, layerId, { isVisible });
-      
-      // Use targeted layer visibility toggle instead of re-rendering all layers
-      const { toggleLayerVisibility } = await import("@/utils/mapUtils");
-      await toggleLayerVisibility(mapRef.current, layerId, isVisible, updatedLayers, dataLayerRefs);
-    } catch (error) {
-      console.error("Failed to update layer visibility:", error);
-    }
-  }, [detail]);
+  }, [detail?.id, layers]);
 
   const onFeatureVisibilityChange = useCallback(async (featureId: string, isVisible: boolean) => {
-    if (!detail) return;
-    await handleFeatureVisibilityChange(detail.id, featureId, isVisible, features, setFeatures, mapRef.current, sketchRef.current);
-  }, [detail, features]);
+    if (!detail?.id) return;
+    
+    await handleFeatureVisibilityChange(
+      detail.id,
+      featureId,
+      isVisible,
+      features,
+      setFeatures,
+      mapRef.current,
+      sketchRef.current,
+      setFeatureVisibility
+    );
+  }, [detail?.id, features]);
 
   const onSelectLayer = useCallback((layer: FeatureData | RawLayer) => {
-    handleSelectLayer(layer, setSelectedLayer, setShowStylePanel);
+    setSelectedLayer(layer);
+    setShowStylePanel(true);
   }, []);
 
   const onUpdateLayer = useCallback(async (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => {
     if (!detail || !mapRef.current) return;
-    await handleUpdateLayerStyle(detail.id, layerId, updates, mapRef.current, detail.layers, dataLayerRefs);
   }, [detail]);
 
   const onUpdateFeature = useCallback(async (featureId: string, updates: UpdateMapFeatureRequest) => {
     if (!detail) return;
-    const converted = {
-      name: updates.name ?? undefined,
-      style: updates.style ?? undefined,
-      properties: updates.properties ?? undefined,
-      isVisible: updates.isVisible ?? undefined,
-      zIndex: updates.zIndex ?? undefined,
-    };
-    await handleUpdateFeatureStyle(detail.id, featureId, converted);
   }, [detail]);
 
   const onDeleteFeature = useCallback(async (featureId: string) => {
     if (!detail) return;
-    await handleDeleteFeature(detail.id, featureId, features, setFeatures, mapRef.current, sketchRef.current);
+    
+    const feature = features.find(f => f.id === featureId || f.featureId === featureId);
+    if (!feature) {
+      return;
+    }
+    
+    if (mapRef.current && sketchRef.current) {
+      sketchRef.current.removeLayer(feature.layer);
+    }
+    
+    setFeatures(prev => prev.filter(f => f.id !== featureId && f.featureId !== featureId));
+    
+    setFeatureVisibility(prev => {
+      const newVisibility = { ...prev };
+      delete newVisibility[featureId];
+      return newVisibility;
+    });
+    
+    if (feature.featureId) {
+      try {
+        await deleteFeatureFromDB(detail.id, feature.featureId);
+      } catch (error) {
+        console.error("Error deleting from database:", error);
+      }
+    }
+    
   }, [detail, features]);
 
-  // Style management functions
   const applyPresetStyleToFeature = useCallback(async (featureId: string, layerType: string, presetName: string) => {
     if (!detail) return;
-    
-    const feature = features.find(f => f.featureId === featureId);
-    if (!feature) return;
-    
-    const presetStyle = getStylePreset(layerType, presetName);
-    await applyStyleToFeature(detail.id, featureId, feature.layer, presetStyle, features, setFeatures);
-  }, [detail, features, setFeatures]);
+  }, [detail]);
 
   const applyCustomStyleToFeature = useCallback(async (featureId: string, styleOptions: {
     color?: string;
@@ -428,13 +544,7 @@ export default function EditMapPage() {
     dashArray?: string;
   }) => {
     if (!detail) return;
-    
-    const feature = features.find(f => f.featureId === featureId);
-    if (!feature) return;
-    
-    const customStyle = createCustomStyle(styleOptions);
-    await applyStyleToFeature(detail.id, featureId, feature.layer, customStyle, features, setFeatures);
-  }, [detail, features, setFeatures]);
+  }, [detail]);
 
   const applyStyleToLayer = useCallback(async (layerId: string, styleOptions: {
     color?: string;
@@ -444,13 +554,10 @@ export default function EditMapPage() {
     fillOpacity?: number;
   }) => {
     if (!detail) return;
-    
-    const customStyle = createCustomStyle(styleOptions);
-    await applyStyleToDataLayer(detail.id, layerId, customStyle);
   }, [detail]);
 
   const getCurrentFeatureStyle = useCallback((featureId: string) => {
-    const feature = features.find(f => f.featureId === featureId);
+    const feature = features.find(f => f.id === featureId);
     if (!feature) return {};
     
     return extractLayerStyle(feature.layer);
@@ -581,7 +688,6 @@ export default function EditMapPage() {
                   const file = e.target.files?.[0];
                   if (file) {
                     // TODO: Handle file upload for adding layer from template
-                    console.log("File selected:", file.name);
                   }
                 }}
                 className="hidden"
@@ -626,7 +732,7 @@ export default function EditMapPage() {
 
       <DataLayersPanel
         features={features}
-        layers={detail?.layers || []}
+        layers={layers}
         showDataLayersPanel={showDataLayersPanel}
         setShowDataLayersPanel={setShowDataLayersPanel}
         map={mapRef.current}
