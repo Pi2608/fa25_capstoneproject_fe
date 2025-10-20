@@ -274,7 +274,7 @@ export function DataLayersPanel({
         <div className="absolute top-15 left-1 z-[3000] w-80 max-h-[65vh] overflow-hidden pointer-events-auto bg-black/80 text-white rounded shadow-lg">
           {/* Tabs */}
           <div className="flex border-b border-gray-600">
-            <button
+            {/* <button
               onClick={() => setActiveTab("Segment")}
               className={`px-4 py-2 text-sm font-medium ${
                 activeTab === "Segment" 
@@ -283,7 +283,7 @@ export function DataLayersPanel({
               }`}
             >
               Segment
-            </button>
+            </button> */}
             <button
               onClick={() => setActiveTab("List")}
               className={`px-4 py-2 text-sm font-medium ${

@@ -267,7 +267,10 @@ export default function RecentsPage() {
     setBusyKey(s.key);
     try {
       if (s.templateId) {
-        const r = await createMapFromTemplate({ templateId: s.templateId });
+        const r = await createMapFromTemplate({
+          templateId: s.templateId,
+          customName: (s.title ?? s.preset?.name ?? "Bản đồ mới từ template").trim(),
+        });
         router.push(`/maps/${r.mapId}`);
       } else if (s.preset) {
         const presetData = convertPresetToNewFormat(s.preset);
@@ -329,11 +332,11 @@ export default function RecentsPage() {
         ms.map((m) =>
           m.id === edit.map!.id
             ? {
-                ...m,
-                name: body.name ?? m.name,
-                description: body.description ?? m.description,
-                previewImageUrl: body.previewImageUrl ?? m.previewImageUrl,
-              }
+              ...m,
+              name: body.name ?? m.name,
+              description: body.description ?? m.description,
+              previewImageUrl: body.previewImageUrl ?? m.previewImageUrl,
+            }
             : m
         )
       );
