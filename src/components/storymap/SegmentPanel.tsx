@@ -17,6 +17,7 @@ import type {
   CreateSegmentZoneReq,
   UpdateSegmentZoneReq,
 } from "@/lib/api";
+import SegmentPoiPanel from "@/components/poi/SegmentPoiPanel";
 import ZoneContextMenu, { LayerPickerDialog } from "@/components/map/ZoneContextMenu";
 import PoiPanel from "@/components/poi/PoiPanel";
 
@@ -756,7 +757,7 @@ export default function SegmentPanel({
             </div>
             {selectedSegmentId && (
               <div className="mt-4 border-t border-white/10 pt-3">
-                <PoiPanel mapId={mapId} />
+                <SegmentPoiPanel mapId={mapId} segmentId={selectedSegmentId} />
               </div>
             )}
             {error && <div className="text-red-300 text-xs">{error}</div>}

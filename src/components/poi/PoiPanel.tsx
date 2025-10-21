@@ -93,12 +93,12 @@ export default function MapPoiPanel({ mapId }: Props) {
     <div className="bg-zinc-900/85 text-white rounded-lg p-3 mt-2 ring-1 ring-white/15">
       <div className="flex justify-between items-center mb-2">
         <div className="text-xs text-white/60">POIs của Map</div>
-        <button
+        {/* <button
           onClick={() => setDialogOpen(true)}
           className="text-[11px] px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60"
         >
           + Thêm POI
-        </button>
+        </button> */}
       </div>
 
       {loading ? (

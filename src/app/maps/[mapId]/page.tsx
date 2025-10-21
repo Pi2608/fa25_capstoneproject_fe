@@ -40,6 +40,8 @@ import {
   type SegmentZone,
   type SegmentLayer,
 } from "@/lib/api";
+import type * as L from "leaflet";
+import type { GeoJsonObject, Feature, Point } from "geojson";
 
 import type {
   Feature as GJFeature,
@@ -78,6 +80,9 @@ import {
 
 import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
 import dynamic from "next/dynamic";
+import { createMapPoi } from "@/lib/api";
+import PoiDialog, { type PoiForm } from "@/components/poi/PoiDialog";
+
 
 // Lazy components
 const SegmentPanel = dynamic(() => import("@/components/storymap/SegmentPanel"), { ssr: false });
@@ -215,6 +220,15 @@ export default function EditMapPage() {
   const [baseKey, setBaseKey] = useState<BaseKey>("osm");
   const [showStylePanel, setShowStylePanel] = useState(false);
   const [showDataLayersPanel, setShowDataLayersPanel] = useState(true);
+  // ----- POI state -----
+  const [poiDialogOpen, setPoiDialogOpen] = useState(false);
+  const [poiForm, setPoiForm] = useState<PoiForm>({
+    title: "",
+    subtitle: "",
+    markerGeometry: null,
+    highlightOnEnter: false,
+    shouldPin: false,
+  });
 
   const [features, setFeatures] = useState<FeatureData[]>([]);
   const [selectedLayer, setSelectedLayer] = useState<FeatureData | RawLayer | null>(null);
@@ -226,6 +240,8 @@ export default function EditMapPage() {
   const mapRef = useRef<MapWithPM | null>(null);
   const baseRef = useRef<TileLayer | null>(null);
   const sketchRef = useRef<FeatureGroup | null>(null);
+  const addingSegmentPoiRef = useRef<{ mapId: string; segmentId: string } | null>(null);
+
   const dataLayerRefs = useRef<Map<string, L.Layer>>(new Map());
 
   const lastDrawnLayerRef = useRef<Layer | null>(null);
@@ -306,7 +322,7 @@ export default function EditMapPage() {
         if (myToken !== baseTokenRef.current) return;
 
         const m = mapRef.current as unknown as { _panes?: { tilePane?: HTMLElement } } | null;
-        if (!m || !m._panes || !m._panes.tilePane) return; 
+        if (!m || !m._panes || !m._panes.tilePane) return;
 
         layer.addTo(mapRef.current!);
         baseRef.current = layer;
@@ -430,14 +446,62 @@ export default function EditMapPage() {
         removalMode: false,
       });
 
-      // Unified pm:create handler: save Feature + prepare Zone Draft
       map.on("pm:create", async (e: PMCreateEvent) => {
         const extLayer = e.layer as ExtendedLayer;
+        const type = getFeatureTypeUtil(extLayer);
+
+        if (addingSegmentPoiRef.current && type === "Marker" && hasToGeoJSON(extLayer)) {
+          const gj = extLayer.toGeoJSON();
+          const geometry =
+            (gj as GJFeature).type === "Feature"
+              ? ((gj as GJFeature).geometry ?? null)
+              : (gj as GJObject);
+
+          if (geometry) {
+            map.pm.disableDraw("Marker");
+            try { sketch.removeLayer(extLayer); } catch { }
+            try { map.removeLayer(extLayer); } catch { }
+
+            const coords = (geometry as any)?.coordinates;
+            window.dispatchEvent(
+              new CustomEvent("poi:pointSelectedForSegment", {
+                detail: {
+                  lngLat: Array.isArray(coords)
+                    ? ([coords[0], coords[1]] as [number, number])
+                    : ([0, 0] as [number, number]),
+                  geojson: geometry,
+                },
+              })
+            );
+
+            addingSegmentPoiRef.current = null;
+            return;
+          }
+        }
+
         sketch.addLayer(extLayer);
         lastDrawnLayerRef.current = extLayer;
 
-        // build local feature
-        const type = getFeatureTypeUtil(extLayer);
+        if (type === "Marker" && hasToGeoJSON(extLayer)) {
+          const gj = extLayer.toGeoJSON();
+          const geometry =
+            (gj as GJFeature).type === "Feature"
+              ? ((gj as GJFeature).geometry ?? null)
+              : (gj as GJObject);
+
+          if (geometry) {
+            setPoiForm({
+              title: "",
+              subtitle: "",
+              markerGeometry: geometry,
+              highlightOnEnter: false,
+              shouldPin: false,
+            });
+            setPoiDialogOpen(true);
+            return;
+          }
+        }
+
         const localId = `feature-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
         const newFeature: FeatureData = {
           id: localId,
@@ -447,7 +511,6 @@ export default function EditMapPage() {
           isVisible: true,
         };
 
-        // Try saving to DB
         try {
           const saved = await saveFeature(detail.id, "", extLayer, features, setFeatures);
           if (saved) {
@@ -463,19 +526,20 @@ export default function EditMapPage() {
           setFeatureVisibility((prev) => ({ ...prev, [newFeature.id]: true }));
         }
 
-        // Prepare zone draft from the drawn geometry
         if (hasToGeoJSON(extLayer)) {
-          const gj = extLayer.toGeoJSON();
-          const geometry: GJObject | null =
-            (gj as GJFeature).type === "Feature"
-              ? ((gj as GJFeature).geometry ?? null)
-              : (gj as GJObject);
-          if (geometry) {
-            setZoneDraft({ geometry, defaultName: guessZoneName(geometry) });
+          const gj2 = extLayer.toGeoJSON();
+          const geometry2: GJObject | null =
+            (gj2 as GJFeature).type === "Feature"
+              ? ((gj2 as GJFeature).geometry ?? null)
+              : (gj2 as GJObject);
+
+          if (geometry2) {
+            setZoneDraft({ geometry: geometry2, defaultName: guessZoneName(geometry2) });
             setZoneDialogOpen(true);
           }
         }
       });
+
 
       // Editing existing features
       sketch.on("pm:edit", async (e: { layer: Layer; shape: string }) => {
@@ -507,6 +571,27 @@ export default function EditMapPage() {
     };
 
   }, [detail, applyBaseLayer, sp, features.length]);
+  useEffect(() => {
+    // chỉ hoạt động khi map đã sẵn sàng
+    if (!mapRef.current) return;
+
+    const onStartAdd = (e: Event) => {
+      const ev = e as CustomEvent<{ mapId: string; segmentId: string }>;
+      if (!mapRef.current) return;
+      addingSegmentPoiRef.current = { mapId: ev.detail.mapId, segmentId: ev.detail.segmentId };
+      mapRef.current.pm.enableDraw("Marker", {
+        snappable: true,
+        snapDistance: 20,
+        finishOn: "click",
+        cursorMarker: true,
+      });
+    };
+
+    window.addEventListener("poi:startAddSegmentPoi", onStartAdd as EventListener);
+    return () => {
+      window.removeEventListener("poi:startAddSegmentPoi", onStartAdd as EventListener);
+    };
+  }, [isMapReady]); // hoặc [] cũng được, nhưng dùng isMapReady an toàn hơn
 
   // ---------- render data layers ----------
   useEffect(() => {
@@ -970,7 +1055,7 @@ export default function EditMapPage() {
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500"
                 title="Quản lý POI cấp Map"
               >
-                Thêm POIs cho Map
+                POIs của Map
               </button>
             </div>
 
@@ -1210,6 +1295,27 @@ export default function EditMapPage() {
         onUpdateLayer={onUpdateLayer}
         onUpdateFeature={onUpdateFeature}
       />
+      {poiDialogOpen && (
+        <PoiDialog
+          open={poiDialogOpen}
+          initial={poiForm}
+          onCancel={() => setPoiDialogOpen(false)}
+          onSubmit={async (form) => {
+            try {
+              await createMapPoi(mapId, {
+                title: form.title,
+                subtitle: form.subtitle,
+                markerGeometry: JSON.stringify(form.markerGeometry),
+                highlightOnEnter: form.highlightOnEnter,
+                shouldPin: form.shouldPin,
+              });
+              setPoiDialogOpen(false);
+            } catch (err) {
+              alert("Tạo POI thất bại: " + (err instanceof Error ? err.message : ""));
+            }
+          }}
+        />
+      )}
 
       {/* Create Zone dialog */}
       <CreateZoneDialog
