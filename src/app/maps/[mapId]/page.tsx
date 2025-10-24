@@ -9,8 +9,6 @@ import {
   type MapDetail,
   updateMap,
   type UpdateMapRequest,
-  getActiveUserAccessTools,
-  type UserAccessTool,
   type RawLayer,
   type UpdateMapFeatureRequest,
 } from "@/lib/api";
@@ -163,8 +161,6 @@ export default function EditMapPage() {
   const dataLayerRefs = useRef<Map<string, L.Layer>>(new Map());
   const originalStylesRef = useRef<Map<Layer, LayerStyle>>(new Map());
 
-  const [toolsLoading, setToolsLoading] = useState(true);
-  const [allowed, setAllowed] = useState<Set<string>>(new Set());
 
   // Helper: Store original style
   const storeOriginalStyle = useCallback((layer: Layer) => {
@@ -379,28 +375,6 @@ export default function EditMapPage() {
     };
   }, [mapId]);
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        setToolsLoading(true);
-        const list = await getActiveUserAccessTools();
-        const names = new Set<string>();
-        (list ?? []).forEach((t: UserAccessTool) => {
-          const key = normalizeToolName(t.name);
-          if (key) names.add(key);
-        });
-        if (alive) setAllowed(names);
-      } catch {
-        if (alive) setAllowed(new Set());
-      } finally {
-        if (alive) setToolsLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!detail || !mapEl.current || mapRef.current) return;
@@ -409,6 +383,35 @@ export default function EditMapPage() {
     (async () => {
       const L = (await import("leaflet")).default;
       await import("@geoman-io/leaflet-geoman-free");
+      
+      // Tạo custom marker tròn nhỏ giống Circle
+      const customDefaultIcon = L.divIcon({
+        className: 'custom-default-marker',
+        html: '<div style="width: 8px; height: 8px; background-color: #3388ff; border: 2px solid white; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>',
+        iconSize: [8, 8],
+        iconAnchor: [4, 4]
+      });
+
+      // Override icon mặc định bằng cách tạo constructor mới
+      (L.Icon.Default as any) = L.Icon.extend({
+        options: {
+          iconSize: [8, 8],
+          iconAnchor: [4, 4],
+          popupAnchor: [0, -4],
+          shadowSize: [0, 0],
+          shadowAnchor: [0, 0]
+        },
+        _getIconUrl: function() {
+          return '';
+        },
+        createIcon: function() {
+          return customDefaultIcon.createIcon();
+        },
+        createShadow: function() {
+          return null;
+        }
+      });
+      
       if (!alive || !el) return;
 
       const VN_CENTER: LatLngTuple = [14.058324, 108.277199];
@@ -434,6 +437,14 @@ export default function EditMapPage() {
 
       const sketch = L.featureGroup().addTo(map);
       sketchRef.current = sketch;
+
+      // Custom marker cho Point tool - giống hệt Circle
+      const customMarkerIcon = L.divIcon({
+        className: 'custom-marker-icon',
+        html: '<div style="width: 8px; height: 8px; background-color: #3388ff; border: 2px solid white; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.3);"></div>',
+        iconSize: [8, 8],
+        iconAnchor: [4, 4]
+      });
 
       try {
         const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
@@ -522,13 +533,26 @@ export default function EditMapPage() {
         removalMode: false,
       });
 
+      // Set global options (thêm tooltips: false nếu chưa)
       map.pm.setGlobalOptions({
-        limitMarkersToCount: 20
+        limitMarkersToCount: 20,
+        allowSelfIntersection: true,
+        finishOn: "click",
+        snappable: true,
+        snapDistance: 20,
+        hideMiddleMarkers: true,
+        cursorMarker: false,  // Tắt cursor marker hoàn toàn
+        tooltips: false       // Tắt tooltip nếu chưa có
       });
 
       map.on("pm:create", async (e: PMCreateEvent) => {
         const extLayer = e.layer as ExtendedLayer;
         sketch.addLayer(e.layer);
+        
+        // Áp dụng custom marker icon cho markers (giờ an toàn hơn)
+        if (extLayer instanceof L.Marker) {
+          extLayer.setIcon(customMarkerIcon);
+        }
         
         // Store original style
         storeOriginalStyle(e.layer);
@@ -808,7 +832,15 @@ export default function EditMapPage() {
   }, [selectedLayers]); // Only depend on selectedLayers, not the callback
 
   const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text" ) => {
-    mapRef.current?.pm.enableDraw(shape);
+    mapRef.current?.pm.enableDraw(shape, {
+      snappable: true,
+      snapDistance: 20,
+      finishOn: "click",
+      cursorMarker: false,
+      allowSelfIntersection: true,
+      hideMiddleMarkers: true,
+      tooltips: false  // Tắt tooltip
+    });
   };
   const toggleEdit = () => mapRef.current?.pm.toggleGlobalEditMode();
   const toggleDelete = () => mapRef.current?.pm.toggleGlobalRemovalMode();
@@ -1071,58 +1103,58 @@ export default function EditMapPage() {
               />
             </div>
             <div className="flex items-center justify-center gap-1.5 overflow-x-auto no-scrollbar">
-              <GuardBtn title="Vẽ điểm" onClick={() => enableDraw("Marker")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ điểm" onClick={() => enableDraw("Marker")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 21s-6-4.5-6-10a6 6 0 1 1 12 0c0 5.5-6 10-6 10z" />
                   <circle cx="12" cy="11" r="2.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Vẽ đường" onClick={() => enableDraw("Line")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ đường" onClick={() => enableDraw("Line")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="5" cy="7" r="2" />
                   <circle cx="19" cy="17" r="2" />
                   <path d="M7 8.5 17 15.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Vẽ vùng" onClick={() => enableDraw("Polygon")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ vùng" onClick={() => enableDraw("Polygon")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M7 4h10l4 6-4 10H7L3 10 7 4z" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Vẽ hình chữ nhật" onClick={() => enableDraw("Rectangle")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ hình chữ nhật" onClick={() => enableDraw("Rectangle")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="5" y="6" width="14" height="12" rx="1.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Vẽ hình tròn" onClick={() => enableDraw("Circle")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ hình tròn" onClick={() => enableDraw("Circle")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="8.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Thêm chữ" onClick={() => enableDraw("Text")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Thêm chữ" onClick={() => enableDraw("Text")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 6h16M12 6v12" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Cắt polygon" onClick={enableCutPolygon} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Cắt polygon" onClick={enableCutPolygon} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="5.5" cy="8" r="2" />
                   <circle cx="5.5" cy="16" r="2" />
                   <path d="M8 9l12 8M8 15l12-8" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Xoay đối tượng" onClick={toggleRotate} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Xoay đối tượng" onClick={toggleRotate} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 11a8 8 0 1 1-2.2-5.5" />
                   <path d="M20 4v7h-7" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Di chuyển đối tượng" onClick={toggleDrag} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Di chuyển đối tượng" onClick={toggleDrag} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Chỉnh sửa đối tượng" onClick={toggleEdit} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Chỉnh sửa đối tượng" onClick={toggleEdit} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
                 </svg>
@@ -1210,6 +1242,82 @@ export default function EditMapPage() {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .leaflet-container { width: 100%; height: 100%; }
         .leaflet-top.leaflet-left .leaflet-control { display: none !important; }
+        
+        /* Hide Geoman tooltips and help text */
+        .leaflet-pm-tooltip,
+        .leaflet-pm-help,
+        .leaflet-pm-hint,
+        .leaflet-pm-cursor-marker,
+        .leaflet-pm-cursor-marker-text {
+          display: none !important;
+        }
+        
+        /* Hide Geoman help text */
+        .leaflet-pm-help-text,
+        .leaflet-pm-tooltip-text {
+          display: none !important;
+        }
+        
+        /* Thêm các class mới để target tooltip vẽ/edit cụ thể */
+        .leaflet-pm-draw-tooltip,
+        .leaflet-pm-vertex-tooltip,
+        .leaflet-pm-snapping-tooltip,
+        .leaflet-pm-edit-tooltip,
+        .leaflet-pm-drag-tooltip,
+        .leaflet-pm-rotate-tooltip,
+        .leaflet-pm-cut-tooltip {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+        }
+        
+        /* Đảm bảo không hiển thị text động */
+        [class*="leaflet-pm-tooltip"]::after,
+        [class*="leaflet-pm-tooltip"]::before,
+        [class*="leaflet-pm-hint"] * {
+          display: none !important;
+        }
+
+        /* Force crosshair cursor khi draw mode active */
+        .leaflet-pm-draw-mode-enabled {
+          cursor: crosshair !important;
+        }
+
+        /* Tắt hiển thị bất kỳ marker tạm nào trong draw mode */
+        .leaflet-pm-cursor-marker .leaflet-marker-icon,
+        .leaflet-pm-cursor-marker .leaflet-marker-shadow {
+          display: none !important;
+        }
+        
+        /* Hide default Leaflet marker icons */
+        .leaflet-marker-icon {
+          background: none !important;
+          border: none !important;
+        }
+        
+        /* Custom marker style */
+        .custom-marker-icon {
+          background: none !important;
+          border: none !important;
+        }
+        
+        /* Custom default marker style */
+        .custom-default-marker {
+          background: none !important;
+          border: none !important;
+        }
+        
+        /* Đảm bảo tất cả marker đều dùng custom icon */
+        .leaflet-marker-icon {
+          background: none !important;
+          border: none !important;
+        }
+        
+        /* Override any default marker styles */
+        .leaflet-marker-icon[src*="marker-icon"],
+        .leaflet-marker-icon[src*="marker-shadow"] {
+          display: none !important;
+        }
       `}</style>
     </main>
   );

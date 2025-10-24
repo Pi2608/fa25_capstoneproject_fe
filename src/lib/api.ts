@@ -311,46 +311,6 @@ export type RawAccessTool = {
   requiredMembership?: boolean;
 };
 
-export type RawUserAccessTool = {
-  userAccessToolId?: number | string;
-  id?: number | string;
-  accessToolId?: number | string;
-  accessTool?: RawAccessTool | null;
-  expiredAt?: string;
-  isActive?: boolean;
-};
-
-export type UserAccessTool = {
-  id: string;
-  accessToolId: string;
-  name: string;
-  description?: string;
-  expiredAt: string;
-  isActive: boolean;
-  iconUrl?: string;
-};
-
-function mapUserAccessTool(raw: RawUserAccessTool): UserAccessTool {
-  return {
-    id: String(raw.userAccessToolId ?? raw.id ?? ""),
-    accessToolId: String(raw.accessToolId ?? raw.accessTool?.accessToolId ?? ""),
-    name: raw.accessTool?.accessToolName ?? "Unknown tool",
-    description: raw.accessTool?.accessToolDescription,
-    expiredAt: raw.expiredAt ?? "",
-    isActive: typeof raw.isActive === "boolean" ? raw.isActive : true,
-    iconUrl: raw.accessTool?.iconUrl,
-  };
-}
-
-export async function getUserAccessTools(): Promise<UserAccessTool[]> {
-  const data = await getJson<RawUserAccessTool[]>("/user-access-tool/get-all");
-  return (data ?? []).map(mapUserAccessTool);
-}
-
-export async function getActiveUserAccessTools(): Promise<UserAccessTool[]> {
-  const data = await getJson<RawUserAccessTool[]>("/user-access-tool/get-active");
-  return (data ?? []).map(mapUserAccessTool);
-}
 
 /** ===== MEMBERSHIP ===== */
 export type MembershipResponse = {

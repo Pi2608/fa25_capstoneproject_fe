@@ -782,7 +782,13 @@ export async function loadFeaturesToMap(
     for (const feature of features) {
       let coordinates: Position | Position[] | Position[][];
       try {
-        coordinates = JSON.parse(feature.coordinates);
+        const parsed = JSON.parse(feature.coordinates);
+        // Check if it's GeoJSON format
+        if (parsed.type && parsed.coordinates) {
+          coordinates = parsed.coordinates;
+        } else {
+          coordinates = parsed;
+        }
       } catch {
         console.warn("Failed to parse coordinates for feature:", feature.featureId);
         continue;
@@ -794,28 +800,34 @@ export async function loadFeaturesToMap(
         const coords = coordinates as Position;
         
         // Check if it's a Text annotation type
-        if (feature.annotationType === "Text") {
-          // Try to extract text content from properties or style
-          let textContent = "Text";
+        if (feature.annotationType?.toLowerCase() === "text") {
+          // Create a simple colored circle marker instead of HTML
+          let markerColor = "#3388ff"; // Default blue
+          let markerSize = 16; // 2x the original 8px
           
-          // First check if there's a text property
-          if (feature.properties) {
+          // Apply style from database if available
+          if (feature.style) {
             try {
-              const props = JSON.parse(feature.properties);
-              if (props.text) {
-                textContent = props.text;
+              const style = JSON.parse(feature.style);
+              if (style.color) {
+                markerColor = style.color;
+              }
+              if (style.fillColor) {
+                markerColor = style.fillColor;
               }
             } catch (error) {
-              console.warn("Failed to parse feature properties:", error);
+              console.warn("Failed to parse feature style:", error);
             }
           }
           
-          // Create text marker with DivIcon
-          layer = L.marker([coords[1], coords[0]], {
-            icon: L.divIcon({
-              className: "leaflet-div-icon geoman-text",
-              html: textContent,
-            }),
+          // Create colored circle marker
+          layer = L.circleMarker([coords[1], coords[0]], {
+            radius: markerSize / 2,
+            color: markerColor,
+            fillColor: markerColor,
+            fillOpacity: 0.8,
+            weight: 2,
+            opacity: 1
           }) as ExtendedLayer;
         } else {
           // Regular marker
@@ -1046,7 +1058,13 @@ export async function renderFeatures(
     try {
       let coordinates: Position | Position[] | Position[][];
       try {
-        coordinates = JSON.parse(feature.coordinates);
+        const parsed = JSON.parse(feature.coordinates);
+        // Check if it's GeoJSON format
+        if (parsed.type && parsed.coordinates) {
+          coordinates = parsed.coordinates;
+        } else {
+          coordinates = parsed;
+        }
       } catch {
         console.warn("Failed to parse coordinates for feature:", feature.featureId);
         continue;
@@ -1058,29 +1076,36 @@ export async function renderFeatures(
         const coords = coordinates as Position;
         
         // Check if it's a Text annotation type
-        if (feature.annotationType === "Text") {
-          // Try to extract text content from properties
-          let textContent = "Text";
+        if (feature.annotationType?.toLowerCase() === "text") {
+          // Create a simple colored circle marker instead of HTML
+          let markerColor = "#3388ff"; // Default blue
+          let markerSize = 16; // 2x the original 8px
           
-          if (feature.properties) {
+          // Apply style from database if available
+          if (feature.style) {
             try {
-              const props = JSON.parse(feature.properties);
-              if (props.text) {
-                textContent = props.text;
+              const style = JSON.parse(feature.style);
+              if (style.color) {
+                markerColor = style.color;
+              }
+              if (style.fillColor) {
+                markerColor = style.fillColor;
               }
             } catch (error) {
-              console.warn("Failed to parse feature properties:", error);
+              console.warn("Failed to parse feature style:", error);
             }
           }
           
-          // Create text marker with DivIcon
-          layer = L.marker([coords[1], coords[0]], {
-            icon: L.divIcon({
-              className: "leaflet-div-icon geoman-text",
-              html: textContent,
-            }),
+          // Create colored circle marker
+          layer = L.circleMarker([coords[1], coords[0]], {
+            radius: markerSize / 2,
+            color: markerColor,
+            fillColor: markerColor,
+            fillOpacity: 0.8,
+            weight: 2,
+            opacity: 1
           }) as ExtendedLayer;
-          console.log("📝 Rendered Text:", textContent);
+          console.log("📝 Rendered Text with color:", markerColor);
         } else {
           // Regular marker
           layer = L.marker([coords[1], coords[0]]) as ExtendedLayer;
@@ -1282,7 +1307,7 @@ export async function toggleFeatureVisibility(
         const coords = coordinates as Position;
         
         // Check if it's a Text annotation type
-        if (feature.annotationType === "Text") {
+        if (feature.annotationType?.toLowerCase() === "text") {
           // Try to extract text content from properties
           let textContent = "Text";
           
