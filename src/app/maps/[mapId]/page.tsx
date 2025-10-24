@@ -91,6 +91,42 @@ interface ExtendedLayer extends GeoJSONLayer {
   _bounds?: LatLngBounds;
 }
 
+interface LayerStyle {
+  color?: string;
+  weight?: number;
+  opacity?: number;
+  fillColor?: string;
+  fillOpacity?: number;
+  dashArray?: string;
+  radius?: number;
+}
+
+interface PathLayer {
+  setStyle: (style: LayerStyle) => void;
+  bringToFront?: () => void;
+  options?: LayerStyle & Record<string, unknown>;
+}
+
+interface LeafletMouseEvent {
+  originalEvent: MouseEvent & { shiftKey: boolean };
+  target: Layer;
+}
+
+interface LeafletMapClickEvent {
+  originalEvent: MouseEvent;
+  target: HTMLElement;
+}
+
+interface GeomanLayer extends Layer {
+  pm: {
+    enable: (options: {
+      draggable?: boolean;
+      allowEditing?: boolean;
+      allowSelfIntersection?: boolean;
+    }) => void;
+  };
+}
+
 export default function EditMapPage() {
   const params = useParams<{ mapId: string }>();
   const sp = useSearchParams();
@@ -114,15 +150,173 @@ export default function EditMapPage() {
   const [layers, setLayers] = useState<RawLayer[]>([]);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({});
   const [featureVisibility, setFeatureVisibility] = useState<Record<string, boolean>>({})
+  
+  // New state for multi-selection and hover interaction
+  const [currentLayer, setCurrentLayer] = useState<Layer | null>(null);
+  const [selectedLayers, setSelectedLayers] = useState<Set<Layer>>(new Set());
+  const [hoveredLayer, setHoveredLayer] = useState<Layer | null>(null);
 
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapWithPM | null>(null);
   const baseRef = useRef<TileLayer | null>(null);
   const sketchRef = useRef<FeatureGroup | null>(null);
   const dataLayerRefs = useRef<Map<string, L.Layer>>(new Map());
+  const originalStylesRef = useRef<Map<Layer, LayerStyle>>(new Map());
 
   const [toolsLoading, setToolsLoading] = useState(true);
   const [allowed, setAllowed] = useState<Set<string>>(new Set());
+
+  // Helper: Store original style
+  const storeOriginalStyle = useCallback((layer: Layer) => {
+    if (originalStylesRef.current.has(layer)) return;
+    
+    const style: LayerStyle = {};
+    if ('setStyle' in layer && typeof layer.setStyle === 'function') {
+      const pathLayer = layer as unknown as PathLayer;
+      const options = pathLayer.options || {};
+      style.color = options.color || '#3388ff';
+      style.weight = options.weight || 3;
+      style.opacity = options.opacity || 1.0;
+      style.fillColor = options.fillColor || options.color || '#3388ff';
+      style.fillOpacity = options.fillOpacity || 0.2;
+      style.dashArray = options.dashArray || '';
+    }
+    originalStylesRef.current.set(layer, style);
+  }, []);
+
+  // Helper: Apply hover highlight
+  const applyHoverStyle = useCallback((layer: Layer) => {
+    if ('setStyle' in layer && typeof layer.setStyle === 'function') {
+      (layer as unknown as PathLayer).setStyle({
+        weight: 5,
+        dashArray: '',
+        fillOpacity: 0.6
+      });
+      
+      // Bring to front
+      const pathLayer = layer as unknown as PathLayer;
+      if ('bringToFront' in layer && pathLayer.bringToFront) {
+        pathLayer.bringToFront();
+      }
+    }
+  }, []);
+
+  // Helper: Reset to original style
+  const resetToOriginalStyle = useCallback((layer: Layer) => {
+    const originalStyle = originalStylesRef.current.get(layer);
+    if (originalStyle && 'setStyle' in layer && typeof layer.setStyle === 'function') {
+      (layer as unknown as PathLayer).setStyle(originalStyle);
+    }
+  }, []);
+
+  // Helper: Apply selection style
+  const applySelectionStyle = useCallback((layer: Layer) => {
+    if ('setStyle' in layer && typeof layer.setStyle === 'function') {
+      (layer as unknown as PathLayer).setStyle({
+        color: '#ff6600',
+        weight: 4,
+        fillOpacity: 0.5
+      });
+    }
+  }, []);
+
+  // Helper: Apply multi-selection style
+  const applyMultiSelectionStyle = useCallback((layer: Layer) => {
+    if ('setStyle' in layer && typeof layer.setStyle === 'function') {
+      (layer as unknown as PathLayer).setStyle({
+        color: '#ff0000',
+        weight: 4,
+        fillOpacity: 0.5
+      });
+    }
+  }, []);
+
+  // Handle layer click (single or multi-select)
+  const handleLayerClick = useCallback((layer: Layer, isShiftKey: boolean) => {
+    if (isShiftKey) {
+      // Multi-select mode
+      const newSelected = new Set(selectedLayers);
+      if (newSelected.has(layer)) {
+        newSelected.delete(layer);
+        resetToOriginalStyle(layer);
+      } else {
+        newSelected.add(layer);
+        applyMultiSelectionStyle(layer);
+      }
+      setSelectedLayers(newSelected);
+      
+      // Update currentLayer to the last selected
+      if (newSelected.size > 0) {
+        setCurrentLayer(layer);
+      } else {
+        setCurrentLayer(null);
+      }
+    } else {
+      // Single select mode - clear previous selections
+      selectedLayers.forEach(l => {
+        if (l !== layer) {
+          resetToOriginalStyle(l);
+        }
+      });
+      
+      setSelectedLayers(new Set([layer]));
+      setCurrentLayer(layer);
+      applySelectionStyle(layer);
+      
+      // Show style panel and find corresponding feature/layer data
+      const feature = features.find(f => f.layer === layer);
+      if (feature) {
+        setSelectedLayer(feature);
+        setShowStylePanel(true);
+      }
+    }
+  }, [selectedLayers, features, resetToOriginalStyle, applySelectionStyle, applyMultiSelectionStyle]);
+
+  // Handle layer hover
+  const handleLayerHover = useCallback((layer: Layer | null, isEntering: boolean) => {
+    if (!layer) return;
+    
+    if (isEntering) {
+      // Don't apply hover style if already selected
+      if (!selectedLayers.has(layer)) {
+        storeOriginalStyle(layer);
+        applyHoverStyle(layer);
+      }
+      setHoveredLayer(layer);
+    } else {
+      // Don't reset style if selected
+      if (!selectedLayers.has(layer)) {
+        resetToOriginalStyle(layer);
+      }
+      setHoveredLayer(null);
+    }
+  }, [selectedLayers, storeOriginalStyle, applyHoverStyle, resetToOriginalStyle]);
+
+  // Handle layer deletion
+  const handleLayerDelete = useCallback((layer: Layer) => {
+    // Clear from selections
+    if (currentLayer === layer) {
+      setCurrentLayer(null);
+      setSelectedLayer(null);
+      setShowStylePanel(false);
+    }
+    
+    const newSelected = new Set(selectedLayers);
+    newSelected.delete(layer);
+    setSelectedLayers(newSelected);
+    
+    // Clear from refs
+    originalStylesRef.current.delete(layer);
+  }, [currentLayer, selectedLayers]);
+
+  // Reset all selections (for base layer clicks)
+  const resetAllSelections = useCallback(() => {
+    selectedLayers.forEach(layer => resetToOriginalStyle(layer));
+    setSelectedLayers(new Set());
+    setCurrentLayer(null);
+    setSelectedLayer(null);
+    setShowStylePanel(false);
+  }, [selectedLayers, resetToOriginalStyle]);
 
   const applyBaseLayer = useCallback((key: BaseKey) => {
     if (!mapRef.current) return;
@@ -159,7 +353,7 @@ export default function EditMapPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, []); // Empty deps - only depends on baseKey via useEffect
 
   useEffect(() => {
     if (!mapId) return;
@@ -243,6 +437,66 @@ export default function EditMapPage() {
 
       try {
         const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
+        
+        // Attach event listeners to loaded features
+        dbFeatures.forEach(feature => {
+          if (feature.layer) {
+            // Store original style
+            storeOriginalStyle(feature.layer);
+            
+            // Attach hover and click event listeners
+            feature.layer.on('mouseover', () => handleLayerHover(feature.layer, true));
+            feature.layer.on('mouseout', () => handleLayerHover(feature.layer, false));
+            feature.layer.on('click', (event: LeafletMouseEvent) => {
+              // Stop propagation to prevent base layer click from firing
+              if (event.originalEvent) {
+                event.originalEvent.stopPropagation();
+              }
+              handleLayerClick(feature.layer, event.originalEvent.shiftKey);
+            });
+            
+            // Attach edit/drag/rotate event listeners for database updates
+            feature.layer.on('pm:edit', async () => {
+              if (feature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, feature.featureId, feature);
+                } catch (error) {
+                  console.error("Error updating feature after edit:", error);
+                }
+              }
+            });
+            
+            feature.layer.on('pm:dragend', async () => {
+              if (feature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, feature.featureId, feature);
+                } catch (error) {
+                  console.error("Error updating feature after drag:", error);
+                }
+              }
+            });
+            
+            feature.layer.on('pm:rotateend', async () => {
+              if (feature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, feature.featureId, feature);
+                } catch (error) {
+                  console.error("Error updating feature after rotation:", error);
+                }
+              }
+            });
+            
+            // Enable dragging and editing via Geoman
+            if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
+              (feature.layer as GeomanLayer).pm.enable({
+                draggable: true,
+                allowEditing: true,
+                allowSelfIntersection: true,
+              });
+            }
+          }
+        });
+        
         setFeatures(dbFeatures);
         const initialFeatureVisibility: Record<string, boolean> = {};
         dbFeatures.forEach(feature => {
@@ -268,9 +522,27 @@ export default function EditMapPage() {
         removalMode: false,
       });
 
+      map.pm.setGlobalOptions({
+        limitMarkersToCount: 20
+      });
+
       map.on("pm:create", async (e: PMCreateEvent) => {
         const extLayer = e.layer as ExtendedLayer;
         sketch.addLayer(e.layer);
+        
+        // Store original style
+        storeOriginalStyle(e.layer);
+        
+        // Attach hover and click event listeners
+        e.layer.on('mouseover', () => handleLayerHover(e.layer, true));
+        e.layer.on('mouseout', () => handleLayerHover(e.layer, false));
+        e.layer.on('click', (event: LeafletMouseEvent) => {
+          // Stop propagation to prevent base layer click from firing
+          if (event.originalEvent) {
+            event.originalEvent.stopPropagation();
+          }
+          handleLayerClick(e.layer, event.originalEvent.shiftKey);
+        });
         
         const type = getFeatureTypeUtil(extLayer);
         const serialized = serializeFeature(extLayer);
@@ -291,6 +563,37 @@ export default function EditMapPage() {
         try {
           const savedFeature = await saveFeature(detail.id, "", extLayer, features, setFeatures);
           if (savedFeature) {
+            // Attach edit/drag/rotate event listeners with the saved featureId
+            e.layer.on('pm:edit', async () => {
+              if (savedFeature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
+                } catch (error) {
+                  console.error("Error updating feature after edit:", error);
+                }
+              }
+            });
+            
+            e.layer.on('pm:dragend', async () => {
+              if (savedFeature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
+                } catch (error) {
+                  console.error("Error updating feature after drag:", error);
+                }
+              }
+            });
+            
+            e.layer.on('pm:rotateend', async () => {
+              if (savedFeature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
+                } catch (error) {
+                  console.error("Error updating feature after rotation:", error);
+                }
+              }
+            });
+            
             setFeatures(prev => [...prev, savedFeature]);
             setFeatureVisibility(prev => ({
               ...prev,
@@ -310,6 +613,15 @@ export default function EditMapPage() {
             ...prev,
             [newFeature.id]: true
           }));
+        }
+        
+        // Enable dragging and editing via Geoman
+        if ('pm' in e.layer && e.layer.pm) {
+          (e.layer as GeomanLayer).pm.enable({
+            draggable: true,
+            allowEditing: true,
+            allowSelfIntersection: true,
+          });
         }
       });
 
@@ -333,6 +645,44 @@ export default function EditMapPage() {
             ));
           } catch (error) {
             console.error("Error updating feature:", error);
+          }
+        }
+      });
+
+      sketch.on("pm:dragend", async (e: { layer: Layer; shape: string }) => {
+        const extLayer = e.layer as ExtendedLayer;
+        
+        const draggedFeature = features.find(f => f.layer === extLayer);
+        if (draggedFeature && draggedFeature.featureId) {
+          try {
+            await updateFeatureInDB(detail.id, draggedFeature.featureId, draggedFeature);
+            
+            setFeatures(prev => prev.map(f => 
+              f.id === draggedFeature.id || f.featureId === draggedFeature.featureId
+                ? { ...f, layer: extLayer }
+                : f
+            ));
+          } catch (error) {
+            console.error("Error updating feature after drag:", error);
+          }
+        }
+      });
+
+      sketch.on("pm:rotateend", async (e: { layer: Layer }) => {
+        const extLayer = e.layer as ExtendedLayer;
+        
+        const rotatedFeature = features.find(f => f.layer === extLayer);
+        if (rotatedFeature && rotatedFeature.featureId) {
+          try {
+            await updateFeatureInDB(detail.id, rotatedFeature.featureId, rotatedFeature);
+            
+            setFeatures(prev => prev.map(f => 
+              f.id === rotatedFeature.id || f.featureId === rotatedFeature.featureId
+                ? { ...f, layer: extLayer }
+                : f
+            ));
+          } catch (error) {
+            console.error("Error updating feature after rotation:", error);
           }
         }
       });
@@ -428,6 +778,35 @@ export default function EditMapPage() {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
 
+  // Map click handler for deselecting when clicking on empty space or base layer
+  useEffect(() => {
+    if (!mapRef.current) return;
+    
+    const handleMapClick = (e: LeafletMapClickEvent) => {
+      // Only reset if clicking directly on map/base layer (not on a feature layer)
+      const target = e.originalEvent.target;
+      if (target && target instanceof HTMLElement && !target.closest('.leaflet-interactive')) {
+        // Use ref to avoid dependency on resetAllSelections
+        selectedLayers.forEach(layer => {
+          const originalStyle = originalStylesRef.current.get(layer);
+          if (originalStyle && 'setStyle' in layer && typeof (layer as unknown as PathLayer).setStyle === 'function') {
+            (layer as unknown as PathLayer).setStyle(originalStyle);
+          }
+        });
+        setSelectedLayers(new Set());
+        setCurrentLayer(null);
+        setSelectedLayer(null);
+        setShowStylePanel(false);
+      }
+    };
+
+    mapRef.current.on('click', handleMapClick);
+    
+    return () => {
+      mapRef.current?.off('click', handleMapClick);
+    };
+  }, [selectedLayers]); // Only depend on selectedLayers, not the callback
+
   const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text" ) => {
     mapRef.current?.pm.enableDraw(shape);
   };
@@ -498,7 +877,36 @@ export default function EditMapPage() {
 
   const onUpdateFeature = useCallback(async (featureId: string, updates: UpdateMapFeatureRequest) => {
     if (!detail) return;
+    
+    try {
+      const { updateMapFeature } = await import("@/lib/api");
+      await updateMapFeature(detail.id, featureId, updates);
+      
+      // Update local state
+      setFeatures(prev => prev.map(f => 
+        f.featureId === featureId 
+          ? { ...f, name: updates.name || f.name } 
+          : f
+      ));
+      
+      setTimeout(() => setFeedback(null), 2000);
+    } catch (error) {
+      setTimeout(() => setFeedback(null), 2000);
+    }
   }, [detail]);
+
+  // Apply style visually to layer
+  const onApplyStyle = useCallback((layer: Layer, styleOptions: LayerStyle) => {
+    if (!layer || !('setStyle' in layer)) return;
+    
+    // Apply style
+    (layer as unknown as PathLayer).setStyle(styleOptions);
+    
+    // Update original style ref
+    originalStylesRef.current.set(layer, {
+      ...styleOptions
+    });
+  }, []);
 
   const onDeleteFeature = useCallback(async (featureId: string) => {
     if (!detail) return;
@@ -507,6 +915,9 @@ export default function EditMapPage() {
     if (!feature) {
       return;
     }
+    
+    // Handle layer deletion state cleanup
+    handleLayerDelete(feature.layer);
     
     if (mapRef.current && sketchRef.current) {
       sketchRef.current.removeLayer(feature.layer);
@@ -528,7 +939,34 @@ export default function EditMapPage() {
       }
     }
     
-  }, [detail, features]);
+  }, [detail, features, handleLayerDelete]);
+
+  // Keyboard event handler for delete/backspace
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedLayers.size > 0) {
+        // Don't prevent backspace if user is typing in an input
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          return;
+        }
+        
+        e.preventDefault();
+        
+        // Delete all selected layers
+        const layersToDelete = Array.from(selectedLayers);
+        for (const layer of layersToDelete) {
+          const feature = features.find(f => f.layer === layer);
+          if (feature && (feature.id || feature.featureId)) {
+            await onDeleteFeature(feature.featureId || feature.id);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedLayers, features, onDeleteFeature]);
 
   const applyPresetStyleToFeature = useCallback(async (featureId: string, layerType: string, presetName: string) => {
     if (!detail) return;
@@ -679,6 +1117,16 @@ export default function EditMapPage() {
                   <path d="M20 4v7h-7" />
                 </svg>
               </GuardBtn>
+              <GuardBtn title="Di chuyển đối tượng" onClick={toggleDrag} disabled={toolsLoading || !mapRef.current}>
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
+                </svg>
+              </GuardBtn>
+              <GuardBtn title="Chỉnh sửa đối tượng" onClick={toggleEdit} disabled={toolsLoading || !mapRef.current}>
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                </svg>
+              </GuardBtn>
             </div>
             <div className="flex items-center justify-end gap-1.5 overflow-x-auto no-scrollbar">
               <input
@@ -743,6 +1191,9 @@ export default function EditMapPage() {
         onDeleteFeature={onDeleteFeature}
         onBaseLayerChange={setBaseKey}
         currentBaseLayer={baseKey}
+        onFeatureHover={handleLayerHover}
+        hoveredLayer={hoveredLayer}
+        selectedLayers={selectedLayers}
       />
 
       <StylePanel
@@ -751,6 +1202,7 @@ export default function EditMapPage() {
         setShowStylePanel={setShowStylePanel}
         onUpdateLayer={onUpdateLayer}
         onUpdateFeature={onUpdateFeature}
+        onApplyStyle={onApplyStyle}
       />
 
       <style jsx global>{`

@@ -1908,7 +1908,7 @@ export async function handleLayerVisibilityChange(
 ): Promise<void> {
   if (!map) return;
 
-  console.log("👁️ Toggling layer visibility:", { layerId, isVisible });
+  console.log("Toggling layer visibility:", { layerId, isVisible });
 
   setLayerVisibility(prev => ({
     ...prev,
