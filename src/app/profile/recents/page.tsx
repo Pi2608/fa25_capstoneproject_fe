@@ -6,7 +6,10 @@ import {
   getMyMaps,
   createMapFromTemplate,
   createMap,
+  updateMap,
+  deleteMap,
   type MapDto,
+  type UpdateMapRequest,
 } from "@/lib/api";
 import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
 
@@ -104,7 +107,7 @@ const SAMPLES: Sample[] = [
   },
 ];
 
-function Thumb({ k }: { k: string }) {
+function Thumb({ src, fallbackKey }: { src?: string | null; fallbackKey: string }) {
   const palette: Record<string, string> = {
     "reservoir-precip": "from-cyan-700 to-emerald-700",
     "sandy-inundation": "from-amber-600 to-rose-600",
@@ -112,12 +115,39 @@ function Thumb({ k }: { k: string }) {
     "sales-territories": "from-emerald-700 to-teal-700",
     "getting-started": "from-zinc-700 to-zinc-800",
   };
-  const bg = palette[k] ?? "from-zinc-700 to-zinc-800";
+  if (src) {
+    return (
+      <div className="h-32 w-full rounded-lg border border-white/10 overflow-hidden bg-zinc-900/40">
+        <img src={src} alt="preview" className="h-full w-full object-cover" loading="lazy" />
+      </div>
+    );
+  }
+  const bg = palette[fallbackKey] ?? "from-zinc-700 to-zinc-800";
   return (
     <div className={`h-32 w-full rounded-lg border border-white/10 bg-gradient-to-br ${bg} grid place-items-center`}>
       <div className="h-16 w-16 rounded-full bg-white/10 backdrop-blur-sm" />
     </div>
   );
+}
+
+type EditState = {
+  open: boolean;
+  map?: MapDto | null;
+  name: string;
+  description: string;
+  previewLocal?: string | null;
+  previewFile?: File | null;
+  saving: boolean;
+  error?: string | null;
+};
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
 }
 
 export default function RecentsPage() {
@@ -135,24 +165,58 @@ export default function RecentsPage() {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
 
+  const [edit, setEdit] = useState<EditState>({
+    open: false,
+    map: null,
+    name: "",
+    description: "",
+    previewLocal: null,
+    previewFile: null,
+    saving: false,
+    error: null,
+  });
+
+  const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Đóng menu khi click ra ngoài/ESC
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        setLoading(true);
-        setErr(null);
-        const res = await getMyMaps();
-        if (!alive) return;
-        setMaps(res);
-      } catch (e) {
-        if (!alive) return;
-        setErr(e instanceof Error ? e.message : "Failed to load your maps.");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
-    return () => { alive = false; };
+    function onDown(e: MouseEvent) {
+      // Nếu click vào bất kỳ element không phải menu hiện tại => đóng
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const container = target.closest("[data-menu-container]");
+      if (!container) setMenuOpenId(null);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setMenuOpenId(null);
+    }
+    if (menuOpenId) {
+      document.addEventListener("mousedown", onDown);
+      document.addEventListener("keydown", onKey);
+      return () => {
+        document.removeEventListener("mousedown", onDown);
+        document.removeEventListener("keydown", onKey);
+      };
+    }
+  }, [menuOpenId]);
+
+  const loadMyMaps = useCallback(async () => {
+    setLoading(true);
+    setErr(null);
+    try {
+      const res = await getMyMaps();
+      setMaps(res);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Failed to load your maps.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadMyMaps();
+  }, [loadMyMaps]);
 
   const clickNewMap = useCallback(async () => {
     const center = { lat: 10.78, lng: 106.69 };
@@ -168,7 +232,7 @@ export default function RecentsPage() {
         [center.lng + lngDiff / 2, center.lat + latDiff / 2],
         [center.lng - lngDiff / 2, center.lat + latDiff / 2],
         [center.lng - lngDiff / 2, center.lat - latDiff / 2],
-      ]]
+      ]],
     });
     const viewState = JSON.stringify({ center: [center.lat, center.lng], zoom });
 
@@ -203,7 +267,10 @@ export default function RecentsPage() {
     setBusyKey(s.key);
     try {
       if (s.templateId) {
-        const r = await createMapFromTemplate({ templateId: s.templateId });
+        const r = await createMapFromTemplate({
+          templateId: s.templateId,
+          customName: (s.title ?? s.preset?.name ?? "Bản đồ mới từ template").trim(),
+        });
         router.push(`/maps/${r.mapId}`);
       } else if (s.preset) {
         const presetData = convertPresetToNewFormat(s.preset);
@@ -224,18 +291,87 @@ export default function RecentsPage() {
     }
   };
 
-  if (loading) {
-    return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">Loading…</div>;
-  }
-  if (err) {
-    return <div className="max-w-3xl px-4 text-red-400">{err}</div>;
-  }
+  const openEdit = (m: MapDto) => {
+    setMenuOpenId(null);
+    setEdit({
+      open: true,
+      map: m,
+      name: m.name ?? "",
+      description: m.description ?? "",
+      previewLocal: m.previewImageUrl ?? null,
+      previewFile: null,
+      saving: false,
+      error: null,
+    });
+  };
+
+  const closeEdit = () => {
+    setEdit((e) => ({ ...e, open: false, error: null, saving: false }));
+  };
+
+  const handleImagePick = async (file: File | null) => {
+    if (!file) {
+      setEdit((e) => ({ ...e, previewFile: null, previewLocal: null }));
+      return;
+    }
+    const dataUrl = await fileToDataUrl(file);
+    setEdit((e) => ({ ...e, previewFile: file, previewLocal: dataUrl }));
+  };
+
+  const saveEdit = async () => {
+    if (!edit.map) return;
+    setEdit((e) => ({ ...e, saving: true, error: null }));
+    try {
+      const body: UpdateMapRequest = {
+        name: edit.name?.trim() ?? "",
+        description: edit.description ?? "",
+        previewImageUrl: edit.previewLocal ?? null,
+      };
+      await updateMap(edit.map.id, body);
+      setMaps((ms) =>
+        ms.map((m) =>
+          m.id === edit.map!.id
+            ? {
+              ...m,
+              name: body.name ?? m.name,
+              description: body.description ?? m.description,
+              previewImageUrl: body.previewImageUrl ?? m.previewImageUrl,
+            }
+            : m
+        )
+      );
+      closeEdit();
+    } catch (e) {
+      setEdit((s) => ({
+        ...s,
+        error: e instanceof Error ? e.message : "Failed to save changes.",
+        saving: false,
+      }));
+    }
+  };
+
+  const handleDeleteMap = async (mapId: string) => {
+    setMenuOpenId(null);
+    const ok = confirm("Delete this map?");
+    if (!ok) return;
+    setDeletingId(mapId);
+    try {
+      await deleteMap(mapId);
+      setMaps((ms) => ms.filter((m) => m.id !== mapId));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to delete map.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">Loading…</div>;
+  if (err) return <div className="max-w-3xl px-4 text-red-400">{err}</div>;
 
   return (
     <div className="min-w-0 relative px-4">
       <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl sm:text-3xl font-semibold">Recents</h1>
-
         <div className="flex items-center gap-2 relative">
           <div className="relative">
             <button
@@ -288,7 +424,6 @@ export default function RecentsPage() {
               </div>
             )}
           </div>
-
           <button
             onClick={clickNewMap}
             className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
@@ -318,13 +453,60 @@ export default function RecentsPage() {
             {sortedMaps.map((m) => (
               <li
                 key={m.id}
-                className="group rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4 cursor-pointer"
-                onClick={() => router.push(`/maps/${m.id}`)}
+                className="group relative rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4"
                 title={m.name}
               >
-                <div className="h-32 w-full rounded-lg bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/5 mb-3 grid place-items-center text-zinc-400 text-xs">
-                  Preview
+                {/* Nút ⋯ cố định góc phải */}
+                <div className="absolute right-2 top-2 z-10" data-menu-container>
+                  <button
+                    aria-label="More actions"
+                    title="More actions"
+                    className="h-8 w-8 grid place-items-center rounded-md hover:bg-white/10 border border-white/10 text-lg leading-none"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMenuOpenId((id) => (id === m.id ? null : m.id));
+                    }}
+                  >
+                    ⋯
+                  </button>
+                  {menuOpenId === m.id && (
+                    <div
+                      className="absolute right-0 mt-2 w-44 rounded-md border border-white/10 bg-zinc-900/95 shadow-lg"
+                      onMouseLeave={() => setMenuOpenId(null)}
+                    >
+                      <button
+                        className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-60"
+                        disabled={deletingId === m.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteMap(m.id);
+                        }}
+                      >
+                        {deletingId === m.id ? "Deleting..." : "Delete map"}
+                      </button>
+                    </div>
+                  )}
                 </div>
+
+                {/* Header trái: Edit details */}
+                <div className="flex items-start justify-between -mt-1 mb-2 pr-10">
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                      onClick={() => openEdit(m)}
+                    >
+                      Edit details
+                    </button>
+                  </div>
+                </div>
+
+                <div
+                  className="h-32 w-full mb-3 cursor-pointer"
+                  onClick={() => router.push(`/maps/${m.id}`)}
+                >
+                  <Thumb src={m.previewImageUrl ?? undefined} fallbackKey={m.id} />
+                </div>
+
                 <div className="flex items-center justify-between">
                   <div className="min-w-0">
                     <div className="truncate font-semibold">{m.name || "Untitled"}</div>
@@ -333,13 +515,10 @@ export default function RecentsPage() {
                     </div>
                   </div>
                   <button
-                    className="opacity-0 group-hover:opacity-100 transition text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      router.push(`/maps/${m.id}`);
-                    }}
+                    className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                    onClick={() => router.push(`/maps/${m.id}`)}
                   >
-                    Edit
+                    Open
                   </button>
                 </div>
               </li>
@@ -372,12 +551,44 @@ export default function RecentsPage() {
                       {m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <button
-                        className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
-                        onClick={() => router.push(`/maps/${m.id}`)}
-                      >
-                        Edit
-                      </button>
+                      <div className="inline-flex items-center gap-1 relative" data-menu-container>
+                        <button
+                          className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                          onClick={() => openEdit(m)}
+                        >
+                          Edit details
+                        </button>
+                        <button
+                          className="text-xl leading-none px-2 py-1 rounded hover:bg-white/5"
+                          title="More actions"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuOpenId((id) => (id === m.id ? null : m.id));
+                          }}
+                        >
+                          ⋯
+                        </button>
+                        {menuOpenId === m.id && (
+                          <div
+                            className="absolute right-0 mt-1 w-40 rounded-md border border-white/10 bg-zinc-900/95 shadow-lg z-10"
+                            onMouseLeave={() => setMenuOpenId(null)}
+                          >
+                            <button
+                              className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-60"
+                              disabled={deletingId === m.id}
+                              onClick={() => handleDeleteMap(m.id)}
+                            >
+                              {deletingId === m.id ? "Deleting..." : "Delete map"}
+                            </button>
+                          </div>
+                        )}
+                        <button
+                          className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                          onClick={() => router.push(`/maps/${m.id}`)}
+                        >
+                          Open
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -397,7 +608,7 @@ export default function RecentsPage() {
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {SAMPLES.map((s) => (
             <li key={s.key} className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
-              <Thumb k={s.key} />
+              <Thumb fallbackKey={s.key} />
               <div className="mt-3">
                 <div className="font-semibold truncate">{s.title}</div>
                 <div className="text-xs text-zinc-400">{s.author}</div>
@@ -417,6 +628,104 @@ export default function RecentsPage() {
           ))}
         </ul>
       </section>
+
+      {edit.open && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
+          <div className="w-full max-w-lg rounded-xl border border-white/10 bg-zinc-900 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold">Edit map details</h3>
+              <button className="text-zinc-300 hover:text-white" onClick={closeEdit}>✕</button>
+            </div>
+
+            {edit.error && (
+              <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-200">
+                {edit.error}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <label className="block">
+                <span className="text-sm text-zinc-300">Map name</span>
+                <input
+                  className="mt-1 w-full rounded-md border border-white/10 bg-zinc-800 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  value={edit.name}
+                  onChange={(e) => setEdit((s) => ({ ...s, name: e.target.value }))}
+                  maxLength={150}
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm text-zinc-300">Description</span>
+                <textarea
+                  className="mt-1 w-full rounded-md border border-white/10 bg-zinc-800 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  rows={3}
+                  value={edit.description}
+                  onChange={(e) => setEdit((s) => ({ ...s, description: e.target.value }))}
+                  maxLength={1000}
+                />
+              </label>
+
+              <div>
+                <div className="text-sm text-zinc-300 mb-1">Preview image</div>
+                <div className="flex items-start gap-3">
+                  <div className="h-24 w-40 rounded-md border border-white/10 overflow-hidden bg-zinc-800">
+                    {edit.previewLocal ? (
+                      <img src={edit.previewLocal} alt="preview" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="h-full w-full grid place-items-center text-xs text-zinc-500">No preview</div>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="inline-block">
+                      <span className="px-3 py-1.5 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer text-sm">
+                        Choose file
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const f = e.target.files?.[0] ?? null;
+                          if (f) {
+                            const dataUrl = await fileToDataUrl(f);
+                            setEdit((s) => ({ ...s, previewFile: f, previewLocal: dataUrl }));
+                          } else {
+                            setEdit((s) => ({ ...s, previewFile: null, previewLocal: null }));
+                          }
+                        }}
+                      />
+                    </label>
+                    <button
+                      className="text-xs text-zinc-400 hover:text-zinc-200 text-left"
+                      onClick={() => setEdit((s) => ({ ...s, previewLocal: null, previewFile: null }))}
+                    >
+                      Remove image
+                    </button>
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-zinc-400">PNG/JPG, khuyến nghị ≤ 2MB.</p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                className="px-3 py-1.5 rounded-md border border-white/10 bg-white/5 hover:bg-white/10"
+                onClick={closeEdit}
+                disabled={edit.saving}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-3 py-1.5 rounded-md bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400 disabled:opacity-70"
+                onClick={saveEdit}
+                disabled={edit.saving}
+              >
+                {edit.saving ? "Saving…" : "Save changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

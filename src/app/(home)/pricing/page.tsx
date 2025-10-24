@@ -53,6 +53,11 @@ export default function PricingPage() {
   };
 
   const handleSelectPlan = async (plan: Plan) => {
+    if (!isLoggedIn) {
+      router.push("/login");
+      return;
+    }
+    router.push(`/profile/select-plan?planId=${plan.planId}`);
     try {
       if (!isLoggedIn) {
         router.push("/login");

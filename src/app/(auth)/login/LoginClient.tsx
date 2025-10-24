@@ -222,14 +222,18 @@ export default function LoginClient() {
       if (!token) throw new Error("Login response missing token");
 
       setAuthTokens({ accessToken: token });
-      authStore.setToken?.(token); 
+      authStore.setToken?.(token);
       await ensureFreeMembership();
 
       setBanner({ type: "success", text: "Signed in successfully." });
       setToast("Signed in successfully! Welcome back 👋");
       setTimeout(() => {
         router.refresh();
-        router.push("/profile");
+        if (email.toLowerCase() === "admin@cusommaposm.com") {
+          router.push("/dashboard");
+        } else {
+          router.push("/profile");
+        }
       }, 900);
     } catch (err: unknown) {
       setBanner({ type: "error", text: humanizeLoginError(err) });

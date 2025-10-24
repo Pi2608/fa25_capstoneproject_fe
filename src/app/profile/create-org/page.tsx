@@ -409,7 +409,6 @@ function CreateOrganizationPageContent() {
   )
 }
 
-// Main export with Suspense boundary
 export default function CreateOrganizationPage() {
   return (
     <Suspense fallback={
