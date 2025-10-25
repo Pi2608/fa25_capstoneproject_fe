@@ -1,9 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
-import type { Map as LMap, TileLayer, LatLngTuple, Layer, FeatureGroup, LatLng, LatLngBounds, Marker } from "leaflet";
+import type { TileLayer, LatLngTuple, FeatureGroup } from "leaflet";
+import type {
+  BaseKey,
+  LMap,
+  LNS,
+  Layer,
+  LeafletMouseEvent,
+  LeafletMapClickEvent,
+  MapWithPM,
+  PMCreateEvent,
+  GeoJSONLayer,
+  LayerStyle,
+  PathLayer,
+  GeomanLayer,
+  ToolName,
+} from "@/types";
 import {
   getMapDetail,
   type MapDetail,
@@ -11,55 +26,25 @@ import {
   type UpdateMapRequest,
   type RawLayer,
   type UpdateMapFeatureRequest,
+  uploadGeoJsonToMap,
 } from "@/lib/api";
-import type { Position } from "geojson";
 import { 
   type FeatureData,
-  getFeatureType as getFeatureTypeUtil,
   serializeFeature,
   extractLayerStyle,
+  handleLayerVisibilityChange,
+  handleFeatureVisibilityChange,
+  getFeatureType as getFeatureTypeUtil,
   saveFeature,
   updateFeatureInDB,
   deleteFeatureFromDB,
   loadFeaturesToMap,
   loadLayerToMap,
-  handleLayerVisibilityChange,
-  handleFeatureVisibilityChange,
+  type ExtendedLayer,
 } from "@/utils/mapUtils";
 import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
 
-type BaseKey = "osm" | "sat" | "dark";
-
-type MapWithPM = LMap & {
-  pm: {
-    addControls: (opts: {
-      position?: string;
-      drawMarker?: boolean;
-      drawPolyline?: boolean;
-      drawRectangle?: boolean;
-      drawPolygon?: boolean;
-      drawCircle?: boolean;
-      drawCircleMarker?: boolean;
-      drawText?: boolean;
-      editMode?: boolean;
-      dragMode?: boolean;
-      cutPolygon?: boolean;
-      removalMode?: boolean;
-      rotateMode?: boolean;
-    }) => void;
-    enableDraw: (
-      shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text"
-    ) => void;
-    toggleGlobalEditMode: () => void;
-    toggleGlobalRemovalMode: () => void;
-    toggleGlobalDragMode: () => void;
-    enableGlobalCutMode: () => void;
-    toggleGlobalRotateMode?: () => void;
-  };
-};
-type PMCreateEvent = { layer: Layer };
-
-function normalizeToolName(name?: string | null): "Marker" | "Line" | "Polygon" | "Circle" | "Text" | "Route" | null {
+function normalizeToolName(name?: string | null): ToolName {
   if (!name) return null;
   const n = name.trim().toLowerCase();
   if (n === "pin" || n === "marker") return "Marker";
@@ -69,60 +54,6 @@ function normalizeToolName(name?: string | null): "Marker" | "Line" | "Polygon" 
   if (n === "circle") return "Circle";
   if (n === "text") return "Text";
   return null;
-}
-
-interface GeoJSONLayer extends Layer {
-  feature?: {
-    type?: string;
-    properties?: Record<string, unknown>;
-    geometry?: {
-      type?: string;
-      coordinates?: Position | Position[] | Position[][] | Position[][][];
-    };
-  };
-}
-
-interface ExtendedLayer extends GeoJSONLayer {
-  _mRadius?: number;
-  _latlng?: LatLng;
-  _latlngs?: LatLng[] | LatLng[][] | LatLng[][][];
-  _bounds?: LatLngBounds;
-}
-
-interface LayerStyle {
-  color?: string;
-  weight?: number;
-  opacity?: number;
-  fillColor?: string;
-  fillOpacity?: number;
-  dashArray?: string;
-  radius?: number;
-}
-
-interface PathLayer {
-  setStyle: (style: LayerStyle) => void;
-  bringToFront?: () => void;
-  options?: LayerStyle & Record<string, unknown>;
-}
-
-interface LeafletMouseEvent {
-  originalEvent: MouseEvent & { shiftKey: boolean };
-  target: Layer;
-}
-
-interface LeafletMapClickEvent {
-  originalEvent: MouseEvent;
-  target: HTMLElement;
-}
-
-interface GeomanLayer extends Layer {
-  pm: {
-    enable: (options: {
-      draggable?: boolean;
-      allowEditing?: boolean;
-      allowSelfIntersection?: boolean;
-    }) => void;
-  };
 }
 
 export default function EditMapPage() {
@@ -280,7 +211,6 @@ export default function EditMapPage() {
       }
       setHoveredLayer(layer);
     } else {
-      // Don't reset style if selected
       if (!selectedLayers.has(layer)) {
         resetToOriginalStyle(layer);
       }
@@ -288,9 +218,7 @@ export default function EditMapPage() {
     }
   }, [selectedLayers, storeOriginalStyle, applyHoverStyle, resetToOriginalStyle]);
 
-  // Handle layer deletion
   const handleLayerDelete = useCallback((layer: Layer) => {
-    // Clear from selections
     if (currentLayer === layer) {
       setCurrentLayer(null);
       setSelectedLayer(null);
@@ -339,7 +267,7 @@ export default function EditMapPage() {
           layer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 20, attribution: "© OpenStreetMap contributors" });
         }
         if (!cancelled && mapRef.current) {
-          layer.addTo(mapRef.current);
+          layer.addTo(mapRef.current as any);
           baseRef.current = layer;
         }
       } catch (error) {
@@ -435,7 +363,7 @@ export default function EditMapPage() {
 
       applyBaseLayer(detail.baseMapProvider === "Satellite" ? "sat" : detail.baseMapProvider === "Dark" ? "dark" : "osm");
 
-      const sketch = L.featureGroup().addTo(map);
+      const sketch = L.featureGroup().addTo(map as any);
       sketchRef.current = sketch;
 
       // Custom marker cho Point tool - giống hệt Circle
@@ -518,32 +446,35 @@ export default function EditMapPage() {
         console.error("Failed to load from database:", error);
       }
 
-      map.pm.addControls({
-        drawMarker: false,
-        drawPolyline: false,
-        drawRectangle: false,
-        drawPolygon: false,
-        drawCircle: false,
-        drawCircleMarker: false,
-        drawText: false,
-        editMode: false,
-        dragMode: false,
-        cutPolygon: false,
-        rotateMode: false,
-        removalMode: false,
-      });
+      // Check if PM is available on map before using it
+      if (map.pm) {
+        map.pm.addControls({
+          drawMarker: false,
+          drawPolyline: false,
+          drawRectangle: false,
+          drawPolygon: false,
+          drawCircle: false,
+          drawCircleMarker: false,
+          drawText: false,
+          editMode: false,
+          dragMode: false,
+          cutPolygon: false,
+          rotateMode: false,
+          removalMode: false,
+        });
 
-      // Set global options (thêm tooltips: false nếu chưa)
-      map.pm.setGlobalOptions({
-        limitMarkersToCount: 20,
-        allowSelfIntersection: true,
-        finishOn: "click",
-        snappable: true,
-        snapDistance: 20,
-        hideMiddleMarkers: true,
-        cursorMarker: false,  // Tắt cursor marker hoàn toàn
-        tooltips: false       // Tắt tooltip nếu chưa có
-      });
+        // Set global options (thêm tooltips: false nếu chưa)
+        map.pm.setGlobalOptions({
+          limitMarkersToCount: 20,
+          allowSelfIntersection: true,
+          finishOn: "click",
+          snappable: true,
+          snapDistance: 20,
+          hideMiddleMarkers: true,
+          cursorMarker: false,  // Tắt cursor marker hoàn toàn
+          tooltips: false       // Tắt tooltip nếu chưa có
+        });
+      }
 
       map.on("pm:create", async (e: PMCreateEvent) => {
         const extLayer = e.layer as ExtendedLayer;
@@ -743,7 +674,7 @@ export default function EditMapPage() {
         initialLayerVisibility[layer.id] = isVisible;
         
         try {
-          const loaded = await loadLayerToMap(map, layer, dataLayerRefs);
+          const loaded = await loadLayerToMap(map as any, layer, dataLayerRefs);
           if (loaded && !isVisible) {
             const leafletLayer = dataLayerRefs.current.get(layer.id);
             if (leafletLayer && map.hasLayer(leafletLayer)) {
@@ -832,21 +763,13 @@ export default function EditMapPage() {
   }, [selectedLayers]); // Only depend on selectedLayers, not the callback
 
   const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text" ) => {
-    mapRef.current?.pm.enableDraw(shape, {
-      snappable: true,
-      snapDistance: 20,
-      finishOn: "click",
-      cursorMarker: false,
-      allowSelfIntersection: true,
-      hideMiddleMarkers: true,
-      tooltips: false  // Tắt tooltip
-    });
+    mapRef.current?.pm.enableDraw(shape);
   };
   const toggleEdit = () => mapRef.current?.pm.toggleGlobalEditMode();
   const toggleDelete = () => mapRef.current?.pm.toggleGlobalRemovalMode();
   const toggleDrag = () => mapRef.current?.pm.toggleGlobalDragMode();
   const enableCutPolygon = () => mapRef.current?.pm.enableGlobalCutMode();
-  const toggleRotate = () => mapRef.current?.pm.toggleGlobalRotateMode();
+  const toggleRotate = () => mapRef.current?.pm?.toggleGlobalRotateMode?.();
 
   const clearSketch = useCallback(async () => {
     if (!detail) return;
@@ -876,7 +799,7 @@ export default function EditMapPage() {
       detail.id,
       layerId,
       isVisible,
-      mapRef.current,
+      mapRef.current as any,
       dataLayerRefs,
       setLayerVisibility,
       layerData
@@ -892,7 +815,7 @@ export default function EditMapPage() {
       isVisible,
       features,
       setFeatures,
-      mapRef.current,
+      mapRef.current as any,
       sketchRef.current,
       setFeatureVisibility
     );
@@ -1053,16 +976,37 @@ export default function EditMapPage() {
    }, [detail, name, baseKey]);
 
   const saveView = useCallback(async () => {
-    if (!detail || !mapRef.current) return;
+    if (!detail || !mapRef.current) {
+      console.warn("saveView: detail or mapRef.current is null");
+      return;
+    }
+    const map = mapRef.current;
+    if (!map) {
+      console.warn("saveView: map is null");
+      return;
+    }
     setBusySaveView(true);
     setFeedback(null);
     try {
-      const c = mapRef.current.getCenter();
-      const view = { center: [c.lat, c.lng] as [number, number], zoom: mapRef.current.getZoom() };
+      // Check if map is still valid
+      if (!map.getCenter || typeof map.getCenter !== 'function') {
+        console.warn("saveView: map.getCenter is not a function");
+        setFeedback("Bản đồ chưa sẵn sàng");
+        return;
+      }
+      const c = map.getCenter();
+      if (!c) {
+        console.warn("saveView: map.getCenter() returned null");
+        setFeedback("Bản đồ chưa sẵn sàng");
+        return;
+      }
+      const zoom = map.getZoom ? map.getZoom() : 10;
+      const view = { center: [c.lat, c.lng] as [number, number], zoom };
       const body: UpdateMapRequest = { viewState: JSON.stringify(view) };
       await updateMap(detail.id, body);
       setFeedback("Đã lưu vị trí hiển thị.");
     } catch (e) {
+      console.error("saveView error:", e);
       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveView(false);
@@ -1163,11 +1107,27 @@ export default function EditMapPage() {
             <div className="flex items-center justify-end gap-1.5 overflow-x-auto no-scrollbar">
               <input
                 type="file"
-                accept=".geojson,.json"
-                onChange={(e) => {
+                accept=".geojson,.json,.kml,.gpx"
+                onChange={async (e) => {
                   const file = e.target.files?.[0];
-                  if (file) {
-                    // TODO: Handle file upload for adding layer from template
+                  if (file && mapId) {
+                    try {
+                      setFeedback("Uploading file...");
+                      const result = await uploadGeoJsonToMap(mapId, file);
+                      
+                      // Refresh the entire map detail
+                      const updatedDetail = await getMapDetail(mapId);
+                      setDetail(updatedDetail);
+                      
+                      setFeedback(`Successfully uploaded! Added ${result.featuresAdded} features.`);
+                      setTimeout(() => setFeedback(null), 5000);
+                      
+                      // Clear the input
+                      e.target.value = '';
+                    } catch (error) {
+                      setFeedback(error instanceof Error ? error.message : "Failed to upload file");
+                      setTimeout(() => setFeedback(null), 5000);
+                    }
                   }
                 }}
                 className="hidden"
@@ -1176,9 +1136,9 @@ export default function EditMapPage() {
               <label
                 htmlFor="upload-layer"
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 cursor-pointer"
-                title="Upload GeoJSON file to add as layer"
+                title="Upload GeoJSON/KML/GPX file to add as layer"
               >
-                Upload Layer
+                Upload File
               </label>
               <button
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-zinc-700 hover:bg-zinc-600 disabled:opacity-60"
@@ -1215,7 +1175,7 @@ export default function EditMapPage() {
         layers={layers}
         showDataLayersPanel={showDataLayersPanel}
         setShowDataLayersPanel={setShowDataLayersPanel}
-        map={mapRef.current}
+        map={mapRef.current as any}
         dataLayerRefs={dataLayerRefs}
         onLayerVisibilityChange={onLayerVisibilityChange}
         onFeatureVisibilityChange={onFeatureVisibilityChange}

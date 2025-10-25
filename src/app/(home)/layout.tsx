@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "CustomMapOSM",
+  title: "IMOS",
   description: "Shared layout without duplicate header",
 };
 

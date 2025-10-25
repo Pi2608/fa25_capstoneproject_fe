@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Community — CustomMapOSM",
-  description: "Join the CustomMapOSM community.",
+  title: "Community — IMOS",
+  description: "Join the IMOS community.",
 };
 
 export default function CommunityPage() {
