@@ -326,7 +326,7 @@ export default function PricingPage() {
           <Link href="/" className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-md bg-emerald-400 shadow" />
             <span className="text-lg md:text-xl font-bold tracking-tight text-white">
-              CustomMapOSM
+              IMOS
             </span>
           </Link>
 

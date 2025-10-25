@@ -187,8 +187,17 @@ export type RegisterRequest = {
 
 export type RegisterResponse = { userId: string };
 
-export function login(req: LoginRequest) {
-  return postJson<LoginRequest, LoginResponse>("/auth/login", req);
+export async function login(req: LoginRequest): Promise<LoginResponse> {
+  const response = await postJson<LoginRequest, LoginResponse>("/auth/login", req);
+  
+  if (response.token ) {
+    setAuthTokens({
+      token: response.token,
+      refreshToken: response.refreshToken
+    });
+  }
+  
+  return response;
 }
 
 export function register(req: RegisterRequest) {
@@ -320,46 +329,6 @@ export type RawAccessTool = {
   requiredMembership?: boolean;
 };
 
-export type RawUserAccessTool = {
-  userAccessToolId?: number | string;
-  id?: number | string;
-  accessToolId?: number | string;
-  accessTool?: RawAccessTool | null;
-  expiredAt?: string;
-  isActive?: boolean;
-};
-
-export type UserAccessTool = {
-  id: string;
-  accessToolId: string;
-  name: string;
-  description?: string;
-  expiredAt: string;
-  isActive: boolean;
-  iconUrl?: string;
-};
-
-function mapUserAccessTool(raw: RawUserAccessTool): UserAccessTool {
-  return {
-    id: String(raw.userAccessToolId ?? raw.id ?? ""),
-    accessToolId: String(raw.accessToolId ?? raw.accessTool?.accessToolId ?? ""),
-    name: raw.accessTool?.accessToolName ?? "Unknown tool",
-    description: raw.accessTool?.accessToolDescription,
-    expiredAt: raw.expiredAt ?? "",
-    isActive: typeof raw.isActive === "boolean" ? raw.isActive : true,
-    iconUrl: raw.accessTool?.iconUrl,
-  };
-}
-
-export async function getUserAccessTools(): Promise<UserAccessTool[]> {
-  const data = await getJson<RawUserAccessTool[]>("/user-access-tool/get-all");
-  return (data ?? []).map(mapUserAccessTool);
-}
-
-export async function getActiveUserAccessTools(): Promise<UserAccessTool[]> {
-  const data = await getJson<RawUserAccessTool[]>("/user-access-tool/get-active");
-  return (data ?? []).map(mapUserAccessTool);
-}
 
 /** ===== MEMBERSHIP ===== */
 export type MembershipResponse = {
@@ -604,7 +573,7 @@ type MapDetailRawWrapped = {
     viewState: {
       center?: [number, number];
       zoom?: number;
-    }
+    } | null;
     initialLatitude: number;
     initialLongitude: number;
     initialZoom: number;
@@ -624,7 +593,7 @@ export async function getMapDetail(mapId: string): Promise<MapDetail> {
       baseMapProvider: m.baseLayer,
       initialLatitude: m.initialLatitude,
       initialLongitude: m.initialLongitude,
-      initialZoom: m.viewState.zoom ?? 10,
+      initialZoom: m.viewState?.zoom ?? m.initialZoom ?? 10,
       layers: m.layers ?? [],
     };
   }
@@ -817,6 +786,49 @@ export interface AddLayerToMapRequest {
 export interface AddLayerToMapResponse { mapLayerId: string; }
 export function addLayerToMap(mapId: string, body: AddLayerToMapRequest) {
   return postJson<AddLayerToMapRequest, AddLayerToMapResponse>(`/maps/${mapId}/layers`, body);
+}
+
+// Upload GeoJSON file to map
+export interface UploadGeoJsonToMapResponse {
+  layerId: string;
+  message: string;
+  featuresAdded: number;
+  dataSize: number;
+}
+
+export async function uploadGeoJsonToMap(
+  mapId: string,
+  file: File,
+  layerName?: string
+): Promise<UploadGeoJsonToMapResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (layerName) {
+    formData.append("layerName", layerName);
+  }
+
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (!base) throw new Error("Missing env: NEXT_PUBLIC_API_BASE_URL");
+
+  const token = getToken();
+  if (!token) {
+    throw new Error("Not authenticated");
+  }
+
+  const response = await fetch(`${base}/maps/${mapId}/upload-geojson`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || "Failed to upload file");
+  }
+
+  return response.json();
 }
 
 export interface UpdateMapLayerRequest {
