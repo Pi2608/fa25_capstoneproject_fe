@@ -101,7 +101,7 @@ export default function CustomersClient() {
         <div className="relative z-10">
           <p className="c-hero-eyebrow opacity-0 translate-y-[18px] text-sm tracking-wide text-emerald-300/90">Resources / Customers</p>
           <h1 className="c-hero-title opacity-0 translate-y-[18px] mt-2 text-3xl font-semibold sm:text-4xl">
-            Stories from teams using <span className="text-emerald-300">CustomMapOSM</span>
+            Stories from teams using <span className="text-emerald-300">IMOS</span>
           </h1>
           <p className="c-hero-sub opacity-0 translate-y-[18px] mt-3 max-w-2xl text-zinc-300">
             Built for educators and organizations. See how schools create interactive lesson maps, story
@@ -191,7 +191,7 @@ export default function CustomersClient() {
         <aside className="c-quote opacity-0 translate-y-[20px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6 shadow-lg">
           <figure>
             <blockquote className="text-lg leading-relaxed text-zinc-200">
-              “CustomMapOSM made our geography units come alive. Students explored places, timelines, and cause–effect through interactive maps instead of static slides.”
+              IMOS made our geography units come alive. Students explored places, timelines, and cause–effect through interactive maps instead of static slides.”
             </blockquote>
             <figcaption className="mt-4 flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400/30 to-emerald-200/20" />

@@ -11,8 +11,6 @@ import {
   inviteMember,
   type InviteMemberOrganizationReqDto,
   deleteOrganization,
-  getUserAccessTools,
-  type UserAccessTool,
   getOrganizationMaps,
   removeMember,
   updateMemberRole,
@@ -225,11 +223,7 @@ export default function OrgDetailPage() {
         setOrg(orgRes.organization);
         setMembers(memRes);
         setMaps(mapsRes);
-        try {
-          const ats = await getUserAccessTools();
-          if (!alive) return;
-          setTools(ats);
-        } catch { }
+        // Access tools functionality removed
       } catch (e) {
         if (!alive) return;
         setErr(safeMessage(e));

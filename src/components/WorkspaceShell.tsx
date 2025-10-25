@@ -188,7 +188,7 @@ export default function WorkspaceShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2">
               <span className="h-3 w-3 rounded-md bg-emerald-400/90 shadow" />
               <span className="text-lg font-semibold bg-gradient-to-r from-emerald-300 to-emerald-200 bg-clip-text text-transparent">
-                CustomMapOSM
+              IMOS
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs">

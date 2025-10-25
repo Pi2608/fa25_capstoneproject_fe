@@ -3,9 +3,9 @@ import Link from "next/link";
 import GalleryClient, { MapItem } from "./GalleryClient";
 
 export const metadata: Metadata = {
-  title: "Map Gallery — CustomMapOSM",
+  title: "Map Gallery — IMOS",
   description:
-    "Showcase of community maps built with CustomMapOSM. Browse, learn, and duplicate templates.",
+    "Showcase of community maps built with IMOS. Browse, learn, and duplicate templates.",
 };
 
 function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
