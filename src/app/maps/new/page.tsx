@@ -7,8 +7,6 @@ import {
   createMap,
   type CreateMapRequest,
   createMapTemplateFromGeoJson,
-  getActiveUserAccessTools,
-  type UserAccessTool,
 } from "@/lib/api";
 import type { FeatureCollection as GeoFeatureCollection, Geometry, GeoJsonProperties, Position } from "geojson";
 import { addLayerToList, removeLayerFromList, toggleLayerVisibility, renameLayer, LayerInfo, ExtendedLayer } from "@/utils/mapUtils";
@@ -113,7 +111,6 @@ function NewMapPageInner() {
   const [showLayerPanel, setShowLayerPanel] = useState(true);
   const [layers, setLayers] = useState<LayerInfo[]>([]);
 
-  const [allowed, setAllowed] = useState<Set<string>>(new Set());
 
   const [asTemplate, setAsTemplate] = useState(false);
   const [templateName, setTemplateName] = useState("");
@@ -134,19 +131,6 @@ function NewMapPageInner() {
   const [baseLoaded, setBaseLoaded] = useState(false);
 
 
-  const perms = useMemo(() => {
-    const has = (n: string) => allowed.has(n);
-    return {
-      marker: has("Marker"),
-      line: has("Line") || has("Route"),
-      polygon: has("Polygon"),
-      rectangle: has("Polygon"),
-      circle: has("Circle"),
-      text: has("Text"),
-      cut: has("Polygon"),
-      rotate: has("Polygon"),
-    };
-  }, [allowed]);
 
   const isMapValid = useCallback((): boolean => {
     const map = mapRef.current as (LMap & { _removed?: boolean; _loaded?: boolean }) | null;
@@ -514,29 +498,9 @@ function NewMapPageInner() {
     applyBaseLayer(baseLayer);
   }, [ready, baseLayer, applyBaseLayer]);
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        const list = await getActiveUserAccessTools();
-        const names = new Set<string>();
-        (list ?? []).forEach((t: UserAccessTool) => {
-          const key = normalizeToolName(t.name);
-          if (key) names.add(key);
-        });
-        if (alive) setAllowed(names);
-      } catch {
-        if (alive) setAllowed(new Set());
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
 
-  type GuardBtnProps = PropsWithChildren<{ can: boolean; title: string; onClick?: () => void; disabled?: boolean }>;
-  function GuardBtn({ can, title, onClick, disabled, children }: GuardBtnProps) {
-    if (!can) return null;
+  type GuardBtnProps = PropsWithChildren<{ title: string; onClick?: () => void; disabled?: boolean }>;
+  function GuardBtn({ title, onClick, disabled, children }: GuardBtnProps) {
     return (
       <button
         className="px-3 py-2 rounded-md bg-transparent text-white text-sm hover:bg-emerald-500"

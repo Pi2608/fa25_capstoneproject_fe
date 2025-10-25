@@ -311,81 +311,6 @@ export type RawAccessTool = {
   requiredMembership?: boolean;
 };
 
-export type RawUserAccessTool = {
-  userAccessToolId?: number | string;
-  id?: number | string;
-  accessToolId?: number | string;
-  accessTool?: RawAccessTool | null;
-  expiredAt?: string;
-  isActive?: boolean;
-};
-
-export type UserAccessTool = {
-  id: string;
-  accessToolId: string;
-  name: string;
-  description?: string;
-  expiredAt: string;
-  isActive: boolean;
-  iconUrl?: string;
-};
-
-function mapUserAccessTool(raw: RawUserAccessTool): UserAccessTool {
-  return {
-    id: String(raw.userAccessToolId ?? raw.id ?? ""),
-    accessToolId: String(raw.accessToolId ?? raw.accessTool?.accessToolId ?? ""),
-    name: raw.accessTool?.accessToolName ?? "Unknown tool",
-    description: raw.accessTool?.accessToolDescription,
-    expiredAt: raw.expiredAt ?? "",
-    isActive: typeof raw.isActive === "boolean" ? raw.isActive : true,
-    iconUrl: raw.accessTool?.iconUrl,
-  };
-}
-
-export async function getUserAccessTools(): Promise<UserAccessTool[]> {
-  const data = await getJson<RawUserAccessTool[]>("/user-access-tool/get-all");
-  return (data ?? []).map(mapUserAccessTool);
-}
-
-export async function getActiveUserAccessTools(): Promise<UserAccessTool[]> {
-  const data = await getJson<RawUserAccessTool[]>("/user-access-tool/get-active");
-  return (data ?? []).map(mapUserAccessTool);
-}
-
-export type CancelPaymentWithContextReq = {
-  paymentGateway: PaymentGateway;
-  purpose?: {
-    userId?: string;
-    planId?: number;
-    email?: string;
-    [k: string]: unknown;
-  };
-  paymentId?: string;
-  payerId?: string;
-  token?: string;
-  intent?: string;
-  secret?: string;
-  orderCode?: string;
-  signature?: string;
-  transactionId?: string;
-};
-
-
-export type CancelPaymentRes = {
-  ok: boolean;
-  message?: string;
-};
-
-export async function cancelPaymentWithContext(
-  payload: CancelPaymentWithContextReq
-) {
-  console.log("cancelPaymentWithContext", payload);
-  return postJson<CancelPaymentWithContextReq, CancelPaymentRes>(
-    `/Transaction/cancel-payment-with-context?`,
-    payload
-  );
-}
-
 
 /** ===== MEMBERSHIP ===== */
 export type MembershipResponse = {
@@ -434,6 +359,8 @@ export async function createOrRenewMembership(payload: { planId: number }) {
   }
 }
 
+
+
 /** ===== Forgot / Reset Password ===== */
 export type ResetPasswordVerifyReq = { email: string };
 export type ResetPasswordVerifyRes = { message?: string };
@@ -457,134 +384,153 @@ export function resetPassword(req: ResetPasswordReq) {
 }
 
 
-// ==== Transactions (PayPal) ====
-// export interface ProcessPaymentReq {
-//   paymentGateway: "PayPal" | "payOS";
-//   purpose: "membership" | "order";
-//   total?: number;           
-//   currency?: string;        
-//   returnUrl?: string;
-//   successUrl: string;
-//   cancelUrl: string;
-//   context?: {
-//     PlanId?: number; 
-//     OrgId?: string;
-//     AutoRenew?: boolean;
-//     MembershipId?: string;
-//     AddonKey?: string;
-//     Quantity?: number;
-//     UserId?: string;
-//   };
-// }
+// ==== Payment APIs ====
 
-// ==== Transactions (PayOS) ====
+export type PaymentGateway = "vnPay" | "payOS" | "stripe" | "payPal";
+export type PaymentPurpose = "membership" | "addon" | "upgrade";
 
-export type PaymentGateway = "vnPay" | "payOS" | "stripe";
-export type PaymentPurpose = "membership" | "order";
-export interface ProcessPaymentReq {
-  paymentGateway: PaymentGateway;
-  purpose: PaymentPurpose;
-  total?: number;
-  PlanId?: number;
-  UserId?: string;
-  OrgId?: string;
-  AutoRenew?: boolean;
-  MembershipId?: string;
-  AddonKey?: string;
-  Quantity?: number;
+// Subscribe to a plan
+export interface SubscribeRequest {
+  userId: string;
+  orgId: string;
+  planId: number;
+  paymentMethod: PaymentGateway;
+  autoRenew: boolean;
 }
 
-// Response trả về khi tạo giao dịch
-export interface ProcessPaymentRes {
-  approvalUrl: string;
-  transactionId?: string;
-  provider?: string;
-
-  paymentGateway?: PaymentGateway;
-  sessionId: string;
-  qrCode?: string;
-  orderCode: string;
-}
-
-export function processPayment(body: ProcessPaymentReq) {
-  return postJson<ProcessPaymentReq, ProcessPaymentRes>(
-    "/transaction/process-payment",
-    body
-  );
-}
-
-export interface ConfirmPaymentReq {
+export interface SubscribeResponse {
   transactionId: string;
-  token: string;
-  payerId: string;
+  paymentUrl: string;
+  status: string;
+  message: string;
+  paymentGateway: PaymentGateway;
+  qrCode?: string;
+  orderCode?: string;
+}
+
+export function subscribeToPlan(body: SubscribeRequest) {
+  return postJson<SubscribeRequest, SubscribeResponse>(
+    "/payment/subscribe",
+    body
+  );
+}
+
+// Upgrade to a different plan
+export interface UpgradeRequest {
+  userId: string;
+  orgId: string;
+  newPlanId: number;
+  paymentMethod: PaymentGateway;
+  autoRenew: boolean;
+}
+
+export interface UpgradeResponse {
+  transactionId: string;
+  paymentUrl: string;
+  status: string;
+  message: string;
+  proRatedAmount?: number;
+  paymentGateway: PaymentGateway;
+  qrCode?: string;
+  orderCode?: string;
+}
+
+export function upgradePlan(body: UpgradeRequest) {
+  return postJson<UpgradeRequest, UpgradeResponse>(
+    "/payment/upgrade",
+    body
+  );
+}
+
+// Confirm payment (webhook/callback)
+export interface PaymentConfirmationRequest {
+  paymentGateway: PaymentGateway;
+  purpose: string;
+  transactionId: string;
+  status: "success" | "failed" | "cancelled";
   paymentId: string;
+  orderCode?: string;
 }
 
-export interface ConfirmPaymentRes {
-  success: boolean;
-  message?: string;
+export interface PaymentConfirmationResponse {
+  transactionId: string;
+  status: string;
+  message: string;
+  membershipUpdated: boolean;
+  notificationSent: boolean;
 }
 
-export function confirmPayment(body: ConfirmPaymentReq) {
-  return postJson<ConfirmPaymentReq, ConfirmPaymentRes>(
-    "/transaction/confirm-payment",
+export function confirmPayment(body: PaymentConfirmationRequest) {
+  return postJson<PaymentConfirmationRequest, PaymentConfirmationResponse>(
+    "/payment/confirm",
     body
   );
 }
 
-// export interface ConfirmPaymentWithContextReq {
-//   transactionId: string;
-//   token: string;
-//   payerId: string;
-//   paymentId: string;
-//   paymentGateway: PaymentGateway;
-//   purpose: PaymentPurpose;
-//   membershipContext: {
-//     userId: string;
-//     planId: number;
-//     email?: string;
-//   };
-// }
-
-export interface ConfirmPaymentWithContextReq {
-  paymentGateway: PaymentGateway,
-  paymentId: string,
-  orderCode: string,
-  purpose: string,
-  transactionId: string,
-  userId: string,
-  orgId: string,
-  planId: number,
-  autoRenew: true
+// Cancel payment
+export interface CancelPaymentRequest {
+  paymentGateway: PaymentGateway;
+  paymentId: string;
+  orderCode: string;
+  transactionId: string;
 }
 
-export interface ConfirmPaymentWithContextRes {
-  membershipId: string,
-  transactionId: string,
-  accessToolsGranted: true
+export interface CancelPaymentResponse {
+  status: string;
+  gatewayName: string;
 }
 
-export function confirmPaymentWithContext(body: ConfirmPaymentWithContextReq) {
-  console.log("confirmPaymentWithContext", body);
-  return postJson<ConfirmPaymentWithContextReq, ConfirmPaymentWithContextRes>(
-    "/transaction/confirm-payment-with-context",
+export function cancelPayment(body: CancelPaymentRequest) {
+  return postJson<CancelPaymentRequest, CancelPaymentResponse>(
+    "/payment/cancel",
     body
   );
 }
 
-export function getTransactionById(transactionId: string) {
-  return getJson(`/transaction/${transactionId}`);
-}
-
-export interface Transaction {
+// Get payment history
+export interface PaymentHistoryItem {
   transactionId: string;
   amount: number;
   status: string;
   purpose: string;
-  paymentGatewayId?: string;
+  transactionDate: string;
+  createdAt: string;
   transactionReference?: string;
-  transactionDate?: string;
-  createdAt?: string;
+  paymentGateway?: {
+    gatewayId: string;
+    name: string;
+  };
+  membership?: {
+    membershipId: string;
+    startDate: string;
+    endDate?: string;
+    status: string;
+    autoRenew: boolean;
+    plan?: {
+      planId: number;
+      planName: string;
+      description: string;
+      priceMonthly: number;
+      durationMonths: number;
+    };
+    organization?: {
+      orgId: string;
+      orgName: string;
+      abbreviation: string;
+    };
+  };
+}
+
+export interface PaymentHistoryResponse {
+  payments: PaymentHistoryItem[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  hasMore: boolean;
+}
+
+export function getPaymentHistory(page = 1, pageSize = 20) {
+  return getJson<PaymentHistoryResponse>(`/payment/history?page=${page}&pageSize=${pageSize}`);
 }
 
 
@@ -1020,6 +966,7 @@ export interface MapFeatureResponse {
 }
 
 export interface CreateMapFeatureRequest {
+  mapId: string;
   layerId?: string | null;
   name?: string | null;
   description?: string | null;
@@ -1034,7 +981,8 @@ export interface CreateMapFeatureRequest {
 }
 
 export function createMapFeature(mapId: string, body: CreateMapFeatureRequest) {
-  return postJson<CreateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features`, body);
+  const requestBody = { ...body, mapId };
+  return postJson<CreateMapFeatureRequest, MapFeatureResponse>(`/maps/${mapId}/features`, requestBody);
 }
 export function getMapFeatures(mapId: string) {
   return getJson<MapFeatureResponse[]>(`/maps/${mapId}/features`);
@@ -1068,6 +1016,8 @@ export function deleteMapFeature(mapId: string, featureId: string) {
 export function getMapFeatureById(mapId: string, featureId: string) {
   return getJson<MapFeatureResponse>(`/maps/${mapId}/features/${featureId}`);
 }
+
+
 
 export type OrganizationReqDto = {
 
