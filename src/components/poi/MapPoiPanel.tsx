@@ -22,9 +22,7 @@ type MapPoi = {
 
 type Props = {
   mapId: string;
-  /** tuỳ chọn: hiện tại bạn truyền "map" */
   mode?: "map";
-  /** tuỳ chọn: callback đóng panel (được truyền từ nơi gọi) */
   onClose?: () => void;
 };
 
