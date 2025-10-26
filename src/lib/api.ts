@@ -7,6 +7,8 @@ export interface ApiErrorShape {
 
 const ACCESS_TOKEN_KEY = "token";
 const REFRESH_TOKEN_KEY = "refreshToken";
+const STORYMAP_PREFIX = "/story-map";
+const POI_PREFIX = "/points-of-interest";
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -143,6 +145,13 @@ export async function apiFetch<T>(
 
   if (!rawText) return undefined as unknown as T;
   return JSON.parse(rawText) as T;
+}
+
+export function fetchJSON<T>(
+  path: string,
+  init?: RequestInit & { method?: ApiMethod }
+) {
+  return apiFetch<T>(path, init ?? { method: "GET" });
 }
 
 export function getJson<T>(path: string, init?: RequestInit) {
@@ -393,154 +402,25 @@ export function resetPassword(req: ResetPasswordReq) {
 }
 
 
-// ==== Payment APIs ====
-
-export type PaymentGateway = "vnPay" | "payOS" | "stripe" | "payPal";
-export type PaymentPurpose = "membership" | "addon" | "upgrade";
-
-// Subscribe to a plan
-export interface SubscribeRequest {
-  userId: string;
-  orgId: string;
-  planId: number;
-  paymentMethod: PaymentGateway;
-  autoRenew: boolean;
-}
-
-export interface SubscribeResponse {
-  transactionId: string;
-  paymentUrl: string;
-  status: string;
-  message: string;
-  paymentGateway: PaymentGateway;
-  qrCode?: string;
-  orderCode?: string;
-}
-
-export function subscribeToPlan(body: SubscribeRequest) {
-  return postJson<SubscribeRequest, SubscribeResponse>(
-    "/payment/subscribe",
-    body
-  );
-}
-
-// Upgrade to a different plan
-export interface UpgradeRequest {
-  userId: string;
-  orgId: string;
-  newPlanId: number;
-  paymentMethod: PaymentGateway;
-  autoRenew: boolean;
-}
-
-export interface UpgradeResponse {
-  transactionId: string;
-  paymentUrl: string;
-  status: string;
-  message: string;
-  proRatedAmount?: number;
-  paymentGateway: PaymentGateway;
-  qrCode?: string;
-  orderCode?: string;
-}
-
-export function upgradePlan(body: UpgradeRequest) {
-  return postJson<UpgradeRequest, UpgradeResponse>(
-    "/payment/upgrade",
-    body
-  );
-}
-
-// Confirm payment (webhook/callback)
-export interface PaymentConfirmationRequest {
-  paymentGateway: PaymentGateway;
-  purpose: string;
-  transactionId: string;
-  status: "success" | "failed" | "cancelled";
-  paymentId: string;
-  orderCode?: string;
-}
-
-export interface PaymentConfirmationResponse {
-  transactionId: string;
-  status: string;
-  message: string;
-  membershipUpdated: boolean;
-  notificationSent: boolean;
-}
-
-export function confirmPayment(body: PaymentConfirmationRequest) {
-  return postJson<PaymentConfirmationRequest, PaymentConfirmationResponse>(
-    "/payment/confirm",
-    body
-  );
-}
-
-// Cancel payment
-export interface CancelPaymentRequest {
-  paymentGateway: PaymentGateway;
-  paymentId: string;
-  orderCode: string;
-  transactionId: string;
-}
-
-export interface CancelPaymentResponse {
-  status: string;
-  gatewayName: string;
-}
-
-export function cancelPayment(body: CancelPaymentRequest) {
-  return postJson<CancelPaymentRequest, CancelPaymentResponse>(
-    "/payment/cancel",
-    body
-  );
-}
-
-// Get payment history
-export interface PaymentHistoryItem {
-  transactionId: string;
-  amount: number;
-  status: string;
-  purpose: string;
-  transactionDate: string;
-  createdAt: string;
-  transactionReference?: string;
-  paymentGateway?: {
-    gatewayId: string;
-    name: string;
-  };
-  membership?: {
-    membershipId: string;
-    startDate: string;
-    endDate?: string;
-    status: string;
-    autoRenew: boolean;
-    plan?: {
-      planId: number;
-      planName: string;
-      description: string;
-      priceMonthly: number;
-      durationMonths: number;
-    };
-    organization?: {
-      orgId: string;
-      orgName: string;
-      abbreviation: string;
-    };
-  };
-}
-
-export interface PaymentHistoryResponse {
-  payments: PaymentHistoryItem[];
-  page: number;
-  pageSize: number;
-  totalCount: number;
-  hasMore: boolean;
-}
-
-export function getPaymentHistory(page = 1, pageSize = 20) {
-  return getJson<PaymentHistoryResponse>(`/payment/history?page=${page}&pageSize=${pageSize}`);
-}
+// ==== Transactions (PayPal) ====
+// export interface ProcessPaymentReq {
+//   paymentGateway: "PayPal" | "payOS";
+//   purpose: "membership" | "order";
+//   total?: number;           
+//   currency?: string;        
+//   returnUrl?: string;
+//   successUrl: string;
+//   cancelUrl: string;
+//   context?: {
+//     PlanId?: number; 
+//     OrgId?: string;
+//     AutoRenew?: boolean;
+//     MembershipId?: string;
+//     AddonKey?: string;
+//     Quantity?: number;
+//     UserId?: string;
+//   };
+// }
 
 
 /** =========================================================
@@ -567,7 +447,7 @@ export interface CreateMapResponse {
 }
 
 export function createMap(req: CreateMapRequest) {
-  let center: [number, number] = [10.78, 106.69]; 
+  let center: [number, number] = [10.78, 106.69];
   let zoom = 13;
 
   if (req.viewState) {
@@ -593,13 +473,13 @@ export function createMap(req: CreateMapRequest) {
 
   const body = {
     OrgId: req.orgId,
-    OrganizationId: req.orgId, 
+    OrganizationId: req.orgId,
     Name: req.name,
     Description: req.description ?? null,
     IsPublic: req.isPublic,
     ViewState: JSON.stringify({ Center: center, Zoom: zoom }),
     BaseMapProvider: req.baseMapProvider ?? "OSM",
-    GeographicBounds: req.defaultBounds ?? null, 
+    GeographicBounds: req.defaultBounds ?? null,
   };
 
   return postJson<typeof body, CreateMapResponse>("/maps", body);
@@ -610,6 +490,7 @@ export type MapDto = {
   name: string;
   ownerId?: string;
   description?: string;
+  previewImageUrl?: string | null;
   createdAt: string;
 };
 
@@ -620,6 +501,7 @@ export function getMapById(mapId: string) {
 export interface UpdateMapRequest {
   name?: string;
   description?: string;
+  previewImageUrl?: string | null;
   isPublic?: boolean;
   baseMapProvider?: BaseMapProvider;
   geographicBounds?: string;
@@ -827,15 +709,16 @@ export function getMapTemplateLayerData(templateId: string, layerId: string) {
 
 export interface CreateMapFromTemplateRequest {
   templateId: string;
-  mapName?: string;
-  description?: string;
+  customName: string;
+  customDescription?: string;
   isPublic?: boolean;
+  customInitialLatitude?: number;
+  customInitialLongitude?: number;
+  customInitialZoom?: number;
 }
-
 export interface CreateMapFromTemplateResponse {
   mapId: string;
 }
-
 export function createMapFromTemplate(body: CreateMapFromTemplateRequest) {
   return postJson<CreateMapFromTemplateRequest, CreateMapFromTemplateResponse>(
     "/maps/from-template",
@@ -863,21 +746,6 @@ export async function createMapTemplateFromGeoJson(args: {
   if (args.layerName) form.append("layerName", args.layerName);
   if (args.category) form.append("category", args.category);
   form.append("isPublic", String(!!args.isPublic));
-  async function formDataToObject(form: FormData) {
-    const obj: Record<string, string | { name: string; size: number; type: string }> = {};
-    for (const [key, value] of form.entries()) {
-      if (value instanceof File) {
-        obj[key] = {
-          name: value.name,
-          size: value.size,
-          type: value.type,
-        };
-      } else {
-        obj[key] = value;
-      }
-    }
-    return obj;
-  }
 
   return apiFetch<CreateMapTemplateResponse>("/maps/create-template", {
     method: "POST",
@@ -1563,3 +1431,388 @@ export function markAllNotificationsAsRead() {
     method: "PUT",
   });
 }
+
+// PAYMENT API //
+export type PaymentGateway = "vnPay" | "payOS" | "stripe" | "payPal";
+export type PaymentPurpose = "membership" | "addon" | "upgrade";
+
+// Subscribe to a plan
+export interface SubscribeRequest {
+  userId: string;
+  orgId: string;
+  planId: number;
+  paymentMethod: PaymentGateway;
+  autoRenew: boolean;
+}
+
+export interface SubscribeResponse {
+  transactionId: string;
+  paymentUrl: string;
+  status: string;
+  message: string;
+  paymentGateway: PaymentGateway;
+  qrCode?: string;
+  orderCode?: string;
+}
+
+export function subscribeToPlan(body: SubscribeRequest) {
+  return postJson<SubscribeRequest, SubscribeResponse>(
+    "/payment/subscribe",
+    body
+  );
+}
+
+// Upgrade to a different plan
+export interface UpgradeRequest {
+  userId: string;
+  orgId: string;
+  newPlanId: number;
+  paymentMethod: PaymentGateway;
+  autoRenew: boolean;
+}
+
+export interface UpgradeResponse {
+  transactionId: string;
+  paymentUrl: string;
+  status: string;
+  message: string;
+  proRatedAmount?: number;
+  paymentGateway: PaymentGateway;
+  qrCode?: string;
+  orderCode?: string;
+}
+
+export function upgradePlan(body: UpgradeRequest) {
+  return postJson<UpgradeRequest, UpgradeResponse>(
+    "/payment/upgrade",
+    body
+  );
+}
+
+// Confirm payment (webhook/callback)
+export interface PaymentConfirmationRequest {
+  paymentGateway: PaymentGateway;
+  purpose: string;
+  transactionId: string;
+  status: "success" | "failed" | "cancelled";
+  paymentId: string;
+  orderCode?: string;
+}
+
+export interface PaymentConfirmationResponse {
+  transactionId: string;
+  status: string;
+  message: string;
+  membershipUpdated: boolean;
+  notificationSent: boolean;
+}
+
+export function confirmPayment(body: PaymentConfirmationRequest) {
+  return postJson<PaymentConfirmationRequest, PaymentConfirmationResponse>(
+    "/payment/confirm",
+    body
+  );
+}
+
+// Cancel payment
+export interface CancelPaymentRequest {
+  paymentGateway: PaymentGateway;
+  paymentId: string;
+  orderCode: string;
+  transactionId: string;
+}
+
+export interface CancelPaymentResponse {
+  status: string;
+  gatewayName: string;
+}
+
+export function cancelPayment(body: CancelPaymentRequest) {
+  return postJson<CancelPaymentRequest, CancelPaymentResponse>(
+    "/payment/cancel",
+    body
+  );
+}
+
+// Get payment history
+export interface PaymentHistoryItem {
+  transactionId: string;
+  amount: number;
+  status: string;
+  purpose: string;
+  transactionDate: string;
+  createdAt: string;
+  transactionReference?: string;
+  paymentGateway?: {
+    gatewayId: string;
+    name: string;
+  };
+  membership?: {
+    membershipId: string;
+    startDate: string;
+    endDate?: string;
+    status: string;
+    autoRenew: boolean;
+    plan?: {
+      planId: number;
+      planName: string;
+      description: string;
+      priceMonthly: number;
+      durationMonths: number;
+    };
+    organization?: {
+      orgId: string;
+      orgName: string;
+      abbreviation: string;
+    };
+  };
+}
+
+export interface PaymentHistoryResponse {
+  payments: PaymentHistoryItem[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  hasMore: boolean;
+}
+
+export function getPaymentHistory(page = 1, pageSize = 20) {
+  return getJson<PaymentHistoryResponse>(`/payment/history?page=${page}&pageSize=${pageSize}`);
+}
+
+// ===== Story Map (Segments) =====
+export type Segment = {
+  segmentId: string;
+  mapId: string;
+  name?: string;
+  summary?: string;
+  storyContent?: string;
+  displayOrder?: number;
+  isVisible?: boolean;
+  createdBy?: string;
+  createdAt?: string; // ISO
+  updatedAt?: string; // ISO
+};
+
+export type CreateSegmentRequest = {
+  // mapId được lấy từ route
+  name: string;
+  summary?: string;
+  storyContent?: string;
+  displayOrder?: number;
+  isVisible?: boolean;
+};
+
+export type UpdateSegmentRequest = Partial<CreateSegmentRequest>;
+
+export function getSegments(mapId: string) {
+  return getJson<Segment[]>(`${STORYMAP_PREFIX}/${mapId}/segments`);
+}
+
+export function createSegment(mapId: string, body: CreateSegmentRequest) {
+  return postJson<CreateSegmentRequest, Segment>(
+    `${STORYMAP_PREFIX}/${mapId}/segments`,
+    body
+  );
+}
+
+export function updateSegment(
+  mapId: string,
+  segmentId: string,
+  body: UpdateSegmentRequest
+) {
+  return putJson<UpdateSegmentRequest, Segment>(
+    `${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}`,
+    body
+  );
+}
+
+export function deleteSegment(mapId: string, segmentId: string) {
+  return delJson<void>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}`);
+}
+
+// ===== Segment ↔ Layers =====
+export type SegmentLayer = {
+  segmentLayerId: string;
+  segmentId: string;
+  layerId: string;
+  isVisible?: boolean;
+  zIndex?: number;
+};
+
+export function getSegmentLayers(mapId: string, segmentId: string) {
+  return getJson<SegmentLayer[]>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/layers`);
+}
+
+export function attachLayerToSegment(
+  mapId: string,
+  segmentId: string,
+  payload: { layerId: string; isVisible?: boolean; zIndex?: number }
+) {
+  return postJson<typeof payload, SegmentLayer>(
+    `${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/layers`,
+    payload
+  );
+}
+
+export function updateSegmentLayer(
+  mapId: string,
+  segmentId: string,
+  layerId: string,
+  payload: { isVisible?: boolean; zIndex?: number }
+) {
+  return putJson<typeof payload, SegmentLayer>(
+    `${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/layers/${layerId}`,
+    payload
+  );
+}
+
+export function detachLayerFromSegment(mapId: string, segmentId: string, layerId: string) {
+  return delJson<void>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/layers/${layerId}`);
+}
+export type CreatePoiReq = {
+  title: string;
+  subtitle?: string;
+  locationType?: string; 
+  markerGeometry: string; 
+  storyContext?: string;
+  mediaResources?: string;
+  displayOrder?: number;
+  highlightOnEnter?: boolean;
+  shouldPin?: boolean;
+  tooltipContent?: string;
+  slideContent?: string;
+  playAudioOnClick?: boolean;
+  audioUrl?: string;
+  layerUrl?: string;
+  animationOverrides?: string;
+};
+export type UpdatePoiReq = Partial<CreatePoiReq>;
+
+export type MapPoi = {
+  poiId: string;
+  mapId: string;
+  title: string;
+  subtitle?: string;
+  markerGeometry: string;      
+  highlightOnEnter?: boolean;
+  shouldPin?: boolean;
+  displayOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type SegmentPoi = MapPoi & {
+  segmentId: string;
+};
+export function getMapPois(mapId: string) {
+  return getJson<MapPoi[]>(`${POI_PREFIX}/${mapId}`);
+}
+
+export function createMapPoi(mapId: string, body: CreatePoiReq) {
+  return postJson<CreatePoiReq, MapPoi>(`${POI_PREFIX}/${mapId}`, body);
+}
+
+export function getSegmentPois(mapId: string, segmentId: string) {
+  return getJson<SegmentPoi[]>(`${POI_PREFIX}/${mapId}/segments/${segmentId}`);
+}
+export function createSegmentPoi(mapId: string, segmentId: string, body: CreatePoiReq) {
+  return postJson<CreatePoiReq, SegmentPoi>(`${POI_PREFIX}/${mapId}/segments/${segmentId}`, body);
+}
+
+export function updatePoi(poiId: string, body: UpdatePoiReq) {
+  return putJson<UpdatePoiReq, MapPoi>(`${POI_PREFIX}/${poiId}`, body);
+}
+
+export function deletePoi(poiId: string) {
+  return delJson<void>(`${POI_PREFIX}/${poiId}`);
+}
+
+// ===== Segment Zones =====
+export type SegmentZone = {
+  segmentZoneId: string;
+  segmentId: string;
+  name?: string;
+  description?: string;
+  zoneGeometry?: string;
+  focusCameraState?: string;
+  displayOrder?: number;
+  isPrimary?: boolean;
+  isVisible?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type CreateSegmentZoneReq = {
+  name: string;
+  description?: string;
+  zoneType: "Area" | "Line" | "Point"; 
+  zoneGeometry: string; 
+  focusCameraState?: string; 
+  displayOrder?: number;
+  isPrimary?: boolean;
+};
+
+
+export type UpdateSegmentZoneReq = Partial<CreateSegmentZoneReq>;
+
+export function getSegmentZones(mapId: string, segmentId: string) {
+  return getJson<SegmentZone[]>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/zones`);
+}
+export function createSegmentZone(mapId: string, segmentId: string, body: CreateSegmentZoneReq) {
+  return postJson<CreateSegmentZoneReq, SegmentZone>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/zones`, body);
+}
+export function updateSegmentZone(mapId: string, segmentId: string, zoneId: string, body: UpdateSegmentZoneReq) {
+  return putJson<UpdateSegmentZoneReq, SegmentZone>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/zones/${zoneId}`, body);
+}
+export function deleteSegmentZone(mapId: string, segmentId: string, zoneId: string) {
+  return delJson<void>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/zones/${zoneId}`);
+}
+
+// ===== Timeline =====
+export type TimelineStep = {
+  timelineStepId: string;
+  mapId: string;
+  segmentId?: string | null;
+  title?: string;
+  description?: string;
+  order?: number;
+  viewState?: string; // JSON {"center":[lat,lng], "zoom": n}
+  mediaUrl?: string;
+};
+
+export type CreateTimelineStepReq = {
+  segmentId?: string | null;
+  title?: string;
+  description?: string;
+  order?: number;
+  viewState?: string;
+  mediaUrl?: string;
+};
+
+export type UpdateTimelineStepReq = Partial<CreateTimelineStepReq>;
+
+export function getTimeline(mapId: string) {
+  return getJson<TimelineStep[]>(`${STORYMAP_PREFIX}/${mapId}/timeline`);
+}
+export function createTimelineStep(mapId: string, body: CreateTimelineStepReq) {
+  return postJson<CreateTimelineStepReq, TimelineStep>(`${STORYMAP_PREFIX}/${mapId}/timeline`, body);
+}
+export function updateTimelineStep(mapId: string, stepId: string, body: UpdateTimelineStepReq) {
+  return putJson<UpdateTimelineStepReq, TimelineStep>(`${STORYMAP_PREFIX}/${mapId}/timeline/${stepId}`, body);
+}
+export function deleteTimelineStep(mapId: string, stepId: string) {
+  return delJson<void>(`${STORYMAP_PREFIX}/${mapId}/timeline/${stepId}`);
+}
+
+// ===== Zone Analytics =====
+export type ZoneAnalyticsRequest = Record<string, unknown>;
+export type ZoneAnalyticsResponse = Record<string, unknown>; 
+
+export function getZoneAnalytics(mapId: string, body: ZoneAnalyticsRequest) {
+  return postJson<ZoneAnalyticsRequest, ZoneAnalyticsResponse>(
+    `${STORYMAP_PREFIX}/${mapId}/analytics/zones`,
+    body
+  );
+}
+

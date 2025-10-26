@@ -12,7 +12,7 @@ type Sample = {
   author: string;
   lastViewed: string;
   blurb: string;
-  templateId?: string; 
+  templateId?: string;
   preset?: {
     name: string;
     description?: string;
@@ -124,7 +124,11 @@ export default function SamplesPage() {
     setBusy(s.key);
     try {
       if (s.templateId) {
-        const res = await createMapFromTemplate({ templateId: s.templateId });
+        const res = await createMapFromTemplate({
+          templateId: s.templateId,
+          customName: s.title?.trim() || "Bản đồ mới từ template",
+        });
+
         router.push(`/maps/${res.mapId}`);
       } else if (s.preset) {
         const presetData = convertPresetToNewFormat(s.preset);
