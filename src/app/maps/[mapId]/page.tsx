@@ -3,18 +3,23 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
+import type { TileLayer, LatLngTuple, FeatureGroup } from "leaflet";
+import type L from "leaflet";
 import type {
-  Map as LMap,
-  TileLayer,
-  LatLngTuple,
+  BaseKey,
+  LMap,
+  LNS,
   Layer,
-  FeatureGroup,
-  LatLng,
-  LatLngBounds,
   LeafletMouseEvent,
-  LatLngExpression,
-} from "leaflet";
-
+  LeafletMapClickEvent,
+  MapWithPM,
+  PMCreateEvent,
+  GeoJSONLayer,
+  LayerStyle,
+  PathLayer,
+  GeomanLayer,
+  ToolName,
+} from "@/types";
 import {
   getMapDetail,
   type MapDetail,
@@ -22,156 +27,26 @@ import {
   type UpdateMapRequest,
   type RawLayer,
   type UpdateMapFeatureRequest,
-  getSegments,
-  createSegment,
-  updateSegment,
-  deleteSegment,
-  getSegmentZones,
-  createSegmentZone,
-  updateSegmentZone,
-  deleteSegmentZone,
-  getSegmentLayers,
-  attachLayerToSegment,
-  detachLayerFromSegment,
-  type Segment,
-  type SegmentZone,
-  type SegmentLayer,
-  createSegmentPoi,
+  uploadGeoJsonToMap,
 } from "@/lib/api";
-import type * as L from "leaflet";
-import type { GeoJsonObject as GJObject, Feature as GJFeature, Geometry as GJGeometry } from "geojson";
-
-import {
+import { 
   type FeatureData,
-  getFeatureType as getFeatureTypeUtil,
   serializeFeature,
   extractLayerStyle,
+  handleLayerVisibilityChange,
+  handleFeatureVisibilityChange,
+  getFeatureType as getFeatureTypeUtil,
   saveFeature,
   updateFeatureInDB,
   deleteFeatureFromDB,
   loadFeaturesToMap,
   loadLayerToMap,
-  handleLayerVisibilityChange,
-  handleFeatureVisibilityChange,
-  handleUpdateLayerStyle,
-  handleUpdateFeatureStyle,
-  getStylePreset,
-  createCustomStyle,
-  applyStyleToFeature,
-  applyStyleToDataLayer,
+  type ExtendedLayer,
 } from "@/utils/mapUtils";
-
 import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
-import dynamic from "next/dynamic";
-import { createMapPoi } from "@/lib/api";
-import PoiDialog, { type PoiForm } from "@/components/poi/PoiDialog";
+import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
 
-const SegmentPanel = dynamic(() => import("@/components/storymap/SegmentPanel"), { ssr: false });
-const MapPoiPanel = dynamic(() => import("@/components/poi/PoiPanel"), { ssr: false });
-import CreateZoneDialog, { type ZoneDraft } from "@/components/storymap/CreateZoneDialog";
 
-type BaseKey = "osm" | "sat" | "dark";
-
-type MapWithPM = LMap & {
-  pm: {
-    addControls: (opts: {
-      position?: string;
-      drawMarker?: boolean;
-      drawPolyline?: boolean;
-      drawRectangle?: boolean;
-      drawPolygon?: boolean;
-      drawCircle?: boolean;
-      drawCircleMarker?: boolean;
-      drawText?: boolean;
-      editMode?: boolean;
-      dragMode?: boolean;
-      cutPolygon?: boolean;
-      removalMode?: boolean;
-      rotateMode?: boolean;
-    }) => void;
-    enableDraw: (
-      shape:
-        | "Marker"
-        | "Line"
-        | "Polygon"
-        | "Rectangle"
-        | "Circle"
-        | "CircleMarker"
-        | "Text",
-      options?: {
-        snappable?: boolean;
-        snapDistance?: number;
-        finishOn?: string;
-        cursorMarker?: boolean;
-      }
-    ) => void;
-    toggleGlobalEditMode: () => void;
-    toggleGlobalRemovalMode: () => void;
-    toggleGlobalDragMode: () => void;
-    enableGlobalCutMode: () => void;
-    toggleGlobalRotateMode?: () => void;
-    disableDraw?: (shape?: string) => void;
-  };
-};
-
-type ToolName =
-  | "Marker"
-  | "Line"
-  | "Polygon"
-  | "Rectangle"
-  | "Circle"
-  | "CircleMarker"
-  | "Text"
-  | "Route"
-  | null;
-
-type PMCreateEvent = { layer: Layer };
-
-function normalizeToolName(name?: string | null): ToolName {
-  if (!name) return null;
-  const n = name.trim().toLowerCase();
-  if (n === "pin" || n === "marker") return "Marker";
-  if (n === "line") return "Line";
-  if (n === "route") return "Route";
-  if (n === "polygon") return "Polygon";
-  if (n === "circle") return "Circle";
-  if (n === "text") return "Text";
-  return null;
-}
-
-interface GeoJSONLayer extends Layer {
-  feature?: {
-    type?: string;
-    properties?: Record<string, unknown>;
-    geometry?: {
-      type?: string;
-      coordinates?: unknown;
-    };
-  };
-}
-interface ExtendedLayer extends GeoJSONLayer {
-  _mRadius?: number;
-  _latlng?: LatLng;
-  _latlngs?: LatLng[] | LatLng[][] | LatLng[][][];
-  _bounds?: LatLngBounds;
-}
-
-type LayerWithToGeoJSON = Layer & { toGeoJSON: () => GJFeature | GJGeometry | GJObject };
-function hasToGeoJSON(x: Layer | null | undefined): x is LayerWithToGeoJSON {
-  return !!x && typeof (x as unknown as { toGeoJSON?: unknown }).toGeoJSON === "function";
-}
-
-type SafeSegmentZone = Omit<SegmentZone, "geometry" | "properties"> & {
-  geometry?: GJObject;
-  properties?: Record<string, unknown>;
-};
-
-const VN_CENTER: LatLngTuple = [14.058324, 108.277199];
-const VN_ZOOM = 6;
-interface ParsedViewState {
-  center: [number, number];
-  zoom: number;
-}
 
 export default function EditMapPage() {
   const params = useParams<{ mapId: string }>();
@@ -191,122 +66,211 @@ export default function EditMapPage() {
   const [baseKey, setBaseKey] = useState<BaseKey>("osm");
   const [showStylePanel, setShowStylePanel] = useState(false);
   const [showDataLayersPanel, setShowDataLayersPanel] = useState(true);
-
-  const [poiDialogOpen, setPoiDialogOpen] = useState(false);
-  const [poiForm, setPoiForm] = useState<PoiForm>({
-    title: "",
-    subtitle: "",
-    markerGeometry: null,
-    highlightOnEnter: false,
-    shouldPin: false,
-  });
-  const poiFocusLayerRef = useRef<L.LayerGroup | null>(null);
-  const [creatingForSegmentId, setCreatingForSegmentId] = useState<string | null>(null);
-
   const [features, setFeatures] = useState<FeatureData[]>([]);
   const [selectedLayer, setSelectedLayer] = useState<FeatureData | RawLayer | null>(null);
   const [layers, setLayers] = useState<RawLayer[]>([]);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({});
-  const [featureVisibility, setFeatureVisibility] = useState<Record<string, boolean>>({});
+  const [featureVisibility, setFeatureVisibility] = useState<Record<string, boolean>>({})
+  
+  // New state for multi-selection and hover interaction
+  const [currentLayer, setCurrentLayer] = useState<Layer | null>(null);
+  const [selectedLayers, setSelectedLayers] = useState<Set<Layer>>(new Set());
+  const [hoveredLayer, setHoveredLayer] = useState<Layer | null>(null);
 
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapWithPM | null>(null);
   const baseRef = useRef<TileLayer | null>(null);
   const sketchRef = useRef<FeatureGroup | null>(null);
-  const addingSegmentPoiRef = useRef<{ mapId: string; segmentId: string } | null>(null);
-
   const dataLayerRefs = useRef<Map<string, L.Layer>>(new Map());
+  const originalStylesRef = useRef<Map<Layer, LayerStyle>>(new Map());
 
-  const lastDrawnLayerRef = useRef<Layer | null>(null);
 
-  const [toolsLoading, setToolsLoading] = useState(true);
-  const [allowed, setAllowed] = useState<Set<string>>(new Set());
+  // Helper: Store original style
+  const storeOriginalStyle = useCallback((layer: Layer) => {
+    if (originalStylesRef.current.has(layer)) return;
+    
+    const style: LayerStyle = {};
+    if ('setStyle' in layer && typeof layer.setStyle === 'function') {
+      const pathLayer = layer as unknown as PathLayer;
+      const options = pathLayer.options || {};
+      style.color = options.color || '#3388ff';
+      style.weight = options.weight || 3;
+      style.opacity = options.opacity || 1.0;
+      style.fillColor = options.fillColor || options.color || '#3388ff';
+      style.fillOpacity = options.fillOpacity || 0.2;
+      style.dashArray = options.dashArray || '';
+    }
+    originalStylesRef.current.set(layer, style);
+  }, []);
 
-  const [segments, setSegments] = useState<Segment[]>([]);
-  const [segmentsLoading, setSegmentsLoading] = useState(false);
-  const [zones, setZones] = useState<SafeSegmentZone[]>([]);
-  const [zonesLoading, setZonesLoading] = useState(false);
-  const [selectedSegmentId, setSelectedSegmentId] = useState<string | null>(null);
-  const [showZonesPanel, setShowZonesPanel] = useState<boolean>(false);
-  const [showMapPoiPanel, setShowMapPoiPanel] = useState(false);
-  const [showSegmentPanel, setShowSegmentPanel] = useState<boolean>(true);
+  // Helper: Apply hover highlight
+  const applyHoverStyle = useCallback((layer: Layer) => {
+    if ('setStyle' in layer && typeof layer.setStyle === 'function') {
+      (layer as unknown as PathLayer).setStyle({
+        weight: 5,
+        dashArray: '',
+        fillOpacity: 0.6
+      });
+      
+      // Bring to front
+      const pathLayer = layer as unknown as PathLayer;
+      if ('bringToFront' in layer && pathLayer.bringToFront) {
+        pathLayer.bringToFront();
+      }
+    }
+  }, []);
 
-  const [segmentLayers, setSegmentLayers] = useState<SegmentLayer[]>([]);
-  const [zoneDialogOpen, setZoneDialogOpen] = useState(false);
-  const [zoneDraft, setZoneDraft] = useState<ZoneDraft | null>(null);
+  // Helper: Reset to original style
+  const resetToOriginalStyle = useCallback((layer: Layer) => {
+    // Skip Markers - they don't use path styles and should keep their icon
+    // Check if it's a Marker by checking for the marker-specific methods
+    if ('getIcon' in layer && 'setIcon' in layer) {
+      // It's a Marker, don't reset style
+      return;
+    }
+    
+    const originalStyle = originalStylesRef.current.get(layer);
+    
+    // For PathLayers (Polygon, Line, Circle, etc.)
+    if (originalStyle && 'setStyle' in layer && typeof layer.setStyle === 'function') {
+      (layer as unknown as PathLayer).setStyle(originalStyle);
+    }
+  }, []);
 
-  const [zoneMenuVisible, setZoneMenuVisible] = useState(false);
-  const [zoneMenuPos, setZoneMenuPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [zoneMenuLayer, setZoneMenuLayer] = useState<LayerWithToGeoJSON | null>(null);
-  const [zoneMenuName, setZoneMenuName] = useState<string>("New Zone");
-  const [zoneMenuDesc, setZoneMenuDesc] = useState<string>("");
-  const [zoneMenuType, setZoneMenuType] = useState<"Area" | "Line" | "Point">("Area");
-  const [zoneMenuSegmentId, setZoneMenuSegmentId] = useState<string | null>(null);
+  // Helper: Apply selection style
+  const applySelectionStyle = useCallback((layer: Layer) => {
+    if ('setStyle' in layer && typeof layer.setStyle === 'function') {
+      (layer as unknown as PathLayer).setStyle({
+        color: '#ff6600',
+        weight: 4,
+        fillOpacity: 0.5
+      });
+    }
+  }, []);
 
-  const attachContextMenuToLayer = useCallback((layer: Layer) => {
-    layer.on("contextmenu", (ev: LeafletMouseEvent) => {
-      if (!hasToGeoJSON(layer)) return;
-      const gj = layer.toGeoJSON();
-      const geometry: GJObject | null =
-        (gj as GJFeature).type === "Feature"
-          ? (((gj as GJFeature).geometry ?? null) as unknown as GJObject)
-          : ((gj as unknown) as GJObject);
-      if (!geometry) return;
-      const t = geometry.type;
-      const zt: "Area" | "Line" | "Point" =
-        t === "Polygon" || t === "MultiPolygon"
-          ? "Area"
-          : t === "LineString" || t === "MultiLineString"
-            ? "Line"
-            : "Point";
-      const defName = zt === "Area" ? "Vùng mới" : zt === "Line" ? "Tuyến mới" : "Điểm mới";
-      const segId =
-        selectedSegmentId ||
-        (segments[0]
-          ? ((segments[0] as Segment & { segmentId?: string; id?: string }).segmentId ?? (segments[0] as Segment & { id?: string }).id ?? null)
-          : null);
-      setZoneMenuSegmentId(segId);
-      setZoneMenuName(defName);
-      setZoneMenuType(zt);
-      setZoneMenuLayer(layer as LayerWithToGeoJSON);
-      setZoneMenuPos({ x: ev.originalEvent.clientX, y: ev.originalEvent.clientY });
-      setZoneMenuVisible(true);
-    });
-  }, [segments, selectedSegmentId]);
+  // Helper: Apply multi-selection style
+  const applyMultiSelectionStyle = useCallback((layer: Layer) => {
+    if ('setStyle' in layer && typeof layer.setStyle === 'function') {
+      (layer as unknown as PathLayer).setStyle({
+        color: '#ff0000',
+        weight: 4,
+        fillOpacity: 0.5
+      });
+    }
+  }, []);
+
+  // Handle layer click (single or multi-select)
+  const handleLayerClick = useCallback((layer: Layer, isShiftKey: boolean) => {
+    if (isShiftKey) {
+      // Multi-select mode
+      const newSelected = new Set(selectedLayers);
+      if (newSelected.has(layer)) {
+        newSelected.delete(layer);
+        resetToOriginalStyle(layer);
+      } else {
+        newSelected.add(layer);
+        applyMultiSelectionStyle(layer);
+      }
+      setSelectedLayers(newSelected);
+      
+      // Update currentLayer to the last selected
+      if (newSelected.size > 0) {
+        setCurrentLayer(layer);
+      } else {
+        setCurrentLayer(null);
+      }
+    } else {
+      // Single select mode - clear previous selections
+      selectedLayers.forEach(l => {
+        if (l !== layer) {
+          resetToOriginalStyle(l);
+        }
+      });
+      
+      setSelectedLayers(new Set([layer]));
+      setCurrentLayer(layer);
+      applySelectionStyle(layer);
+      
+      // Show style panel and find corresponding feature/layer data
+      const feature = features.find(f => f.layer === layer);
+      if (feature) {
+        setSelectedLayer(feature);
+        setShowStylePanel(true);
+      }
+    }
+  }, [selectedLayers, features, resetToOriginalStyle, applySelectionStyle, applyMultiSelectionStyle]);
+
+  // Handle layer hover
+  const handleLayerHover = useCallback((layer: Layer | null, isEntering: boolean) => {
+    if (!layer) return;
+    
+    if (isEntering) {
+      // Don't apply hover style if already selected
+      if (!selectedLayers.has(layer)) {
+        storeOriginalStyle(layer);
+        applyHoverStyle(layer);
+      }
+      setHoveredLayer(layer);
+    } else {
+      if (!selectedLayers.has(layer)) {
+        resetToOriginalStyle(layer);
+      }
+      setHoveredLayer(null);
+    }
+  }, [selectedLayers, storeOriginalStyle, applyHoverStyle, resetToOriginalStyle]);
+
+  const handleLayerDelete = useCallback((layer: Layer) => {
+    if (currentLayer === layer) {
+      setCurrentLayer(null);
+      setSelectedLayer(null);
+      setShowStylePanel(false);
+    }
+    
+    const newSelected = new Set(selectedLayers);
+    newSelected.delete(layer);
+    setSelectedLayers(newSelected);
+    
+    // Clear from refs
+    originalStylesRef.current.delete(layer);
+  }, [currentLayer, selectedLayers]);
+
+  // Reset all selections (for base layer clicks)
+  const resetAllSelections = useCallback(() => {
+    selectedLayers.forEach(layer => resetToOriginalStyle(layer));
+    setSelectedLayers(new Set());
+    setCurrentLayer(null);
+    setSelectedLayer(null);
+    setShowStylePanel(false);
+  }, [selectedLayers, resetToOriginalStyle]);
 
   const applyBaseLayer = useCallback((key: BaseKey) => {
-    const map = mapRef.current;
-    if (!map) return;
+    if (!mapRef.current) return;
     if (baseRef.current) {
       try {
-        map.removeLayer(baseRef.current);
-      } catch { }
-      baseRef.current = null;
+        mapRef.current.removeLayer(baseRef.current);
+        baseRef.current = null;
+      } catch (error) {
+        console.warn("Failed to remove existing baseLayer:", error);
+        baseRef.current = null;
+      }
     }
     let cancelled = false;
     (async () => {
       try {
-        const Llib = (await import("leaflet")).default;
+        const L = (await import("leaflet")).default;
+        if (cancelled) return;
         let layer: TileLayer;
         if (key === "sat") {
-          layer = Llib.tileLayer(
-            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-            { maxZoom: 20, attribution: "Tiles © Esri" }
-          );
+          layer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 20, attribution: "Tiles © Esri" });
         } else if (key === "dark") {
-          layer = Llib.tileLayer(
-            "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-            { maxZoom: 20, attribution: "© OpenStreetMap contributors © CARTO" }
-          );
+          layer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 20, attribution: "© OpenStreetMap contributors © CARTO" });
         } else {
-          layer = Llib.tileLayer(
-            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-            { maxZoom: 20, attribution: "© OpenStreetMap contributors" }
-          );
+          layer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 20, attribution: "© OpenStreetMap contributors" });
         }
-        if (cancelled) return;
-        layer.addTo(map);
-        baseRef.current = layer;
+        if (!cancelled && mapRef.current) {
+          layer.addTo(mapRef.current as any);
+          baseRef.current = layer;
+        }
       } catch (error) {
         console.error("Failed to apply baseLayer:", error);
       }
@@ -314,7 +278,7 @@ export default function EditMapPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, []); // Empty deps - only depends on baseKey via useEffect
 
   useEffect(() => {
     if (!mapId) return;
@@ -340,51 +304,45 @@ export default function EditMapPage() {
     };
   }, [mapId]);
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        setToolsLoading(true);
-        const list = await getActiveUserAccessTools();
-        const names = new Set<string>();
-        (list ?? []).forEach((t: UserAccessTool) => {
-          const key = normalizeToolName(t.name);
-          if (key) names.add(key);
-        });
-        if (alive) setAllowed(names);
-      } catch {
-        if (alive) setAllowed(new Set());
-      } finally {
-        if (alive) setToolsLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const onStartAddSegmentPoi = (e: Event) => {
-      if (!mapRef.current) return;
-      const ev = e as CustomEvent<{ mapId: string; segmentId: string }>;
-      addingSegmentPoiRef.current = { mapId: ev.detail.mapId, segmentId: ev.detail.segmentId };
-      mapRef.current.pm.disableDraw?.();
-      mapRef.current.pm.enableDraw("Marker", { cursorMarker: true });
-      mapRef.current.getContainer().style.cursor = "crosshair";
-    };
-
-    window.addEventListener("poi:startAddSegmentPoi", onStartAddSegmentPoi as EventListener);
-    return () => window.removeEventListener("poi:startAddSegmentPoi", onStartAddSegmentPoi as EventListener);
-  }, []);
 
   useEffect(() => {
     if (!detail || !mapEl.current || mapRef.current) return;
     let alive = true;
     const el = mapEl.current;
     (async () => {
-      const Llib = (await import("leaflet")).default;
+      const L = (await import("leaflet")).default;
       await import("@geoman-io/leaflet-geoman-free");
+      
+      // Get custom icons
+      const customDefaultIcon = await getCustomDefaultIcon();
+      const customMarkerIcon = await getCustomMarkerIcon();
+      
+      if (customDefaultIcon) {
+        // Override icon mặc định bằng cách tạo constructor mới
+        (L.Icon.Default as any) = L.Icon.extend({
+          options: {
+            iconSize: [12, 12],
+            iconAnchor: [6, 6],
+            popupAnchor: [0, -6],
+            shadowSize: [0, 0],
+            shadowAnchor: [0, 0]
+          },
+          _getIconUrl: function() {
+            return '';
+          },
+          createIcon: function() {
+            return customDefaultIcon.createIcon();
+          },
+          createShadow: function() {
+            return null;
+          }
+        });
+      }
+      
       if (!alive || !el) return;
+
+      const VN_CENTER: LatLngTuple = [14.058324, 108.277199];
+      const VN_ZOOM = 6;
 
       const createdFlag = sp?.get("created") === "1";
       const rawLat = Number(detail.initialLatitude ?? 0);
@@ -397,108 +355,148 @@ export default function EditMapPage() {
       const initialCenter: LatLngTuple = useVN ? VN_CENTER : [rawLat, rawLng];
       const initialZoom = useVN ? VN_ZOOM : Math.min(Math.max(rawZoom || VN_ZOOM, 3), 12);
 
-      const map = Llib.map(el, {
-        zoomControl: false,
-        minZoom: 2,
-        maxZoom: 20,
-      }).setView(initialCenter, initialZoom) as MapWithPM;
-
+      const map = L.map(el, { zoomControl: false, minZoom: 2, maxZoom: 20 }).setView(initialCenter, initialZoom) as MapWithPM;
       mapRef.current = map;
       if (!alive) return;
       setIsMapReady(true);
-      poiFocusLayerRef.current = Llib.layerGroup().addTo(map);
 
-      applyBaseLayer(
-        detail.baseMapProvider === "Satellite" ? "sat" :
-          detail.baseMapProvider === "Dark" ? "dark" : "osm"
-      );
+      applyBaseLayer(detail.baseMapProvider === "Satellite" ? "sat" : detail.baseMapProvider === "Dark" ? "dark" : "osm");
 
-      const sketch = Llib.featureGroup().addTo(map);
+      const sketch = L.featureGroup().addTo(map as any);
       sketchRef.current = sketch;
 
       try {
-        const dbFeatures = await loadFeaturesToMap(detail.id, Llib, sketch);
-        dbFeatures.forEach((f) => {
-          if (f.layer) attachContextMenuToLayer(f.layer);
+        const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
+        
+        // Attach event listeners to loaded features
+        dbFeatures.forEach(feature => {
+          if (feature.layer) {
+            // Store original style
+            storeOriginalStyle(feature.layer);
+            
+            // Attach hover and click event listeners
+            feature.layer.on('mouseover', () => handleLayerHover(feature.layer, true));
+            feature.layer.on('mouseout', () => handleLayerHover(feature.layer, false));
+            feature.layer.on('click', (event: LeafletMouseEvent) => {
+              // Stop propagation to prevent base layer click from firing
+              if (event.originalEvent) {
+                event.originalEvent.stopPropagation();
+              }
+              handleLayerClick(feature.layer, event.originalEvent.shiftKey);
+            });
+            
+            // Attach edit/drag/rotate event listeners for database updates
+            feature.layer.on('pm:edit', async () => {
+              if (feature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, feature.featureId, feature);
+                } catch (error) {
+                  console.error("Error updating feature after edit:", error);
+                }
+              }
+            });
+            
+            feature.layer.on('pm:dragend', async () => {
+              if (feature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, feature.featureId, feature);
+                } catch (error) {
+                  console.error("Error updating feature after drag:", error);
+                }
+              }
+              resetToOriginalStyle(feature.layer);
+            });
+            
+            feature.layer.on('pm:rotateend', async () => {
+              if (feature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, feature.featureId, feature);
+                } catch (error) {
+                  console.error("Error updating feature after rotation:", error);
+                }
+              }
+            });
+            
+            // Enable dragging and editing via Geoman
+            if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
+              (feature.layer as GeomanLayer).pm.enable({
+                draggable: true,
+                allowEditing: true,
+                allowSelfIntersection: true,
+              });
+            }
+          }
         });
+        
         setFeatures(dbFeatures);
         const initialFeatureVisibility: Record<string, boolean> = {};
-        dbFeatures.forEach((f) => {
-          initialFeatureVisibility[f.id] = f.isVisible ?? true;
+        dbFeatures.forEach(feature => {
+          initialFeatureVisibility[feature.id] = feature.isVisible ?? true;
         });
         setFeatureVisibility(initialFeatureVisibility);
-      } catch (error) {
+        } catch (error) {
         console.error("Failed to load from database:", error);
       }
 
-      map.pm.addControls({
-        drawMarker: false,
-        drawPolyline: false,
-        drawRectangle: false,
-        drawPolygon: false,
-        drawCircle: false,
-        drawCircleMarker: false,
-        drawText: false,
-        editMode: false,
-        dragMode: false,
-        cutPolygon: false,
-        rotateMode: false,
-        removalMode: false,
-      });
+      // Check if PM is available on map before using it
+      if (map.pm) {
+        map.pm.addControls({
+          drawMarker: false,
+          drawPolyline: false,
+          drawRectangle: false,
+          drawPolygon: false,
+          drawCircle: false,
+          drawCircleMarker: false,
+          drawText: false,
+          editMode: false,
+          dragMode: false,
+          cutPolygon: false,
+          rotateMode: false,
+          removalMode: false,
+        });
+
+        // Set global options (thêm tooltips: false nếu chưa)
+        map.pm.setGlobalOptions({
+          limitMarkersToCount: 20,
+          allowSelfIntersection: true,
+          finishOn: "contextmenu",  // Sử dụng click chuột phải để hoàn thành polygon
+          snappable: true,
+          snapDistance: 20,
+          hideMiddleMarkers: true,
+          cursorMarker: false,  // Tắt cursor marker hoàn toàn
+          tooltips: false       // Tắt tooltip nếu chưa có
+        });
+      }
 
       map.on("pm:create", async (e: PMCreateEvent) => {
         const extLayer = e.layer as ExtendedLayer;
+        sketch.addLayer(e.layer);
+        
+        // Áp dụng custom marker icon cho markers (giờ an toàn hơn)
+        if (extLayer instanceof L.Marker && customMarkerIcon) {
+          extLayer.setIcon(customMarkerIcon);
+        }
+        
+        // Store original style
+        storeOriginalStyle(e.layer);
+        
+        // Attach hover and click event listeners
+        e.layer.on('mouseover', () => handleLayerHover(e.layer, true));
+        e.layer.on('mouseout', () => handleLayerHover(e.layer, false));
+        e.layer.on('click', (event: LeafletMouseEvent) => {
+          // Stop propagation to prevent base layer click from firing
+          if (event.originalEvent) {
+            event.originalEvent.stopPropagation();
+          }
+          handleLayerClick(e.layer, event.originalEvent.shiftKey);
+        });
+        
         const type = getFeatureTypeUtil(extLayer);
-
-        if (addingSegmentPoiRef.current && type === "Marker" && hasToGeoJSON(extLayer)) {
-          const ll = (extLayer as unknown as { getLatLng(): LatLng }).getLatLng();
-          const geometry: GJObject = { type: "Point", coordinates: [ll.lng, ll.lat] };
-
-          window.dispatchEvent(
-            new CustomEvent("poi:pointSelectedForSegment", {
-              detail: { lngLat: [ll.lng, ll.lat] as [number, number], geojson: geometry },
-            })
-          );
-
-          addingSegmentPoiRef.current = null;
-
-          const m = mapRef.current;
-          if (m) {
-            m.pm?.disableDraw?.();
-            m.dragging?.enable?.();
-            m.scrollWheelZoom?.enable?.();
-            m.getContainer().style.cursor = "";
-          }
-
-          try { (extLayer as L.Layer).remove?.(); } catch { }
-          return;
-
-        }
-
-        sketch.addLayer(extLayer);
-        attachContextMenuToLayer(extLayer);
-        lastDrawnLayerRef.current = extLayer;
-
-        if (type === "Marker" && hasToGeoJSON(extLayer)) {
-          const gj = extLayer.toGeoJSON();
-          const geometry =
-            (gj as GJFeature).type === "Feature"
-              ? ((gj as GJFeature).geometry ?? null)
-              : (gj as GJObject);
-          if (geometry) {
-            setPoiForm({
-              title: "",
-              subtitle: "",
-              markerGeometry: geometry,
-              highlightOnEnter: false,
-              shouldPin: false,
-            });
-            setPoiDialogOpen(true);
-            return;
-          }
-        }
-
-        const localId = `feature-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        const serialized = serializeFeature(extLayer);
+        const { geometryType, coordinates, text, annotationType } = serialized;
+        const layerStyle = extractLayerStyle(extLayer);
+        
+        const localId = `feature-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         const newFeature: FeatureData = {
           id: localId,
           name: `${type} ${features.length + 1}`,
@@ -506,81 +504,186 @@ export default function EditMapPage() {
           layer: extLayer,
           isVisible: true,
         };
-
+        
+        
+        // Save to database
         try {
-          const saved = await saveFeature(detail.id, "", extLayer, features, setFeatures);
-          if (saved) {
-            setFeatures((prev) => [...prev, saved]);
-            setFeatureVisibility((prev) => ({ ...prev, [saved.id]: true }));
+          const savedFeature = await saveFeature(detail.id, "", extLayer, features, setFeatures);
+          if (savedFeature) {
+            // Attach edit/drag/rotate event listeners with the saved featureId
+            e.layer.on('pm:edit', async () => {
+              if (savedFeature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
+                } catch (error) {
+                  console.error("Error updating feature after edit:", error);
+                }
+              }
+            });
+            
+            e.layer.on('pm:dragend', async () => {
+              if (savedFeature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
+                } catch (error) {
+                  console.error("Error updating feature after drag:", error);
+                }
+              }
+              resetToOriginalStyle(e.layer);
+            });
+            
+            e.layer.on('pm:rotateend', async () => {
+              if (savedFeature.featureId) {
+                try {
+                  await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
+                } catch (error) {
+                  console.error("Error updating feature after rotation:", error);
+                }
+              }
+            });
+            
+            setFeatures(prev => [...prev, savedFeature]);
+            setFeatureVisibility(prev => ({
+              ...prev,
+              [savedFeature.id]: true
+            }));
           } else {
-            setFeatures((prev) => [...prev, newFeature]);
-            setFeatureVisibility((prev) => ({ ...prev, [newFeature.id]: true }));
+            setFeatures(prev => [...prev, newFeature]);
+            setFeatureVisibility(prev => ({
+              ...prev,
+              [newFeature.id]: true
+            }));
           }
         } catch (error) {
           console.error("Error saving to database:", error);
-          setFeatures((prev) => [...prev, newFeature]);
-          setFeatureVisibility((prev) => ({ ...prev, [newFeature.id]: true }));
+          setFeatures(prev => [...prev, newFeature]);
+          setFeatureVisibility(prev => ({
+            ...prev,
+            [newFeature.id]: true
+          }));
+        }
+        
+        // Enable dragging and editing via Geoman
+        if ('pm' in e.layer && e.layer.pm) {
+          (e.layer as GeomanLayer).pm.enable({
+            draggable: true,
+            allowEditing: true,
+            allowSelfIntersection: true,
+          });
         }
       });
 
+
       sketch.on("pm:edit", async (e: { layer: Layer; shape: string }) => {
         const extLayer = e.layer as ExtendedLayer;
-        const editedFeature = features.find((f) => f.layer === extLayer);
+        
+        const editedFeature = features.find(f => f.layer === extLayer);
         if (editedFeature && editedFeature.featureId) {
           try {
             await updateFeatureInDB(detail.id, editedFeature.featureId, editedFeature);
-            setFeatures((prev) =>
-              prev.map((f) =>
-                f.id === editedFeature.id || f.featureId === editedFeature.featureId
-                  ? { ...f, layer: extLayer }
-                  : f
-              )
-            );
+            
+            const serialized = serializeFeature(extLayer);
+            const { geometryType, coordinates, text } = serialized;
+            const layerStyle = extractLayerStyle(extLayer);
+                
+            setFeatures(prev => prev.map(f => 
+              f.id === editedFeature.id || f.featureId === editedFeature.featureId
+                ? { ...f, layer: extLayer }
+                : f
+            ));
           } catch (error) {
             console.error("Error updating feature:", error);
           }
         }
       });
-    })();
 
+      sketch.on("pm:dragend", async (e: { layer: Layer; shape: string }) => {
+        const extLayer = e.layer as ExtendedLayer;
+        
+        const draggedFeature = features.find(f => f.layer === extLayer);
+        if (draggedFeature && draggedFeature.featureId) {
+          try {
+            await updateFeatureInDB(detail.id, draggedFeature.featureId, draggedFeature);
+            
+            setFeatures(prev => prev.map(f => 
+              f.id === draggedFeature.id || f.featureId === draggedFeature.featureId
+                ? { ...f, layer: extLayer }
+                : f
+            ));
+          } catch (error) {
+            console.error("Error updating feature after drag:", error);
+          }
+        }
+        resetToOriginalStyle(e.layer);
+      });
+
+      sketch.on("pm:rotateend", async (e: { layer: Layer }) => {
+        const extLayer = e.layer as ExtendedLayer;
+        
+        const rotatedFeature = features.find(f => f.layer === extLayer);
+        if (rotatedFeature && rotatedFeature.featureId) {
+          try {
+            await updateFeatureInDB(detail.id, rotatedFeature.featureId, rotatedFeature);
+            
+            setFeatures(prev => prev.map(f => 
+              f.id === rotatedFeature.id || f.featureId === rotatedFeature.featureId
+                ? { ...f, layer: extLayer }
+                : f
+            ));
+          } catch (error) {
+            console.error("Error updating feature after rotation:", error);
+          }
+        }
+      });
+
+    })();
     return () => {
       alive = false;
-      try {
-        mapRef.current?.remove();
-      } catch { }
-      baseRef.current = null;
-      sketchRef.current = null;
-      mapRef.current = null;
+      mapRef.current?.remove();
+      setIsMapReady(false);
     };
-  }, [detail, applyBaseLayer, sp, features.length, attachContextMenuToLayer]);
+  }, [detail?.id, applyBaseLayer, sp]);
 
   useEffect(() => {
     if (!mapRef.current || !detail?.layers || detail.layers.length === 0 || !isMapReady) return;
     const map = mapRef.current;
+    
     let alive = true;
+    
     (async () => {
-      setLayers(detail.layers);
+      setLayers((detail.layers));
+      
       dataLayerRefs.current.forEach((layer) => {
-        if (map.hasLayer(layer)) map.removeLayer(layer);
+        if (map.hasLayer(layer)) {
+          map.removeLayer(layer);
+        }
       });
       dataLayerRefs.current.clear();
+      
       const initialLayerVisibility: Record<string, boolean> = {};
+      
       for (const layer of detail.layers) {
         if (!alive) break;
-        const vis = layer.isVisible ?? true;
-        initialLayerVisibility[layer.id] = vis;
+        const isVisible = layer.isVisible ?? true;
+        initialLayerVisibility[layer.id] = isVisible;
+        
         try {
-          const loaded = await loadLayerToMap(map, layer, dataLayerRefs);
-          if (loaded && !vis) {
-            const leaf = dataLayerRefs.current.get(layer.id);
-            if (leaf && map.hasLayer(leaf)) map.removeLayer(leaf);
+          const loaded = await loadLayerToMap(map as any, layer, dataLayerRefs);
+          if (loaded && !isVisible) {
+            const leafletLayer = dataLayerRefs.current.get(layer.id);
+            if (leafletLayer && map.hasLayer(leafletLayer)) {
+              map.removeLayer(leafletLayer);
+            }
           }
         } catch (error) {
           console.error(`Error loading layer ${layer.name}:`, error);
         }
+        
       }
+      
       if (alive) setLayerVisibility(initialLayerVisibility);
     })();
+    
     return () => {
       alive = false;
     };
@@ -588,23 +691,35 @@ export default function EditMapPage() {
 
   useEffect(() => {
     if (!mapRef.current) return;
+    
     Object.entries(layerVisibility).forEach(([layerId, isVisible]) => {
       const layerOnMap = dataLayerRefs.current.get(layerId);
       if (!layerOnMap) return;
+      
       const isOnMap = mapRef.current!.hasLayer(layerOnMap);
-      if (isVisible && !isOnMap) mapRef.current!.addLayer(layerOnMap);
-      else if (!isVisible && isOnMap) mapRef.current!.removeLayer(layerOnMap);
+      
+      if (isVisible && !isOnMap) {
+        mapRef.current!.addLayer(layerOnMap);
+      } else if (!isVisible && isOnMap) {
+        mapRef.current!.removeLayer(layerOnMap);
+      }
     });
   }, [layerVisibility]);
 
   useEffect(() => {
     if (!mapRef.current || !sketchRef.current) return;
+    
     Object.entries(featureVisibility).forEach(([featureId, isVisible]) => {
-      const feature = features.find((f) => f.id === featureId || f.featureId === featureId);
+      const feature = features.find(f => f.id === featureId || f.featureId === featureId);
       if (!feature) return;
+      
       const isOnMap = sketchRef.current!.hasLayer(feature.layer);
-      if (isVisible && !isOnMap) sketchRef.current!.addLayer(feature.layer);
-      else if (!isVisible && isOnMap) sketchRef.current!.removeLayer(feature.layer);
+      
+      if (isVisible && !isOnMap) {
+        sketchRef.current!.addLayer(feature.layer);
+      } else if (!isVisible && isOnMap) {
+        sketchRef.current!.removeLayer(feature.layer);
+      }
     });
   }, [featureVisibility, features]);
 
@@ -612,438 +727,310 @@ export default function EditMapPage() {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
 
+  // Map click handler for deselecting when clicking on empty space or base layer
   useEffect(() => {
-    if (!detail?.id) return;
-    let alive = true;
-    (async () => {
-      try {
-        setSegmentsLoading(true);
-        const list = await getSegments(detail.id);
-        if (!alive) return;
-        setSegments(list ?? []);
-        if (!selectedSegmentId && (list?.length ?? 0) > 0) {
-          const first = list![0] as Segment & { segmentId?: string; id?: string };
-          setSelectedSegmentId(first.segmentId ?? first.id ?? null);
-        }
-      } catch (e) {
-        console.error("getSegments error:", e);
-        setFeedback(e instanceof Error ? `Segments lỗi: ${e.message}` : "Segments lỗi");
-      } finally {
-        if (alive) setSegmentsLoading(false);
+    if (!mapRef.current) return;
+    
+    const handleMapClick = (e: LeafletMapClickEvent) => {
+      // Only reset if clicking directly on map/base layer (not on a feature layer)
+      const target = e.originalEvent.target;
+      if (target && target instanceof HTMLElement && !target.closest('.leaflet-interactive')) {
+        // Use ref to avoid dependency on resetAllSelections
+        selectedLayers.forEach(layer => {
+          const originalStyle = originalStylesRef.current.get(layer);
+          if (originalStyle && 'setStyle' in layer && typeof (layer as unknown as PathLayer).setStyle === 'function') {
+            (layer as unknown as PathLayer).setStyle(originalStyle);
+          }
+        });
+        setSelectedLayers(new Set());
+        setCurrentLayer(null);
+        setSelectedLayer(null);
+        setShowStylePanel(false);
       }
-    })();
+    };
+
+    mapRef.current.on('click', handleMapClick);
+    
     return () => {
-      alive = false;
+      mapRef.current?.off('click', handleMapClick);
     };
-  }, [detail?.id, selectedSegmentId]);
+  }, [selectedLayers]); // Only depend on selectedLayers, not the callback
 
-  useEffect(() => {
-    if (!detail?.id || !selectedSegmentId) return;
-    let alive = true;
-    (async () => {
-      try {
-        setZonesLoading(true);
-        const z = await getSegmentZones(detail.id, selectedSegmentId);
-        if (!alive) return;
-        const safe = (z ?? []).map((it) => it as unknown as SafeSegmentZone);
-        setZones(safe);
-      } catch (e) {
-        console.error("getSegmentZones error:", e);
-        setFeedback(e instanceof Error ? `Zones lỗi: ${e.message}` : "Zones lỗi");
-      } finally {
-        setZonesLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [detail?.id, selectedSegmentId]);
-
-  type FocusPoiDetail = { lngLat: [number, number]; zoom?: number };
-
-  useEffect(() => {
-    const onFocusPoi = async (e: Event) => {
-      const map = mapRef.current;
-      if (!map) return;
-
-      const { lngLat, zoom } = (e as CustomEvent<FocusPoiDetail>).detail;
-      const [lng, lat] = lngLat;
-
-      const targetZoom = Math.min(17, Math.max(13, zoom ?? Math.max(14, map.getZoom())));
-
-      map.pm?.disableDraw?.();
-      map.dragging.enable();
-      map.scrollWheelZoom.enable();
-
-      map.flyTo([lat, lng] as LatLngExpression, targetZoom, { duration: 0.7 });
-
-      const Llib = (await import("leaflet")).default;
-
-      poiFocusLayerRef.current?.clearLayers();
-
-      const ring = Llib.circleMarker([lat, lng] as LatLngExpression, {
-        radius: 14,
-        color: "#22d3ee",
-        weight: 3,
-        opacity: 0.9,
-        fillColor: "#22d3ee",
-        fillOpacity: 0.15,
-      });
-      const marker = Llib.marker([lat, lng] as LatLngExpression);
-
-      poiFocusLayerRef.current?.addLayer(ring);
-      poiFocusLayerRef.current?.addLayer(marker);
-
-      let step = 0;
-      const timer = window.setInterval(() => {
-        step += 1;
-        ring.setStyle({ radius: 14 + (step % 2 === 0 ? 4 : 0) });
-        if (step > 5) {
-          window.clearInterval(timer);
-          try { ring.remove(); } catch { }
-        }
-      }, 350);
-    };
-
-    window.addEventListener("poi:focusSegmentPoi", onFocusPoi as EventListener);
-    window.addEventListener("poi:focusMapPoi", onFocusPoi as EventListener);
-    return () => {
-      window.removeEventListener("poi:focusSegmentPoi", onFocusPoi as EventListener);
-      window.removeEventListener("poi:focusMapPoi", onFocusPoi as EventListener);
-    };
-  }, []);
-
-
-  useEffect(() => {
-    if (!detail?.id || !selectedSegmentId) {
-      setSegmentLayers([]);
-      return;
-    }
-    let alive = true;
-    (async () => {
-      try {
-        const list = await getSegmentLayers(detail.id, selectedSegmentId);
-        if (!alive) return;
-        setSegmentLayers(list ?? []);
-      } catch (e) {
-        console.error("getSegmentLayers error:", e);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [detail?.id, selectedSegmentId]);
-
-  const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text") =>
+  const enableDraw = (shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text") => {
+    // Map Geoman shapes to GeometryTypeEnum:
+    // Marker/CircleMarker -> Point (GeometryTypeEnum.Point = 0)
+    // Line -> LineString (GeometryTypeEnum.LineString = 1)
+    // Polygon -> Polygon (GeometryTypeEnum.Polygon = 2)
+    // Circle (large) -> Circle (GeometryTypeEnum.Circle = 3)
+    // Rectangle -> Rectangle (GeometryTypeEnum.Rectangle = 4)
     mapRef.current?.pm.enableDraw(shape);
-  const toggleRotate = () => mapRef.current?.pm.toggleGlobalRotateMode?.();
+  };
+  const toggleEdit = () => mapRef.current?.pm.toggleGlobalEditMode();
+  const toggleDelete = () => mapRef.current?.pm.toggleGlobalRemovalMode();
+  const toggleDrag = () => mapRef.current?.pm.toggleGlobalDragMode();
   const enableCutPolygon = () => mapRef.current?.pm.enableGlobalCutMode();
+  const toggleRotate = () => mapRef.current?.pm?.toggleGlobalRotateMode?.();
 
   const clearSketch = useCallback(async () => {
     if (!detail) return;
-    for (const f of features) {
-      if (f.featureId) {
+    
+    // Delete all features from database
+    for (const feature of features) {
+      if (feature.featureId) {
         try {
-          await deleteFeatureFromDB(detail.id, f.featureId);
-        } catch (e) {
-          console.error(e);
+          await deleteFeatureFromDB(detail.id, feature.featureId);
+        } catch (error) {
+          console.error("Error deleting from DB:", error);
         }
       }
     }
+    
     sketchRef.current?.clearLayers();
     setFeatures([]);
     setFeatureVisibility({});
   }, [detail, features]);
 
-  const onLayerVisibilityChange = useCallback(
-    async (layerId: string, isVisible: boolean) => {
-      if (!detail?.id || !mapRef.current) return;
-      const layerData = layers.find((l) => l.id === layerId);
-      await handleLayerVisibilityChange(
-        detail.id,
-        layerId,
-        isVisible,
-        mapRef.current,
-        dataLayerRefs,
-        setLayerVisibility,
-        layerData
-      );
-    },
-    [detail?.id, layers]
-  );
+  const onLayerVisibilityChange = useCallback(async (layerId: string, isVisible: boolean) => {
+    if (!detail?.id || !mapRef.current) return;
+    
+    const layerData = layers.find(l => l.id === layerId);
+    
+    await handleLayerVisibilityChange(
+      detail.id,
+      layerId,
+      isVisible,
+      mapRef.current as any,
+      dataLayerRefs,
+      setLayerVisibility,
+      layerData
+    );
+  }, [detail?.id, layers]);
 
-  const onFeatureVisibilityChange = useCallback(
-    async (featureId: string, isVisible: boolean) => {
-      if (!detail?.id) return;
-      await handleFeatureVisibilityChange(
-        detail.id,
-        featureId,
-        isVisible,
-        features,
-        setFeatures,
-        mapRef.current,
-        sketchRef.current,
-        setFeatureVisibility
-      );
-    },
-    [detail?.id, features]
-  );
+  const onFeatureVisibilityChange = useCallback(async (featureId: string, isVisible: boolean) => {
+    if (!detail?.id) return;
+    
+    await handleFeatureVisibilityChange(
+      detail.id,
+      featureId,
+      isVisible,
+      features,
+      setFeatures,
+      mapRef.current as any,
+      sketchRef.current,
+      setFeatureVisibility
+    );
+  }, [detail?.id, features]);
 
   const onSelectLayer = useCallback((layer: FeatureData | RawLayer) => {
     setSelectedLayer(layer);
     setShowStylePanel(true);
   }, []);
 
-  const onUpdateLayer = useCallback(
-    async (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => {
-      if (!detail || !mapRef.current) return;
-      await handleUpdateLayerStyle(detail.id, layerId, updates, mapRef.current, detail.layers, dataLayerRefs);
-    },
-    [detail]
-  );
+  const onUpdateLayer = useCallback(async (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => {
+    if (!detail || !mapRef.current) return;
+  }, [detail]);
 
-  const onUpdateFeature = useCallback(
-    async (featureId: string, updates: UpdateMapFeatureRequest) => {
-      if (!detail) return;
-      const converted = {
-        name: updates.name ?? undefined,
-        style: updates.style ?? undefined,
-        properties: updates.properties ?? undefined,
-        isVisible: updates.isVisible ?? undefined,
-        zIndex: updates.zIndex ?? undefined,
-      };
-      await handleUpdateFeatureStyle(detail.id, featureId, converted);
-    },
-    [detail]
-  );
+  const onUpdateFeature = useCallback(async (featureId: string, updates: UpdateMapFeatureRequest) => {
+    if (!detail) return;
+    
+    try {
+      const { updateMapFeature } = await import("@/lib/api");
+      await updateMapFeature(detail.id, featureId, updates);
+      
+      // Update local state
+      setFeatures(prev => prev.map(f => 
+        f.featureId === featureId 
+          ? { ...f, name: updates.name || f.name } 
+          : f
+      ));
+      
+      setTimeout(() => setFeedback(null), 2000);
+    } catch (error) {
+      setTimeout(() => setFeedback(null), 2000);
+    }
+  }, [detail]);
 
-  const onDeleteFeature = useCallback(
-    async (featureId: string) => {
-      if (!detail) return;
-      const f = features.find((x) => x.id === featureId || x.featureId === featureId);
-      if (f && mapRef.current && sketchRef.current) sketchRef.current.removeLayer(f.layer);
-      setFeatures((prev) => prev.filter((x) => x.id !== featureId && x.featureId !== featureId));
-      setFeatureVisibility((prev) => {
-        const next = { ...prev };
-        delete next[featureId];
-        return next;
-      });
-      if (f?.featureId) {
-        try {
-          await deleteFeatureFromDB(detail.id, f.featureId);
-        } catch (e) {
-          console.error(e);
+  // Apply style visually to layer
+  const onApplyStyle = useCallback((layer: Layer, styleOptions: LayerStyle) => {
+    if (!layer || !('setStyle' in layer)) return;
+    
+    // Apply style
+    (layer as unknown as PathLayer).setStyle(styleOptions);
+    
+    // Update original style ref
+    originalStylesRef.current.set(layer, {
+      ...styleOptions
+    });
+  }, []);
+
+  const onDeleteFeature = useCallback(async (featureId: string) => {
+    if (!detail) return;
+    
+    const feature = features.find(f => f.id === featureId || f.featureId === featureId);
+    if (!feature) {
+      return;
+    }
+    
+    // Handle layer deletion state cleanup
+    handleLayerDelete(feature.layer);
+    
+    if (mapRef.current && sketchRef.current) {
+      sketchRef.current.removeLayer(feature.layer);
+    }
+    
+    setFeatures(prev => prev.filter(f => f.id !== featureId && f.featureId !== featureId));
+    
+    setFeatureVisibility(prev => {
+      const newVisibility = { ...prev };
+      delete newVisibility[featureId];
+      return newVisibility;
+    });
+    
+    if (feature.featureId) {
+      try {
+        await deleteFeatureFromDB(detail.id, feature.featureId);
+      } catch (error) {
+        console.error("Error deleting from database:", error);
+      }
+    }
+    
+  }, [detail, features, handleLayerDelete]);
+
+  // Keyboard event handler for delete/backspace
+  useEffect(() => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedLayers.size > 0) {
+        // Don't prevent backspace if user is typing in an input
+        const target = e.target as HTMLElement;
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+          return;
+        }
+        
+        e.preventDefault();
+        
+        // Delete all selected layers
+        const layersToDelete = Array.from(selectedLayers);
+        for (const layer of layersToDelete) {
+          const feature = features.find(f => f.layer === layer);
+          if (feature && (feature.id || feature.featureId)) {
+            await onDeleteFeature(feature.featureId || feature.id);
+          }
         }
       }
-    },
-    [detail, features]
-  );
+    };
 
-  const applyPresetStyleToFeature = useCallback(
-    async (featureId: string, layerType: string, presetName: string) => {
-      if (!detail) return;
-      const feature = features.find((f) => f.featureId === featureId);
-      if (!feature) return;
-      const presetStyle = getStylePreset(layerType, presetName);
-      await applyStyleToFeature(detail.id, featureId, feature.layer, presetStyle, features, setFeatures);
-    },
-    [detail, features, setFeatures]
-  );
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedLayers, features, onDeleteFeature]);
 
-  const applyCustomStyleToFeature = useCallback(
-    async (featureId: string, styleOptions: {
-      color?: string; fillColor?: string; weight?: number; opacity?: number;
-      fillOpacity?: number; radius?: number; dashArray?: string;
-    }) => {
-      if (!detail) return;
-      const feature = features.find((f) => f.featureId === featureId);
-      if (!feature) return;
-      const customStyle = createCustomStyle(styleOptions);
-      await applyStyleToFeature(detail.id, featureId, feature.layer, customStyle, features, setFeatures);
-    },
-    [detail, features, setFeatures]
-  );
+  const applyPresetStyleToFeature = useCallback(async (featureId: string, layerType: string, presetName: string) => {
+    if (!detail) return;
+  }, [detail]);
 
-  const applyStyleToLayer = useCallback(
-    async (layerId: string, styleOptions: {
-      color?: string; fillColor?: string; weight?: number; opacity?: number; fillOpacity?: number;
-    }) => {
-      if (!detail) return;
-      const customStyle = createCustomStyle(styleOptions);
-      await applyStyleToDataLayer(detail.id, layerId, customStyle);
-    },
-    [detail]
-  );
+  const applyCustomStyleToFeature = useCallback(async (featureId: string, styleOptions: {
+    color?: string;
+    fillColor?: string;
+    weight?: number;
+    opacity?: number;
+    fillOpacity?: number;
+    radius?: number;
+    dashArray?: string;
+  }) => {
+    if (!detail) return;
+  }, [detail]);
+
+  const applyStyleToLayer = useCallback(async (layerId: string, styleOptions: {
+    color?: string;
+    fillColor?: string;
+    weight?: number;
+    opacity?: number;
+    fillOpacity?: number;
+  }) => {
+    if (!detail) return;
+  }, [detail]);
 
   const getCurrentFeatureStyle = useCallback((featureId: string) => {
-    const feature = features.find((f) => f.featureId === featureId);
+    const feature = features.find(f => f.id === featureId);
     if (!feature) return {};
+    
     return extractLayerStyle(feature.layer);
   }, [features]);
 
-  const saveMeta = useCallback(async () => {
-    if (!detail) return;
-    setBusySaveMeta(true);
-    setFeedback(null);
-    try {
-      const body: UpdateMapRequest = {
-        name: (name ?? "").trim() || "Untitled Map",
-        baseMapProvider: baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
-      };
-      await updateMap(detail.id, body);
-      setFeedback("Đã lưu thông tin bản đồ.");
-    } catch (e) {
-      setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
-    } finally {
-      setBusySaveMeta(false);
-      window.setTimeout(() => setFeedback(null), 1600);
-    }
-  }, [detail, name, baseKey]);
-
-  const startDrawSegmentPoi = useCallback((segmentId: string) => {
-    if (!mapRef.current) return;
-    addingSegmentPoiRef.current = { mapId, segmentId };
-    mapRef.current.pm.enableDraw("Marker");
-  }, [mapId]);
+   const saveMeta = useCallback(async () => {
+     if (!detail) return;
+     setBusySaveMeta(true);
+     setFeedback(null);
+     try {
+       const body: UpdateMapRequest = {
+         name: (name ?? "").trim() || "Untitled Map",
+         baseMapProvider: baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
+       };
+       await updateMap(detail.id, body);
+       setFeedback("Đã lưu thông tin bản đồ.");
+     } catch (e) {
+       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
+     } finally {
+       setBusySaveMeta(false);
+       setTimeout(() => setFeedback(null), 1600);
+     }
+   }, [detail, name, baseKey]);
 
   const saveView = useCallback(async () => {
-    if (!detail || !mapRef.current) return;
+    if (!detail || !mapRef.current) {
+      console.warn("saveView: detail or mapRef.current is null");
+      return;
+    }
+    const map = mapRef.current;
+    if (!map) {
+      console.warn("saveView: map is null");
+      return;
+    }
     setBusySaveView(true);
     setFeedback(null);
     try {
-      const c = mapRef.current.getCenter();
-      const view = { center: [c.lat, c.lng] as [number, number], zoom: mapRef.current.getZoom() };
+      // Check if map is still valid
+      if (!map.getCenter || typeof map.getCenter !== 'function') {
+        console.warn("saveView: map.getCenter is not a function");
+        setFeedback("Bản đồ chưa sẵn sàng");
+        return;
+      }
+      const c = map.getCenter();
+      if (!c) {
+        console.warn("saveView: map.getCenter() returned null");
+        setFeedback("Bản đồ chưa sẵn sàng");
+        return;
+      }
+      const zoom = map.getZoom ? map.getZoom() : 10;
+      const view = { center: [c.lat, c.lng] as [number, number], zoom };
       const body: UpdateMapRequest = { viewState: JSON.stringify(view) };
       await updateMap(detail.id, body);
       setFeedback("Đã lưu vị trí hiển thị.");
     } catch (e) {
+      console.error("saveView error:", e);
       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveView(false);
-      window.setTimeout(() => setFeedback(null), 1600);
+      setTimeout(() => setFeedback(null), 1600);
     }
   }, [detail]);
 
-  const handleSelectSegment = (id: string) => setSelectedSegmentId(id);
-
-  const createNewSegment = useCallback(async (segName: string) => {
-    if (!detail?.id) return;
-    const created = await createSegment(detail.id, { name: segName.trim() || "Untitled Segment" });
-    const list = await getSegments(detail.id);
-    setSegments(list ?? []);
-    const createdId = (created as Segment & { segmentId?: string; id?: string }).segmentId ?? (created as Segment & { id?: string }).id ?? "";
-    setSelectedSegmentId(createdId || null);
-  }, [detail?.id]);
-
-  const renameSegment = useCallback(async (segmentId: string, newName: string) => {
-    if (!detail?.id) return;
-    await updateSegment(detail.id, segmentId, { name: newName });
-    const list = await getSegments(detail.id);
-    setSegments(list ?? []);
-  }, [detail?.id]);
-
-  const removeSegment = useCallback(async (segmentId: string) => {
-    if (!detail?.id) return;
-    await deleteSegment(detail.id, segmentId);
-    const list = await getSegments(detail.id);
-    setSegments(list ?? []);
-    const first = (list ?? [])[0] as (Segment & { segmentId?: string; id?: string }) | undefined;
-    setSelectedSegmentId(first ? (first.segmentId ?? first.id ?? null) : null);
-  }, [detail?.id]);
-
-  const getZoneGeometry = useCallback((z: SegmentZone): GJObject | null => {
-    const g1 = (z as { geometry?: unknown }).geometry;
-    const g2 = (z as { zoneGeometry?: unknown }).zoneGeometry;
-    const raw = (g1 ?? g2) as unknown;
-    if (!raw) return null;
-    if (typeof raw === "string") {
-      try { return JSON.parse(raw) as GJObject; } catch { return null; }
-    }
-    return raw as GJObject;
-  }, []);
-
-  const handleZoomZone = useCallback(async (zone: SegmentZone) => {
-    const geom = getZoneGeometry(zone);
-    if (!geom || !mapRef.current) return;
-    const Llib = (await import("leaflet")).default;
-    const gj = Llib.geoJSON(geom);
-    const b = gj.getBounds();
-    if (b.isValid()) mapRef.current.fitBounds(b.pad(0.2));
-  }, [getZoneGeometry]);
-
-  const handleCopyZoneToExistingLayer = useCallback(async (zone: SegmentZone, layerId: string) => {
-    if (!detail?.id) return;
-    const geom = getZoneGeometry(zone);
-    if (!geom) return;
-    const Llib = (await import("leaflet")).default;
-    const gj = Llib.geoJSON(geom);
-    const first = gj.getLayers()[0] as Layer | undefined;
-    if (!first) return;
-    await saveFeature(detail.id, layerId, first as ExtendedLayer, features, setFeatures);
-  }, [detail?.id, features, setFeatures, getZoneGeometry]);
-
-  const handleCopyZoneToNewLayer = useCallback(async (zone: SegmentZone) => {
-    if (!detail?.id) return;
-    const geom = getZoneGeometry(zone);
-    if (!geom) return;
-    const targetLayerId = detail.layers?.[0]?.id;
-    if (!targetLayerId) return;
-    const Llib = (await import("leaflet")).default;
-    const gj = Llib.geoJSON(geom);
-    const first = gj.getLayers()[0] as Layer | undefined;
-    if (!first) return;
-    await saveFeature(detail.id, targetLayerId, first as ExtendedLayer, features, setFeatures);
-  }, [detail?.id, detail?.layers, features, setFeatures, getZoneGeometry]);
-
-  const confirmAddZoneToSegment = useCallback(async () => {
-    if (!detail?.id || !zoneMenuLayer || !zoneMenuSegmentId) {
-      setZoneMenuVisible(false);
-      return;
-    }
-    const gj = zoneMenuLayer.toGeoJSON();
-    const geometry: GJObject | null =
-      (gj as GJFeature).type === "Feature"
-        ? (((gj as GJFeature).geometry ?? null) as unknown as GJObject)
-        : ((gj as unknown) as GJObject);
-    if (!geometry) {
-      setZoneMenuVisible(false);
-      return;
-    }
-    await createSegmentZone(detail.id, zoneMenuSegmentId, {
-      name: zoneMenuName.trim() || "New Zone",
-      description: "",
-      isPrimary: false,
-      zoneType: zoneMenuType,
-      zoneGeometry: JSON.stringify(geometry),
-    });
-    const z = await getSegmentZones(detail.id, zoneMenuSegmentId);
-    const safe = (z ?? []).map((it) => it as unknown as SafeSegmentZone);
-    setZones(safe);
-    setFeedback("Đã thêm Zone vào Segment.");
-    setShowZonesPanel(true);
-    setZoneMenuVisible(false);
-    setZoneMenuLayer(null);
-  }, [detail?.id, zoneMenuLayer, zoneMenuSegmentId, zoneMenuName, zoneMenuType]);
-
   const GuardBtn: React.FC<
     React.PropsWithChildren<{ title: string; onClick?: () => void; disabled?: boolean }>
-  > = ({ title, onClick, disabled, children }) => (
-    <button
-      className="px-2 py-1.5 rounded-md bg-transparent text-white text-xs hover:bg-emerald-500/20 disabled:opacity-60"
-      title={title}
-      onClick={onClick}
-      disabled={disabled}
-    >
-      {children}
-    </button>
-  );
+  > = ({ title, onClick, disabled, children }) => {
+    return (
+      <button
+        className="px-2 py-1.5 rounded-md bg-transparent text-white text-xs hover:bg-emerald-500/20"
+        title={title}
+        onClick={onClick}
+        disabled={disabled}
+      >
+        {children}
+      </button>
+    );
+  };
 
-  if (loading) {
-    return <main className="h-screen w-screen grid place-items-center text-zinc-400">Đang tải…</main>;
-  }
-  if (err || !detail) {
-    return <main className="h-screen w-screen grid place-items-center text-red-300">{err ?? "Không tải được bản đồ"}</main>;
-  }
+  if (loading) return <main className="h-screen w-screen grid place-items-center text-zinc-400">Đang tải…</main>;
+  if (err || !detail) return <main className="h-screen w-screen grid place-items-center text-red-300">{err ?? "Không tải được bản đồ"}</main>;
 
   return (
     <main className="relative h-screen w-screen overflow-hidden text-white">
@@ -1058,72 +1045,89 @@ export default function EditMapPage() {
                 className="px-2.5 py-1.5 rounded-md bg-white text-black text-sm font-medium w-52"
                 placeholder="Untitled Map"
               />
-              <button
-                onClick={() => setShowMapPoiPanel((v) => !v)}
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500"
-                title="Quản lý POI cấp Map"
-              >
-                POIs của Map
-              </button>
             </div>
-
             <div className="flex items-center justify-center gap-1.5 overflow-x-auto no-scrollbar">
-              <GuardBtn title="Vẽ điểm" onClick={() => enableDraw("Marker")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ điểm" onClick={() => enableDraw("Marker")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 21s-6-4.5-6-10a6 6 0 1 1 12 0c0 5.5-6 10-6 10z" />
                   <circle cx="12" cy="11" r="2.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Vẽ đường" onClick={() => enableDraw("Line")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ đường" onClick={() => enableDraw("Line")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="5" cy="7" r="2" />
                   <circle cx="19" cy="17" r="2" />
                   <path d="M7 8.5 17 15.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Vẽ vùng" onClick={() => enableDraw("Polygon")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ vùng" onClick={() => enableDraw("Polygon")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M7 4h10l4 6-4 10H7L3 10 7 4z" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Vẽ hình chữ nhật" onClick={() => enableDraw("Rectangle")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ hình chữ nhật" onClick={() => enableDraw("Rectangle")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="5" y="6" width="14" height="12" rx="1.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Vẽ hình tròn" onClick={() => enableDraw("Circle")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Vẽ hình tròn" onClick={() => enableDraw("Circle")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="8.5" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Thêm chữ" onClick={() => enableDraw("Text")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Thêm chữ" onClick={() => enableDraw("Text")} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 6h16M12 6v12" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Cắt polygon" onClick={enableCutPolygon} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Cắt polygon" onClick={enableCutPolygon} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="5.5" cy="8" r="2" />
                   <circle cx="5.5" cy="16" r="2" />
                   <path d="M8 9l12 8M8 15l12-8" />
                 </svg>
               </GuardBtn>
-              <GuardBtn title="Xoay đối tượng" onClick={toggleRotate} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn title="Xoay đối tượng" onClick={toggleRotate} disabled={!mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 11a8 8 0 1 1-2.2-5.5" />
                   <path d="M20 4v7h-7" />
                 </svg>
               </GuardBtn>
+              <GuardBtn title="Di chuyển đối tượng" onClick={toggleDrag} disabled={!mapRef.current}>
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
+                </svg>
+              </GuardBtn>
+              <GuardBtn title="Chỉnh sửa đối tượng" onClick={toggleEdit} disabled={!mapRef.current}>
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                </svg>
+              </GuardBtn>
             </div>
-
             <div className="flex items-center justify-end gap-1.5 overflow-x-auto no-scrollbar">
               <input
                 type="file"
-                accept=".geojson,.json"
-                onChange={(e) => {
+                accept=".geojson,.json,.kml,.gpx"
+                onChange={async (e) => {
                   const file = e.target.files?.[0];
-                  if (file) {
-                    console.log("File selected:", file.name);
+                  if (file && mapId) {
+                    try {
+                      setFeedback("Uploading file...");
+                      const result = await uploadGeoJsonToMap(mapId, file);
+                      
+                      // Refresh the entire map detail
+                      const updatedDetail = await getMapDetail(mapId);
+                      setDetail(updatedDetail);
+                      
+                      setFeedback(`Successfully uploaded! Added ${result.featuresAdded} features.`);
+                      setTimeout(() => setFeedback(null), 5000);
+                      
+                      // Clear the input
+                      e.target.value = '';
+                    } catch (error) {
+                      setFeedback(error instanceof Error ? error.message : "Failed to upload file");
+                      setTimeout(() => setFeedback(null), 5000);
+                    }
                   }
                 }}
                 className="hidden"
@@ -1132,9 +1136,9 @@ export default function EditMapPage() {
               <label
                 htmlFor="upload-layer"
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 cursor-pointer"
-                title="Upload GeoJSON file to add as layer"
+                title="Upload GeoJSON/KML/GPX file to add as layer"
               >
-                Upload Layer
+                Upload File
               </label>
               <button
                 className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-zinc-700 hover:bg-zinc-600 disabled:opacity-60"
@@ -1160,63 +1164,18 @@ export default function EditMapPage() {
               </button>
             </div>
           </div>
-
-          {feedback && (
-            <div className="px-1 pt-1 text-center text-[11px] text-emerald-300">
-              {feedback}
-            </div>
-          )}
+          {feedback && <div className="px-1 pt-1 text-center text-[11px] text-emerald-300">{feedback}</div>}
         </div>
       </div>
 
       <div ref={mapEl} className="absolute inset-0" />
-
-      <div className="absolute right-5 top-10 z-[3000] pointer-events-auto">
-        {showSegmentPanel ? (
-          <div className="relative w-80">
-            {detail && (
-              <SegmentPanel
-                mapId={mapId}
-                layers={(detail?.layers ?? []).map((l) => ({ id: l.id, name: l.name ?? "Layer" }))}
-                currentLayerId={selectedLayer && "id" in (selectedLayer as RawLayer) ? (selectedLayer as RawLayer).id : ""}
-                onZoomZone={handleZoomZone}
-                onCopyZoneToExistingLayer={handleCopyZoneToExistingLayer}
-                onCopyZoneToNewLayer={handleCopyZoneToNewLayer}
-                onStartAddPoi={startDrawSegmentPoi}
-              />
-            )}
-
-            <button
-              className="absolute top-2 right-2 rounded-md bg-zinc-800/80 hover:bg-zinc-700 text-xs px-2 py-1"
-              onClick={() => setShowSegmentPanel(false)}
-              aria-label="Ẩn StoryMap"
-            >
-              Ẩn
-            </button>
-          </div>
-        ) : (
-          <button
-            className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-zinc-800/90 hover:bg-zinc-700 shadow"
-            onClick={() => setShowSegmentPanel(true)}
-            title="Hiện Segments & Zones"
-          >
-            StoryMap
-          </button>
-        )}
-      </div>
-
-      {showMapPoiPanel && (
-        <div className="absolute left-1 top-100 z-[5000] w-[320px] pointer-events-auto">
-          <MapPoiPanel mapId={mapId} />
-        </div>
-      )}
 
       <DataLayersPanel
         features={features}
         layers={layers}
         showDataLayersPanel={showDataLayersPanel}
         setShowDataLayersPanel={setShowDataLayersPanel}
-        map={mapRef.current as LMap | null}
+        map={mapRef.current as any}
         dataLayerRefs={dataLayerRefs}
         onLayerVisibilityChange={onLayerVisibilityChange}
         onFeatureVisibilityChange={onFeatureVisibilityChange}
@@ -1224,79 +1183,10 @@ export default function EditMapPage() {
         onDeleteFeature={onDeleteFeature}
         onBaseLayerChange={setBaseKey}
         currentBaseLayer={baseKey}
+        onFeatureHover={handleLayerHover}
+        hoveredLayer={hoveredLayer}
+        selectedLayers={selectedLayers}
       />
-
-      {showZonesPanel && (
-        <div className="absolute right-2 top-16 z-[3000] w-80 bg-black/70 backdrop-blur-md ring-1 ring-white/15 rounded-xl p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold">
-              Zones {zonesLoading && <span className="opacity-60">(loading)</span>}
-            </div>
-            <button
-              className="text-xs px-2 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600"
-              onClick={() => setShowZonesPanel(false)}
-              title="Đóng"
-            >
-              ✕
-            </button>
-          </div>
-          <div className="max-h-[45vh] overflow-auto no-scrollbar space-y-1">
-            {zones.map((z) => (
-              <div key={z.segmentZoneId} className="flex items-center justify-between gap-2 rounded-md bg-zinc-800/70 px-2 py-1">
-                <button
-                  className="text-left text-xs truncate"
-                  title={z.name ?? ""}
-                  onClick={async () => {
-                    if (!mapRef.current) return;
-                    const Llib = (await import("leaflet")).default;
-                    const geom = z.geometry;
-                    if (!geom) return;
-                    const gjLayer = Llib.geoJSON(geom as GJObject);
-                    const b = gjLayer.getBounds();
-                    if (b?.isValid()) mapRef.current.fitBounds(b.pad(0.2));
-                  }}
-                >
-                  {z.name ?? "Unnamed Zone"}
-                </button>
-                <div className="flex items-center gap-1">
-                  <button
-                    className="text-[11px] px-1 py-0.5 rounded bg-zinc-700 hover:bg-zinc-600"
-                    onClick={async () => {
-                      if (!detail?.id || !selectedSegmentId) return;
-                      const newName = window.prompt("Đổi tên zone:", z.name ?? "");
-                      if (newName == null) return;
-                      await updateSegmentZone(detail.id, selectedSegmentId, z.segmentZoneId, { name: newName });
-                      const zz = await getSegmentZones(detail.id, selectedSegmentId);
-                      const safe = (zz ?? []).map((it) => it as unknown as SafeSegmentZone);
-                      setZones(safe);
-                    }}
-                  >
-                    Rename
-                  </button>
-                  <button
-                    className="text-[11px] px-1 py-0.5 rounded bg-red-600 hover:bg-red-500"
-                    onClick={async () => {
-                      if (!detail?.id || !selectedSegmentId) return;
-                      if (!window.confirm("Xoá zone này?")) return;
-                      await deleteSegmentZone(detail.id, selectedSegmentId, z.segmentZoneId);
-                      const zz = await getSegmentZones(detail.id, selectedSegmentId);
-                      const safe = (zz ?? []).map((it) => it as unknown as SafeSegmentZone);
-                      setZones(safe);
-                    }}
-                  >
-                    Del
-                  </button>
-                </div>
-              </div>
-            ))}
-            {!zones.length && !zonesLoading && (
-              <div className="text-xs text-zinc-400">
-                Chưa có zone. Nhấp chuột phải lên hình để “Add zone into segment”.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       <StylePanel
         selectedLayer={selectedLayer}
@@ -1304,112 +1194,7 @@ export default function EditMapPage() {
         setShowStylePanel={setShowStylePanel}
         onUpdateLayer={onUpdateLayer}
         onUpdateFeature={onUpdateFeature}
-      />
-
-      {poiDialogOpen && (
-        <PoiDialog
-          open={poiDialogOpen}
-          initial={poiForm}
-          onCancel={() => setPoiDialogOpen(false)}
-          onSubmit={async (form) => {
-            try {
-              const payload = {
-                title: form.title,
-                subtitle: form.subtitle,
-                markerGeometry: JSON.stringify(form.markerGeometry),
-                highlightOnEnter: form.highlightOnEnter,
-                shouldPin: form.shouldPin,
-              };
-
-              if (creatingForSegmentId) {
-                await createSegmentPoi(mapId, creatingForSegmentId, payload);
-              } else {
-                await createMapPoi(mapId, payload);
-              }
-
-              setPoiDialogOpen(false);
-              setCreatingForSegmentId(null);
-            } catch {
-              alert("Tạo POI thất bại");
-            }
-          }}
-
-        />
-      )}
-
-      {zoneMenuVisible && (
-        <div
-          className="fixed z-[4000] bg-zinc-900 text-white rounded-lg shadow-lg ring-1 ring-white/15 p-3 w-72"
-          style={{ left: zoneMenuPos.x, top: zoneMenuPos.y }}
-          onMouseLeave={() => setZoneMenuVisible(false)}
-        >
-          <div className="text-sm font-semibold mb-2">Add zone into segment</div>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs opacity-80 w-16">Segment</span>
-              <select
-                value={zoneMenuSegmentId ?? ""}
-                onChange={(e) => setZoneMenuSegmentId(e.target.value || null)}
-                className="flex-1 bg-zinc-800 rounded px-2 py-1 text-xs"
-              >
-                {(segments ?? []).map((s) => {
-                  const id = (s as Segment & { segmentId?: string; id?: string }).segmentId ?? (s as Segment & { id?: string }).id ?? "";
-                  return (
-                    <option key={id} value={id}>
-                      {s.name ?? "Segment"}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs opacity-80 w-16">Name</span>
-              <input
-                value={zoneMenuName}
-                onChange={(e) => setZoneMenuName(e.target.value)}
-                className="flex-1 bg-zinc-800 rounded px-2 py-1 text-xs"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-1">
-              <button
-                className="text-xs px-3 py-1 rounded bg-zinc-700 hover:bg-zinc-600"
-                onClick={() => setZoneMenuVisible(false)}
-              >
-                Cancel
-              </button>
-              <button
-                className="text-xs px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500"
-                onClick={confirmAddZoneToSegment}
-                disabled={!zoneMenuSegmentId}
-              >
-                Add
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <CreateZoneDialog
-        open={zoneDialogOpen}
-        draft={zoneDraft}
-        busy={false}
-        onCancel={() => setZoneDialogOpen(false)}
-        onCreate={async (data) => {
-          if (!detail?.id || !selectedSegmentId) return;
-          await createSegmentZone(detail.id, selectedSegmentId, {
-            name: data.name?.trim() || "New Zone",
-            description: data.description?.trim() || "",
-            isPrimary: false,
-            zoneType: "Area",
-            zoneGeometry: JSON.stringify(data.geometry),
-          });
-          const z = await getSegmentZones(detail.id, selectedSegmentId);
-          const safe = (z ?? []).map((it) => it as unknown as SafeSegmentZone);
-          setZones(safe);
-          setZoneDialogOpen(false);
-          setZoneDraft(null);
-          setFeedback("Đã tạo Zone từ hình vẽ.");
-        }}
+        onApplyStyle={onApplyStyle}
       />
 
       <style jsx global>{`
@@ -1417,6 +1202,94 @@ export default function EditMapPage() {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .leaflet-container { width: 100%; height: 100%; }
         .leaflet-top.leaflet-left .leaflet-control { display: none !important; }
+        
+        /* Hide Geoman tooltips and help text */
+        .leaflet-pm-tooltip,
+        .leaflet-pm-help,
+        .leaflet-pm-hint,
+        .leaflet-pm-cursor-marker,
+        .leaflet-pm-cursor-marker-text {
+          display: none !important;
+        }
+        
+        /* Hide Geoman help text */
+        .leaflet-pm-help-text,
+        .leaflet-pm-tooltip-text {
+          display: none !important;
+        }
+        
+        /* Thêm các class mới để target tooltip vẽ/edit cụ thể */
+        .leaflet-pm-draw-tooltip,
+        .leaflet-pm-vertex-tooltip,
+        .leaflet-pm-snapping-tooltip,
+        .leaflet-pm-edit-tooltip,
+        .leaflet-pm-drag-tooltip,
+        .leaflet-pm-rotate-tooltip,
+        .leaflet-pm-cut-tooltip {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+        }
+        
+        /* Đảm bảo không hiển thị text động */
+        [class*="leaflet-pm-tooltip"]::after,
+        [class*="leaflet-pm-tooltip"]::before,
+        [class*="leaflet-pm-hint"] * {
+          display: none !important;
+        }
+
+        /* Force crosshair cursor khi draw mode active */
+        .leaflet-pm-draw-mode-enabled {
+          cursor: crosshair !important;
+        }
+
+        /* Tắt hiển thị bất kỳ marker tạm nào trong draw mode */
+        .leaflet-pm-cursor-marker .leaflet-marker-icon,
+        .leaflet-pm-cursor-marker .leaflet-marker-shadow {
+          display: none !important;
+        }
+        
+        /* Hide default Leaflet marker icons */
+        .leaflet-marker-icon {
+          background: none !important;
+          border: none !important;
+        }
+        
+        /* Custom marker style */
+        .custom-marker-icon {
+          background: none !important;
+          border: none !important;
+        }
+        
+        /* Custom default marker style */
+        .custom-default-marker {
+          background: none !important;
+          border: none !important;
+        }
+        
+        /* Đảm bảo tất cả marker đều dùng custom icon */
+        .leaflet-marker-icon {
+          background: none !important;
+          border: none !important;
+        }
+        
+        /* Override any default marker styles */
+        .leaflet-marker-icon[src*="marker-icon"],
+        .leaflet-marker-icon[src*="marker-shadow"] {
+          display: none !important;
+        }
+        
+        /* Custom marker icon styles for consistency */
+        .custom-marker-icon,
+        .custom-default-marker {
+          filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
+          transition: transform 0.1s ease;
+        }
+        
+        .custom-marker-icon:hover,
+        .custom-default-marker:hover {
+          transform: scale(1.1);
+        }
       `}</style>
     </main>
   );

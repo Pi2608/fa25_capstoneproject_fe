@@ -18,8 +18,14 @@ import {
   type CreateMapRequest,
   getMyMembership,
   type CurrentMembershipDto,
+  getProjectsByOrganization,
+  addMapToProject,
 } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
+import { Workspace } from "@/types/workspace";
 type MapRow = Awaited<ReturnType<typeof getOrganizationMaps>>[number];
+
+
 
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
@@ -33,36 +39,6 @@ function safeMessage(err: unknown): string {
   return "Yêu cầu thất bại";
 }
 
-type JwtPayload = Record<string, unknown>;
-function getMyIdentityFromToken(): { userId?: string | null; email?: string | null } {
-  if (typeof window === "undefined") return { userId: null, email: null };
-  const token = localStorage.getItem("token");
-  if (!token) return { userId: null, email: null };
-  const parts = token.split(".");
-  if (parts.length !== 3) return { userId: null, email: null };
-  try {
-    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    const json = typeof atob === "function" ? atob(b64) : Buffer.from(b64, "base64").toString("utf8");
-    const p = JSON.parse(json) as JwtPayload;
-    const email =
-      (typeof p.email === "string" && p.email) ||
-      (typeof p.Email === "string" && p.Email) ||
-      (typeof p["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] === "string" &&
-        (p["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"] as string)) ||
-      null;
-    const userId =
-      (typeof p.userId === "string" && p.userId) ||
-      (typeof p.uid === "string" && p.uid) ||
-      (typeof p.sub === "string" && p.sub) ||
-      (typeof p.nameid === "string" && p.nameid) ||
-      (typeof p["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] === "string" &&
-        (p["http://schemas.xmlsoap.org/ws/2005/05/identity/claims/nameidentifier"] as string)) ||
-      null;
-    return { userId, email };
-  } catch {
-    return { userId: null, email: null };
-  }
-}
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "lastViewed" | "name" | "author";
@@ -99,9 +75,7 @@ export default function OrgDetailPage() {
 
   const [org, setOrg] = useState<OrganizationDetailDto | null>(null);
   const [members, setMembers] = useState<GetOrganizationMembersResDto | null>(null);
-  const [tools, setTools] = useState<UserAccessTool[]>([]);
-  const [maps, setMaps] = useState<MapRow[]>([]);
-  const [creatingMap, setCreatingMap] = useState(false);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [membership, setMembership] = useState<CurrentMembershipDto | null>(null);
   const [loadingMembership, setLoadingMembership] = useState(false);
 
@@ -131,16 +105,14 @@ export default function OrgDetailPage() {
   const [viewOpen, setViewOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [sortKey, setSortKey] = useState<SortKey>("dateCreated");
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
   const [removeBusyId, setRemoveBusyId] = useState<string | null>(null);
   const title = useMemo(() => org?.orgName ?? "—", [org?.orgName]);
 
-  const me = useMemo(getMyIdentityFromToken, []);
-  const myEmail = me.email ?? null;
-  const myId = me.userId ?? null;
+  // Get user identity from auth context
+  const { userId: myId, userEmail: myEmail } = useAuth();
 
   const isOwner = useMemo(() => {
     const list = asMemberArray(members?.members ?? []);
@@ -214,16 +186,15 @@ export default function OrgDetailPage() {
       try {
         setLoading(true);
         setErr(null);
-        const [orgRes, memRes, mapsRes] = await Promise.all([
+        const [orgRes, memRes, workspacesData] = await Promise.all([
           getOrganizationById(orgId),
           getOrganizationMembers(orgId),
-          getOrganizationMaps(orgId),
+          getProjectsByOrganization(orgId),
         ]);
         if (!alive) return;
         setOrg(orgRes.organization);
         setMembers(memRes);
-        setMaps(mapsRes);
-        // Access tools functionality removed
+        setWorkspaces(workspacesData);
       } catch (e) {
         if (!alive) return;
         setErr(safeMessage(e));
@@ -347,7 +318,7 @@ export default function OrgDetailPage() {
   const requireOwner = useCallback(
     (action: () => void) => {
       if (!isOwner) {
-        setPermMsg("You have limited access in this workspace. To create or edit maps, ask your admin for full access.");
+        setPermMsg("You have limited access in this workspace. To manage workspace settings, ask your admin for full access.");
         return;
       }
       setPermMsg(null);
@@ -356,81 +327,29 @@ export default function OrgDetailPage() {
     [isOwner]
   );
 
-  const createAndGo = useCallback(() => {
-    requireOwner(async () => {
-      if (!orgId || creatingMap) return;
-      try {
-        setCreatingMap(true);
-
-        const body: CreateMapRequest = {
-          orgId,
-          name: "Untitled Map",
-          description: "",
-          isPublic: false,
-          baseMapProvider: "OSM",
-          defaultBounds: undefined,
-          viewState: undefined,
-        };
-
-        const created = await createMap(body);
-        const newId = created.mapId;
-        if (!newId) throw new Error("Không xác định được ID bản đồ mới.");
-
-        const n = encodeURIComponent(body.name ?? "Untitled Map");
-        router.push(`/maps/${newId}?created=1&name=${n}`);
-      } catch (e) {
-        setInviteMsg(safeMessage(e));
-      } finally {
-        setCreatingMap(false);
-      }
-    });
-  }, [orgId, creatingMap, requireOwner, router]);
-
-  const clickNewMap = useCallback(() => {
-    void createAndGo();
-  }, [createAndGo]);
-
-
-  const clickNewFolder = useCallback(() => {
+  const handleWorkspaceSettings = useCallback(() => {
     requireOwner(() => {
-      alert("Create Folder (stub)");
+      router.push(`/profile/organizations/${orgId}/settings`);
     });
-  }, [requireOwner]);
+  }, [requireOwner, router, orgId]);
 
-  const clickNewView = useCallback(() => {
+  const handleWorkspaceAnalytics = useCallback(() => {
     requireOwner(() => {
-      alert("Create View (stub)");
+      router.push(`/profile/organizations/${orgId}/analytics`);
     });
-  }, [requireOwner]);
+  }, [requireOwner, router, orgId]);
 
-  const copyProjectUrl = useCallback(() => {
+  const copyWorkspaceUrl = useCallback(() => {
     if (typeof window === "undefined") return;
     void navigator.clipboard.writeText(window.location.href);
   }, []);
-  const copyProjectId = useCallback(() => {
+  const copyWorkspaceId = useCallback(() => {
     if (!orgId || typeof window === "undefined") return;
     void navigator.clipboard.writeText(String(orgId));
   }, [orgId]);
 
-  const sortedMaps = useMemo(() => {
-    const arr = [...maps];
-    arr.sort((a, b) => {
-      if (sortKey === "name") {
-        return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
-      }
-      if (sortKey === "author") {
-        return (a.ownerId || "").localeCompare(b.ownerId || "", undefined, { sensitivity: "base" });
-      }
-      const ad = new Date(a.createdAt ?? 0).getTime();
-      const bd = new Date(b.createdAt ?? 0).getTime();
-      return ad - bd;
-    });
-    if (sortOrder === "desc") arr.reverse();
-    return arr;
-  }, [maps, sortKey, sortOrder]);
-
   if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">Đang tải…</div>;
-  if (err || !org) return <div className="max-w-3xl px-4 text-red-400">{err ?? "Không tìm thấy tổ chức."}</div>;
+  if (err || !org) return <div className="max-w-3xl px-4 text-red-400">{err ?? "Không tìm thấy workspace."}</div>;
 
   const memberRows: MemberLike[] = asMemberArray(members?.members ?? []);
 
@@ -509,19 +428,20 @@ export default function OrgDetailPage() {
             Share
           </button>
 
-          <button onClick={clickNewFolder} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10" title="New folder">
-            New folder
+          <button 
+            onClick={() => router.push(`/profile/workspaces`)}
+            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10" 
+            title="Manage workspaces"
+          >
+            Workspaces
           </button>
 
-          {/* <button onClick={clickNewView} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10" title="New view">
-            New view
-          </button> */}
           <button
-            onClick={createAndGo}
-            className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
-            disabled={creatingMap}
+            onClick={handleWorkspaceSettings}
+            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10"
+            title="Workspace settings"
           >
-            {creatingMap ? "Creating…" : "New map"}
+            Settings
           </button>
 
           <div className="relative">
@@ -536,11 +456,14 @@ export default function OrgDetailPage() {
             </button>
             {moreOpen && (
               <div role="menu" className="absolute right-0 mt-2 w-60 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl overflow-hidden" onMouseLeave={() => setMoreOpen(false)}>
-                <button onClick={copyProjectUrl} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
-                  Copy project URL
+                <button onClick={copyWorkspaceUrl} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
+                  Copy workspace URL
                 </button>
-                <button onClick={copyProjectId} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
-                  Copy project ID for API
+                <button onClick={copyWorkspaceId} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
+                  Copy workspace ID for API
+                </button>
+                <button onClick={handleWorkspaceAnalytics} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
+                  View Analytics
                 </button>
 
                 {isOwner && (
@@ -552,7 +475,7 @@ export default function OrgDetailPage() {
                     className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-red-300"
                     role="menuitem"
                   >
-                    Delete project…
+                    Delete workspace…
                   </button>
                 )}
               </div>
@@ -561,155 +484,105 @@ export default function OrgDetailPage() {
         </div>
       </div>
 
+      {/* Workspaces Section */}
       <section className="mb-8">
-        <h2 className="mb-3 text-lg font-semibold">Maps</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Workspaces</h2>
+          <button
+            onClick={() => router.push(`/profile/workspaces`)}
+            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+          >
+            Manage Workspaces
+          </button>
+        </div>
 
-        {sortedMaps.length === 0 && (
+        {workspaces.length === 0 && (
           <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
-            <p className="text-zinc-400 mb-4">No maps in this project yet.</p>
+            <p className="text-zinc-400 mb-4">No workspaces yet. Create your first workspace to organize your projects.</p>
             <button
-              onClick={createAndGo}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400 disabled:opacity-60"
-              disabled={creatingMap}
+              onClick={() => router.push(`/profile/workspaces`)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
             >
-              {creatingMap ? "Creating…" : "Create a map here"}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Create Workspace
             </button>
           </div>
         )}
 
-        {sortedMaps.length > 0 && viewMode === "grid" && (
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {sortedMaps.map((m) => (
-              <li
-                key={m.id}
+        {workspaces.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {workspaces.slice(0, 4).map((workspace: Workspace) => (
+              <div
+                key={workspace.workspaceId}
                 className="group rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4 cursor-pointer"
-                onClick={() => router.push(`/maps/${m.id}`)}
-                title={m.name}
+                onClick={() => router.push(`/profile/organizations/${orgId}/workspaces/${workspace.workspaceId}`)}
               >
-                <div className="h-32 w-full rounded-lg bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/5 mb-3 grid place-items-center text-zinc-400 text-xs">
-                  Preview
+                <div className="h-24 w-full rounded-lg bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/5 mb-3 grid place-items-center text-zinc-400 text-xs">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                  </svg>
                 </div>
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold">{m.name || "Untitled"}</div>
-                    <div className="text-xs text-zinc-400">
-                      {m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}
-                    </div>
+                <div className="min-w-0">
+                  <div className="truncate font-semibold">{workspace.workspaceName}</div>
+                  <div className="text-xs text-zinc-400 truncate">
+                    {workspace.description ?? "No description"}
                   </div>
-                  <button
-                    className="opacity-0 group-hover:opacity-100 transition text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      router.push(`/maps/${m.id}`);
-                    }}
-                  >
-                    Edit
-                  </button>
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
-        )}
-
-        {sortedMaps.length > 0 && viewMode === "list" && (
-          <div className="rounded-xl border border-white/10 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-white/5 text-zinc-300">
-                <tr>
-                  <th className="text-left px-3 py-2">Name</th>
-                  <th className="text-left px-3 py-2">Author</th>
-                  <th className="text-left px-3 py-2">Created</th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/10">
-                {sortedMaps.map((m) => (
-                  <tr key={m.id} className="hover:bg-white/5">
-                    <td className="px-3 py-2">
-                      <button className="text-emerald-300 hover:underline" onClick={() => router.push(`/maps/${m.id}`)}>
-                        {m.name || "Untitled"}
-                      </button>
-                    </td>
-                    <td className="px-3 py-2 text-zinc-400">{m.ownerId || "—"}</td>
-                    <td className="px-3 py-2 text-zinc-400">{m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}</td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
-                        onClick={() => router.push(`/maps/${m.id}`)}
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section className="mb-6">
-        <button
-          type="button"
-          onClick={() => setToolsOpen((v) => !v)}
-          className="w-full flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 hover:bg-white/10"
-          aria-expanded={toolsOpen}
-          aria-controls="access-tools-panel"
-        >
-          <span className="text-lg font-semibold">
-            Access Tools
-            <span className="ml-2 text-xs font-normal text-zinc-400">{tools.length ? `(${tools.length})` : ""}</span>
-          </span>
-          <span className={["inline-block transition-transform duration-200", toolsOpen ? "rotate-180" : "rotate-0"].join(" ")} aria-hidden>
-            ▾
-          </span>
-        </button>
-
-        {toolsOpen && (
-          <div id="access-tools-panel" className="mt-3 rounded-xl border border-white/10 bg-zinc-900/60 p-4">
-            {tools.length === 0 ? (
-              <p className="text-sm text-zinc-400">No access tools granted yet.</p>
-            ) : (
-              <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {tools.map((t) => (
-                  <li key={t.id} className="rounded-xl border border-white/10 bg-zinc-900/60 p-4 hover:bg-zinc-800/60 transition">
-                    <div className="flex items-start gap-3">
-                      {t.iconUrl ? (
-                        <Image
-                          src={t.iconUrl}
-                          alt=""
-                          width={32}
-                          height={32}
-                          className="h-8 w-8 rounded-md bg-zinc-800/70 p-1 object-contain"
-                          unoptimized
-                        />
-                      ) : (
-                        <div className="h-8 w-8 rounded-md bg-zinc-800/50" />
-                      )}
-                      <div className="flex-1">
-                        <div className="text-base font-semibold">{t.name}</div>
-                        <div className="text-sm text-zinc-400">{t.description ? String(t.description) : "No description"}</div>
-                        <div className="mt-2 flex items-center justify-between text-xs text-zinc-400 border-t border-white/5 pt-2">
-                          <span className={t.isActive ? "text-emerald-400" : "text-red-400"}>{t.isActive ? "Active" : "Inactive"}</span>
-                          <span>
-                            Expires:{" "}
-                            {/^(?:0001-01-01|0001)/.test(t.expiredAt) ? "No expiry" : new Date(t.expiredAt).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+            {workspaces.length > 4 && (
+              <div
+                className="group rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4 cursor-pointer"
+                onClick={() => router.push(`/profile/workspaces`)}
+              >
+                <div className="h-24 w-full rounded-lg bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/5 mb-3 grid place-items-center text-zinc-400 text-xs">
+                  <div className="text-center">
+                    <div className="text-lg font-bold">+{workspaces.length - 4}</div>
+                    <div className="text-xs">more</div>
+                  </div>
+                </div>
+                <div className="min-w-0">
+                  <div className="truncate font-semibold">View All Workspaces</div>
+                  <div className="text-xs text-zinc-400">See all {workspaces.length} workspaces</div>
+                </div>
+              </div>
             )}
           </div>
         )}
       </section>
 
+      {/* Workspace Overview */}
+      <section className="mb-8">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">Workspace Overview</h2>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
+            <div className="text-2xl font-bold text-emerald-300">{workspaces.length}</div>
+            <div className="text-sm text-zinc-400">Workspaces</div>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
+            <div className="text-2xl font-bold text-emerald-300">{memberRows.length}</div>
+            <div className="text-sm text-zinc-400">Members</div>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
+            <div className="text-2xl font-bold text-emerald-300">{membership?.planName || "Basic"}</div>
+            <div className="text-sm text-zinc-400">Plan</div>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
+            <div className="text-2xl font-bold text-emerald-300">—</div>
+            <div className="text-sm text-zinc-400">Actions</div>
+          </div>
+        </div>
+      </section>
+
       {shareOpen && (
         <div className="absolute top-12 right-0 w-[28rem] rounded-xl border border-white/10 bg-zinc-900/95 shadow-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-sm font-medium text-zinc-200">Share project</div>
+            <div className="text-sm font-medium text-zinc-200">Share workspace</div>
             <button className="text-zinc-500 hover:text-white" onClick={() => setShareOpen(false)} aria-label="Close share">
               ✕
             </button>
@@ -738,8 +611,8 @@ export default function OrgDetailPage() {
             {inviteMsg && <div className="mt-2 text-xs text-zinc-300">{inviteMsg}</div>}
           </div>
           <div className="divide-y divide-white/10 text-sm max-h-56 overflow-auto rounded-md border border-white/5">
-            {memberRows.map((m) => {
-              const key = (m.memberId ?? m.email ?? Math.random().toString(36)) as string;
+            {memberRows.map((m, index) => {
+              const key = (m.memberId ?? m.email ?? `member-${index}`) as string;
               const roleLabel = (m.role ?? m.memberType ?? "") || "Member";
               const expanded = expandedMemberId === key;
 
@@ -797,7 +670,7 @@ export default function OrgDetailPage() {
             )}
           </div>
           <div className="mt-3 flex items-center justify-between text-xs text-zinc-400">
-            <span>Only invited users see this project</span>
+            <span>Only invited users see this workspace</span>
             <button
               className="text-emerald-300 hover:underline"
               onClick={() => {
@@ -815,8 +688,8 @@ export default function OrgDetailPage() {
           <div className="w-[30rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
             <h2 className="text-lg font-semibold text-white">Xoá thành viên</h2>
             <p className="text-sm text-zinc-300 mt-2">
-              Bạn sắp xoá <span className="font-semibold">{removeDialog.label ?? "thành viên"}</span> khỏi dự án này.
-              Hành động này sẽ gỡ quyền truy cập của họ vào tất cả bản đồ trong tổ chức.
+              Bạn sắp xoá <span className="font-semibold">{removeDialog.label ?? "thành viên"}</span> khỏi workspace này.
+              Hành động này sẽ gỡ quyền truy cập của họ vào tất cả dự án trong workspace.
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -840,9 +713,9 @@ export default function OrgDetailPage() {
       {isOwner && deleteOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
-            <h2 className="text-lg font-semibold text-white">Delete project</h2>
+            <h2 className="text-lg font-semibold text-white">Delete workspace</h2>
             <p className="text-sm text-zinc-300 mt-2">
-              Bạn sắp xóa tổ chức <span className="font-semibold">{title}</span>. Hành động này không thể hoàn tác. Nhập{" "}
+              Bạn sắp xóa workspace <span className="font-semibold">{title}</span>. Hành động này không thể hoàn tác. Nhập{" "}
               <span className="font-mono">{title}</span> để xác nhận.
             </p>
             <input
@@ -869,7 +742,7 @@ export default function OrgDetailPage() {
                 className="px-3 py-2 rounded-lg bg-red-500 text-zinc-900 text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
                 onClick={() => void onDeleteOrg()}
               >
-                {deleteBusy ? "Đang xóa..." : "Xóa tổ chức"}
+                {deleteBusy ? "Đang xóa..." : "Xóa workspace"}
               </button>
             </div>
           </div>

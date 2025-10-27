@@ -5,10 +5,9 @@ import { useRouter } from "next/navigation";
 import { login } from "@/lib/api";
 import { isFirstTimeUser } from "@/utils/authUtils";
 import { useToast } from "@/contexts/ToastContext";
-import AuthLayout from "@/components/auth/AuthLayout";
-import InputField from "@/components/auth/InputField";
+import InputField from "@/components/ui/InputField";
 import PasswordInput from "@/components/auth/PasswordInput";
-import SubmitButton from "@/components/auth/SubmitButton";
+import SubmitButton from "@/components/ui/SubmitButton";
 import AuthLinks from "@/components/auth/AuthLinks";
 import { AuthFormErrors } from "@/types/auth";
 
@@ -57,10 +56,10 @@ export default function LoginClientSimple() {
   };
 
   return (
-    <AuthLayout
-      title="Welcome back"
-      subtitle="Sign in to your account"
-    >
+    <div className="w-full max-w-md mx-auto">
+      <h1 className="text-3xl md:text-4xl font-bold mb-2">Welcome back</h1>
+      <p className="text-gray-600 dark:text-gray-300 mb-8">Sign in to your account</p>
+      
       <form onSubmit={onSubmit} className="space-y-6" noValidate>
         <InputField
           type="email"
@@ -94,12 +93,11 @@ export default function LoginClientSimple() {
 
       <AuthLinks
         links={[
-          { href: "/forgot-password", text: "Reset" },
+          { href: "/forgot-password", text: "Forgot your password?" },
           { href: "/register", text: "Create an account" }
         ]}
         className="space-y-2"
       />
-
-    </AuthLayout>
+    </div>
   );
 }

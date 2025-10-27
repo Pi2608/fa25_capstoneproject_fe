@@ -7,6 +7,7 @@ import {
   createMap,
   type CreateMapRequest,
   createMapTemplateFromGeoJson,
+  addMapToProject,
 } from "@/lib/api";
 import type { FeatureCollection as GeoFeatureCollection, Geometry, GeoJsonProperties, Position } from "geojson";
 import { addLayerToList, removeLayerFromList, toggleLayerVisibility, renameLayer, LayerInfo, ExtendedLayer } from "@/utils/mapUtils";
@@ -90,6 +91,7 @@ function NewMapPageInner() {
   const router = useRouter();
 
   const [orgId, setOrgId] = useState<string | undefined>(undefined);
+  const [projectId, setProjectId] = useState<string | undefined>(undefined);
 
   const mapEl = useRef<HTMLDivElement | null>(null);
   const LRef = useRef<LNS | null>(null);
@@ -203,6 +205,15 @@ function NewMapPageInner() {
         orgId,
       });
 
+      // If projectId is provided, add map to that project
+      if (projectId) {
+        try {
+          await addMapToProject(projectId, { mapId: created.mapId });
+        } catch (e) {
+          console.warn("Failed to add map to project:", e);
+        }
+      }
+
       router.replace(`/maps/${created.mapId}?created=1&name=${encodeURIComponent((mapName || "Untitled Map").trim())}`);
     } catch {
       setAutoCreated(false);
@@ -210,7 +221,7 @@ function NewMapPageInner() {
     } finally {
       setSaving(false);
     }
-  }, [autoCreated, isMapValid, baseLayer, mapName, description, isPublic, orgId, router]);
+  }, [autoCreated, isMapValid, baseLayer, mapName, description, isPublic, orgId, projectId, router]);
 
   const applyBaseLayer = useCallback((kind: BaseKey) => {
     const L = LRef.current;
@@ -368,6 +379,15 @@ function NewMapPageInner() {
       const created = await createMap(body);
       const id = created.mapId;
 
+      // If projectId is provided, add map to that project
+      if (projectId) {
+        try {
+          await addMapToProject(projectId, { mapId: id });
+        } catch (e) {
+          console.warn("Failed to add map to project:", e);
+        }
+      }
+
       // Nếu lưu Template thì xử lý luôn rồi mới chuyển trang
       if (asTemplate) {
         const exported = exportSketchToGeoJson();
@@ -407,6 +427,7 @@ function NewMapPageInner() {
     description,
     baseLayer,
     orgId,
+    projectId,
     isMapValid,
     asTemplate,
     exportSketchToGeoJson,
@@ -441,8 +462,10 @@ function NewMapPageInner() {
   };
 
   useEffect(() => {
-    const val = sp?.get("org") || sp?.get("orgId") || undefined;
-    setOrgId(val || undefined);
+    const orgVal = sp?.get("org") || sp?.get("orgId") || undefined;
+    const projVal = sp?.get("project") || sp?.get("projectId") || undefined;
+    setOrgId(orgVal || undefined);
+    setProjectId(projVal || undefined);
   }, [sp]);
   useEffect(() => {
     if (ready && baseLoaded && !autoCreated) {
@@ -561,14 +584,14 @@ function NewMapPageInner() {
             </div>
 
             <div className="flex items-center justify-center gap-2 overflow-x-auto no-scrollbar">
-              <GuardBtn can={perms.marker} title="Draw point" onClick={() => enableDraw("Marker")} disabled={!ready}>
+              <GuardBtn title="Draw point" onClick={() => enableDraw("Marker")} disabled={!ready}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 21s-6-4.5-6-10a6 6 0 1 1 12 0c0 5.5-6 10-6 10z" />
                   <circle cx="12" cy="11" r="2.5" />
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.line} title="Draw line" onClick={() => enableDraw("Line")} disabled={!ready}>
+              <GuardBtn title="Draw line" onClick={() => enableDraw("Line")} disabled={!ready}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="5" cy="7" r="2" />
                   <circle cx="19" cy="17" r="2" />
@@ -576,31 +599,31 @@ function NewMapPageInner() {
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.polygon} title="Draw polygon" onClick={() => enableDraw("Polygon")} disabled={!ready}>
+              <GuardBtn title="Draw polygon" onClick={() => enableDraw("Polygon")} disabled={!ready}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M7 4h10l4 6-4 10H7L3 10 7 4z" />
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.rectangle} title="Draw rectangle" onClick={() => enableDraw("Rectangle")} disabled={!ready}>
+              <GuardBtn title="Draw rectangle" onClick={() => enableDraw("Rectangle")} disabled={!ready}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="5" y="6" width="14" height="12" rx="1.5" />
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.circle} title="Draw circle" onClick={() => enableDraw("Circle")} disabled={!ready}>
+              <GuardBtn title="Draw circle" onClick={() => enableDraw("Circle")} disabled={!ready}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="8.5" />
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.text} title="Add text" onClick={() => enableDraw("Text")} disabled={!ready}>
+              <GuardBtn title="Add text" onClick={() => enableDraw("Text")} disabled={!ready}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 6h16M12 6v12" />
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.cut} title="Cut polygon" onClick={enableCutPolygon} disabled={!ready}>
+              <GuardBtn title="Cut polygon" onClick={enableCutPolygon} disabled={!ready}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="5.5" cy="8" r="2" />
                   <circle cx="5.5" cy="16" r="2" />
@@ -608,7 +631,7 @@ function NewMapPageInner() {
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.rotate} title="Rotate features" onClick={toggleRotate} disabled={!ready}>
+              <GuardBtn title="Rotate features" onClick={toggleRotate} disabled={!ready}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 11a8 8 0 1 1-2.2-5.5" />
                   <path d="M20 4v7h-7" />

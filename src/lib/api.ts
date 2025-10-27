@@ -1,3 +1,5 @@
+import { Workspace, WorkspaceAccess } from "@/types/workspace";
+
 export type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export interface ApiErrorShape {
@@ -474,6 +476,7 @@ export function createMap(req: CreateMapRequest) {
   const body = {
     OrgId: req.orgId,
     OrganizationId: req.orgId,
+    ProjectId: (req as any).projectId ?? undefined,
     Name: req.name,
     Description: req.description ?? null,
     IsPublic: req.isPublic,
@@ -484,6 +487,83 @@ export function createMap(req: CreateMapRequest) {
 
   return postJson<typeof body, CreateMapResponse>("/maps", body);
 }
+
+/** ===================== PROJECTS ===================== */
+
+export type CreateWorkspaceRequest = {
+  orgId: string;
+  workspaceName: string;
+  description?: string | null;
+  icon?: string | null;
+  access?: WorkspaceAccess;
+};
+
+export type CreateWorkspaceResponse = { result?: string };
+
+export function createWorkspace(req: CreateWorkspaceRequest) {
+  const body = {
+    OrgId: req.orgId,
+    WorkspaceName: req.workspaceName,
+    Description: req.description ?? null,
+    Icon: req.icon ?? null,
+    Access: req.access ?? "Private",
+  };
+  return postJson<typeof body, CreateWorkspaceResponse>("/workspaces", body);
+}
+
+// Backward compatibility aliases
+export type CreateProjectRequest = CreateWorkspaceRequest;
+export const createProject = createWorkspace;
+
+
+
+export type GetWorkspacesByOrgResponse = { workspaces: Workspace[] } | Workspace[];
+
+export async function getWorkspacesByOrganization(orgId: string): Promise<Workspace[]> {
+  const res = await getJson<GetWorkspacesByOrgResponse>(`/workspaces/organization/${orgId}`);
+  return Array.isArray(res) ? res : (res.workspaces ?? []);
+}
+
+export type AddMapToWorkspaceRequest = { mapId: string };
+export type AddMapToWorkspaceResponse = { result?: string };
+
+export function addMapToWorkspace(workspaceId: string, req: AddMapToWorkspaceRequest) {
+  const body = { MapId: req.mapId };
+  return postJson<typeof body, AddMapToWorkspaceResponse>(`/workspaces/${workspaceId}/maps`, body);
+}
+
+export function getWorkspaceById(workspaceId: string) {
+  return getJson<Workspace>(`/workspaces/${workspaceId}`);
+}
+
+export function updateWorkspace(workspaceId: string, req: { workspaceName: string; description?: string }) {
+  const body = {
+    WorkspaceName: req.workspaceName,
+    Description: req.description ?? null,
+  };
+  return putJson<typeof body, Workspace>(`/workspaces/${workspaceId}`, body);
+}
+
+export function deleteWorkspace(workspaceId: string) {
+  return delJson(`/workspaces/${workspaceId}`);
+}
+
+export function getWorkspaceMaps(workspaceId: string) {
+  return getJson<MapDto[]>(`/workspaces/${workspaceId}/maps`);
+}
+
+export function removeMapFromWorkspace(workspaceId: string, mapId: string) {
+  return delJson(`/workspaces/${workspaceId}/maps/${mapId}`);
+}
+
+// Backward compatibility aliases
+export const getProjectsByOrganization = getWorkspacesByOrganization;
+export const addMapToProject = addMapToWorkspace;
+export const getProjectById = getWorkspaceById;
+export const updateProject = updateWorkspace;
+export const deleteProject = deleteWorkspace;
+export const getProjectMaps = getWorkspaceMaps;
+export const removeMapFromProject = removeMapFromWorkspace;
 
 export type MapDto = {
   id: string;
@@ -869,12 +949,12 @@ export function unshareMap(mapId: string, body: UnshareMapRequest) {
 export interface MapFeatureResponse {
   featureId: string;
   mapId: string;
-  layerId?: string | null;
-  name?: string | null;
+  name: string;
   description?: string | null;
+  layerId?: string | null;
   featureCategory: "Data" | "Annotation";
   annotationType?: "Marker" | "Highlighter" | "Text" | "Note" | "Link" | "Video" | null;
-  geometryType: "Point" | "LineString" | "Polygon" | "Circle";
+  geometryType: "Point" | "LineString" | "Polygon" | "Circle" | "Rectangle";
   coordinates: string;
   properties?: string | null;
   style?: string | null;
@@ -892,7 +972,7 @@ export interface CreateMapFeatureRequest {
   description?: string | null;
   featureCategory: "Data" | "Annotation";
   annotationType?: "Marker" | "Highlighter" | "Text" | "Note" | "Link" | "Video" | null;
-  geometryType: "Point" | "LineString" | "Polygon" | "Circle";
+  geometryType: "Point" | "LineString" | "Polygon" | "Circle" | "Rectangle";
   coordinates: string;
   properties?: string | null;
   style?: string | null;
@@ -918,7 +998,7 @@ export interface UpdateMapFeatureRequest {
   description?: string | null;
   featureCategory?: "Data" | "Annotation" | null;
   annotationType?: "Marker" | "Highlighter" | "Text" | "Note" | "Link" | "Video" | null;
-  geometryType?: "Point" | "LineString" | "Polygon" | "Circle" | null;
+  geometryType?: "Point" | "LineString" | "Polygon" | "Circle" | "Rectangle" | null;
   coordinates?: string | null;
   properties?: string | null;
   style?: string | null;
