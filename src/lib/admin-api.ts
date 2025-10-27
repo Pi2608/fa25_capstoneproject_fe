@@ -1,3 +1,4 @@
+// src/lib/admin-api.ts
 import { getJson, postJson, putJson, delJson, apiFetch } from "./api";
 
 /* ==================== COMMON ==================== */
@@ -7,6 +8,7 @@ export interface PageParams {
   pageSize?: number;
   [key: string]: unknown;
 }
+
 export interface Paged<T> {
   items: T[];
   page: number;
@@ -15,6 +17,11 @@ export interface Paged<T> {
   totalPages: number;
 }
 
+/**
+ * LƯU Ý VỀ BASE URL:
+ * - NEXT_PUBLIC_API_BASE_URL của bạn đã là: http://localhost:5233/api/v1
+ * - Do đó ở đây chỉ cần "/api/admin" (tránh bị /api/v1/api/v1/...).
+ */
 const ADMIN_BASE = "/api/admin";
 
 /* ==================== USERS ==================== */
@@ -43,9 +50,7 @@ export async function adminGetUsers<TUser = unknown>(
   });
   const query = sp.toString() ? `?${sp.toString()}` : "";
 
-  const res = await getJson<AdminUsersResponse<TUser>>(
-    `${ADMIN_BASE}/users${query}`
-  );
+  const res = await getJson<AdminUsersResponse<TUser>>(`${ADMIN_BASE}/users${query}`);
 
   return {
     items: Array.isArray(res.users) ? res.users : [],
@@ -70,10 +75,7 @@ export function adminUpdateUserStatus<TRes = unknown>(
   userId: string,
   body: UpdateUserStatusRequest
 ) {
-  return putJson<UpdateUserStatusRequest, TRes>(
-    `${ADMIN_BASE}/users/${userId}/status`,
-    body
-  );
+  return putJson<UpdateUserStatusRequest, TRes>(`${ADMIN_BASE}/users/${userId}/status`, body);
 }
 
 export function adminDeleteUser<TRes = { success?: boolean }>(userId: string) {
@@ -81,9 +83,7 @@ export function adminDeleteUser<TRes = { success?: boolean }>(userId: string) {
 }
 
 export function adminImpersonateUser<TRes = { token?: string }>(userId: string) {
-  return apiFetch<TRes>(`${ADMIN_BASE}/users/${userId}/impersonate`, {
-    method: "POST",
-  });
+  return apiFetch<TRes>(`${ADMIN_BASE}/users/${userId}/impersonate`, { method: "POST" });
 }
 
 /* ==================== ORGANIZATIONS ==================== */
@@ -112,9 +112,7 @@ export async function adminGetOrganizations<TOrg = unknown>(
   });
   const query = sp.toString() ? `?${sp.toString()}` : "";
 
-  const res = await getJson<AdminOrgsResponse<TOrg>>(
-    `${ADMIN_BASE}/organizations${query}`
-  );
+  const res = await getJson<AdminOrgsResponse<TOrg>>(`${ADMIN_BASE}/organizations${query}`);
 
   return {
     items: Array.isArray(res.organizations) ? res.organizations : [],
@@ -136,9 +134,7 @@ export function adminUpdateOrganizationStatus<TReq extends object, TRes = unknow
   return putJson<TReq, TRes>(`${ADMIN_BASE}/organizations/${orgId}/status`, body);
 }
 
-export function adminDeleteOrganization<TRes = { success?: boolean }>(
-  orgId: string
-) {
+export function adminDeleteOrganization<TRes = { success?: boolean }>(orgId: string) {
   return delJson<TRes>(`${ADMIN_BASE}/organizations/${orgId}`);
 }
 
@@ -173,14 +169,8 @@ export interface CheckQuotaRequestDto {
   resourceType: string;
   requestedAmount: number;
 }
-export function orgAdminCheckQuota<TRes = unknown>(
-  orgId: string,
-  body: CheckQuotaRequestDto
-) {
-  return postJson<CheckQuotaRequestDto, TRes>(
-    `${ORG_ADMIN_BASE}/usage/${orgId}/check-quota`,
-    body
-  );
+export function orgAdminCheckQuota<TRes = unknown>(orgId: string, body: CheckQuotaRequestDto) {
+  return postJson<CheckQuotaRequestDto, TRes>(`${ORG_ADMIN_BASE}/usage/${orgId}/check-quota`, body);
 }
 
 /* ==================== SUBSCRIPTION PLANS ==================== */
@@ -190,9 +180,9 @@ export type CreateSubscriptionPlanRequest = {
   description?: string | null;
   priceMonthly: number;
   priceYearly: number;
-  mapsLimit: number;         
-  exportsLimit: number;     
-  customLayersLimit: number; 
+  mapsLimit: number;
+  exportsLimit: number;
+  customLayersLimit: number;
   monthlyTokenLimit: number;
   isPopular: boolean;
   isActive: boolean;
@@ -204,13 +194,8 @@ export function adminGetSubscriptionPlans<TPlan = unknown>() {
 export function adminGetSubscriptionPlanById<TPlan = unknown>(planId: number) {
   return getJson<TPlan>(`${ADMIN_BASE}/subscription-plans/${planId}`);
 }
-export function adminCreateSubscriptionPlan<TRes = unknown>(
-  body: CreateSubscriptionPlanRequest
-) {
-  return postJson<CreateSubscriptionPlanRequest, TRes>(
-    `${ADMIN_BASE}/subscription-plans`,
-    body
-  );
+export function adminCreateSubscriptionPlan<TRes = unknown>(body: CreateSubscriptionPlanRequest) {
+  return postJson<CreateSubscriptionPlanRequest, TRes>(`${ADMIN_BASE}/subscription-plans`, body);
 }
 export function adminUpdateSubscriptionPlan<TReq extends object, TRes = unknown>(
   planId: number,
@@ -218,24 +203,14 @@ export function adminUpdateSubscriptionPlan<TReq extends object, TRes = unknown>
 ) {
   return putJson<TReq, TRes>(`${ADMIN_BASE}/subscription-plans/${planId}`, body);
 }
-export function adminDeleteSubscriptionPlan<TRes = { success?: boolean }>(
-  planId: number
-) {
+export function adminDeleteSubscriptionPlan<TRes = { success?: boolean }>(planId: number) {
   return delJson<TRes>(`${ADMIN_BASE}/subscription-plans/${planId}`);
 }
-export function adminActivateSubscriptionPlan<TRes = { success?: boolean }>(
-  planId: number
-) {
-  return apiFetch<TRes>(`${ADMIN_BASE}/subscription-plans/${planId}/activate`, {
-    method: "POST",
-  });
+export function adminActivateSubscriptionPlan<TRes = { success?: boolean }>(planId: number) {
+  return apiFetch<TRes>(`${ADMIN_BASE}/subscription-plans/${planId}/activate`, { method: "POST" });
 }
-export function adminDeactivateSubscriptionPlan<TRes = { success?: boolean }>(
-  planId: number
-) {
-  return apiFetch<TRes>(`${ADMIN_BASE}/subscription-plans/${planId}/deactivate`, {
-    method: "POST",
-  });
+export function adminDeactivateSubscriptionPlan<TRes = { success?: boolean }>(planId: number) {
+  return apiFetch<TRes>(`${ADMIN_BASE}/subscription-plans/${planId}/deactivate`, { method: "POST" });
 }
 
 /* ==================== SUPPORT TICKETS ==================== */
@@ -247,9 +222,7 @@ export interface GetTicketsFilter extends PageParams {
   [key: string]: unknown;
 }
 
-export function adminGetSupportTickets<TTicket = unknown>(
-  p: GetTicketsFilter = {}
-) {
+export function adminGetSupportTickets<TTicket = unknown>(p: GetTicketsFilter = {}) {
   const sp = new URLSearchParams();
   Object.entries(p).forEach(([k, v]) => {
     if (v === undefined || v === null) return;
@@ -277,10 +250,7 @@ export function adminCloseSupportTicket<TRes = unknown>(
   ticketId: string,
   body: CloseTicketRequestDto
 ) {
-  return postJson<CloseTicketRequestDto, TRes>(
-    `${ADMIN_BASE}/support-tickets/${ticketId}/close`,
-    body
-  );
+  return postJson<CloseTicketRequestDto, TRes>(`${ADMIN_BASE}/support-tickets/${ticketId}/close`, body);
 }
 
 export interface AssignTicketRequestDto {
@@ -290,10 +260,7 @@ export function adminAssignSupportTicket<TRes = unknown>(
   ticketId: string,
   body: AssignTicketRequestDto
 ) {
-  return postJson<AssignTicketRequestDto, TRes>(
-    `${ADMIN_BASE}/support-tickets/${ticketId}/assign`,
-    body
-  );
+  return postJson<AssignTicketRequestDto, TRes>(`${ADMIN_BASE}/support-tickets/${ticketId}/assign`, body);
 }
 
 export interface EscalateTicketRequestDto {
@@ -303,38 +270,18 @@ export function adminEscalateSupportTicket<TRes = unknown>(
   ticketId: string,
   body: EscalateTicketRequestDto
 ) {
-  return postJson<EscalateTicketRequestDto, TRes>(
-    `${ADMIN_BASE}/support-tickets/${ticketId}/escalate`,
-    body
-  );
+  return postJson<EscalateTicketRequestDto, TRes>(`${ADMIN_BASE}/support-tickets/${ticketId}/escalate`, body);
 }
 
-/* ==================== USAGE & DASHBOARD ==================== */
+/* ==================== USAGE & DASHBOARD (DÙNG CHO /dashboard) ==================== */
 
-export function adminGetSystemUsage<TRes = unknown>() {
-  return getJson<TRes>(`${ADMIN_BASE}/system-usage`);
-}
+/** Tổng quan hệ thống: phục vụ 4 thẻ KPI trên dashboard */
 export function adminGetSystemDashboard<TRes = unknown>() {
   return getJson<TRes>(`${ADMIN_BASE}/dashboard`);
 }
-export function adminGetActiveAlerts<TAlert = unknown>() {
-  return getJson<TAlert[]>(`${ADMIN_BASE}/alerts`);
-}
-export interface ResolveAlertRequestDto {
-  resolution: string;
-}
-export function adminResolveAlert<TRes = unknown>(
-  alertId: string,
-  body: ResolveAlertRequestDto
-) {
-  return postJson<ResolveAlertRequestDto, TRes>(
-    `${ADMIN_BASE}/alerts/${alertId}/resolve`,
-    body
-  );
-}
-export function adminGetRecentActivities<TActivity = unknown>(
-  p: PageParams = {}
-) {
+
+/** Hoạt động gần đây: danh sách activity, dùng cho panel bên phải */
+export function adminGetRecentActivities<TActivity = unknown>(p: PageParams = {}) {
   const sp = new URLSearchParams();
   Object.entries(p).forEach(([k, v]) => {
     if (v === undefined || v === null) return;
@@ -344,30 +291,28 @@ export function adminGetRecentActivities<TActivity = unknown>(
   return getJson<Paged<TActivity>>(`${ADMIN_BASE}/activities${query}`);
 }
 
-/* ==================== ANALYTICS ==================== */
+/** Top users: dữ liệu cho bảng "Top accounts" */
+export function adminGetTopUsers<TItem = unknown>(count = 10) {
+  const q = new URLSearchParams({ count: String(count) }).toString();
+  return getJson<TItem[]>(`${ADMIN_BASE}/top-users?${q}`);
+}
 
-export function adminGetSystemAnalytics<TRes = unknown>(
-  startDate: Date,
-  endDate: Date
-) {
+/* ==================== ANALYTICS (nếu cần biểu đồ/extra) ==================== */
+
+export function adminGetSystemAnalytics<TRes = unknown>(startDate: Date, endDate: Date) {
   const q = new URLSearchParams({
     startDate: startDate.toISOString(),
     endDate: endDate.toISOString(),
   }).toString();
   return getJson<TRes>(`${ADMIN_BASE}/analytics?${q}`);
 }
-export function adminGetTopUsers<TItem = unknown>(count = 10) {
-  const q = new URLSearchParams({ count: String(count) }).toString();
-  return getJson<TItem[]>(`${ADMIN_BASE}/top-users?${q}`);
-}
+
 export function adminGetTopOrganizations<TItem = unknown>(count = 10) {
   const q = new URLSearchParams({ count: String(count) }).toString();
   return getJson<TItem[]>(`${ADMIN_BASE}/top-organizations?${q}`);
 }
-export function adminGetRevenueAnalytics<TRes = unknown>(
-  startDate: Date,
-  endDate: Date
-) {
+
+export function adminGetRevenueAnalytics<TRes = unknown>(startDate: Date, endDate: Date) {
   const q = new URLSearchParams({
     startDate: startDate.toISOString(),
     endDate: endDate.toISOString(),
@@ -380,9 +325,7 @@ export function adminGetRevenueAnalytics<TRes = unknown>(
 export interface MaintenanceRequestDto {
   maintenanceType: string;
 }
-export function adminPerformMaintenance<TRes = unknown>(
-  body: MaintenanceRequestDto
-) {
+export function adminPerformMaintenance<TRes = unknown>(body: MaintenanceRequestDto) {
   return postJson<MaintenanceRequestDto, TRes>(`${ADMIN_BASE}/maintenance`, body);
 }
 export function adminClearCache<TRes = { success?: boolean }>() {
@@ -403,14 +346,13 @@ export function adminRestore<TRes = unknown>(body: RestoreRequestDto) {
 export function adminGetConfiguration<TConf = Record<string, unknown>>() {
   return getJson<TConf>(`${ADMIN_BASE}/configuration`);
 }
-export function adminUpdateConfiguration<TRes = unknown>(
-  configuration: Record<string, unknown>
-) {
-  return putJson<Record<string, unknown>, TRes>(
-    `${ADMIN_BASE}/configuration`,
-    configuration
-  );
+export function adminUpdateConfiguration<TRes = unknown>(configuration: Record<string, unknown>) {
+  return putJson<Record<string, unknown>, TRes>(`${ADMIN_BASE}/configuration`, configuration);
 }
 export function adminResetConfiguration<TRes = { success?: boolean }>() {
   return apiFetch<TRes>(`${ADMIN_BASE}/configuration/reset`, { method: "POST" });
+}
+
+export function adminGetSystemUsage<TRes = unknown>() {
+  return getJson<TRes>(`${ADMIN_BASE}/system-usage`);
 }
