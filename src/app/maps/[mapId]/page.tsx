@@ -1121,6 +1121,8 @@ export default function EditMapPage() {
     mapRef.current?.pm.enableDraw(shape);
   const toggleRotate = () => mapRef.current?.pm.toggleGlobalRotateMode?.();
   const enableCutPolygon = () => mapRef.current?.pm.enableGlobalCutMode();
+  const toggleEdit = () => mapRef.current?.pm.toggleGlobalEditMode();
+  const toggleDrag = () => mapRef.current?.pm.toggleGlobalDragMode();
 
   const clearSketch = useCallback(async () => {
     if (!detail) return;
@@ -1562,17 +1564,6 @@ export default function EditMapPage() {
                   <path d="M20 4v7h-7" />
                 </svg>
               </GuardBtn>
-
-              <GuardBtn
-                title="Biến hình vẽ cuối thành Zone của Segment đang chọn"
-                onClick={() => createZoneFromLastDraw(window.prompt("Tên Zone?") ?? undefined)}
-                disabled={!mapRef.current || !selectedSegmentId}
-              >
-                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="4" y="5" width="16" height="14" rx="2" />
-                  <path d="M8 9h8M8 13h5" />
-                </svg>
-              </GuardBtn>
               <GuardBtn title="Di chuyển đối tượng" onClick={toggleDrag} disabled={toolsLoading || !mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
@@ -1581,6 +1572,16 @@ export default function EditMapPage() {
               <GuardBtn title="Chỉnh sửa đối tượng" onClick={toggleEdit} disabled={toolsLoading || !mapRef.current}>
                 <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                </svg>
+              </GuardBtn>
+              <GuardBtn
+                title="Biến hình vẽ cuối thành Zone của Segment đang chọn"
+                onClick={() => createZoneFromLastDraw(window.prompt("Tên Zone?") ?? undefined)}
+                disabled={!mapRef.current || !selectedSegmentId}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="4" y="5" width="16" height="14" rx="2" />
+                  <path d="M8 9h8M8 13h5" />
                 </svg>
               </GuardBtn>
             </div>
