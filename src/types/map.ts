@@ -16,7 +16,7 @@ export type LeafletIcon = L.Icon;
 export type Layer = L.Layer;
 
 // Extended Leaflet types for Polymaps (PM)
-export interface MapWithPM extends LMap {
+export type MapWithPM = LMap & {
   pm: {
     addControls: (opts: {
       position?: string;
@@ -51,8 +51,8 @@ export interface MapWithPM extends LMap {
       cursorMarker?: boolean;
       tooltips?: boolean;
     }) => void;
-  };
-}
+  } & Record<string, any>;
+};
 
 export interface PMCreateEvent extends LeafletEvent {
   layer: Layer;
@@ -115,10 +115,13 @@ export interface LayerStyle {
   radius?: number;
 }
 
-export interface PathLayer extends Layer {
+export type LayerWithOptions = Layer & {
+  options: LayerStyle & Record<string, unknown>;
+}
+
+export type PathLayer = Layer & {
   setStyle: (style: LayerStyle) => void;
   bringToFront?: () => void;
-  options?: LayerStyle & Record<string, unknown>;
 }
 
 export type LayerWithPopup = Layer & { bindPopup: (html: string) => void };
@@ -165,3 +168,87 @@ export interface PresetData {
 export type TemplateCategory = "education" | "urban-planning" | "research" | "other";
 
 export type ToolName = "Marker" | "Line" | "Polygon" | "Circle" | "Text" | "Route" | null;
+
+// Story Element Layer types
+export type StoryElementType = "Text" | "Image" | "Video" | "Audio" | "Map" | "Chart" | "Timeline" | "Interactive" | "Embed" | "Custom";
+
+export type StoryElementDisplayMode = "Normal" | "Highlight" | "Dimmed" | "Hidden" | "Outline" | "Fade" | "Popup" | "Overlay" | "Custom";
+
+export type AnimationEasingType = "Linear" | "EaseIn" | "EaseOut" | "EaseInOut" | "Bounce" | "Elastic" | "Custom";
+
+export interface StoryElementLayer {
+  storyElementLayerId: string;
+  elementId: string;
+  elementType: StoryElementType;
+  layerId: string;
+  zoneId?: string | null;
+  expandToZone: boolean;
+  highlightZoneBoundary: boolean;
+  displayOrder: number;
+  delayMs: number;
+  fadeInMs: number;
+  fadeOutMs: number;
+  startOpacity: number;
+  endOpacity: number;
+  easing: AnimationEasingType;
+  animationPresetId?: string | null;
+  autoPlayAnimation: boolean;
+  repeatCount: number;
+  animationOverrides?: string | null;
+  metadata?: string | null;
+  isVisible: boolean;
+  opacity: number;
+  displayMode: StoryElementDisplayMode;
+  styleOverride?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+}
+
+export interface CreateStoryElementLayerRequest {
+  elementId: string;
+  elementType: StoryElementType;
+  layerId: string;
+  zoneId?: string | null;
+  expandToZone: boolean;
+  highlightZoneBoundary: boolean;
+  displayOrder: number;
+  delayMs: number;
+  fadeInMs: number;
+  fadeOutMs: number;
+  startOpacity: number;
+  endOpacity: number;
+  easing: AnimationEasingType;
+  animationPresetId?: string | null;
+  autoPlayAnimation: boolean;
+  repeatCount: number;
+  animationOverrides?: string | null;
+  metadata?: string | null;
+  isVisible: boolean;
+  opacity: number;
+  displayMode: StoryElementDisplayMode;
+  styleOverride?: string | null;
+}
+
+export interface UpdateStoryElementLayerRequest {
+  elementType: StoryElementType;
+  layerId: string;
+  zoneId?: string | null;
+  expandToZone: boolean;
+  highlightZoneBoundary: boolean;
+  displayOrder: number;
+  delayMs: number;
+  fadeInMs: number;
+  fadeOutMs: number;
+  startOpacity: number;
+  endOpacity: number;
+  easing: AnimationEasingType;
+  animationPresetId?: string | null;
+  autoPlayAnimation: boolean;
+  repeatCount: number;
+  animationOverrides?: string | null;
+  metadata?: string | null;
+  isVisible: boolean;
+  opacity: number;
+  displayMode: StoryElementDisplayMode;
+  styleOverride?: string | null;
+}

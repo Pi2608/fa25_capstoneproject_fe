@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import AuthLayout from "./AuthLayout";
 import { clearAllAuthData } from "@/utils/authUtils";
 import { useToast } from "@/contexts/ToastContext";
 
-export default function AccountTypeSelection() {
+export default function AccountTypePage() {
   const router = useRouter();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -48,10 +47,10 @@ export default function AccountTypeSelection() {
   };
 
   return (
-    <AuthLayout
-      title="Welcome to IMOS!"
-      subtitle="Choose your account type to get started"
-    >
+    <div className="w-full max-w-md mx-auto">
+      <h1 className="text-3xl md:text-4xl font-bold mb-2">Welcome to IMOS!</h1>
+      <p className="text-gray-600 dark:text-gray-300 mb-8">Choose your account type to get started</p>
+      
       <form onSubmit={handleSubmit} className="space-y-6" noValidate>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Personal Account */}
@@ -107,7 +106,6 @@ export default function AccountTypeSelection() {
           {loading ? "Setting up..." : "Continue"}
         </button>
       </form>
-
-    </AuthLayout>
+    </div>
   );
 }

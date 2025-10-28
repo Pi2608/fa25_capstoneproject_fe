@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import AuthLayout from "@/components/auth/AuthLayout";
 import { useToast } from "@/contexts/ToastContext";
 import { 
   subscribeToPlan, 
@@ -10,11 +9,11 @@ import {
   type SubscribeResponse,
   type PaymentGateway,
   getMyOrganizations,
-  type MyOrganizationDto,
   postJson,
   type OrganizationReqDto,
   type OrganizationResDto
 } from "@/lib/api";
+import { createProject, type CreateProjectRequest } from "@/lib/api";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
 
 export default function OrganizationSetupPage() {
@@ -273,6 +272,20 @@ export default function OrganizationSetupPage() {
                     if (latestOrg) {
                       setCreatedOrgId(latestOrg.orgId);
                       localStorage.setItem("created_org_id", latestOrg.orgId);
+
+                      // Auto-create a default project for this organization
+                      try {
+                        const projReq: CreateProjectRequest = {
+                          orgId: latestOrg.orgId,
+                          workspaceName: `${formData.orgName} Workspace`,
+                          description: "Default project",
+                          access: "AllMembers",
+                        };
+                        await createProject(projReq);
+                        // Optionally remember last project name/id by refetching list later
+                      } catch (e) {
+                        console.warn("Auto-create project failed:", e);
+                      }
                     }
                     
                     // Save organization data to localStorage for reference

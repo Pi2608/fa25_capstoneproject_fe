@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 
 function NavDropdown({
   label,
@@ -30,22 +31,21 @@ function NavDropdown({
     };
   }, []);
 
+  const reduceMotion = useReducedMotion();
+
   useEffect(() => {
     const el = ref.current?.querySelector<HTMLDivElement>("[data-menu]");
     if (!el) return;
-    const reduce =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     if (open) {
       gsap.fromTo(
         el,
         { autoAlpha: 0, y: -8, scale: 0.98 },
-        { autoAlpha: 1, y: 0, scale: 1, duration: reduce ? 0 : 0.2, ease: "power2.out" }
+        { autoAlpha: 1, y: 0, scale: 1, duration: reduceMotion ? 0 : 0.2, ease: "power2.out" }
       );
     } else {
-      gsap.to(el, { autoAlpha: 0, y: -8, scale: 0.98, duration: reduce ? 0 : 0.15, ease: "power1.in" });
+      gsap.to(el, { autoAlpha: 0, y: -8, scale: 0.98, duration: reduceMotion ? 0 : 0.15, ease: "power1.in" });
     }
-  }, [open]);
+  }, [open, reduceMotion]);
 
   return (
     <div className="relative" ref={ref}>

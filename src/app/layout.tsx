@@ -4,6 +4,7 @@ import { Manrope } from "next/font/google";
 import LeafletStylesClient from "@/components/LeafletStylesClient";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { ToastProvider } from "@/contexts/ToastContext";
+import { AuthProvider } from "@/contexts/AuthContext";
 import ToastContainer from "@/components/ui/ToastContainer";
 
 const manrope = Manrope({
@@ -41,11 +42,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         "
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <ToastProvider>
-            <LeafletStylesClient />
-            {children}
-            <ToastContainer />
-          </ToastProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <LeafletStylesClient />
+              {children}
+              <ToastContainer />
+            </ToastProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -4,9 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { resetPasswordVerify } from "@/lib/api";
 import { getApiMessage } from "@/lib/errors";
-import AuthLayout from "@/components/auth/AuthLayout";
-import InputField from "@/components/auth/InputField";
-import SubmitButton from "@/components/auth/SubmitButton";
+import InputField from "@/components/ui/InputField";
+import SubmitButton from "@/components/ui/SubmitButton";
 import AuthLinks from "@/components/auth/AuthLinks";
 
 export default function ForgotPasswordPage() {
@@ -30,10 +29,10 @@ export default function ForgotPasswordPage() {
   };
 
   return (
-    <AuthLayout
-      title="Forgot Password"
-      subtitle="Enter your email address and we'll send you a verification code to reset your password."
-    >
+    <div className="w-full max-w-md mx-auto">
+      <h1 className="text-3xl md:text-4xl font-bold mb-2">Forgot Password</h1>
+      <p className="text-gray-600 dark:text-gray-300 mb-8">Enter your email address and we'll send you a verification code to reset your password.</p>
+      
       <form onSubmit={submit} className="space-y-6" noValidate>
         <InputField
           type="email"
@@ -54,6 +53,6 @@ export default function ForgotPasswordPage() {
           { href: "/login", text: "Back to login" }
         ]}
       />
-    </AuthLayout>
+    </div>
   );
 }

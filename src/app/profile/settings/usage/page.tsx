@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatDate, formatDateTime, formatNumber } from "@/utils/formatUtils";
 import {
   getOrganizationMaps,
   getMyOrgMembership,
@@ -70,20 +71,21 @@ function normalize(s?: string | null) {
 }
 function capText(v?: number | null, unit?: string) {
   if (v == null) return "không giới hạn";
-  const t = v.toLocaleString();
+  const t = formatNumber(v);
   return unit ? `${t} ${unit}` : t;
 }
 function percent(used: number, max?: number | null) {
   if (max == null || max <= 0) return 0;
   return Math.min(100, Math.round((used / max) * 100));
 }
-function firstOfNextMonth(d = new Date()) {
-  const y = d.getFullYear();
-  const m = d.getMonth();
+function firstOfNextMonth(d?: Date) {
+  const date = d || new Date();
+  const y = date.getFullYear();
+  const m = date.getMonth();
   return new Date(y, m + 1, 1);
 }
 function fmtDate(d: Date) {
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return formatDate(d);
 }
 function bytesToMB(b: number) {
   return Math.round((b / (1024 * 1024)) * 100) / 100;
@@ -327,7 +329,7 @@ export default function Page() {
                   />
                 </div>
                 <div className="mt-1 text-sm text-neutral-300">
-                  {mapsUsedFromUsage.toLocaleString()} / {capText(mapsLimitFromUsage)}
+                  {formatNumber(mapsUsedFromUsage)} / {capText(mapsLimitFromUsage)}
                 </div>
               </div>
               <div className="rounded-lg border border-neutral-800 p-3">
@@ -339,7 +341,7 @@ export default function Page() {
                   />
                 </div>
                 <div className="mt-1 text-sm text-neutral-300">
-                  {layersUsedFromUsage.toLocaleString()} / {capText(layersLimitFromUsage)}
+                  {formatNumber(layersUsedFromUsage)} / {capText(layersLimitFromUsage)}
                 </div>
               </div>
               <div className="rounded-lg border border-neutral-800 p-3">
@@ -351,7 +353,7 @@ export default function Page() {
                   />
                 </div>
                 <div className="mt-1 text-sm text-neutral-300">
-                  {membersUsedFromUsage.toLocaleString()} / {capText(membersLimitFromUsage)}
+                  {formatNumber(membersUsedFromUsage)} / {capText(membersLimitFromUsage)}
                 </div>
               </div>
               <div className="rounded-lg border border-neutral-800 p-3">
@@ -374,7 +376,7 @@ export default function Page() {
                   <div className="mt-1 text-xs text-neutral-500">Chu kỳ: {userUsage.period}</div>
                 )}
                 {userUsage?.lastReset && (
-                  <div className="text-xs text-neutral-500">Làm mới lần cuối: {new Date(userUsage.lastReset).toLocaleString()}</div>
+                  <div className="text-xs text-neutral-500">Làm mới lần cuối: {formatDateTime(userUsage.lastReset)}</div>
                 )}
               </div>
             </div>
@@ -473,7 +475,7 @@ export default function Page() {
                 <div className="h-full bg-pink-400" style={{ width: `${percent(totalViews, viewsMax)}%` }} />
               </div>
               <div className="mt-2 text-sm text-neutral-300">
-                <span className="text-pink-300 font-medium">{totalViews.toLocaleString()}</span> trong{" "}
+                <span className="text-pink-300 font-medium">{formatNumber(totalViews)}</span> trong{" "}
                 <span className="font-medium">{capText(viewsMax)}</span> / tháng
               </div>
               <p className="mt-1 text-xs text-neutral-400">Mỗi lần người dùng tải bản đồ trên trình duyệt hoặc nhúng đều được tính là một lượt xem.</p>
@@ -507,7 +509,7 @@ export default function Page() {
                           </a>
                         </td>
                         <td className="py-2 pr-4">{m.createdBy ?? "—"}</td>
-                        <td className="py-2 pr-4">{(m.views ?? 0).toLocaleString()}</td>
+                        <td className="py-2 pr-4">{formatNumber(m.views ?? 0)}</td>
                       </tr>
                     ))}
                 </tbody>

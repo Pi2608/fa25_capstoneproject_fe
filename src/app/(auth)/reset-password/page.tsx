@@ -3,10 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { resetPassword } from "@/lib/api";
-import AuthLayout from "@/components/auth/AuthLayout";
-import InputField from "@/components/auth/InputField";
+import InputField from "@/components/ui/InputField";
 import PasswordInput from "@/components/auth/PasswordInput";
-import SubmitButton from "@/components/auth/SubmitButton";
+import SubmitButton from "@/components/ui/SubmitButton";
 import AuthLinks from "@/components/auth/AuthLinks";
 
 export default function ResetPasswordPage() {
@@ -42,10 +41,10 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <AuthLayout
-      title="Reset Password"
-      subtitle="Enter the verification code and your new password."
-    >
+    <div className="w-full max-w-md mx-auto">
+      <h1 className="text-3xl md:text-4xl font-bold mb-2">Reset Password</h1>
+      <p className="text-gray-600 dark:text-gray-300 mb-8">Enter the verification code and your new password.</p>
+      
       <form onSubmit={submit} className="space-y-6" noValidate>
         <InputField
           value={otp}
@@ -85,6 +84,6 @@ export default function ResetPasswordPage() {
           { href: "/login", text: "Back to login" }
         ]}
       />
-    </AuthLayout>
+    </div>
   );
 }
