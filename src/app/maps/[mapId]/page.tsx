@@ -17,6 +17,7 @@ import type {
   GeoJSONLayer,
   LayerStyle,
   PathLayer,
+  LayerWithOptions,
   GeomanLayer,
   ToolName,
 } from "@/types";
@@ -45,6 +46,7 @@ import {
 } from "@/utils/mapUtils";
 import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
+import SegmentPanel from "@/components/storymap/SegmentPanel";
 
 
 
@@ -66,6 +68,7 @@ export default function EditMapPage() {
   const [baseKey, setBaseKey] = useState<BaseKey>("osm");
   const [showStylePanel, setShowStylePanel] = useState(false);
   const [showDataLayersPanel, setShowDataLayersPanel] = useState(true);
+  const [showSegmentPanel, setShowSegmentPanel] = useState(false);
   const [features, setFeatures] = useState<FeatureData[]>([]);
   const [selectedLayer, setSelectedLayer] = useState<FeatureData | RawLayer | null>(null);
   const [layers, setLayers] = useState<RawLayer[]>([]);
@@ -91,14 +94,33 @@ export default function EditMapPage() {
     
     const style: LayerStyle = {};
     if ('setStyle' in layer && typeof layer.setStyle === 'function') {
-      const pathLayer = layer as unknown as PathLayer;
-      const options = pathLayer.options || {};
-      style.color = options.color || '#3388ff';
-      style.weight = options.weight || 3;
-      style.opacity = options.opacity || 1.0;
-      style.fillColor = options.fillColor || options.color || '#3388ff';
-      style.fillOpacity = options.fillOpacity || 0.2;
-      style.dashArray = options.dashArray || '';
+      // Check if layer has options property at runtime
+      const unknownLayer = layer as unknown;
+      const hasOptions = (
+        unknownLayer !== null && 
+        typeof unknownLayer === 'object' && 
+        'options' in unknownLayer &&
+        typeof (unknownLayer as { options: unknown }).options === 'object'
+      );
+      
+      if (hasOptions) {
+        const layerWithOptions = unknownLayer as LayerWithOptions;
+        const options = layerWithOptions.options || {};
+        style.color = options.color || '#3388ff';
+        style.weight = options.weight || 3;
+        style.opacity = options.opacity || 1.0;
+        style.fillColor = options.fillColor || options.color || '#3388ff';
+        style.fillOpacity = options.fillOpacity || 0.2;
+        style.dashArray = options.dashArray || '';
+      } else {
+        // Default style for layers without options
+        style.color = '#3388ff';
+        style.weight = 3;
+        style.opacity = 1.0;
+        style.fillColor = '#3388ff';
+        style.fillOpacity = 0.2;
+        style.dashArray = '';
+      }
     }
     originalStylesRef.current.set(layer, style);
   }, []);
@@ -1162,6 +1184,17 @@ export default function EditMapPage() {
               >
                 {busySaveMeta ? "Đang lưu…" : "Save"}
               </button>
+              <button
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                  showSegmentPanel 
+                    ? 'bg-purple-600 hover:bg-purple-500' 
+                    : 'bg-purple-700 hover:bg-purple-600'
+                }`}
+                onClick={() => setShowSegmentPanel(!showSegmentPanel)}
+                title="Toggle Story Map Panel"
+              >
+                Story Map
+              </button>
             </div>
           </div>
           {feedback && <div className="px-1 pt-1 text-center text-[11px] text-emerald-300">{feedback}</div>}
@@ -1196,6 +1229,17 @@ export default function EditMapPage() {
         onUpdateFeature={onUpdateFeature}
         onApplyStyle={onApplyStyle}
       />
+
+      {showSegmentPanel && detail && (
+        <SegmentPanel
+          mapId={detail.id}
+          layers={layers.map(layer => ({ 
+            id: layer.id, 
+            name: layer.name 
+          }))}
+          currentLayerId={layers[0]?.id}
+        />
+      )}
 
       <style jsx global>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }

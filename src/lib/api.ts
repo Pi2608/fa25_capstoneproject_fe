@@ -1,4 +1,5 @@
 import { Workspace, WorkspaceAccess } from "@/types/workspace";
+import type { StoryElementLayer, CreateStoryElementLayerRequest, UpdateStoryElementLayerRequest } from "@/types/map";
 
 export type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
@@ -1894,5 +1895,23 @@ export function getZoneAnalytics(mapId: string, body: ZoneAnalyticsRequest) {
     `${STORYMAP_PREFIX}/${mapId}/analytics/zones`,
     body
   );
+}
+
+// ====== STORY ELEMENT LAYER APIs ======
+
+export function getStoryElementLayers(elementId: string) {
+  return getJson<StoryElementLayer[]>(`${STORYMAP_PREFIX}/story-elements/${elementId}/layers`);
+}
+
+export function createStoryElementLayer(body: CreateStoryElementLayerRequest) {
+  return postJson<CreateStoryElementLayerRequest, StoryElementLayer>(`${STORYMAP_PREFIX}/story-elements/layers`, body);
+}
+
+export function updateStoryElementLayer(storyElementLayerId: string, body: UpdateStoryElementLayerRequest) {
+  return putJson<UpdateStoryElementLayerRequest, StoryElementLayer>(`${STORYMAP_PREFIX}/story-elements/layers/${storyElementLayerId}`, body);
+}
+
+export function deleteStoryElementLayer(storyElementLayerId: string) {
+  return delJson<{ success: boolean }>(`${STORYMAP_PREFIX}/story-elements/layers/${storyElementLayerId}`);
 }
 
