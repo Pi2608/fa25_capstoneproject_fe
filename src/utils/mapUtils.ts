@@ -149,6 +149,12 @@ export function extractLayerStyle(layer: ExtendedLayer): Record<string, unknown>
   // Layer-specific properties
   if ('_mRadius' in layer && layer._mRadius !== undefined) {
     style.radius = layer._mRadius;
+    
+    // For circleMarker (small circles used as markers), add additional properties
+    if (layer._mRadius <= 10) {
+      style.markerType = 'circleMarker';
+      style.markerRadius = layer._mRadius;
+    }
   }
   
   return style;
@@ -175,9 +181,16 @@ export function applyLayerStyle(layer: ExtendedLayer, style: Record<string, unkn
     if (style.lineCap !== undefined) styleOptions.lineCap = style.lineCap;
     if (style.lineJoin !== undefined) styleOptions.lineJoin = style.lineJoin;
    
-    // Apply radius for circles
+    // Apply radius for circles and circleMarkers
     if (style.radius !== undefined && 'setRadius' in layer) {
       (layer as CircleLayer).setRadius(style.radius as number);
+    }
+    
+    // Apply marker-specific properties for circleMarkers
+    if (style.markerType === 'circleMarker' && style.markerRadius !== undefined) {
+      if ('setRadius' in layer) {
+        (layer as CircleLayer).setRadius(style.markerRadius as number);
+      }
     }
    
     // Apply style using setStyle method if available
@@ -285,7 +298,12 @@ function safeParseJSON<T = unknown>(value: string, fallback: T = {} as T): T {
 }
 
 export function getFeatureType(layer: ExtendedLayer): string {
-  // Check for Marker or Text first
+  // Check for CircleMarker first (small circles used as markers)
+  if (layer._latlng && layer._mRadius && layer._mRadius <= 10) {
+    return "Marker";
+  }
+  
+  // Check for Marker or Text
   if (layer._latlng && !layer._mRadius) {
     // Type assertion for marker to access icon
     const L = (window as { L?: typeof import('leaflet') }).L;
@@ -348,13 +366,13 @@ export function getFeatureType(layer: ExtendedLayer): string {
 }
 
 export function serializeFeature(layer: ExtendedLayer): {
-  geometryType: "Point" | "LineString" | "Polygon" | "Circle";
+  geometryType: "Point" | "LineString" | "Polygon" | "Circle" | "Rectangle";
   coordinates: string;
   annotationType: "Marker" | "Highlighter" | "Text" | "Note" | "Link" | "Video";
   text?: string;
 } {
   const type = getFeatureType(layer);
-  let geometryType: "Point" | "LineString" | "Polygon" | "Circle" = "Point";
+  let geometryType: "Point" | "LineString" | "Polygon" | "Circle" | "Rectangle" = "Point";
   let annotationType:
     | "Marker"
     | "Highlighter"
@@ -387,6 +405,13 @@ export function serializeFeature(layer: ExtendedLayer): {
         }
       }
     }
+    
+    // Handle circleMarker (small circles used as markers)
+    if (layer._mRadius && layer._mRadius <= 10) {
+      // CircleMarker được serialize như Point nhưng có thêm radius trong properties
+      geometryType = "Point";
+      annotationType = "Marker";
+    }
   } else if (type === "Circle") {
     geometryType = "Circle";
     annotationType = "Marker";
@@ -397,7 +422,7 @@ export function serializeFeature(layer: ExtendedLayer): {
       coordinates = [0, 0, 100];
     }
   } else if (type === "Rectangle") {
-    geometryType = "Polygon";
+    geometryType = "Rectangle"; // Match backend GeometryTypeEnum.Rectangle = 4
     annotationType = "Highlighter";
     if (layer._bounds) {
       const bounds = layer._bounds;
@@ -445,7 +470,7 @@ export function serializeFeature(layer: ExtendedLayer): {
   }
 
   const result: {
-    geometryType: "Point" | "LineString" | "Polygon" | "Circle";
+    geometryType: "Point" | "LineString" | "Polygon" | "Circle" | "Rectangle";
     coordinates: string;
     annotationType: "Marker" | "Highlighter" | "Text" | "Note" | "Link" | "Video";
     text?: string;
@@ -654,6 +679,9 @@ export async function saveFeature(
   features: FeatureData[],
   setFeatures: React.Dispatch<React.SetStateAction<FeatureData[]>>
 ): Promise<FeatureData | null> {
+  // Create optimistic feature first
+  const tempFeatureId = `temp-${Date.now()}`;
+  
   try {
     const serialized = serializeFeature(layer);
     const { geometryType, annotationType, coordinates, text } = serialized;
@@ -678,12 +706,32 @@ export async function saveFeature(
       properties.text = text;
     }
 
+    // Create optimistic feature first
+    const optimisticFeature: FeatureData = {
+      id: tempFeatureId,
+      name: `${type}`,
+      type,
+      layer,
+      isVisible: true,
+      featureId: tempFeatureId, // Temporary ID
+    };
+
+    // Immediately add to UI (optimistic update)
+    setFeatures((prev) => [...prev, optimisticFeature]);
+    console.log("🚀 Optimistic update: Feature added to UI immediately");
+
+    // Determine feature category based on type
+    // Marker with circleMarker (small circle) is Data (Geometry), not Annotation
+    // Annotation is only for Text, Note, Link, Video etc.
+    const isAnnotation = type === "Text" || annotationType === "Text" || annotationType === "Note" || annotationType === "Link" || annotationType === "Video";
+    const featureCategory = isAnnotation ? "Annotation" : "Data";
+    
     const body: CreateMapFeatureRequest = {
       mapId,
       layerId: layerId || null,
       name: `${type}`,
       description: "",
-      featureCategory: "Annotation",
+      featureCategory: featureCategory,
       annotationType: annotationType,
       geometryType: geometryType,
       coordinates,
@@ -696,20 +744,28 @@ export async function saveFeature(
     console.log("Saving feature with body:", body);
     const response = await createMapFeature(mapId, body);
 
-    const newFeature: FeatureData = {
-      id: `feature-${Date.now()}`,
-      name: body.name || `${type} ${features.length + 1}`,
-      type,
-      layer,
-      isVisible: true,
+    // Update with real server response
+    const realFeature: FeatureData = {
+      ...optimisticFeature,
       featureId: response.featureId,
     };
 
-    setFeatures((prev) => [...prev, newFeature]);
-    console.log("✅ Feature saved to DB:", newFeature);
-    return newFeature;
+    // Replace temporary feature with real one
+    setFeatures((prev) => 
+      prev.map(f => f.id === tempFeatureId ? realFeature : f)
+    );
+    
+    console.log("✅ Feature synced with server:", realFeature);
+    return realFeature;
   } catch (error) {
     console.error("❌ Failed to save feature:", error);
+    
+    // Rollback optimistic update
+    setFeatures((prev) => 
+      prev.filter(f => f.id !== tempFeatureId)
+    );
+    
+    console.log("🔄 Rolled back optimistic update due to API failure");
     return null;
   }
 }
@@ -734,10 +790,15 @@ export async function updateFeatureInDB(
       properties.text = text;
     }
 
+    // Determine feature category based on type
+    const type = getFeatureType(feature.layer);
+    const isAnnotation = type === "Text" || annotationType === "Text" || annotationType === "Note" || annotationType === "Link" || annotationType === "Video";
+    const featureCategory = isAnnotation ? "Annotation" : "Data";
+    
     const body: UpdateMapFeatureRequest = {
       name: feature.name,
       description: "",
-      featureCategory: "Annotation",
+      featureCategory: featureCategory,
       annotationType: annotationType,
       geometryType: geometryType,
       coordinates,
@@ -789,9 +850,33 @@ export async function loadFeaturesToMap(
         } else {
           coordinates = parsed;
         }
-      } catch {
-        console.warn("Failed to parse coordinates for feature:", feature.featureId);
-        continue;
+      } catch (parseError) {
+        console.warn("Failed to parse coordinates for feature:", feature.featureId, "Raw coordinates:", feature.coordinates);
+        
+        // Try to handle the case where coordinates might be a comma-separated string
+        if (typeof feature.coordinates === 'string' && feature.coordinates.includes(',')) {
+          try {
+            // Split by comma and convert to numbers
+            const coordStrings = feature.coordinates.split(',');
+            const coordNumbers = coordStrings.map(coord => parseFloat(coord.trim()));
+            
+            // For circle geometry, we expect [lng, lat, radius]
+            if (feature.geometryType.toLowerCase() === "circle" && coordNumbers.length === 3) {
+              coordinates = coordNumbers as [number, number, number];
+            } else if (feature.geometryType.toLowerCase() === "point" && coordNumbers.length >= 2) {
+              coordinates = [coordNumbers[0], coordNumbers[1]] as Position;
+            } else {
+              console.warn("Unsupported coordinate format for geometry type:", feature.geometryType);
+              continue;
+            }
+          } catch (coordError) {
+            console.warn("Failed to parse coordinate string:", coordError);
+            continue;
+          }
+        } else {
+          console.warn("Failed to parse coordinates for feature:", feature.featureId);
+          continue;
+        }
       }
 
       let layer: ExtendedLayer | null = null;
@@ -829,10 +914,17 @@ export async function loadFeaturesToMap(
             weight: 2,
             opacity: 1
           }) as ExtendedLayer;
-        } else {
-          // Regular marker
-          layer = L.marker([coords[1], coords[0]]) as ExtendedLayer;
-        }
+         } else {
+           // Regular marker - sử dụng circleMarker để có thể tùy chỉnh properties trong GeoJSON
+           layer = L.circleMarker([coords[1], coords[0]], {
+             radius: 6,
+             color: '#3388ff',
+             fillColor: 'white',
+             fillOpacity: 1,
+             weight: 2,
+             opacity: 1
+           }) as ExtendedLayer;
+         }
       } else if (feature.geometryType.toLowerCase() === "linestring") {
         const coords = coordinates as Position[];
         layer = L.polyline(coords.map((c) => [c[1], c[0]])) as ExtendedLayer;
@@ -840,8 +932,67 @@ export async function loadFeaturesToMap(
         const coords = coordinates as Position[][];
         layer = L.polygon(coords[0].map((c) => [c[1], c[0]])) as ExtendedLayer;
       } else if (feature.geometryType.toLowerCase() === "circle") {
-        const coords = coordinates as [number, number, number];
-        layer = L.circle([coords[1], coords[0]], { radius: coords[2] }) as ExtendedLayer;
+        console.log("Circle coordinates:", coordinates, "Type:", typeof coordinates, "Is Array:", Array.isArray(coordinates));
+        
+        // Handle different coordinate formats for circles
+        let circleCoords: [number, number, number];
+        
+        if (Array.isArray(coordinates)) {
+          if (coordinates.length === 3) {
+            // Simple [lng, lat, radius] format
+            circleCoords = coordinates as [number, number, number];
+          } else if (coordinates.length === 2) {
+            // If only 2 coordinates, assume radius is 100 meters
+            const coords = coordinates as [number, number];
+            circleCoords = [coords[0], coords[1], 100];
+          } else if (coordinates.length === 1 && Array.isArray(coordinates[0])) {
+            // GeoJSON Polygon format - extract center and calculate radius
+            const polygonCoords = coordinates[0] as Position[];
+            if (polygonCoords.length > 0) {
+              // Calculate center point (average of all coordinates)
+              let sumLng = 0, sumLat = 0;
+              for (const coord of polygonCoords) {
+                sumLng += coord[0];
+                sumLat += coord[1];
+              }
+              const centerLng = sumLng / polygonCoords.length;
+              const centerLat = sumLat / polygonCoords.length;
+              
+              // Calculate radius (distance from center to first point)
+              const firstPoint = polygonCoords[0];
+              const radius = Math.sqrt(
+                Math.pow(firstPoint[0] - centerLng, 2) + 
+                Math.pow(firstPoint[1] - centerLat, 2)
+              ) * 111000; // Convert degrees to meters (approximate)
+              
+              circleCoords = [centerLng, centerLat, radius];
+            } else {
+              console.error("Empty polygon coordinates for circle");
+              continue;
+            }
+          } else {
+            console.error("Invalid circle coordinates length:", coordinates.length);
+            continue;
+          }
+        } else {
+          console.error("Circle coordinates is not an array:", coordinates);
+          continue;
+        }
+        
+        // Validate that all coordinates are valid numbers
+        if (circleCoords.some(coord => typeof coord !== 'number' || isNaN(coord))) {
+          console.error("Invalid circle coordinates - contains non-numeric values:", circleCoords);
+          continue;
+        }
+        
+        // Validate coordinate ranges
+        const [lng, lat, radius] = circleCoords;
+        if (lng < -180 || lng > 180 || lat < -90 || lat > 90 || radius <= 0) {
+          console.error("Circle coordinates out of valid range:", circleCoords);
+          continue;
+        }
+        
+        layer = L.circle([lat, lng], { radius: radius }) as ExtendedLayer;
       }
       
       if (layer) {
@@ -1106,11 +1257,18 @@ export async function renderFeatures(
             opacity: 1
           }) as ExtendedLayer;
           console.log("📝 Rendered Text with color:", markerColor);
-        } else {
-          // Regular marker
-          layer = L.marker([coords[1], coords[0]]) as ExtendedLayer;
-          console.log("📍 Rendered Marker");
-        }
+         } else {
+           // Regular marker - sử dụng circleMarker để có thể tùy chỉnh properties trong GeoJSON
+           layer = L.circleMarker([coords[1], coords[0]], {
+             radius: 6,
+             color: '#3388ff',
+             fillColor: 'white',
+             fillOpacity: 1,
+             weight: 2,
+             opacity: 1
+           }) as ExtendedLayer;
+           console.log("📍 Rendered Marker");
+         }
       } else if (feature.geometryType.toLowerCase() === "linestring") {
         const coords = coordinates as Position[];
         layer = L.polyline(coords.map((c) => [c[1], c[0]])) as ExtendedLayer;
@@ -1329,10 +1487,17 @@ export async function toggleFeatureVisibility(
               html: textContent,
             }),
           }) as ExtendedLayer;
-        } else {
-          // Regular marker
-          layer = L.marker([coords[1], coords[0]]) as ExtendedLayer;
-        }
+         } else {
+           // Regular marker - sử dụng circleMarker để có thể tùy chỉnh properties trong GeoJSON
+           layer = L.circleMarker([coords[1], coords[0]], {
+             radius: 6,
+             color: '#3388ff',
+             fillColor: 'white',
+             fillOpacity: 1,
+             weight: 2,
+             opacity: 1
+           }) as ExtendedLayer;
+         }
       } else if (feature.geometryType.toLowerCase() === "linestring") {
         const coords = coordinates as Position[];
         layer = L.polyline(coords.map((c) => [c[1], c[0]])) as ExtendedLayer;
@@ -1340,8 +1505,67 @@ export async function toggleFeatureVisibility(
         const coords = coordinates as Position[][];
         layer = L.polygon(coords[0].map((c) => [c[1], c[0]])) as ExtendedLayer;
       } else if (feature.geometryType.toLowerCase() === "circle") {
-        const coords = coordinates as [number, number, number];
-        layer = L.circle([coords[1], coords[0]], { radius: coords[2] }) as ExtendedLayer;
+        console.log("Circle coordinates:", coordinates, "Type:", typeof coordinates, "Is Array:", Array.isArray(coordinates));
+        
+        // Handle different coordinate formats for circles
+        let circleCoords: [number, number, number];
+        
+        if (Array.isArray(coordinates)) {
+          if (coordinates.length === 3) {
+            // Simple [lng, lat, radius] format
+            circleCoords = coordinates as [number, number, number];
+          } else if (coordinates.length === 2) {
+            // If only 2 coordinates, assume radius is 100 meters
+            const coords = coordinates as [number, number];
+            circleCoords = [coords[0], coords[1], 100];
+          } else if (coordinates.length === 1 && Array.isArray(coordinates[0])) {
+            // GeoJSON Polygon format - extract center and calculate radius
+            const polygonCoords = coordinates[0] as Position[];
+            if (polygonCoords.length > 0) {
+              // Calculate center point (average of all coordinates)
+              let sumLng = 0, sumLat = 0;
+              for (const coord of polygonCoords) {
+                sumLng += coord[0];
+                sumLat += coord[1];
+              }
+              const centerLng = sumLng / polygonCoords.length;
+              const centerLat = sumLat / polygonCoords.length;
+              
+              // Calculate radius (distance from center to first point)
+              const firstPoint = polygonCoords[0];
+              const radius = Math.sqrt(
+                Math.pow(firstPoint[0] - centerLng, 2) + 
+                Math.pow(firstPoint[1] - centerLat, 2)
+              ) * 111000; // Convert degrees to meters (approximate)
+              
+              circleCoords = [centerLng, centerLat, radius];
+            } else {
+              console.error("Empty polygon coordinates for circle");
+              return;
+            }
+          } else {
+            console.error("Invalid circle coordinates length:", coordinates.length);
+            return;
+          }
+        } else {
+          console.error("Circle coordinates is not an array:", coordinates);
+          return;
+        }
+        
+        // Validate that all coordinates are valid numbers
+        if (circleCoords.some(coord => typeof coord !== 'number' || isNaN(coord))) {
+          console.error("Invalid circle coordinates - contains non-numeric values:", circleCoords);
+          return;
+        }
+        
+        // Validate coordinate ranges
+        const [lng, lat, radius] = circleCoords;
+        if (lng < -180 || lng > 180 || lat < -90 || lat > 90 || radius <= 0) {
+          console.error("Circle coordinates out of valid range:", circleCoords);
+          return;
+        }
+        
+        layer = L.circle([lat, lng], { radius: radius }) as ExtendedLayer;
       }
 
       if (layer) {

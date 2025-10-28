@@ -365,7 +365,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <section className="flex-1 overflow-auto px-4 sm:px-8 lg:px-10 py-8 max-w-6xl mx-auto md:ml-72">
+        <section className="flex-1 overflow-auto px-4 sm:px-8 lg:px-10 py-8 md:ml-72">
           {children}
         </section>
       </div>

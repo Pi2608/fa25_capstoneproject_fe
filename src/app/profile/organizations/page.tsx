@@ -18,7 +18,7 @@ export default function OrganizationsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load organization data from localStorage
+    // Load workspace data from localStorage
     const name = localStorage.getItem("org_name");
     const role = localStorage.getItem("org_role");
     const planData = localStorage.getItem("org_plan");
@@ -38,10 +38,10 @@ export default function OrganizationsPage() {
           members: memberData.emails || []
         });
       } catch (error) {
-        console.error("Error parsing organization data:", error);
+        console.error("Error parsing workspace data:", error);
         // Set default values if parsing fails
         setOrgData({
-          name: name || "My Organization",
+          name: name || "My Workspace",
           role: role || "owner",
           plan: "basic",
           credits: parseInt(credits || "0"),
@@ -53,18 +53,18 @@ export default function OrganizationsPage() {
     setLoading(false);
   }, []);
 
-  const handleCreateMap = () => {
-    // Navigate to create new map
-    router.push("/maps/new");
+  const handleViewWorkspace = () => {
+    // Navigate to workspaces list
+    router.push("/profile/workspaces");
   };
 
-  const handleViewOrganization = () => {
-    // Navigate to organization detail (you'll need to create this route)
-    router.push("/profile/organizations/1"); // Using placeholder ID
+  const handleManageWorkspace = () => {
+    // Navigate to workspace management
+    router.push("/profile/workspace/settings");
   };
 
   const handleClearData = () => {
-    // Clear organization setup data
+    // Clear workspace setup data
     localStorage.removeItem("org_name");
     localStorage.removeItem("org_role");
     localStorage.removeItem("org_plan");
@@ -72,7 +72,7 @@ export default function OrganizationsPage() {
     localStorage.removeItem("org_members");
     localStorage.removeItem("account_type");
     
-    // Redirect to create organization
+    // Redirect to create workspace
     router.push("/profile/create-org");
   };
 
@@ -81,7 +81,7 @@ export default function OrganizationsPage() {
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white text-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-green-500 mx-auto"></div>
-          <p className="mt-4">Loading organization...</p>
+          <p className="mt-4">Loading workspace...</p>
         </div>
       </div>
     );
@@ -91,13 +91,13 @@ export default function OrganizationsPage() {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
         <div className="text-white text-center">
-          <h1 className="text-2xl font-bold mb-4">No Organization Found</h1>
-          <p className="text-gray-400 mb-6">It seems your organization setup wasn't completed.</p>
+          <h1 className="text-2xl font-bold mb-4">No Workspace Found</h1>
+          <p className="text-gray-400 mb-6">It seems your workspace setup wasn't completed.</p>
           <Link 
             href="/profile/create-org"
             className="inline-block px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
           >
-            Create Organization
+            Create Workspace
           </Link>
         </div>
       </div>
@@ -117,7 +117,7 @@ export default function OrganizationsPage() {
               <span className="text-white font-bold text-xl">IMOS</span>
             </Link>
             <div className="text-gray-400">
-              Welcome to your organization!
+              Welcome to your workspace!
             </div>
           </div>
         </div>
@@ -127,19 +127,19 @@ export default function OrganizationsPage() {
       <div className="max-w-6xl mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-white mb-4">
-            🎉 Organization Setup Complete!
+            🏢 Workspace Ready!
           </h1>
           <p className="text-gray-400 text-lg">
-            Your organization <span className="text-green-400 font-semibold">{orgData.name}</span> is ready to use.
+            Your workspace <span className="text-green-400 font-semibold">{orgData.name}</span> is ready to use.
           </p>
         </div>
 
-        {/* Organization Summary */}
+        {/* Workspace Summary */}
         <div className="bg-gray-800 rounded-lg p-6 mb-8">
-          <h2 className="text-xl font-semibold text-white mb-4">Organization Summary</h2>
+          <h2 className="text-xl font-semibold text-white mb-4">Workspace Summary</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
             <div className="bg-gray-700 rounded-lg p-4">
-              <h3 className="text-sm text-gray-400 mb-2">Organization Name</h3>
+              <h3 className="text-sm text-gray-400 mb-2">Workspace Name</h3>
               <p className="text-white font-semibold">{orgData.name}</p>
             </div>
             <div className="bg-gray-700 rounded-lg p-4">
@@ -177,19 +177,19 @@ export default function OrganizationsPage() {
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
           <button
-            onClick={handleCreateMap}
+            onClick={handleViewWorkspace}
             className="px-8 py-4 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
           >
-            <span>🗺️</span>
-            Create Your First Map
+            <span>🏢</span>
+            View Workspace
           </button>
           
           <button
-            onClick={handleViewOrganization}
+            onClick={handleManageWorkspace}
             className="px-8 py-4 border border-gray-600 text-white rounded-lg font-semibold hover:bg-gray-800 transition-colors flex items-center justify-center gap-2"
           >
-            <span>👥</span>
-            View Organization
+            <span>⚙️</span>
+            Manage Workspace
           </button>
         </div>
 
@@ -199,40 +199,40 @@ export default function OrganizationsPage() {
             onClick={handleClearData}
             className="px-4 py-2 text-sm text-gray-400 hover:text-white border border-gray-600 rounded-lg hover:bg-gray-800 transition-colors"
           >
-            Reset Organization Setup
+            Reset Workspace Setup
           </button>
         </div>
 
         {/* Quick Tips */}
         <div className="mt-12 bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Quick Tips</h3>
+          <h3 className="text-lg font-semibold text-white mb-4">Workspace Features</h3>
           <div className="grid md:grid-cols-2 gap-4">
             <div className="flex items-start gap-3">
-              <span className="text-green-400 text-xl">💡</span>
+              <span className="text-green-400 text-xl">🏢</span>
               <div>
-                <h4 className="text-white font-medium">Start Creating Maps</h4>
-                <p className="text-gray-400 text-sm">Use our intuitive map editor to create custom maps for your organization.</p>
+                <h4 className="text-white font-medium">Workspace Management</h4>
+                <p className="text-gray-400 text-sm">Organize your projects and collaborate with team members in your workspace.</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <span className="text-green-400 text-xl">👥</span>
               <div>
-                <h4 className="text-white font-medium">Collaborate with Team</h4>
-                <p className="text-gray-400 text-sm">Invite team members and work together on map projects.</p>
+                <h4 className="text-white font-medium">Team Collaboration</h4>
+                <p className="text-gray-400 text-sm">Invite team members and manage their roles and permissions.</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <span className="text-green-400 text-xl">📊</span>
               <div>
-                <h4 className="text-white font-medium">Track Usage</h4>
-                <p className="text-gray-400 text-sm">Monitor your organization's map usage and credits.</p>
+                <h4 className="text-white font-medium">Usage Analytics</h4>
+                <p className="text-gray-400 text-sm">Monitor your workspace usage, credits, and activity.</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
               <span className="text-green-400 text-xl">⚙️</span>
               <div>
-                <h4 className="text-white font-medium">Manage Settings</h4>
-                <p className="text-gray-400 text-sm">Configure organization settings and member permissions.</p>
+                <h4 className="text-white font-medium">Settings & Configuration</h4>
+                <p className="text-gray-400 text-sm">Configure workspace settings, billing, and member permissions.</p>
               </div>
             </div>
           </div>

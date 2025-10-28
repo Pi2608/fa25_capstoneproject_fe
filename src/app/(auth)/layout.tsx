@@ -2,21 +2,11 @@
 
 import Link from "next/link";
 
-interface RegisterLayoutProps {
+export default function AuthLayout({
+  children,
+}: {
   children: React.ReactNode;
-  title: string;
-  subtitle: string;
-  showBackButton?: boolean;
-  onBack?: () => void;
-  currentStep?: number;
-  totalSteps?: number;
-}
-
-export default function RegisterLayout({ 
-  children, 
-  title, 
-  subtitle, 
-}: RegisterLayoutProps) {
+}) {
   return (
     <main className="relative min-h-screen text-gray-900 dark:text-white transition-colors">
       <div className="absolute inset-0 -z-20 bg-white dark:bg-[#070b0b]" aria-hidden />
@@ -50,31 +40,8 @@ export default function RegisterLayout({
 
       <div className="relative z-10 max-w-7xl mx-auto px-6">
         <section className="min-h-[60vh] md:min-h-[70vh] flex flex-col items-center justify-center text-center space-y-6">
-          <div className="w-full max-w-4xl">
-
-            {/* Header */}
-            <div className="text-center mb-8">
-              <h1 className="text-3xl md:text-4xl font-bold mb-3 text-gray-900 dark:text-white">
-                {title}
-              </h1>
-              <p className="text-lg text-gray-600 dark:text-gray-300">
-                {subtitle}
-              </p>
-            </div>
-
-            {/* Form Card */}
-            <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              <div className="p-8 md:p-10">
-                {children}
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="mt-8 text-center">
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Already have an account? <Link href="/login" className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 font-medium hover:underline">Sign in</Link>
-              </p>
-            </div>
+          <div className="w-full">
+            {children}
           </div>
         </section>
       </div>

@@ -20,6 +20,7 @@ import type {
 import SegmentPoiPanel from "@/components/poi/SegmentPoiPanel";
 import ZoneContextMenu, { LayerPickerDialog } from "@/components/map/ZoneContextMenu";
 import PoiPanel from "@/components/poi/PoiPanel";
+import StoryElementManager from "./StoryElementManager";
 
 import type {
   GeoJsonObject,
@@ -225,8 +226,21 @@ function ConfirmDialog({
 
 
 function stringifyGeo(geo: GeoJsonObject | null): string | undefined {
-  return geo ? JSON.stringify(geo) : undefined;
+  if (!geo) return undefined;
+  
+  const result = JSON.stringify(geo);
+  
+  // Debug: Log geometry size to monitor large payloads
+  if (result.length > 500000) { // > 500KB
+    console.info(`Large geometry: ${Math.round(result.length / 1024)}KB`, {
+      type: geo.type,
+      size: result.length
+    });
+  }
+  
+  return result;
 }
+
 
 
 export default function SegmentPanel({
@@ -760,6 +774,22 @@ export default function SegmentPanel({
                 <SegmentPoiPanel mapId={mapId} segmentId={selectedSegmentId} />
               </div>
             )}
+            
+            {/* Story Elements Section */}
+            <div className="mt-4 border-t border-white/10 pt-3">
+              <div className="text-xs text-white/60 mb-2">Story Elements</div>
+              <div className="bg-zinc-800/50 rounded-lg p-3">
+                <StoryElementManager
+                  mapId={mapId}
+                  availableLayers={layers}
+                  availableZones={zones.map(z => ({ 
+                    id: z.segmentZoneId, 
+                    name: getZoneName(z) 
+                  }))}
+                />
+              </div>
+            </div>
+            
             {error && <div className="text-red-300 text-xs">{error}</div>}
           </div>
         </div>

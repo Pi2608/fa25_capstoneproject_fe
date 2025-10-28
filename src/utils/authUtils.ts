@@ -39,7 +39,8 @@ export const clearAllAuthData = () => {
   
   if (typeof window !== "undefined") {
     // Clear any other auth-related data
-    localStorage.removeItem("auth_token");
+    localStorage.removeItem("token");
+    localStorage.removeItem("refreshToken");
     localStorage.removeItem("user_data");
     localStorage.removeItem("organization_data");
   }
