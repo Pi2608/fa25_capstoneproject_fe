@@ -7,6 +7,7 @@ import s from "./admin.module.css";
 
 const NAV = [
   { href: "/dashboard", label: "Tổng quan", icon: <DashIcon /> },
+  { href: "/analytics", label: "Phân tích", icon: <ChartIcon /> },
   { href: "/users", label: "Tài khoản", icon: <UsersIcon /> },
   { href: "/organizations", label: "Tổ chức", icon: <OrgIcon /> },
   { href: "/subscription-plans", label: "Gói đăng ký", icon: <PlanIcon /> },
@@ -98,6 +99,18 @@ function DashIcon() {
     </svg>
   );
 }
+
+function ChartIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M4 20h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      <rect x="6" y="10" width="3" height="7" rx="1" stroke="currentColor" strokeWidth="2" />
+      <rect x="11" y="6" width="3" height="11" rx="1" stroke="currentColor" strokeWidth="2" />
+      <rect x="16" y="13" width="3" height="4" rx="1" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
 function UsersIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -108,6 +121,7 @@ function UsersIcon() {
     </svg>
   );
 }
+
 function FileIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -116,6 +130,7 @@ function FileIcon() {
     </svg>
   );
 }
+
 function CardIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -125,6 +140,7 @@ function CardIcon() {
     </svg>
   );
 }
+
 function SettingsIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -138,6 +154,7 @@ function SettingsIcon() {
     </svg>
   );
 }
+
 function SignOutIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -147,6 +164,7 @@ function SignOutIcon() {
     </svg>
   );
 }
+
 function BurgerIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -154,6 +172,7 @@ function BurgerIcon() {
     </svg>
   );
 }
+
 function BellIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -162,6 +181,7 @@ function BellIcon() {
     </svg>
   );
 }
+
 function MapIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -170,6 +190,7 @@ function MapIcon() {
     </svg>
   );
 }
+
 function OrgIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -179,6 +200,7 @@ function OrgIcon() {
     </svg>
   );
 }
+
 function PlanIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -187,6 +209,7 @@ function PlanIcon() {
     </svg>
   );
 }
+
 function TicketIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">

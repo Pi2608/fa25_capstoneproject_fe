@@ -1,4 +1,3 @@
-// src/lib/admin-api.ts
 import { getJson, postJson, putJson, delJson, apiFetch } from "./api";
 
 /* ==================== COMMON ==================== */
@@ -17,11 +16,6 @@ export interface Paged<T> {
   totalPages: number;
 }
 
-/**
- * LƯU Ý VỀ BASE URL:
- * - NEXT_PUBLIC_API_BASE_URL của bạn đã là: http://localhost:5233/api/v1
- * - Do đó ở đây chỉ cần "/api/admin" (tránh bị /api/v1/api/v1/...).
- */
 const ADMIN_BASE = "/api/admin";
 
 /* ==================== USERS ==================== */
@@ -127,11 +121,28 @@ export function adminGetOrganizationById<TOrg = unknown>(orgId: string) {
   return getJson<TOrg>(`${ADMIN_BASE}/organizations/${orgId}`);
 }
 
-export function adminUpdateOrganizationStatus<TReq extends object, TRes = unknown>(
+export type OrgStatus = "Active" | "Suspended";
+
+export interface UpdateOrgStatusRequest {
+  orgId: string;
+  status: OrgStatus;
+  reason: string;
+}
+
+export interface UpdateOrgStatusResponse {
+  orgId: string;
+  status: OrgStatus;
+  updatedAt?: string;
+}
+
+export function adminUpdateOrganizationStatus(
   orgId: string,
-  body: TReq
+  body: UpdateOrgStatusRequest
 ) {
-  return putJson<TReq, TRes>(`${ADMIN_BASE}/organizations/${orgId}/status`, body);
+  return putJson<UpdateOrgStatusRequest, UpdateOrgStatusResponse>(
+    `${ADMIN_BASE}/organizations/${orgId}/status`,
+    body
+  );
 }
 
 export function adminDeleteOrganization<TRes = { success?: boolean }>(orgId: string) {
@@ -356,3 +367,72 @@ export function adminResetConfiguration<TRes = { success?: boolean }>() {
 export function adminGetSystemUsage<TRes = unknown>() {
   return getJson<TRes>(`${ADMIN_BASE}/system-usage`);
 }
+
+export interface AdminAnalytics {
+  total_users: number;
+  active_users: number;
+  total_organizations: number;
+  active_organizations: number;
+  total_revenue: number;
+  total_transactions: number;
+}
+
+interface AnalyticsPayload {
+  total_users?: number;
+  active_users?: number;
+  total_organizations?: number;
+  active_organizations?: number;
+  total_revenue?: number;
+  total_transactions?: number;
+}
+
+function getLast7DaysRange(): { startDate: string; endDate: string } {
+  const now = new Date();
+
+  const end = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      23,
+      59,
+      59,
+      0
+    )
+  );
+
+  const start = new Date(end.getTime() - 6 * 24 * 60 * 60 * 1000);
+
+  const startDate = start.toISOString().replace(/\.\d{3}Z$/, "Z");
+  const endDate = end.toISOString().replace(/\.\d{3}Z$/, "Z");
+
+  return { startDate, endDate };
+}
+
+export async function adminGetAnalytics(): Promise<AdminAnalytics> {
+  const { startDate, endDate } = getLast7DaysRange();
+
+  const query = new URLSearchParams({
+    startDate,
+    endDate,
+  }).toString();
+
+  const rawResult = await getJson<AnalyticsPayload | { data: AnalyticsPayload }>(
+    `${ADMIN_BASE}/analytics?${query}`
+  );
+
+  const payload: AnalyticsPayload =
+    typeof rawResult === "object" && rawResult !== null && "data" in rawResult
+      ? (rawResult as { data: AnalyticsPayload }).data
+      : (rawResult as AnalyticsPayload);
+
+  return {
+    total_users: Number(payload.total_users ?? 0),
+    active_users: Number(payload.active_users ?? 0),
+    total_organizations: Number(payload.total_organizations ?? 0),
+    active_organizations: Number(payload.active_organizations ?? 0),
+    total_revenue: Number(payload.total_revenue ?? 0),
+    total_transactions: Number(payload.total_transactions ?? 0),
+  };
+}
+

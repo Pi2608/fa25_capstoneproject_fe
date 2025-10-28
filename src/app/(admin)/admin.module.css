@@ -1,13 +1,20 @@
 .shell {
     display: grid;
     grid-template-columns: 260px 1fr;
-    min-height: 100dvh;
+    height: 100dvh;
+    max-height: 100dvh;
     background: var(--bg);
     color: var(--fg);
+    overflow: hidden;
 }
 
 .sidebar {
-    position: relative;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow-y: auto;
     border-right: 1px solid var(--line);
     background: color-mix(in srgb, var(--surface) 98%, transparent);
     padding: 16px 12px;
@@ -115,6 +122,8 @@
     display: grid;
     grid-template-rows: 64px 1fr;
     min-width: 0;
+    max-height: 100dvh;
+    overflow: hidden;
 }
 
 .header {
@@ -190,6 +199,9 @@
     padding: 20px;
     display: grid;
     gap: 20px;
+    min-height: 0;
+    max-height: calc(100dvh - 64px);
+    overflow-y: auto;
 }
 
 .stack {
@@ -457,7 +469,6 @@
     }
 }
 
-/* ==== Compact Table Layout for Account Manager ==== */
 .panelHead {
   align-items: flex-start;
   flex-wrap: wrap;
@@ -503,6 +514,56 @@
 .rowActions {
   justify-content: flex-end;
   gap: 6px;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+
+.rowActionSep {
+  color: #9ca3af; 
+  user-select: none;
+  font-weight: 400;
+  padding: 0 2px;
+}
+
+.rowActionBtn {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: #166534; 
+  cursor: pointer;
+  text-decoration: none; 
+}
+
+.rowActionBtn:hover {
+  text-decoration: underline;
+  color: #14532d;
+}
+
+.rowActionBtnDanger {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: #b91c1c; 
+  cursor: pointer;
+}
+
+.rowActionBtnDanger:hover {
+  text-decoration: underline;
+  color: #7f1d1d;
 }
 
 .linkBtn {
@@ -574,30 +635,27 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;           
+  gap: 12px;
   padding-top: 12px;
 }
 
 .pager span {
-  min-width: 110px;    
+  min-width: 110px;
   text-align: center;
 }
 
 .pager .linkBtn {
-  white-space: nowrap;  
+  white-space: nowrap;
 }
 
 .light {
   --bg: #fafafa;
   --fg: #111827;
-
   --surface: #ffffff;
   --surface-2: #f3f4f6;
-
   --line: #e5e7eb;
   --muted: #6b7280;
-
-  --brand: #3f5f36; 
+  --brand: #3f5f36;
   --shadow: 0 1px 2px rgba(17, 24, 39, .04), 0 4px 10px rgba(17, 24, 39, .06);
 }
 
@@ -608,10 +666,429 @@
 }
 
 .panel {
-  padding-top: 8px;  
+  padding-top: 8px;
   margin-top: 0;
 }
 
 .panelHead {
-  margin-bottom: 8px; 
+  margin-bottom: 8px;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 15, 20, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(2px);
+}
+
+.modalCardPro {
+  width: 440px;
+  max-width: calc(100% - 32px);
+  background: #ffffff;
+  color: #1a1a1a;
+  border-radius: 20px;
+  box-shadow:
+    0 40px 120px rgba(0, 0, 0, 0.45),
+    0 4px 16px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: cardPop .22s ease;
+  border: 1px solid rgba(0,0,0,0.06);
+}
+
+@keyframes cardPop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modalHeadPro {
+  padding: 20px 24px 16px 24px;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.modalHeadLeft {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.iconCircle {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 10px;
+  background: radial-gradient(
+    circle at 20% 20%,
+    rgba(0,180,90,0.16) 0%,
+    rgba(0,150,60,0.07) 60%,
+    rgba(0,120,40,0) 100%
+  );
+  border: 1px solid rgba(0,140,70,0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgb(0,128,64);
+}
+
+.iconDotWarn {
+  color: #b54700;
+}
+.iconDotOk {
+  color: #008048;
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modalTitlePro {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #1a1a1a;
+}
+
+.modalSubtitlePro {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #6b6b6b;
+  max-width: 360px;
+}
+
+.modalBodyPro {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.fieldGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fieldLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: #2c2c2c;
+  display: flex;
+  align-items: center;
+  line-height: 1.3;
+  gap: 4px;
+}
+
+.requiredMark {
+  color: #d73232;
+  font-size: 13px;
+  line-height: 1;
+  font-weight: 500;
+}
+
+.fieldControl {
+  display: flex;
+  flex-direction: column;
+}
+
+.selectField {
+  appearance: none;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background-color: #fff;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 10px 12px;
+  color: #1a1a1a;
+  outline: none;
+  background-image:
+    radial-gradient(circle at 16px 16px, rgba(0,128,64,0.08) 0%, rgba(0,128,64,0) 70%);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03) inset;
+}
+
+.selectField:focus {
+  border-color: rgba(0,128,64,0.45);
+  box-shadow: 0 0 0 3px rgba(0,128,64,0.15);
+}
+
+.textareaField {
+  min-height: 92px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background-color: #fff;
+  font-size: 14px;
+  line-height: 1.45;
+  padding: 10px 12px;
+  color: #1a1a1a;
+  outline: none;
+  resize: vertical;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03) inset;
+}
+
+.textareaField:focus {
+  border-color: rgba(0,128,64,0.45);
+  box-shadow: 0 0 0 3px rgba(0,128,64,0.15);
+}
+
+.fieldHint {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #8a8a8a;
+  max-width: 360px;
+}
+
+.modalFootPro {
+  padding: 16px 24px 20px 24px;
+  border-top: 1px solid rgba(0,0,0,0.05);
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+
+.btnGhost {
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #ffffff;
+  color: #2c2c2c;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.3;
+  padding: 8px 14px;
+  min-width: 68px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+
+.btnGhost:hover {
+  background: #f8f8f8;
+}
+
+.btnSolid {
+  background: linear-gradient(
+    145deg,
+    rgb(0,140,80) 0%,
+    rgb(0,115,60) 100%
+  );
+  color: #ffffff;
+  border: 0;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.3;
+  padding: 8px 14px;
+  min-width: 110px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow:
+    0 8px 24px rgba(0,128,64,0.35),
+    0 1px 2px rgba(0,0,0,0.35) inset;
+}
+
+.btnSolid:hover {
+  box-shadow:
+    0 10px 28px rgba(0,128,64,0.4),
+    0 1px 2px rgba(0,0,0,0.35) inset;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 15, 20, 0.55);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.modalCardDanger {
+  width: 440px;
+  max-width: calc(100% - 32px);
+  background: #ffffff;
+  color: #1a1a1a;
+  border-radius: 20px;
+  box-shadow:
+    0 40px 120px rgba(0, 0, 0, 0.45),
+    0 4px 16px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(185, 28, 28, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: cardPop .22s ease;
+}
+
+@keyframes cardPop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.modalHeadDanger {
+  padding: 20px 24px 16px 24px;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+}
+
+.modalHeadLeft {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.iconCircleDanger {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 10px;
+  background: radial-gradient(
+    circle at 20% 20%,
+    rgba(220, 38, 38, 0.18) 0%,
+    rgba(185, 28, 28, 0.07) 60%,
+    rgba(220, 38, 38, 0) 100%
+  );
+  border: 1px solid rgba(185, 28, 28, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  color: rgb(185, 28, 28);
+}
+
+.iconDotDanger {
+  color: rgb(185, 28, 28);
+  font-weight: 600;
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modalTitleProDanger {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: rgb(185, 28, 28);
+}
+
+.modalSubtitleProDanger {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #6b6b6b;
+  max-width: 360px;
+}
+
+.orgNameHighlight {
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.modalBodyDanger {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.dangerBox {
+  background: rgba(185,28,28,0.06);
+  border: 1px solid rgba(185,28,28,0.2);
+  color: #5f0f0f;
+  font-size: 13px;
+  line-height: 1.5;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.modalFootDanger {
+  padding: 16px 24px 20px 24px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+}
+
+.btnGhost {
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #ffffff;
+  color: #2c2c2c;
+  border-radius: 10px;
+  font-size: 14px;
+  line-height: 1.3;
+  padding: 8px 14px;
+  min-width: 68px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.btnGhost:hover {
+  background: #f8f8f8;
+}
+
+.btnDangerOutline {
+  border-radius: 10px;
+  border: 1px solid rgba(185,28,28,0.4);
+  background: #fff;
+  color: rgb(185,28,28);
+  font-size: 14px;
+  line-height: 1.3;
+  padding: 8px 14px;
+  min-width: 110px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.04),
+    0 8px 24px rgba(185,28,28,0.08);
+  transition: box-shadow .15s ease, background-color .15s ease;
+}
+.btnDangerOutline:hover {
+  background: rgba(185,28,28,0.03);
+  box-shadow:
+    0 2px 4px rgba(0,0,0,0.06),
+    0 10px 28px rgba(185,28,28,0.12);
+}
+
+.linkBtnDanger {
+  color: #b91c1c;
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  padding: 0 6px;
+}
+.linkBtnDanger:hover {
+  color: #7f1d1d;
+  text-decoration: underline;
 }

@@ -87,7 +87,10 @@ export default function EditPlanPage() {
     <div className={s.stack}>
       <section className={s.panel}>
         <div className={s.panelHead}>
-          <h3>Chỉnh sửa gói: <span style={{ color: "#2563eb" }}>{form.name}</span></h3>
+          <h3>
+            Chỉnh sửa gói:{" "}
+            <span style={{ color: "#2563eb" }}>{form.name}</span>
+          </h3>
         </div>
 
         {error && <div className={s.errorBox}>{error}</div>}
@@ -103,17 +106,23 @@ export default function EditPlanPage() {
           }}
         >
           <div style={{ display: "grid", gap: 16 }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <label
+              style={{ display: "flex", flexDirection: "column", gap: 6 }}
+            >
               <span className={s.formLabel}>Tên gói</span>
               <input
                 className={s.input}
                 value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, name: e.target.value })
+                }
                 placeholder="Nhập tên gói (Free, Pro, Enterprise...)"
               />
             </label>
 
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <label
+              style={{ display: "flex", flexDirection: "column", gap: 6 }}
+            >
               <span className={s.formLabel}>Mô tả</span>
               <textarea
                 className={s.input}
@@ -142,36 +151,63 @@ export default function EditPlanPage() {
             }}
           >
             <h4 style={{ marginBottom: 0, color: "#111827" }}>💰 Giá</h4>
+
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                gridTemplateColumns:
+                  "repeat(auto-fit, minmax(260px, 1fr))",
                 gap: 16,
               }}
             >
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <span className={s.formLabel}>Giá / tháng (VND)</span>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                <span className={s.formLabel}>Giá / tháng (USD)</span>
                 <input
                   className={s.input}
                   type="number"
                   value={form.priceMonthly}
                   onChange={(e) =>
-                    setForm({ ...form, priceMonthly: Number(e.target.value) })
+                    setForm({
+                      ...form,
+                      priceMonthly: Number(e.target.value),
+                    })
                   }
                   min={0}
                 />
+                <small className={s.muted}>
+                  Ví dụ: 29.99 = $29.99 / tháng
+                </small>
               </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <span className={s.formLabel}>Giá / năm (VND)</span>
+
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
+                <span className={s.formLabel}>Giá / năm (USD)</span>
                 <input
                   className={s.input}
                   type="number"
                   value={form.priceYearly}
                   onChange={(e) =>
-                    setForm({ ...form, priceYearly: Number(e.target.value) })
+                    setForm({
+                      ...form,
+                      priceYearly: Number(e.target.value),
+                    })
                   }
                   min={0}
                 />
+                <small className={s.muted}>
+                  Ví dụ: 99.99 = $99.99 / năm
+                </small>
               </label>
             </div>
           </div>
@@ -184,37 +220,67 @@ export default function EditPlanPage() {
               gap: 16,
             }}
           >
-            <h4 style={{ marginBottom: 0, color: "#111827" }}>📊 Giới hạn</h4>
+            <h4 style={{ marginBottom: 0, color: "#111827" }}>
+              📊 Giới hạn
+            </h4>
+
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gridTemplateColumns:
+                  "repeat(auto-fit, minmax(220px, 1fr))",
                 gap: 16,
               }}
             >
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
                 <span className={s.formLabel}>Giới hạn bản đồ</span>
                 <input
                   className={s.input}
                   type="number"
                   value={form.mapsLimit}
                   onChange={(e) =>
-                    setForm({ ...form, mapsLimit: Number(e.target.value) })
+                    setForm({
+                      ...form,
+                      mapsLimit: Number(e.target.value),
+                    })
                   }
                 />
               </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
                 <span className={s.formLabel}>Giới hạn xuất file</span>
                 <input
                   className={s.input}
                   type="number"
                   value={form.exportsLimit}
                   onChange={(e) =>
-                    setForm({ ...form, exportsLimit: Number(e.target.value) })
+                    setForm({
+                      ...form,
+                      exportsLimit: Number(e.target.value),
+                    })
                   }
                 />
               </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
                 <span className={s.formLabel}>Layer tùy chỉnh</span>
                 <input
                   className={s.input}
@@ -228,7 +294,14 @@ export default function EditPlanPage() {
                   }
                 />
               </label>
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+
+              <label
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                }}
+              >
                 <span className={s.formLabel}>Token / tháng</span>
                 <input
                   className={s.input}
@@ -253,7 +326,10 @@ export default function EditPlanPage() {
               gap: 10,
             }}
           >
-            <h4 style={{ marginBottom: 0, color: "#111827" }}>⚙️ Cờ trạng thái</h4>
+            <h4 style={{ marginBottom: 0, color: "#111827" }}>
+              ⚙️ Cờ trạng thái
+            </h4>
+
             <div
               style={{
                 display: "flex",
@@ -263,23 +339,41 @@ export default function EditPlanPage() {
                 marginLeft: 10,
               }}
             >
-              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={form.isPopular}
                   onChange={(e) =>
-                    setForm({ ...form, isPopular: e.target.checked })
+                    setForm({
+                      ...form,
+                      isPopular: e.target.checked,
+                    })
                   }
                 />
                 <span>Phổ biến</span>
               </label>
 
-              <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={form.isActive}
                   onChange={(e) =>
-                    setForm({ ...form, isActive: e.target.checked })
+                    setForm({
+                      ...form,
+                      isActive: e.target.checked,
+                    })
                   }
                 />
                 <span>Đang hoạt động</span>
@@ -304,6 +398,7 @@ export default function EditPlanPage() {
             >
               Hủy
             </button>
+
             <button
               className={s.primaryBtn}
               onClick={handleSave}
