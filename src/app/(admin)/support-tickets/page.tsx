@@ -2,6 +2,8 @@
 
 import {
   adminGetSupportTickets,
+  adminGetSupportTicketById,
+  adminUpdateSupportTicket,
   adminCloseSupportTicket,
   type Paged,
 } from "@/lib/admin-api";
@@ -19,27 +21,45 @@ type Ticket = {
   priority: Priority;
   createdAt?: string;
   requesterName?: string;
+  description?: string;
+  lastUpdatedAt?: string;
+};
+
+type EditableTicketFields = {
+  subject: string;
+  category: string;
+  priority: string;
+  status: TicketStatus;
 };
 
 export default function SupportTicketsPage() {
   const [rows, setRows] = useState<Ticket[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [status, setStatus] = useState<"Tất cả" | TicketStatus>("Tất cả");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"Tất cả" | TicketStatus>("Tất cả");
+  const [loadingList, setLoadingList] = useState(false);
+  const [listError, setListError] = useState<string | null>(null);
+
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailTicket, setDetailTicket] = useState<Ticket | null>(null);
+
+  const [editDraft, setEditDraft] = useState<EditableTicketFields | null>(null);
+  const [savingUpdate, setSavingUpdate] = useState(false);
+  const [closingTicket, setClosingTicket] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     const run = async () => {
-      setLoading(true);
-      setErr(null);
+      setLoadingList(true);
+      setListError(null);
       try {
         const res = await adminGetSupportTickets<Ticket>({
           page,
           pageSize: 10,
-          status: status === "Tất cả" ? undefined : status,
+          status: statusFilter === "Tất cả" ? undefined : statusFilter,
         });
         const data = res as Paged<Ticket>;
         if (cancelled) return;
@@ -51,10 +71,12 @@ export default function SupportTicketsPage() {
             e instanceof Error
               ? e.message
               : "Không thể tải danh sách yêu cầu hỗ trợ.";
-          setErr(msg);
+          setListError(msg);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoadingList(false);
+        }
       }
     };
 
@@ -62,31 +84,136 @@ export default function SupportTicketsPage() {
     return () => {
       cancelled = true;
     };
-  }, [page, status]);
+  }, [page, statusFilter]);
 
-  const onStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setStatus(e.target.value as "Tất cả" | TicketStatus);
+  const reloadRowInList = (updated: Ticket) => {
+    setRows((arr) =>
+      arr.map((x) => (x.ticketId === updated.ticketId ? updated : x))
+    );
+  };
+
+  const openDetail = async (ticketId: string) => {
+    setDetailOpen(true);
+    setDetailLoading(true);
+    setDetailError(null);
+    setDetailTicket(null);
+    setEditDraft(null);
+
+    try {
+      const data = await adminGetSupportTicketById<Ticket>(ticketId);
+      setDetailTicket(data);
+      setEditDraft({
+        subject: data.subject,
+        category: data.category,
+        priority: data.priority,
+        status: data.status,
+      });
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : "Không thể tải chi tiết yêu cầu.";
+      setDetailError(msg);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeDetail = () => {
+    setDetailOpen(false);
+    setDetailTicket(null);
+    setEditDraft(null);
+    setDetailError(null);
+  };
+
+  const onStatusFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setStatusFilter(e.target.value as "Tất cả" | TicketStatus);
     setPage(1);
   };
 
-  const closeTicket = async (t: Ticket) => {
-    const ok = confirm(`Đóng yêu cầu "${t.subject}"?`);
-    if (!ok) return;
-
-    const prev = rows;
-    setRows((arr) =>
-      arr.map((x) =>
-        x.ticketId === t.ticketId ? { ...x, status: "Closed" } : x
-      )
+  const onDraftChange = (field: keyof EditableTicketFields, value: string) => {
+    setEditDraft((prev) =>
+      prev
+        ? {
+            ...prev,
+            [field]:
+              field === "status"
+                ? (value as TicketStatus)
+                : value,
+          }
+        : prev
     );
+  };
+
+  const saveUpdate = async () => {
+    if (!detailTicket || !editDraft) return;
+    setSavingUpdate(true);
+    setDetailError(null);
+
+    const body = {
+        subject: editDraft.subject,
+        category: editDraft.category,
+        priority: editDraft.priority,
+        status: editDraft.status,
+    };
 
     try {
-      await adminCloseSupportTicket(t.ticketId, { resolution: "Đã xử lý" });
-    } catch (e: unknown) {
-      alert(
-        e instanceof Error ? e.message : "Không thể đóng yêu cầu."
+      const updated = await adminUpdateSupportTicket<typeof body, Ticket>(
+        detailTicket.ticketId,
+        body
       );
-      setRows(prev);
+
+      setDetailTicket(updated);
+      setEditDraft({
+        subject: updated.subject,
+        category: updated.category,
+        priority: updated.priority,
+        status: updated.status,
+      });
+      reloadRowInList(updated);
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : "Không thể cập nhật yêu cầu.";
+      setDetailError(msg);
+    } finally {
+      setSavingUpdate(false);
+    }
+  };
+
+  const performCloseTicket = async () => {
+    if (!detailTicket) return;
+    const ok = confirm(`Đóng yêu cầu "${detailTicket.subject}"?`);
+    if (!ok) return;
+
+    setClosingTicket(true);
+    setDetailError(null);
+
+    const prevDetail = detailTicket;
+    const prevRows = rows;
+
+    const optimisticClosed: Ticket = {
+      ...detailTicket,
+      status: "Closed",
+    };
+    setDetailTicket(optimisticClosed);
+    reloadRowInList(optimisticClosed);
+
+    try {
+      await adminCloseSupportTicket(detailTicket.ticketId, {
+        resolution: "Đã xử lý",
+      });
+    } catch (e: unknown) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : "Không thể đóng yêu cầu.";
+      alert(msg);
+      setDetailTicket(prevDetail);
+      setRows(prevRows);
+    } finally {
+      setClosingTicket(false);
     }
   };
 
@@ -98,8 +225,8 @@ export default function SupportTicketsPage() {
           <div className={s.filters}>
             <select
               className={s.select}
-              value={status}
-              onChange={onStatusChange}
+              value={statusFilter}
+              onChange={onStatusFilterChange}
             >
               <option value="Tất cả">Tất cả trạng thái</option>
               <option value="Open">Đang mở</option>
@@ -110,8 +237,8 @@ export default function SupportTicketsPage() {
         </div>
 
         <div className={s.tableWrap}>
-          {err ? (
-            <div className={s.errorBox}>{err}</div>
+          {listError ? (
+            <div className={s.errorBox}>{listError}</div>
           ) : (
             <table className={s.table}>
               <thead>
@@ -125,7 +252,7 @@ export default function SupportTicketsPage() {
                 </tr>
               </thead>
               <tbody>
-                {loading && rows.length === 0 ? (
+                {loadingList && rows.length === 0 ? (
                   <tr>
                     <td colSpan={6}>Đang tải...</td>
                   </tr>
@@ -143,18 +270,34 @@ export default function SupportTicketsPage() {
                       <td>
                         {t.status === "Closed" ? (
                           <span className={s.badgeWarn}>Đã đóng</span>
+                        ) : t.status === "Pending" ? (
+                          <span className={s.badgePending}>Đang chờ</span>
                         ) : (
-                          <span className={s.badgeSuccess}>{t.status}</span>
+                          <span className={s.badgeSuccess}>Đang mở</span>
                         )}
                       </td>
                       <td className={s.rowActions}>
-                        <button className={s.linkBtn}>Xem</button>
+                        <button
+                          className={s.linkBtn}
+                          onClick={() => openDetail(t.ticketId)}
+                        >
+                          Xem
+                        </button>
                         {t.status !== "Closed" && (
                           <button
                             className={s.linkBtn}
-                            onClick={() => closeTicket(t)}
+                            onClick={() => {
+                              setDetailTicket(t);
+                              setEditDraft({
+                                subject: t.subject,
+                                category: t.category,
+                                priority: t.priority,
+                                status: t.status,
+                              });
+                              setDetailOpen(true);
+                            }}
                           >
-                            Đóng
+                            Sửa nhanh
                           </button>
                         )}
                       </td>
@@ -174,7 +317,9 @@ export default function SupportTicketsPage() {
           >
             ← Trước
           </button>
-          <span>Trang {page}/{totalPages}</span>
+          <span>
+            Trang {page}/{totalPages}
+          </span>
           <button
             className={s.linkBtn}
             disabled={page >= totalPages}
@@ -184,6 +329,109 @@ export default function SupportTicketsPage() {
           </button>
         </div>
       </section>
+
+      {detailOpen && (
+        <div className={s.modalBackdrop}>
+          <div className={s.modalCard}>
+            <div className={s.modalHead}>
+              <h4>Chi tiết yêu cầu</h4>
+              <button className={s.linkBtn} onClick={closeDetail}>
+                ✕
+              </button>
+            </div>
+
+            {detailLoading ? (
+              <div className={s.sectionBox}>Đang tải chi tiết…</div>
+            ) : detailError ? (
+              <div className={s.errorBox}>{detailError}</div>
+            ) : detailTicket && editDraft ? (
+              <div className={s.sectionBoxCol}>
+                <div className={s.fieldCol}>
+                  <label className={s.label}>Tiêu đề</label>
+                  <input
+                    className={s.input}
+                    value={editDraft.subject}
+                    onChange={(e) => onDraftChange("subject", e.target.value)}
+                  />
+                </div>
+
+                <div className={s.fieldCol}>
+                  <label className={s.label}>Danh mục</label>
+                  <input
+                    className={s.input}
+                    value={editDraft.category}
+                    onChange={(e) => onDraftChange("category", e.target.value)}
+                  />
+                </div>
+
+                <div className={s.fieldCol}>
+                  <label className={s.label}>Độ ưu tiên</label>
+                  <input
+                    className={s.input}
+                    value={editDraft.priority}
+                    onChange={(e) => onDraftChange("priority", e.target.value)}
+                  />
+                </div>
+
+                <div className={s.fieldCol}>
+                  <label className={s.label}>Trạng thái</label>
+                  <select
+                    className={s.select}
+                    value={editDraft.status}
+                    onChange={(e) => onDraftChange("status", e.target.value)}
+                  >
+                    <option value="Open">Đang mở</option>
+                    <option value="Pending">Đang chờ</option>
+                    <option value="Closed">Đã đóng</option>
+                  </select>
+                </div>
+
+                <div className={s.fieldCol}>
+                  <label className={s.label}>Mô tả</label>
+                  <div className={s.readonlyBox}>
+                    {detailTicket.description ?? "(Không có mô tả)"}
+                  </div>
+                </div>
+
+                <div className={s.fieldCol}>
+                  <label className={s.label}>Người gửi</label>
+                  <div className={s.readonlyBox}>
+                    {detailTicket.requesterName ?? "Ẩn danh"}
+                  </div>
+                </div>
+
+                <div className={s.fieldRow}>
+                  <button
+                    className={s.primaryBtn}
+                    disabled={savingUpdate}
+                    onClick={saveUpdate}
+                  >
+                    {savingUpdate ? "Đang lưu..." : "Lưu thay đổi"}
+                  </button>
+
+                  <span className={s.divider}>|</span>
+
+                  {detailTicket.status !== "Closed" ? (
+                    <button
+                      className={s.dangerBtn}
+                      disabled={closingTicket}
+                      onClick={performCloseTicket}
+                    >
+                      {closingTicket ? "Đang đóng..." : "Đóng yêu cầu"}
+                    </button>
+                  ) : (
+                    <button className={s.dangerBtn} disabled>
+                      Đã đóng
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className={s.sectionBox}>Không có dữ liệu.</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
