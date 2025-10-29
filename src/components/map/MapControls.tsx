@@ -2,6 +2,8 @@ import { useState, useRef, useEffect } from "react";
 import { FeatureData, toggleLayerVisibility, toggleFeatureVisibility, addDataLayerToMap, updateDataLayerInMap, removeDataLayerFromMap, createFeatureInMap, updateFeatureInMap, deleteFeatureFromMap } from "@/utils/mapUtils";
 import { RawLayer, MapFeatureResponse, CreateMapFeatureRequest, UpdateMapFeatureRequest } from "@/lib/api";
 import type { Map as LMap, FeatureGroup } from "leaflet";
+import SegmentPanel from "@/components/storymap/SegmentPanel";
+import MapPoiPanel from "@/components/poi/MapPoiPanel";
 
 // ---------------- StylePanel ----------------
 export interface StylePanelProps {
@@ -488,7 +490,7 @@ export function DataLayersPanel({
   hoveredLayer,
   selectedLayers
 }: DataLayersPanelProps) {
-  const [activeTab, setActiveTab] = useState<"Segment" | "List">("List");
+  const [activeTab, setActiveTab] = useState<"List" | "Segments/Zones" | "MapPOIs">("List");
 
   return (
     <>
@@ -505,19 +507,9 @@ export function DataLayersPanel({
         </div>
       )}
       {showDataLayersPanel && (
-        <div className="absolute top-15 left-1 z-[3000] w-80 max-h-[65vh] overflow-hidden pointer-events-auto bg-black/80 text-white rounded shadow-lg">
+        <div className="absolute top-15 left-1 z-[3000] w-auto max-h-[65vh] overflow-hidden pointer-events-auto bg-black/80 text-white rounded shadow-lg">
           {/* Tabs */}
           <div className="flex border-b border-gray-600">
-            {/* <button
-              onClick={() => setActiveTab("Segment")}
-              className={`px-4 py-2 text-sm font-medium ${
-                activeTab === "Segment" 
-                  ? "text-white border-b-2 border-white" 
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              Segment
-            </button> */}
             <button
               onClick={() => setActiveTab("List")}
               className={`px-4 py-2 text-sm font-medium ${
@@ -527,6 +519,26 @@ export function DataLayersPanel({
               }`}
             >
               List
+            </button>
+            <button
+              onClick={() => setActiveTab("Segments/Zones")}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === "Segments/Zones" 
+                  ? "text-white border-b-2 border-white" 
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Segments & Zones
+            </button>
+            <button
+              onClick={() => setActiveTab("MapPOIs")}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === "MapPOIs" 
+                  ? "text-white border-b-2 border-white" 
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Map POIs
             </button>
             <div className="ml-auto px-4 py-2">
               <button

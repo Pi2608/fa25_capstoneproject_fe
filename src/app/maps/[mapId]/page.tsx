@@ -256,6 +256,7 @@ export default function EditMapPage() {
   const [baseKey, setBaseKey] = useState<BaseKey>("osm");
   const [showStylePanel, setShowStylePanel] = useState(false);
   const [showDataLayersPanel, setShowDataLayersPanel] = useState(true);
+  
   // ----- POI state -----
   const [poiDialogOpen, setPoiDialogOpen] = useState(false);
   const [poiForm, setPoiForm] = useState<PoiForm>({
@@ -350,9 +351,9 @@ export default function EditMapPage() {
   const applyHoverStyle = useCallback((layer: Layer) => {
     if ('setStyle' in layer && typeof layer.setStyle === 'function') {
       (layer as unknown as PathLayer).setStyle({
-        weight: 5,
+        weight: (layer as unknown as PathLayer).options?.weight ?? 4 + 0.5,
         dashArray: '',
-        fillOpacity: 0.6
+        fillOpacity: (layer as unknown as PathLayer).options?.fillOpacity ?? 0.5 + 0.5
       });
       
       // Bring to front
@@ -375,9 +376,8 @@ export default function EditMapPage() {
   const applySelectionStyle = useCallback((layer: Layer) => {
     if ('setStyle' in layer && typeof layer.setStyle === 'function') {
       (layer as unknown as PathLayer).setStyle({
-        color: '#ff6600',
-        weight: 4,
-        fillOpacity: 0.5
+        weight: ((layer as unknown as PathLayer).options?.weight ?? 4) + 0.5,
+        fillOpacity: ((layer as unknown as PathLayer).options?.fillOpacity ?? 0.5) + 0.5
       });
     }
   }, []);
@@ -439,7 +439,6 @@ export default function EditMapPage() {
     if (!layer) return;
     
     if (isEntering) {
-      // Don't apply hover style if already selected
       if (!selectedLayers.has(layer)) {
         storeOriginalStyle(layer);
         applyHoverStyle(layer);
@@ -591,12 +590,13 @@ export default function EditMapPage() {
 
       const useVN = createdFlag || isZeroZero || tooClose;
       const initialCenter: LatLngTuple = useVN ? VN_CENTER : [rawLat, rawLng];
-      const initialZoom = useVN ? VN_ZOOM : Math.min(Math.max(rawZoom || VN_ZOOM, 3), 12);
+      const initialZoom = useVN ? VN_ZOOM : Math.min(Math.max(rawZoom || VN_ZOOM, 3), 20);
 
       const map = L.map(el, {
         zoomControl: false,
         minZoom: 2,
         maxZoom: 20,
+        worldCopyJump: true,
       }).setView(initialCenter, initialZoom) as MapWithPM;
 
       mapRef.current = map;
@@ -611,14 +611,12 @@ export default function EditMapPage() {
       const sketch = L.featureGroup().addTo(map);
       sketchRef.current = sketch;
 
-      // Load Features from DB to sketch group
       try {
         const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
         
         // Attach event listeners to loaded features
         dbFeatures.forEach(feature => {
           if (feature.layer) {
-            // Store original style
             storeOriginalStyle(feature.layer);
             
             // Attach hover and click event listeners
@@ -865,7 +863,6 @@ export default function EditMapPage() {
           });
         }
       });
-
 
       // Editing existing features
       sketch.on("pm:edit", async (e: { layer: Layer; shape: string }) => {
