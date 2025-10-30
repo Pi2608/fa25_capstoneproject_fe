@@ -127,6 +127,7 @@ export default function SamplesPage() {
         const res = await createMapFromTemplate({
           templateId: s.templateId,
           customName: s.title?.trim() || "Bản đồ mới từ template",
+          workspaceId: null,
         });
 
         router.push(`/maps/${res.mapId}`);
@@ -137,6 +138,7 @@ export default function SamplesPage() {
           description: s.blurb,
           isPublic: false,
           ...presetData,
+          workspaceId: null,
         });
         router.push(`/maps/${r.mapId}`);
       } else {

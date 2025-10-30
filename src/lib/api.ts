@@ -434,13 +434,13 @@ export type BaseMapProvider = "OSM" | "Satellite" | "Dark";
 
 // ==== MAPS ====
 export interface CreateMapRequest {
-  orgId?: string;
   name: string;
   description?: string;
   isPublic: boolean;
   defaultBounds?: string; // GeoJSON Polygon or null
   viewState?: string; // JSON object {"center":[lat,lng],"zoom":zoom}
   baseMapProvider?: BaseMapProvider;
+  workspaceId?: string | null;
 }
 
 export interface CreateMapResponse {
@@ -470,20 +470,25 @@ export function createMap(req: CreateMapRequest) {
         zoom = z;
       }
     } catch {
-
+      // ignore malformed view state input
     }
   }
 
+  const finalViewState =
+    req.viewState ??
+    JSON.stringify({
+      center,
+      zoom,
+    });
+
   const body = {
-    OrgId: req.orgId,
-    OrganizationId: req.orgId,
-    ProjectId: (req as any).projectId ?? undefined,
     Name: req.name,
     Description: req.description ?? null,
     IsPublic: req.isPublic,
-    ViewState: JSON.stringify({ Center: center, Zoom: zoom }),
+    DefaultBounds: req.defaultBounds ?? null,
+    ViewState: finalViewState,
     BaseMapProvider: req.baseMapProvider ?? "OSM",
-    GeographicBounds: req.defaultBounds ?? null,
+    WorkspaceId: req.workspaceId ?? null,
   };
 
   return postJson<typeof body, CreateMapResponse>("/maps", body);
@@ -516,14 +521,50 @@ export function createWorkspace(req: CreateWorkspaceRequest) {
 export type CreateProjectRequest = CreateWorkspaceRequest;
 export const createProject = createWorkspace;
 
+const PERSONAL_WORKSPACE_NAME = "Personal Workspace";
+const PERSONAL_WORKSPACE_NOTE = "Không thuộc tổ chức";
 
+function normalizeWorkspace(raw: Workspace): Workspace {
+  const orgId = raw.orgId ?? null;
+  const isPersonal = !orgId;
+  const trimmedOrgName =
+    typeof raw.orgName === "string" ? raw.orgName.trim() : "";
+  const finalOrgName = isPersonal
+    ? trimmedOrgName || PERSONAL_WORKSPACE_NAME
+    : trimmedOrgName || raw.orgName;
+  const trimmedWorkspaceName =
+    typeof raw.workspaceName === "string" ? raw.workspaceName.trim() : "";
+  const finalWorkspaceName = isPersonal
+    ? trimmedWorkspaceName || PERSONAL_WORKSPACE_NAME
+    : trimmedWorkspaceName || raw.workspaceName;
+
+  return {
+    ...raw,
+    orgId,
+    orgName: finalOrgName,
+    workspaceName: finalWorkspaceName,
+    isPersonal,
+    personalLabel: isPersonal ? PERSONAL_WORKSPACE_NOTE : raw.personalLabel,
+  };
+}
 
 export type GetWorkspacesByOrgResponse = { workspaces: Workspace[] } | Workspace[];
 
 export async function getWorkspacesByOrganization(orgId: string): Promise<Workspace[]> {
   const res = await getJson<GetWorkspacesByOrgResponse>(`/workspaces/organization/${orgId}`);
-  return Array.isArray(res) ? res : (res.workspaces ?? []);
+  const items = Array.isArray(res) ? res : (res.workspaces ?? []);
+  return items.map(normalizeWorkspace);
 }
+
+export type GetMyWorkspacesResponse = { workspaces: Workspace[] } | Workspace[];
+
+export async function getMyWorkspaces(): Promise<Workspace[]> {
+  const res = await getJson<GetMyWorkspacesResponse>("/workspaces/my");
+  const items = Array.isArray(res) ? res : (res.workspaces ?? []);
+  return items.map(normalizeWorkspace);
+}
+
+export const getMyProjects = getMyWorkspaces;
 
 export type AddMapToWorkspaceRequest = { mapId: string };
 export type AddMapToWorkspaceResponse = { result?: string };
@@ -534,7 +575,7 @@ export function addMapToWorkspace(workspaceId: string, req: AddMapToWorkspaceReq
 }
 
 export function getWorkspaceById(workspaceId: string) {
-  return getJson<Workspace>(`/workspaces/${workspaceId}`);
+  return getJson<Workspace>(`/workspaces/${workspaceId}`).then(normalizeWorkspace);
 }
 
 export function updateWorkspace(workspaceId: string, req: { workspaceName: string; description?: string }) {
@@ -542,7 +583,7 @@ export function updateWorkspace(workspaceId: string, req: { workspaceName: strin
     WorkspaceName: req.workspaceName,
     Description: req.description ?? null,
   };
-  return putJson<typeof body, Workspace>(`/workspaces/${workspaceId}`, body);
+  return putJson<typeof body, Workspace>(`/workspaces/${workspaceId}`, body).then(normalizeWorkspace);
 }
 
 export function deleteWorkspace(workspaceId: string) {
@@ -643,7 +684,13 @@ export interface MapDetail {
   initialLongitude: number;
   initialZoom: number;
   layers: RawLayer[];
+  status?: MapStatus;
+  publishedAt?: string;
+  isPublic?: boolean;
+  isActive?: boolean;
 }
+
+export type MapStatus = "Draft" | "UnderReview" | "Published" | "Unpublished" | "Archived";
 
 type MapDetailRawWrapped = {
   map: {
@@ -796,15 +843,23 @@ export interface CreateMapFromTemplateRequest {
   customInitialLatitude?: number;
   customInitialLongitude?: number;
   customInitialZoom?: number;
+  workspaceId?: string | null;
 }
 export interface CreateMapFromTemplateResponse {
   mapId: string;
 }
 export function createMapFromTemplate(body: CreateMapFromTemplateRequest) {
-  return postJson<CreateMapFromTemplateRequest, CreateMapFromTemplateResponse>(
-    "/maps/from-template",
-    body
-  );
+  const payload = {
+    TemplateId: body.templateId,
+    CustomName: body.customName,
+    CustomDescription: body.customDescription ?? null,
+    IsPublic: body.isPublic ?? false,
+    CustomInitialLatitude: body.customInitialLatitude ?? null,
+    CustomInitialLongitude: body.customInitialLongitude ?? null,
+    CustomInitialZoom: body.customInitialZoom ?? null,
+    WorkspaceId: body.workspaceId ?? null,
+  };
+  return postJson<typeof payload, CreateMapFromTemplateResponse>("/maps/from-template", payload);
 }
 
 export interface CreateMapTemplateResponse {
@@ -1304,16 +1359,12 @@ export async function copyFeatureToLayer(
   sourceLayerId: string,
   request: CopyFeatureToLayerRequest
 ): Promise<CopyFeatureToLayerResponse> {
-  console.log("🌐 API call: copyFeatureToLayer");
-  console.log("📍 URL:", `/maps/${mapId}/layers/${sourceLayerId}/copy-feature`);
-  console.log("📦 Request body:", request);
 
   const res = await postJson<CopyFeatureToLayerRequest, CopyFeatureToLayerResponse>(
     `/maps/${mapId}/layers/${sourceLayerId}/copy-feature`,
     request
   );
 
-  console.log("✅ API response:", res);
   return res;
 }
 
@@ -1913,5 +1964,28 @@ export function updateStoryElementLayer(storyElementLayerId: string, body: Updat
 
 export function deleteStoryElementLayer(storyElementLayerId: string) {
   return delJson<{ success: boolean }>(`${STORYMAP_PREFIX}/story-elements/layers/${storyElementLayerId}`);
+}
+
+// ====== MAP PUBLISHING APIs ======
+
+export interface PublishMapResponse {
+  success: boolean;
+  message?: string;
+}
+
+export function publishMap(mapId: string) {
+  return postJson<void, PublishMapResponse>(`/maps/${mapId}/publish`);
+}
+
+export function unpublishMap(mapId: string) {
+  return postJson<void, PublishMapResponse>(`/maps/${mapId}/unpublish`);
+}
+
+export function archiveMap(mapId: string) {
+  return postJson<void, PublishMapResponse>(`/maps/${mapId}/archive`);
+}
+
+export function restoreMap(mapId: string) {
+  return postJson<void, PublishMapResponse>(`/maps/${mapId}/restore`);
 }
 

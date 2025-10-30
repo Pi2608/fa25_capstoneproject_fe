@@ -221,7 +221,6 @@ export default function OrgDetailPage() {
         setMembership(membershipData);
       } catch (error) {
         if (!alive) return;
-        console.log("No membership found for organization:", error);
         setMembership(null);
       } finally {
         if (alive) setLoadingMembership(false);

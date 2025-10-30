@@ -176,6 +176,7 @@ export default function TemplatesPage() {
         customName: name.trim(),
         customDescription: t.description ?? "",
         isPublic,
+        workspaceId: null,
       });
       router.push(`/maps/${res.mapId}`);
     } catch (e) {

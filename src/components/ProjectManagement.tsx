@@ -265,8 +265,14 @@ export function ProjectCard({ project, orgId, onEdit, onDelete }: ProjectCardPro
         <div className="min-w-0 flex-1">
           <div className="truncate font-semibold">{project.workspaceName || "Untitled"}</div>
           <div className="text-xs text-zinc-400 truncate">
-            {project.description || "No description"}
+            {project.description ||
+              (project.isPersonal ? project.personalLabel ?? "Không thuộc tổ chức" : "No description")}
           </div>
+          {project.isPersonal && (
+            <div className="mt-1 text-[11px] text-emerald-300">
+              {project.orgName} · {project.personalLabel ?? "Không thuộc tổ chức"}
+            </div>
+          )}
           <div className="text-xs text-zinc-500">
             {project.createdAt ? formatDate(project.createdAt) : "—"}
           </div>

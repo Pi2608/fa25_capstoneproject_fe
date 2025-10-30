@@ -279,6 +279,17 @@ export function validateGeometry(geometryType: string, coordinates: string): boo
           coords[2] > 0
         );
 
+      case "Rectangle":
+        // Rectangle format: [minLng, minLat, maxLng, maxLat]
+        return (
+          Array.isArray(coords) &&
+          coords.length === 4 &&
+          typeof coords[0] === "number" &&
+          typeof coords[1] === "number" &&
+          typeof coords[2] === "number" &&
+          typeof coords[3] === "number"
+        );
+
       default:
         return false;
     }
@@ -426,18 +437,16 @@ export function serializeFeature(layer: ExtendedLayer): {
     annotationType = "Highlighter";
     if (layer._bounds) {
       const bounds = layer._bounds;
+      // Backend expects Rectangle as [minLng, minLat, maxLng, maxLat]
       coordinates = [
-        [
-          [bounds.getWest(), bounds.getSouth()],
-          [bounds.getEast(), bounds.getSouth()],
-          [bounds.getEast(), bounds.getNorth()],
-          [bounds.getWest(), bounds.getNorth()],
-          [bounds.getWest(), bounds.getSouth()],
-        ],
+        bounds.getWest(),   // minLng
+        bounds.getSouth(),  // minLat
+        bounds.getEast(),   // maxLng
+        bounds.getNorth()   // maxLat
       ];
     } else {
       console.warn("Rectangle layer missing _bounds property");
-      coordinates = [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]];
+      coordinates = [0, 0, 1, 1]; // [minLng, minLat, maxLng, maxLat]
     }
   } else if (type === "Line") {
     geometryType = "LineString";
@@ -718,7 +727,6 @@ export async function saveFeature(
 
     // Immediately add to UI (optimistic update)
     setFeatures((prev) => [...prev, optimisticFeature]);
-    console.log("🚀 Optimistic update: Feature added to UI immediately");
 
     // Determine feature category based on type
     // Marker with circleMarker (small circle) is Data (Geometry), not Annotation
@@ -741,7 +749,6 @@ export async function saveFeature(
       zIndex: features.length,
     };
 
-    console.log("Saving feature with body:", body);
     const response = await createMapFeature(mapId, body);
 
     // Update with real server response
@@ -755,17 +762,14 @@ export async function saveFeature(
       prev.map(f => f.id === tempFeatureId ? realFeature : f)
     );
     
-    console.log("✅ Feature synced with server:", realFeature);
     return realFeature;
   } catch (error) {
-    console.error("❌ Failed to save feature:", error);
     
     // Rollback optimistic update
     setFeatures((prev) => 
       prev.filter(f => f.id !== tempFeatureId)
     );
     
-    console.log("🔄 Rolled back optimistic update due to API failure");
     return null;
   }
 }
@@ -779,8 +783,6 @@ export async function updateFeatureInDB(
     const serialized = serializeFeature(feature.layer);
     const { geometryType, annotationType, coordinates, text } = serialized;
    
-    console.log("🔄 Updating feature in DB:", { featureId, geometryType, annotationType, text });
-
     // Extract current style from layer
     const layerStyle = extractLayerStyle(feature.layer);
 
@@ -837,7 +839,6 @@ export async function loadFeaturesToMap(
 ): Promise<FeatureData[]> {
   try {
     const features = await getMapFeatures(mapId);
-    console.log("features", features);
     const featureDataList: FeatureData[] = [];
 
     for (const feature of features) {
@@ -865,6 +866,9 @@ export async function loadFeaturesToMap(
               coordinates = coordNumbers as [number, number, number];
             } else if (feature.geometryType.toLowerCase() === "point" && coordNumbers.length >= 2) {
               coordinates = [coordNumbers[0], coordNumbers[1]] as Position;
+            } else if (feature.geometryType.toLowerCase() === "rectangle" && coordNumbers.length === 4) {
+              // Rectangle format: [minLng, minLat, maxLng, maxLat]
+              coordinates = [coordNumbers[0], coordNumbers[1], coordNumbers[2], coordNumbers[3]] as Position;
             } else {
               console.warn("Unsupported coordinate format for geometry type:", feature.geometryType);
               continue;
@@ -931,8 +935,29 @@ export async function loadFeaturesToMap(
       } else if (feature.geometryType.toLowerCase() === "polygon") {
         const coords = coordinates as Position[][];
         layer = L.polygon(coords[0].map((c) => [c[1], c[0]])) as ExtendedLayer;
+      } else if (feature.geometryType.toLowerCase() === "rectangle") {
+        // Rectangle is stored as bounds format: [minLng, minLat, maxLng, maxLat]
+        
+        // Parse Rectangle coordinates
+        let rectangleCoords: [number, number, number, number];
+        
+        if (Array.isArray(coordinates) && coordinates.length === 4) {
+          // Direct bounds format: [minLng, minLat, maxLng, maxLat]
+          rectangleCoords = coordinates as [number, number, number, number];
+        } else {
+          console.warn("Invalid Rectangle coordinates format:", coordinates);
+          continue;
+        }
+        
+        const [minLng, minLat, maxLng, maxLat] = rectangleCoords;
+        
+        // Create Rectangle using L.rectangle with LatLngBounds
+        // L.rectangle expects [[south, west], [north, east]] = [[minLat, minLng], [maxLat, maxLng]]
+        layer = L.rectangle(
+          [[minLat, minLng], [maxLat, maxLng]]
+        ) as ExtendedLayer;
+        
       } else if (feature.geometryType.toLowerCase() === "circle") {
-        console.log("Circle coordinates:", coordinates, "Type:", typeof coordinates, "Is Array:", Array.isArray(coordinates));
         
         // Handle different coordinate formats for circles
         let circleCoords: [number, number, number];
@@ -1092,7 +1117,6 @@ export async function loadLayerToMap(
       map.addLayer(geoJsonLayer);
       dataLayerRefs.current.set(layer.id, geoJsonLayer);
       
-      console.log("✅ Loaded layer to map:", layer.name);
       return true;
     }
     
@@ -1201,7 +1225,6 @@ export async function renderFeatures(
   });
   featureRefs.current.clear();
 
-  console.log("🎨 Rendering features:", features);
 
   for (const feature of features) {
     if (!feature.isVisible) continue;
@@ -1256,7 +1279,6 @@ export async function renderFeatures(
             weight: 2,
             opacity: 1
           }) as ExtendedLayer;
-          console.log("📝 Rendered Text with color:", markerColor);
          } else {
            // Regular marker - sử dụng circleMarker để có thể tùy chỉnh properties trong GeoJSON
            layer = L.circleMarker([coords[1], coords[0]], {
@@ -1267,20 +1289,38 @@ export async function renderFeatures(
              weight: 2,
              opacity: 1
            }) as ExtendedLayer;
-           console.log("📍 Rendered Marker");
          }
       } else if (feature.geometryType.toLowerCase() === "linestring") {
         const coords = coordinates as Position[];
         layer = L.polyline(coords.map((c) => [c[1], c[0]])) as ExtendedLayer;
-        console.log("📏 Rendered Line");
       } else if (feature.geometryType.toLowerCase() === "polygon") {
         const coords = coordinates as Position[][];
         layer = L.polygon(coords[0].map((c) => [c[1], c[0]])) as ExtendedLayer;
-        console.log("🔷 Rendered Polygon");
+      } else if (feature.geometryType.toLowerCase() === "rectangle") {
+        // Rectangle is stored as bounds format: [minLng, minLat, maxLng, maxLat]
+        
+        // Parse Rectangle coordinates
+        let rectangleCoords: [number, number, number, number];
+        
+        if (Array.isArray(coordinates) && coordinates.length === 4) {
+          // Direct bounds format: [minLng, minLat, maxLng, maxLat]
+          rectangleCoords = coordinates as [number, number, number, number];
+        } else {
+          console.warn("Invalid Rectangle coordinates format:", coordinates);
+          continue;
+        }
+        
+        const [minLng, minLat, maxLng, maxLat] = rectangleCoords;
+        
+        // Create Rectangle using L.rectangle with LatLngBounds
+        // L.rectangle expects [[south, west], [north, east]] = [[minLat, minLng], [maxLat, maxLng]]
+        layer = L.rectangle(
+          [[minLat, minLng], [maxLat, maxLng]]
+        ) as ExtendedLayer;
+        
       } else if (feature.geometryType.toLowerCase() === "circle") {
         const coords = coordinates as [number, number, number];
         layer = L.circle([coords[1], coords[0]], { radius: coords[2] }) as ExtendedLayer;
-        console.log("⭕ Rendered Circle");
       }
 
       if (layer) {
@@ -1289,7 +1329,6 @@ export async function renderFeatures(
           try {
             const storedStyle = JSON.parse(feature.style);
             applyLayerStyle(layer, storedStyle);
-            console.log("🎨 Applied style:", storedStyle);
           } catch (error) {
             console.warn("Failed to parse feature style:", error);
           }
@@ -1329,7 +1368,6 @@ export async function renderFeatures(
     }
   }
   
-  console.log("✅ Finished rendering features");
 }
 
 export async function toggleLayerVisibility(
@@ -1504,8 +1542,24 @@ export async function toggleFeatureVisibility(
       } else if (feature.geometryType.toLowerCase() === "polygon") {
         const coords = coordinates as Position[][];
         layer = L.polygon(coords[0].map((c) => [c[1], c[0]])) as ExtendedLayer;
+      } else if (feature.geometryType.toLowerCase() === "rectangle") {
+        // Rectangle is stored as bounds format: [minLng, minLat, maxLng, maxLat]
+        let rectangleCoords: [number, number, number, number];
+        
+        if (Array.isArray(coordinates) && coordinates.length === 4) {
+          rectangleCoords = coordinates as [number, number, number, number];
+        } else {
+          console.warn("Invalid Rectangle coordinates format:", coordinates);
+          return;
+        }
+        
+        const [minLng, minLat, maxLng, maxLat] = rectangleCoords;
+        
+        // Create Rectangle using L.rectangle with LatLngBounds
+        layer = L.rectangle(
+          [[minLat, minLng], [maxLat, maxLng]]
+        ) as ExtendedLayer;
       } else if (feature.geometryType.toLowerCase() === "circle") {
-        console.log("Circle coordinates:", coordinates, "Type:", typeof coordinates, "Is Array:", Array.isArray(coordinates));
         
         // Handle different coordinate formats for circles
         let circleCoords: [number, number, number];
@@ -1998,7 +2052,6 @@ export async function handleDeleteFeature(
 ): Promise<void> {
   try {
     await deleteFeatureFromDB(mapId, featureId);
-    console.log("Delete featureId", featureId);
     setFeatures(prev => removeFeatureFromList(prev, featureId, map, sketchGroup));
    
     // Call refresh callback if provided
@@ -2157,7 +2210,6 @@ export async function handleLayerVisibilityChange(
 ): Promise<void> {
   if (!map) return;
 
-  console.log("Toggling layer visibility:", { layerId, isVisible });
 
   setLayerVisibility(prev => ({
     ...prev,
@@ -2167,11 +2219,9 @@ export async function handleLayerVisibilityChange(
   let layerOnMap = dataLayerRefs.current.get(layerId);
   
   if (isVisible && !layerOnMap && layerData) {
-    console.log("🔄 Layer not loaded yet, loading now:", layerData.name);
     const success = await loadLayerToMap(map, layerData, dataLayerRefs);
     if (success) {
       layerOnMap = dataLayerRefs.current.get(layerId);
-      console.log("✅ Layer loaded successfully:", layerData.name);
     } else {
       console.warn("⚠️ Failed to load layer:", layerData.name);
     }
@@ -2192,7 +2242,6 @@ export async function handleLayerVisibilityChange(
   try {
     const { updateMapLayer } = await import("@/lib/api");
     await updateMapLayer(mapId, layerId, { isVisible });
-    console.log("Layer visibility updated in database");
   } catch (error) {
     console.error("Failed to update layer visibility in database:", error);
 
