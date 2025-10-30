@@ -3,6 +3,8 @@ import { FeatureData, toggleLayerVisibility, toggleFeatureVisibility, addDataLay
 import { RawLayer, MapFeatureResponse, CreateMapFeatureRequest, UpdateMapFeatureRequest } from "@/lib/api";
 import type { Map as LMap, FeatureGroup } from "leaflet";
 
+import DeleteConfirmModal from "./DeleteConfirmModal";
+
 // ---------------- StylePanel ----------------
 export interface StylePanelProps {
   selectedLayer: FeatureData | RawLayer | null;
@@ -489,6 +491,17 @@ export function DataLayersPanel({
   selectedLayers
 }: DataLayersPanelProps) {
   const [activeTab, setActiveTab] = useState<"Segment" | "List">("List");
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    itemId: string;
+    itemName: string;
+    itemType: "feature" | "layer";
+  }>({
+    isOpen: false,
+    itemId: "",
+    itemName: "",
+    itemType: "feature"
+  });
 
   return (
     <>
@@ -546,14 +559,24 @@ export function DataLayersPanel({
               <>
                 {/* Elements Section */}
                 <div className="px-4 py-2">
-                  <div className="text-sm font-medium text-white/70 mb-2">Elements</div>
+                  <div className="text-sm font-medium text-white/70 mb-2">Elements ({features.length})</div>
                   {features.map((feature,index : number) => {
                     const isHovered = hoveredLayer === feature.layer;
                     const isSelected = selectedLayers?.has(feature.layer);
                     
+                    // Debug: Log Line features
+                    if (feature.type.toLowerCase() === 'line') {
+                      console.log(`🔍 Rendering Line #${index}:`, {
+                        id: feature.id,
+                        featureId: feature.featureId,
+                        name: feature.name,
+                        layerInstance: feature.layer
+                      });
+                    }
+                    
                     return (
                     <div
-                      key={`${feature.featureId}-${index}`}
+                      key={`${feature.featureId || feature.id}-${index}`}
                       className={`flex items-center justify-between px-2 py-1 rounded cursor-pointer transition-colors ${
                         isSelected ? 'bg-orange-500/30' : isHovered ? 'bg-white/20' : 'hover:bg-white/5'
                       }`}
@@ -618,8 +641,19 @@ export function DataLayersPanel({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (confirm(`Delete "${feature.name}"?`)) {
+                              
+                              // Check if user has disabled confirmation
+                              const skipConfirm = localStorage.getItem('skipDeleteConfirm') === 'true';
+                              
+                              if (skipConfirm) {
                                 feature.featureId && onDeleteFeature(feature.featureId);
+                              } else {
+                                setDeleteModal({
+                                  isOpen: true,
+                                  itemId: feature.featureId || feature.id,
+                                  itemName: feature.name,
+                                  itemType: "feature"
+                                });
                               }
                             }}
                             className="p-1 rounded hover:bg-red-500/20 text-red-400"
@@ -680,8 +714,19 @@ export function DataLayersPanel({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (confirm(`Remove "${layer.name}" from map?`)) {
+                              
+                              // Check if user has disabled confirmation
+                              const skipConfirm = localStorage.getItem('skipDeleteConfirm') === 'true';
+                              
+                              if (skipConfirm) {
                                 onRemoveDataLayer(layer.id);
+                              } else {
+                                setDeleteModal({
+                                  isOpen: true,
+                                  itemId: layer.id,
+                                  itemName: layer.name,
+                                  itemType: "layer"
+                                });
                               }
                             }}
                             className="p-1 rounded hover:bg-red-500/20 text-red-400"
@@ -742,6 +787,21 @@ export function DataLayersPanel({
           </div>
         </div>
       )}
+      
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ ...deleteModal, isOpen: false })}
+        onConfirm={() => {
+          if (deleteModal.itemType === "feature" && onDeleteFeature) {
+            onDeleteFeature(deleteModal.itemId);
+          } else if (deleteModal.itemType === "layer" && onRemoveDataLayer) {
+            onRemoveDataLayer(deleteModal.itemId);
+          }
+        }}
+        itemName={deleteModal.itemName}
+        itemType={deleteModal.itemType}
+      />
     </>
   );
 }

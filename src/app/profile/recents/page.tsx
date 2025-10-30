@@ -243,6 +243,7 @@ export default function RecentsPage() {
       defaultBounds,
       viewState,
       baseMapProvider: "OSM",
+      workspaceId: null,
     });
 
     router.push(`/maps/${created.mapId}?created=1&name=${encodeURIComponent("Untitled Map")}`);
@@ -270,6 +271,7 @@ export default function RecentsPage() {
         const r = await createMapFromTemplate({
           templateId: s.templateId,
           customName: (s.title ?? s.preset?.name ?? "Bản đồ mới từ template").trim(),
+          workspaceId: null,
         });
         router.push(`/maps/${r.mapId}`);
       } else if (s.preset) {
@@ -279,6 +281,7 @@ export default function RecentsPage() {
           description: s.blurb,
           isPublic: false,
           ...presetData,
+          workspaceId: null,
         });
         router.push(`/maps/${r2.mapId}`);
       } else {

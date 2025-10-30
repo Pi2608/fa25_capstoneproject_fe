@@ -47,6 +47,8 @@ import {
 import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
 import SegmentPanel from "@/components/storymap/SegmentPanel";
+import PublishButton from "@/components/PublishButton";
+import type { MapStatus } from "@/lib/api";
 
 
 
@@ -59,6 +61,7 @@ export default function EditMapPage() {
   const [detail, setDetail] = useState<MapDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [err, setErr] = useState<string | null>(null);
+  const [mapStatus, setMapStatus] = useState<MapStatus>("Draft");
 
   const [busySaveMeta, setBusySaveMeta] = useState<boolean>(false);
   const [busySaveView, setBusySaveView] = useState<boolean>(false);
@@ -86,6 +89,7 @@ export default function EditMapPage() {
   const sketchRef = useRef<FeatureGroup | null>(null);
   const dataLayerRefs = useRef<Map<string, L.Layer>>(new Map());
   const originalStylesRef = useRef<Map<Layer, LayerStyle>>(new Map());
+  const lastUpdateRef = useRef<Map<string, number>>(new Map());
 
 
   // Helper: Store original style
@@ -314,6 +318,7 @@ export default function EditMapPage() {
         setDetail(m);
         setName(m.mapName ?? "");
         setBaseKey(m.baseMapProvider === "Satellite" ? "sat" : m.baseMapProvider === "Dark" ? "dark" : "osm");
+        setMapStatus(m.status || "Draft");
       } catch (e) {
         if (!alive) return;
         setErr(e instanceof Error ? e.message : "Không tải được bản đồ");
@@ -388,76 +393,9 @@ export default function EditMapPage() {
       sketchRef.current = sketch;
 
       try {
-        const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
-        
-        // Attach event listeners to loaded features
-        dbFeatures.forEach(feature => {
-          if (feature.layer) {
-            // Store original style
-            storeOriginalStyle(feature.layer);
-            
-            // Attach hover and click event listeners
-            feature.layer.on('mouseover', () => handleLayerHover(feature.layer, true));
-            feature.layer.on('mouseout', () => handleLayerHover(feature.layer, false));
-            feature.layer.on('click', (event: LeafletMouseEvent) => {
-              // Stop propagation to prevent base layer click from firing
-              if (event.originalEvent) {
-                event.originalEvent.stopPropagation();
-              }
-              handleLayerClick(feature.layer, event.originalEvent.shiftKey);
-            });
-            
-            // Attach edit/drag/rotate event listeners for database updates
-            feature.layer.on('pm:edit', async () => {
-              if (feature.featureId) {
-                try {
-                  await updateFeatureInDB(detail.id, feature.featureId, feature);
-                } catch (error) {
-                  console.error("Error updating feature after edit:", error);
-                }
-              }
-            });
-            
-            feature.layer.on('pm:dragend', async () => {
-              if (feature.featureId) {
-                try {
-                  await updateFeatureInDB(detail.id, feature.featureId, feature);
-                } catch (error) {
-                  console.error("Error updating feature after drag:", error);
-                }
-              }
-              resetToOriginalStyle(feature.layer);
-            });
-            
-            feature.layer.on('pm:rotateend', async () => {
-              if (feature.featureId) {
-                try {
-                  await updateFeatureInDB(detail.id, feature.featureId, feature);
-                } catch (error) {
-                  console.error("Error updating feature after rotation:", error);
-                }
-              }
-            });
-            
-            // Enable dragging and editing via Geoman
-            if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
-              (feature.layer as GeomanLayer).pm.enable({
-                draggable: true,
-                allowEditing: true,
-                allowSelfIntersection: true,
-              });
-            }
-          }
-        });
-        
-        setFeatures(dbFeatures);
-        const initialFeatureVisibility: Record<string, boolean> = {};
-        dbFeatures.forEach(feature => {
-          initialFeatureVisibility[feature.id] = feature.isVisible ?? true;
-        });
-        setFeatureVisibility(initialFeatureVisibility);
+        // Features will be loaded in a separate useEffect
         } catch (error) {
-        console.error("Failed to load from database:", error);
+        console.error("Failed to initialize map:", error);
       }
 
       // Check if PM is available on map before using it
@@ -529,13 +467,25 @@ export default function EditMapPage() {
         
         
         // Save to database
+        // Note: saveFeature already handles adding to features state (optimistic update)
         try {
+          console.log("🎯 pm:create - Before saveFeature, features count:", features.length);
           const savedFeature = await saveFeature(detail.id, "", extLayer, features, setFeatures);
+          console.log("🎯 pm:create - After saveFeature, savedFeature:", savedFeature);
+          
           if (savedFeature) {
-            // Attach edit/drag/rotate event listeners with the saved featureId
+            // Attach edit/drag/rotate event listeners for the saved feature
             e.layer.on('pm:edit', async () => {
               if (savedFeature.featureId) {
+                const now = Date.now();
+                const lastUpdate = lastUpdateRef.current.get(savedFeature.featureId) || 0;
+                if (now - lastUpdate < 1000) return;
+                lastUpdateRef.current.set(savedFeature.featureId, now);
+                
                 try {
+                  console.log("🔄 Updating feature after edit:", savedFeature.featureId);
+                  // Reset to original style first to remove selection styling
+                  resetToOriginalStyle(e.layer);
                   await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
                 } catch (error) {
                   console.error("Error updating feature after edit:", error);
@@ -545,18 +495,31 @@ export default function EditMapPage() {
             
             e.layer.on('pm:dragend', async () => {
               if (savedFeature.featureId) {
+                const now = Date.now();
+                const lastUpdate = lastUpdateRef.current.get(savedFeature.featureId) || 0;
+                if (now - lastUpdate < 1000) return;
+                lastUpdateRef.current.set(savedFeature.featureId, now);
+                
                 try {
+                  console.log("🔄 Updating feature after drag:", savedFeature.featureId);
+                  // Reset to original style first to remove selection styling
+                  resetToOriginalStyle(e.layer);
                   await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
                 } catch (error) {
                   console.error("Error updating feature after drag:", error);
                 }
               }
-              resetToOriginalStyle(e.layer);
             });
             
             e.layer.on('pm:rotateend', async () => {
               if (savedFeature.featureId) {
+                const now = Date.now();
+                const lastUpdate = lastUpdateRef.current.get(savedFeature.featureId) || 0;
+                if (now - lastUpdate < 1000) return;
+                lastUpdateRef.current.set(savedFeature.featureId, now);
+                
                 try {
+                  console.log("🔄 Updating feature after rotate:", savedFeature.featureId);
                   await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
                 } catch (error) {
                   console.error("Error updating feature after rotation:", error);
@@ -564,12 +527,15 @@ export default function EditMapPage() {
               }
             });
             
-            setFeatures(prev => [...prev, savedFeature]);
+            // Update visibility for the saved feature
             setFeatureVisibility(prev => ({
               ...prev,
-              [savedFeature.id]: true
+              [savedFeature.id]: true,
+              ...(savedFeature.featureId ? { [savedFeature.featureId]: true } : {})
             }));
           } else {
+            // Fallback: add to features if saveFeature returned null
+            console.log("⚠️ saveFeature returned null, adding newFeature manually");
             setFeatures(prev => [...prev, newFeature]);
             setFeatureVisibility(prev => ({
               ...prev,
@@ -578,6 +544,8 @@ export default function EditMapPage() {
           }
         } catch (error) {
           console.error("Error saving to database:", error);
+          // Only add to features if save failed
+          console.log("❌ saveFeature failed, adding newFeature manually");
           setFeatures(prev => [...prev, newFeature]);
           setFeatureVisibility(prev => ({
             ...prev,
@@ -601,6 +569,11 @@ export default function EditMapPage() {
         
         const editedFeature = features.find(f => f.layer === extLayer);
         if (editedFeature && editedFeature.featureId) {
+          const now = Date.now();
+          const lastUpdate = lastUpdateRef.current.get(editedFeature.featureId) || 0;
+          if (now - lastUpdate < 1000) return; // Skip if updated less than 1 second ago
+          lastUpdateRef.current.set(editedFeature.featureId, now);
+          
           try {
             await updateFeatureInDB(detail.id, editedFeature.featureId, editedFeature);
             
@@ -624,6 +597,11 @@ export default function EditMapPage() {
         
         const draggedFeature = features.find(f => f.layer === extLayer);
         if (draggedFeature && draggedFeature.featureId) {
+          const now = Date.now();
+          const lastUpdate = lastUpdateRef.current.get(draggedFeature.featureId) || 0;
+          if (now - lastUpdate < 1000) return; // Skip if updated less than 1 second ago
+          lastUpdateRef.current.set(draggedFeature.featureId, now);
+          
           try {
             await updateFeatureInDB(detail.id, draggedFeature.featureId, draggedFeature);
             
@@ -644,6 +622,11 @@ export default function EditMapPage() {
         
         const rotatedFeature = features.find(f => f.layer === extLayer);
         if (rotatedFeature && rotatedFeature.featureId) {
+          const now = Date.now();
+          const lastUpdate = lastUpdateRef.current.get(rotatedFeature.featureId) || 0;
+          if (now - lastUpdate < 1000) return; // Skip if updated less than 1 second ago
+          lastUpdateRef.current.set(rotatedFeature.featureId, now);
+          
           try {
             await updateFeatureInDB(detail.id, rotatedFeature.featureId, rotatedFeature);
             
@@ -665,6 +648,117 @@ export default function EditMapPage() {
       setIsMapReady(false);
     };
   }, [detail?.id, applyBaseLayer, sp]);
+
+  useEffect(() => {
+    if (!detail?.id || !isMapReady) return;
+    
+    let alive = true;
+    
+    (async () => {
+      try {
+        const L = (await import("leaflet")).default;
+        const sketch = sketchRef.current;
+        if (!sketch || !alive) return;
+        
+        const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
+        
+        // Attach event listeners to loaded features
+        dbFeatures.forEach(feature => {
+          if (feature.layer) {
+            // Store original style
+            storeOriginalStyle(feature.layer);
+            
+            // Attach hover and click event listeners
+            feature.layer.on('mouseover', () => handleLayerHover(feature.layer, true));
+            feature.layer.on('mouseout', () => handleLayerHover(feature.layer, false));
+            feature.layer.on('click', (event: LeafletMouseEvent) => {
+              // Stop propagation to prevent base layer click from firing
+              if (event.originalEvent) {
+                event.originalEvent.stopPropagation();
+              }
+              handleLayerClick(feature.layer, event.originalEvent.shiftKey);
+            });
+            
+            // Attach edit/drag/rotate event listeners for database updates
+            if (feature.featureId) {
+              feature.layer.on('pm:edit', async () => {
+                const now = Date.now();
+                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                if (now - lastUpdate < 1000) return;
+                lastUpdateRef.current.set(feature.featureId!, now);
+                
+                try {
+                  console.log("🔄 Updating loaded feature after edit:", feature.featureId);
+                  // Reset to original style first to remove selection styling
+                  resetToOriginalStyle(feature.layer);
+                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                } catch (error) {
+                  console.error("Error updating feature after edit:", error);
+                }
+              });
+              
+              feature.layer.on('pm:dragend', async () => {
+                const now = Date.now();
+                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                if (now - lastUpdate < 1000) return;
+                lastUpdateRef.current.set(feature.featureId!, now);
+                
+                try {
+                  console.log("🔄 Updating loaded feature after drag:", feature.featureId);
+                  // Reset to original style first to remove selection styling
+                  resetToOriginalStyle(feature.layer);
+                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                } catch (error) {
+                  console.error("Error updating feature after drag:", error);
+                }
+              });
+              
+              feature.layer.on('pm:rotateend', async () => {
+                const now = Date.now();
+                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                if (now - lastUpdate < 1000) return;
+                lastUpdateRef.current.set(feature.featureId!, now);
+                
+                try {
+                  console.log("🔄 Updating loaded feature after rotate:", feature.featureId);
+                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                } catch (error) {
+                  console.error("Error updating feature after rotation:", error);
+                }
+              });
+            }
+            
+            // Enable dragging and editing via Geoman
+            if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
+              (feature.layer as GeomanLayer).pm.enable({
+                draggable: true,
+                allowEditing: true,
+                allowSelfIntersection: true,
+              });
+            }
+          }
+        });
+        
+        if (alive) {
+          setFeatures(dbFeatures);
+          const initialFeatureVisibility: Record<string, boolean> = {};
+          dbFeatures.forEach(feature => {
+            initialFeatureVisibility[feature.id] = feature.isVisible ?? true;
+            if (feature.featureId) {
+              initialFeatureVisibility[feature.featureId] = feature.isVisible ?? true;
+            }
+          });
+          setFeatureVisibility(initialFeatureVisibility);
+        }
+      } catch (error) {
+        console.error("Failed to load features from database:", error);
+      }
+    })();
+    
+    return () => {
+      alive = false;
+    };
+  }, [detail?.id, isMapReady]);
 
   useEffect(() => {
     if (!mapRef.current || !detail?.layers || detail.layers.length === 0 || !isMapReady) return;
@@ -1067,6 +1161,7 @@ export default function EditMapPage() {
                 className="px-2.5 py-1.5 rounded-md bg-white text-black text-sm font-medium w-52"
                 placeholder="Untitled Map"
               />
+              <PublishButton mapId={mapId} status={mapStatus} onStatusChange={setMapStatus} />
             </div>
             <div className="flex items-center justify-center gap-1.5 overflow-x-auto no-scrollbar">
               <GuardBtn title="Vẽ điểm" onClick={() => enableDraw("Marker")} disabled={!mapRef.current}>
@@ -1194,6 +1289,19 @@ export default function EditMapPage() {
                 title="Toggle Story Map Panel"
               >
                 Story Map
+              </button>
+              <button
+                className="rounded-lg p-1.5 text-xs font-semibold bg-zinc-700 hover:bg-zinc-600"
+                onClick={() => {
+                  localStorage.removeItem('skipDeleteConfirm');
+                  setFeedback("Delete confirmations re-enabled");
+                  setTimeout(() => setFeedback(null), 2000);
+                }}
+                title="Re-enable delete confirmation dialogs"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
               </button>
             </div>
           </div>
