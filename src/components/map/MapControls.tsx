@@ -564,15 +564,6 @@ export function DataLayersPanel({
                     const isHovered = hoveredLayer === feature.layer;
                     const isSelected = selectedLayers?.has(feature.layer);
                     
-                    // Debug: Log Line features
-                    if (feature.type.toLowerCase() === 'line') {
-                      console.log(`🔍 Rendering Line #${index}:`, {
-                        id: feature.id,
-                        featureId: feature.featureId,
-                        name: feature.name,
-                        layerInstance: feature.layer
-                      });
-                    }
                     
                     return (
                     <div

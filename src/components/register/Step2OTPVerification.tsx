@@ -53,8 +53,6 @@ export default function Step2OTPVerification({
           className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={loading}
           onClick={async () => {
-            // This would be handled by the parent component
-            console.log("Resend OTP clicked");
           }}
         >
           Resend code

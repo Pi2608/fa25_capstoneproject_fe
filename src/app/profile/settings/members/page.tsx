@@ -256,7 +256,6 @@ export default function MembersPage() {
         newOwnerId: target.userId.trim(),
       };
 
-      console.log("transferOwnership payload:", payload);
 
       const res = await apiTransferOwnership(payload);
 

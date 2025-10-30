@@ -1359,16 +1359,12 @@ export async function copyFeatureToLayer(
   sourceLayerId: string,
   request: CopyFeatureToLayerRequest
 ): Promise<CopyFeatureToLayerResponse> {
-  console.log("🌐 API call: copyFeatureToLayer");
-  console.log("📍 URL:", `/maps/${mapId}/layers/${sourceLayerId}/copy-feature`);
-  console.log("📦 Request body:", request);
 
   const res = await postJson<CopyFeatureToLayerRequest, CopyFeatureToLayerResponse>(
     `/maps/${mapId}/layers/${sourceLayerId}/copy-feature`,
     request
   );
 
-  console.log("✅ API response:", res);
   return res;
 }
 

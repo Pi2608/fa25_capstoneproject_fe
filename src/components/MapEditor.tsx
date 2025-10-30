@@ -531,12 +531,8 @@ export default function MapEditor() {
   }, [contextMenu.feature]);
 
   const openCopyFeatureDialog = useCallback((copyMode: "existing" | "new") => {
-    console.log("📝 openCopyFeatureDialog called with mode:", copyMode);
-    console.log("📊 Detail:", detail);
-    console.log("📊 ContextMenu:", contextMenu);
 
     if (!detail || !contextMenu.feature || !contextMenu.layerId) {
-      console.log("❌ Missing required data:", { detail: !!detail, feature: !!contextMenu.feature, layerId: !!contextMenu.layerId });
       return;
     }
 
@@ -547,16 +543,13 @@ export default function MapEditor() {
     const layerData = JSON.parse(sourceLayer?.layerData || '{}');
     const featureIndex = findFeatureIndex(layerData, contextMenu.feature);
 
-    console.log("🔍 Feature search result:", { featureIndex, layerData, feature: contextMenu.feature });
 
     if (featureIndex === -1) {
-      console.log("❌ Feature not found in layer");
       setFeedback('❌ Feature not found in layer');
       setTimeout(() => setFeedback(null), 2000);
       return;
     }
 
-    console.log("✅ Opening copy dialog with:", { sourceLayerId, sourceLayerName, featureIndex, copyMode });
     setCopyFeatureDialog({
       isOpen: true,
       sourceLayerId,
@@ -571,7 +564,6 @@ export default function MapEditor() {
   }, [openCopyFeatureDialog]);
 
   const handleCopyToNewLayer = useCallback(() => {
-    console.log("🚀 handleCopyToNewLayer called!");
     openCopyFeatureDialog("new");
   }, [openCopyFeatureDialog]);
 

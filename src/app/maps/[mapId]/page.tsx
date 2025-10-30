@@ -469,9 +469,7 @@ export default function EditMapPage() {
         // Save to database
         // Note: saveFeature already handles adding to features state (optimistic update)
         try {
-          console.log("🎯 pm:create - Before saveFeature, features count:", features.length);
           const savedFeature = await saveFeature(detail.id, "", extLayer, features, setFeatures);
-          console.log("🎯 pm:create - After saveFeature, savedFeature:", savedFeature);
           
           if (savedFeature) {
             // Attach edit/drag/rotate event listeners for the saved feature
@@ -483,7 +481,6 @@ export default function EditMapPage() {
                 lastUpdateRef.current.set(savedFeature.featureId, now);
                 
                 try {
-                  console.log("🔄 Updating feature after edit:", savedFeature.featureId);
                   // Reset to original style first to remove selection styling
                   resetToOriginalStyle(e.layer);
                   await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
@@ -501,8 +498,6 @@ export default function EditMapPage() {
                 lastUpdateRef.current.set(savedFeature.featureId, now);
                 
                 try {
-                  console.log("🔄 Updating feature after drag:", savedFeature.featureId);
-                  // Reset to original style first to remove selection styling
                   resetToOriginalStyle(e.layer);
                   await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
                 } catch (error) {
@@ -519,7 +514,6 @@ export default function EditMapPage() {
                 lastUpdateRef.current.set(savedFeature.featureId, now);
                 
                 try {
-                  console.log("🔄 Updating feature after rotate:", savedFeature.featureId);
                   await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
                 } catch (error) {
                   console.error("Error updating feature after rotation:", error);
@@ -534,8 +528,6 @@ export default function EditMapPage() {
               ...(savedFeature.featureId ? { [savedFeature.featureId]: true } : {})
             }));
           } else {
-            // Fallback: add to features if saveFeature returned null
-            console.log("⚠️ saveFeature returned null, adding newFeature manually");
             setFeatures(prev => [...prev, newFeature]);
             setFeatureVisibility(prev => ({
               ...prev,
@@ -545,7 +537,6 @@ export default function EditMapPage() {
         } catch (error) {
           console.error("Error saving to database:", error);
           // Only add to features if save failed
-          console.log("❌ saveFeature failed, adding newFeature manually");
           setFeatures(prev => [...prev, newFeature]);
           setFeatureVisibility(prev => ({
             ...prev,
@@ -688,7 +679,6 @@ export default function EditMapPage() {
                 lastUpdateRef.current.set(feature.featureId!, now);
                 
                 try {
-                  console.log("🔄 Updating loaded feature after edit:", feature.featureId);
                   // Reset to original style first to remove selection styling
                   resetToOriginalStyle(feature.layer);
                   await updateFeatureInDB(detail.id, feature.featureId!, feature);
@@ -704,7 +694,6 @@ export default function EditMapPage() {
                 lastUpdateRef.current.set(feature.featureId!, now);
                 
                 try {
-                  console.log("🔄 Updating loaded feature after drag:", feature.featureId);
                   // Reset to original style first to remove selection styling
                   resetToOriginalStyle(feature.layer);
                   await updateFeatureInDB(detail.id, feature.featureId!, feature);
@@ -720,7 +709,6 @@ export default function EditMapPage() {
                 lastUpdateRef.current.set(feature.featureId!, now);
                 
                 try {
-                  console.log("🔄 Updating loaded feature after rotate:", feature.featureId);
                   await updateFeatureInDB(detail.id, feature.featureId!, feature);
                 } catch (error) {
                   console.error("Error updating feature after rotation:", error);
@@ -1229,21 +1217,27 @@ export default function EditMapPage() {
                   const file = e.target.files?.[0];
                   if (file && mapId) {
                     try {
-                      setFeedback("Uploading file...");
+                      setFeedback("Đang tải file lên...");
+                      
+                      // Backend tự động tạo layer mới, chỉ cần truyền mapId
                       const result = await uploadGeoJsonToMap(mapId, file);
                       
-                      // Refresh the entire map detail
+                      setFeedback("Đang load dữ liệu...");
+                      
+                      // Refresh toàn bộ map detail để lấy layer mới
                       const updatedDetail = await getMapDetail(mapId);
                       setDetail(updatedDetail);
                       
-                      setFeedback(`Successfully uploaded! Added ${result.featuresAdded} features.`);
+                      setFeedback(`Tải lên thành công! Đã thêm ${result.featuresAdded} đối tượng vào layer "${result.layerId}".`);
                       setTimeout(() => setFeedback(null), 5000);
                       
                       // Clear the input
                       e.target.value = '';
                     } catch (error) {
-                      setFeedback(error instanceof Error ? error.message : "Failed to upload file");
+                      console.error("Upload error:", error);
+                      setFeedback(error instanceof Error ? error.message : "Tải file thất bại");
                       setTimeout(() => setFeedback(null), 5000);
+                      e.target.value = '';
                     }
                   }
                 }}
