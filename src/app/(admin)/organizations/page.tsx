@@ -6,10 +6,10 @@ import s from "../admin.module.css";
 import {
   adminGetOrganizations,
   adminUpdateOrganizationStatus,
+  adminDeleteOrganization,
   type Paged,
+  type OrgStatus,
 } from "@/lib/admin-api";
-
-type OrgStatus = "Active" | "Suspended";
 
 type Organization = {
   orgId: string;
@@ -18,6 +18,13 @@ type Organization = {
   status: OrgStatus;
   createdAt?: string | null;
   totalMembers?: number | null;
+};
+
+type EditDraft = {
+  orgId: string;
+  currentStatus: OrgStatus;
+  nextStatus: OrgStatus;
+  reason: string;
 };
 
 export default function OrganizationsPage() {
@@ -29,6 +36,12 @@ export default function OrganizationsPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const [draft, setDraft] = useState<EditDraft | null>(null);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<Organization | null>(null);
+  const [deleting, setDeleting] = useState<boolean>(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -36,13 +49,15 @@ export default function OrganizationsPage() {
       if (cancelled) return;
       setLoading(true);
       setErr(null);
+
       try {
-        const res: Paged<Organization> = await adminGetOrganizations<Organization>({
-          page,
-          pageSize: 10,
-          search: search.trim() || undefined,
-          status: status === "Tất cả" ? undefined : status,
-        });
+        const res: Paged<Organization> =
+          await adminGetOrganizations<Organization>({
+            page,
+            pageSize: 10,
+            search: search.trim() || undefined,
+            status: status === "Tất cả" ? undefined : status,
+          });
 
         if (cancelled) return;
         setRows(res.items ?? []);
@@ -50,7 +65,9 @@ export default function OrganizationsPage() {
       } catch (e) {
         if (!cancelled) {
           const msg =
-            e instanceof Error ? e.message : "Không thể tải danh sách tổ chức.";
+            e instanceof Error
+              ? e.message
+              : "Không thể tải danh sách tổ chức.";
           setErr(msg);
         }
       } finally {
@@ -73,17 +90,107 @@ export default function OrganizationsPage() {
     setPage(1);
   };
 
-  const toggleStatus = async (o: Organization) => {
-    const next: OrgStatus = o.status === "Suspended" ? "Active" : "Suspended";
-    const prev = o.status;
+  const openEditModal = (org: Organization) => {
+    const toggledStatus: OrgStatus =
+      org.status === "Suspended" ? "Active" : "Suspended";
 
-    setRows((r) => r.map((x) => (x.orgId === o.orgId ? { ...x, status: next } : x)));
+    setDraft({
+      orgId: org.orgId,
+      currentStatus: org.status,
+      nextStatus: toggledStatus,
+      reason: "",
+    });
+  };
+
+  const closeEditModal = () => {
+    if (submitting) return;
+    setDraft(null);
+  };
+
+  const onDraftStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      nextStatus: e.target.value as OrgStatus,
+    });
+  };
+
+  const onDraftReasonChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      reason: e.target.value,
+    });
+  };
+
+  const submitUpdate = async () => {
+    if (!draft) return;
+    if (!draft.reason.trim()) {
+      alert("Vui lòng nhập lý do.");
+      return;
+    }
+
+    setSubmitting(true);
+
+    const prevStatus: OrgStatus = draft.currentStatus;
+    const newStatus: OrgStatus = draft.nextStatus;
+    const orgId = draft.orgId;
+    const reasonText = draft.reason.trim();
+
+    // optimistic UI
+    setRows((list) =>
+      list.map((x) =>
+        x.orgId === orgId ? { ...x, status: newStatus } : x
+      )
+    );
 
     try {
-      await adminUpdateOrganizationStatus(o.orgId, { status: next });
+      await adminUpdateOrganizationStatus(orgId, {
+        orgId,
+        status: newStatus,
+        reason: reasonText,
+      });
+      setDraft(null);
     } catch {
-      setRows((r) => r.map((x) => (x.orgId === o.orgId ? { ...x, status: prev } : x)));
-      alert("Không thể cập nhật trạng thái.");
+      // rollback
+      setRows((list) =>
+        list.map((x) =>
+          x.orgId === orgId ? { ...x, status: prevStatus } : x
+        )
+      );
+      alert("Không thể cập nhật trạng thái tổ chức.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openDeleteModal = (org: Organization) => {
+    setDeleteTarget(org);
+  };
+
+  const closeDeleteModal = () => {
+    if (deleting) return;
+    setDeleteTarget(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+
+    setDeleting(true);
+
+    const orgId = deleteTarget.orgId;
+
+    try {
+      await adminDeleteOrganization(orgId);
+
+      // remove from list
+      setRows((list) => list.filter((x) => x.orgId !== orgId));
+
+      setDeleteTarget(null);
+    } catch {
+      alert("Không thể xóa tổ chức. Vui lòng thử lại.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -99,7 +206,11 @@ export default function OrganizationsPage() {
               value={search}
               onChange={onSearchChange}
             />
-            <select className={s.select} value={status} onChange={onStatusChange}>
+            <select
+              className={s.select}
+              value={status}
+              onChange={onStatusChange}
+            >
               <option value="Tất cả">Tất cả trạng thái</option>
               <option value="Active">Hoạt động</option>
               <option value="Suspended">Đã khóa</option>
@@ -150,13 +261,32 @@ export default function OrganizationsPage() {
                           : "–"}
                       </td>
                       <td className={s.rowActions}>
-                        <Link href={`/organizations/${o.orgId}`} className={s.linkBtn}>
+                        <Link
+                          href={`/organizations/${o.orgId}`}
+                          className={s.rowActionBtn}
+                        >
                           Chi tiết
                         </Link>
-                        <button className={s.linkBtn} onClick={() => toggleStatus(o)}>
-                          {o.status === "Suspended" ? "Mở khóa" : "Khóa"}
+
+                        <span className={s.rowActionSep}>|</span>
+
+                        <button
+                          className={s.rowActionBtn}
+                          onClick={() => openEditModal(o)}
+                        >
+                          Sửa
+                        </button>
+
+                        <span className={s.rowActionSep}>|</span>
+
+                        <button
+                          className={s.rowActionBtnDanger}
+                          onClick={() => openDeleteModal(o)}
+                        >
+                          Xóa
                         </button>
                       </td>
+
                     </tr>
                   ))
                 )}
@@ -185,6 +315,144 @@ export default function OrganizationsPage() {
           </button>
         </div>
       </section>
+
+      {/* Modal cập nhật trạng thái tổ chức */}
+      {draft && (
+        <div className={s.modalOverlay}>
+          <div className={s.modalCardPro}>
+            <div className={s.modalHeadPro}>
+              <div className={s.modalHeadLeft}>
+                <div className={s.iconCircle}>
+                  {draft.nextStatus === "Suspended" ? (
+                    <span className={s.iconDotWarn}>!</span>
+                  ) : (
+                    <span className={s.iconDotOk}>✓</span>
+                  )}
+                </div>
+                <div className={s.titleBlock}>
+                  <div className={s.modalTitlePro}>
+                    Cập nhật trạng thái tổ chức
+                  </div>
+                  <div className={s.modalSubtitlePro}>
+                    Thay đổi trạng thái hoạt động của tổ chức. Hệ thống sẽ ghi
+                    nhận lý do để phục vụ kiểm tra và đối soát.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={s.modalBodyPro}>
+              <div className={s.fieldGroup}>
+                <label className={s.fieldLabel}>
+                  Trạng thái mới
+                  <span className={s.requiredMark}>*</span>
+                </label>
+                <div className={s.fieldControl}>
+                  <select
+                    className={s.selectField}
+                    value={draft.nextStatus}
+                    disabled={submitting}
+                    onChange={onDraftStatusChange}
+                  >
+                    <option value="Active">Hoạt động</option>
+                    <option value="Suspended">Đã khóa</option>
+                  </select>
+                </div>
+                <div className={s.fieldHint}>
+                  "Đã khóa" sẽ tạm chặn quyền truy cập của toàn bộ thành viên
+                  trong tổ chức này.
+                </div>
+              </div>
+
+              <div className={s.fieldGroup}>
+                <label className={s.fieldLabel}>
+                  Lý do thay đổi
+                  <span className={s.requiredMark}>*</span>
+                </label>
+                <div className={s.fieldControl}>
+                  <textarea
+                    className={s.textareaField}
+                    placeholder="VD: Hoạt động bất thường, cần tạm ngưng để kiểm tra thanh toán."
+                    value={draft.reason}
+                    disabled={submitting}
+                    onChange={onDraftReasonChange}
+                  />
+                </div>
+                <div className={s.fieldHint}>
+                  Lý do này sẽ được lưu trong lịch sử hoạt động quản trị.
+                </div>
+              </div>
+            </div>
+
+            <div className={s.modalFootPro}>
+              <button
+                className={s.btnGhost}
+                disabled={submitting}
+                onClick={closeEditModal}
+              >
+                Hủy
+              </button>
+              <button
+                className={s.btnSolid}
+                disabled={submitting}
+                onClick={submitUpdate}
+              >
+                {submitting ? "Đang lưu..." : "Lưu thay đổi"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className={s.modalOverlay}>
+          <div className={s.modalCardDanger}>
+            <div className={s.modalHeadDanger}>
+              <div className={s.modalHeadLeft}>
+                <div className={s.iconCircleDanger}>
+                  <span className={s.iconDotDanger}>!</span>
+                </div>
+                <div className={s.titleBlock}>
+                  <div className={s.modalTitleProDanger}>
+                    Xóa tổ chức này?
+                  </div>
+                  <div className={s.modalSubtitleProDanger}>
+                    Thao tác này sẽ xóa vĩnh viễn tổ chức
+                    <span className={s.orgNameHighlight}>
+                      {" "}{deleteTarget.name}
+                    </span>{" "}
+                    và toàn bộ dữ liệu liên quan. Hành động này không thể hoàn tác.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={s.modalBodyDanger}>
+              <div className={s.dangerBox}>
+                Vui lòng xác nhận rằng bạn hiểu hậu quả và muốn tiếp tục.
+              </div>
+            </div>
+
+            <div className={s.modalFootDanger}>
+              <button
+                className={s.btnGhost}
+                disabled={deleting}
+                onClick={closeDeleteModal}
+              >
+                Hủy
+              </button>
+
+              <button
+                className={s.btnDangerOutline}
+                disabled={deleting}
+                onClick={confirmDelete}
+              >
+                {deleting ? "Đang xóa..." : "Xóa vĩnh viễn"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
