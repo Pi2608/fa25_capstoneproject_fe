@@ -1,7 +1,7 @@
 "use client";
 
+import { archiveMap, MapStatus, publishMap, restoreMap, unpublishMap } from "@/lib/api-maps";
 import { useState } from "react";
-import { publishMap, unpublishMap, archiveMap, restoreMap, type MapStatus } from "@/lib/api";
 
 interface PublishButtonProps {
   mapId: string;

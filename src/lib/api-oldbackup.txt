@@ -1,4 +1,3 @@
-import { Workspace, WorkspaceAccess } from "@/types/workspace";
 import type { StoryElementLayer, CreateStoryElementLayerRequest, UpdateStoryElementLayerRequest } from "@/types/map";
 
 export type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";

@@ -10,19 +10,8 @@ import type {
   IconOptions
 } from "leaflet";
 import type { Position } from "geojson";
-import {
-  createMapFeature,
-  updateMapFeature,
-  deleteMapFeature,
-  getMapFeatures,
-  type CreateMapFeatureRequest,
-  type UpdateMapFeatureRequest,
-  type MapFeatureResponse,
-  RawLayer,
-  MapDetail,
-} from "@/lib/api";
+import { createMapFeature, CreateMapFeatureRequest, deleteMapFeature, getMapFeatures, MapDetail, MapFeatureResponse, RawLayer, updateMapFeature, UpdateMapFeatureRequest, addLayerToMap, updateMapLayer, removeLayerFromMap } from "@/lib/api-maps";
 
-// TYPE DEFINITIONS
 
 // Icon interface for proper typing
 interface LeafletIcon {
@@ -1875,7 +1864,6 @@ export async function addDataLayerToMap(
   zIndex: number = 0
 ): Promise<boolean> {
   try {
-    const { addLayerToMap } = await import("@/lib/api");
     await addLayerToMap(mapId, {
       layerId,
       isVisible,
@@ -1901,8 +1889,7 @@ export async function updateDataLayerInMap(
   }
 ): Promise<boolean> {
   try {
-    const { updateMapLayer } = await import("@/lib/api");
-    await updateMapLayer(mapId, layerId, updates);
+await updateMapLayer(mapId, layerId, updates);
     return true;
   } catch (error) {
     console.error("Failed to update data layer in map:", error);
@@ -1915,8 +1902,7 @@ export async function removeDataLayerFromMap(
   layerId: string
 ): Promise<boolean> {
   try {
-    const { removeLayerFromMap } = await import("@/lib/api");
-    await removeLayerFromMap(mapId, layerId);
+await removeLayerFromMap(mapId, layerId);
     return true;
   } catch (error) {
     console.error("Failed to remove data layer from map:", error);
@@ -1929,8 +1915,7 @@ export async function createFeatureInMap(
   featureData: CreateMapFeatureRequest
 ): Promise<MapFeatureResponse | null> {
   try {
-    const { createMapFeature } = await import("@/lib/api");
-    return await createMapFeature(mapId, featureData);
+return await createMapFeature(mapId, featureData);
   } catch (error) {
     console.error("Failed to create feature in map:", error);
     return null;
@@ -1943,8 +1928,7 @@ export async function updateFeatureInMap(
   updates: UpdateMapFeatureRequest
 ): Promise<MapFeatureResponse | null> {
   try {
-    const { updateMapFeature } = await import("@/lib/api");
-    return await updateMapFeature(mapId, featureId, updates);
+return await updateMapFeature(mapId, featureId, updates);
   } catch (error) {
     console.error("Failed to update feature in map:", error);
     return null;
@@ -1956,8 +1940,7 @@ export async function deleteFeatureFromMap(
   featureId: string
 ): Promise<boolean> {
   try {
-    const { deleteMapFeature } = await import("@/lib/api");
-    await deleteMapFeature(mapId, featureId);
+await deleteMapFeature(mapId, featureId);
     return true;
   } catch (error) {
     console.error("Failed to delete feature from map:", error);
@@ -2220,8 +2203,7 @@ export async function updateLayerStyle(
   dataLayerRefs: React.MutableRefObject<Map<string, Layer>>
 ): Promise<boolean> {
   try {
-    const { updateMapLayer } = await import("@/lib/api");
-    await updateMapLayer(mapId, layerId, styleUpdates);
+await updateMapLayer(mapId, layerId, styleUpdates);
 
     await renderAllDataLayers(map, layers, dataLayerRefs);
     return true;
@@ -2243,8 +2225,7 @@ export async function updateFeatureStyle(
   }
 ): Promise<boolean> {
   try {
-    const { updateMapFeature } = await import("@/lib/api");
-    await updateMapFeature(mapId, featureId, styleUpdates);
+await updateMapFeature(mapId, featureId, styleUpdates);
     return true;
   } catch (error) {
     console.error("Failed to update feature style:", error);
@@ -2352,8 +2333,7 @@ export async function updateFeatureStyleRealTime(
     const layerStyle = extractLayerStyle(layer);
    
     // Update feature in database
-    const { updateMapFeature } = await import("@/lib/api");
-    await updateMapFeature(mapId, featureId, {
+await updateMapFeature(mapId, featureId, {
       style: JSON.stringify(layerStyle)
     });
    
@@ -2384,8 +2364,7 @@ export async function updateLayerStyleRealTime(
 ): Promise<void> {
   try {
     // Update layer in database
-    const { updateMapLayer } = await import("@/lib/api");
-    await updateMapLayer(mapId, layerId, {
+await updateMapLayer(mapId, layerId, {
       customStyle: JSON.stringify(customStyle)
     });
    
@@ -2415,8 +2394,7 @@ export async function applyStyleToFeature(
     applyLayerStyle(layer, style);
    
     // Update feature in database
-    const { updateMapFeature } = await import("@/lib/api");
-    await updateMapFeature(mapId, featureId, {
+await updateMapFeature(mapId, featureId, {
       style: JSON.stringify(style)
     });
    
@@ -2447,8 +2425,7 @@ export async function applyStyleToDataLayer(
 ): Promise<void> {
   try {
     // Update layer in database
-    const { updateMapLayer } = await import("@/lib/api");
-    await updateMapLayer(mapId, layerId, {
+await updateMapLayer(mapId, layerId, {
       customStyle: JSON.stringify(style)
     });
    
@@ -2502,8 +2479,7 @@ export async function handleLayerVisibilityChange(
   }
 
   try {
-    const { updateMapLayer } = await import("@/lib/api");
-    await updateMapLayer(mapId, layerId, { isVisible });
+await updateMapLayer(mapId, layerId, { isVisible });
   } catch (error) {
     console.error("Failed to update layer visibility in database:", error);
 
@@ -2558,8 +2534,7 @@ export async function handleFeatureVisibilityChange(
 
   if (feature.featureId) {
     try {
-      const { updateMapFeature } = await import("@/lib/api");
-      await updateMapFeature(mapId, feature.featureId, { isVisible });
+    await updateMapFeature(mapId, feature.featureId, { isVisible });
     } catch (error) {
       console.error("Failed to update feature visibility in database:", error);
 

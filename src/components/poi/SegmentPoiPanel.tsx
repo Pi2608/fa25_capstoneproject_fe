@@ -2,14 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { GeoJsonObject, Point, GeometryCollection } from "geojson";
-import {
-  getSegmentPois,
-  createSegmentPoi,
-  deletePoi,
-  updatePoi,
-  type SegmentPoi,
-  type CreatePoiReq,
-} from "@/lib/api";
+import { CreatePoiReq, createSegmentPoi, deletePoi, getSegmentPois, SegmentPoi, updatePoi } from "@/lib/api-storymap";
 
 type Props = { mapId: string; segmentId: string };
 

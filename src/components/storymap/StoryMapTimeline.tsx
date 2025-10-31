@@ -20,26 +20,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  getSegments,
-  getSegmentZones,
-  createSegment,
-  updateSegment,
-  deleteSegment,
-  deleteSegmentZone,
-  createSegmentZone,
-  updateSegmentZone,
-  getSegmentLayers,
-  attachLayerToSegment,
-  detachLayerFromSegment,
-  getSegmentPois,
-  type Segment,
-  type SegmentZone,
-  type SegmentLayer,
-  type SegmentPoi,
-} from "@/lib/api";
-import type { GeoJsonObject } from "geojson";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { attachLayerToSegment, createSegment, createSegmentZone, deleteSegment, deleteSegmentZone, detachLayerFromSegment, getSegmentLayers, getSegmentPois, getSegments, getSegmentZones, Segment, SegmentZone, updateSegment, updateSegmentZone } from "@/lib/api-storymap";
 
 type LayerLite = { id: string; name: string };
 

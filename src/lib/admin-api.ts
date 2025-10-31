@@ -1,4 +1,4 @@
-import { getJson, postJson, putJson, delJson, apiFetch } from "./api";
+import { getJson, postJson, putJson, delJson, apiFetch } from "./api-core";
 
 /* ==================== COMMON ==================== */
 

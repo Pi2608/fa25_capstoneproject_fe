@@ -1,12 +1,7 @@
 "use client";
 
+import { copyFeatureToLayer, CopyFeatureToLayerRequest, getMapLayers, LayerInfo } from "@/lib/api-maps";
 import { useState, useEffect } from "react";
-import { 
-  getMapLayers, 
-  copyFeatureToLayer, 
-  type LayerInfo, 
-  type CopyFeatureToLayerRequest 
-} from "@/lib/api";
 
 interface CopyFeatureDialogProps {
   isOpen: boolean;

@@ -1,17 +1,9 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import {
-  getMapPois,
-  createMapPoi,
-  deletePoi,
-  updatePoi,
-  updatePoiDisplayConfig,
-  updatePoiInteractionConfig,
-  type CreatePoiReq,
-  type MapPoi,
-} from "@/lib/api";
+
 import type { GeoJsonObject, Point, GeometryCollection } from "geojson";
+import { createMapPoi, CreatePoiReq, deletePoi, getMapPois, MapPoi, updatePoi, updatePoiDisplayConfig, updatePoiInteractionConfig } from "@/lib/api-storymap";
 
 type Props = { mapId: string };
 

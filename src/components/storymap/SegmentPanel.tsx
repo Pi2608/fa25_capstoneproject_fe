@@ -1,22 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  getSegments,
-  getSegmentZones,
-  createSegment,
-  updateSegment,
-  deleteSegment,
-  deleteSegmentZone,
-  createSegmentZone,
-  updateSegmentZone,
-} from "@/lib/api";
-import type {
-  Segment,
-  SegmentZone,
-  CreateSegmentZoneReq,
-  UpdateSegmentZoneReq,
-} from "@/lib/api";
+
 import SegmentPoiPanel from "@/components/poi/SegmentPoiPanel";
 import ZoneContextMenu, { LayerPickerDialog } from "@/components/map/ZoneContextMenu";
 import PoiPanel from "@/components/poi/PoiPanel";
@@ -31,6 +16,7 @@ import type {
   Point,
   Polygon,
 } from "geojson";
+import { createSegment, createSegmentZone, CreateSegmentZoneReq, deleteSegment, deleteSegmentZone, getSegments, getSegmentZones, Segment, SegmentZone, updateSegment, updateSegmentZone, UpdateSegmentZoneReq } from "@/lib/api-storymap";
 
 
 type LayerLite = { id: string; name: string };

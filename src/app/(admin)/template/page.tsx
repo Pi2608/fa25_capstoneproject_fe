@@ -3,11 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  getMapTemplates,
-  createMapFromTemplate,
-  type MapTemplate,
-} from "@/lib/api";
+import { createMapFromTemplate, getMapTemplates, MapTemplate } from "@/lib/api-maps";
+
 
 type BaseMap = "OSM" | "Satellite" | "Dark";
 
