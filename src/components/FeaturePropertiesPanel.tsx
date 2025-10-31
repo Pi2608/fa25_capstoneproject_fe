@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import FeaturePropertiesTable from "./FeaturePropertiesTable";
 import type { GeoJSON } from "geojson";
-import type { RawLayer } from "@/lib/api";
+import { RawLayer } from "@/lib/api-maps";
 
 interface FeaturePropertiesPanelProps {
   layers: RawLayer[];

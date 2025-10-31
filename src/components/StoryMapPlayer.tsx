@@ -1,7 +1,7 @@
 "use client";
 
+import { getSegments, Segment } from "@/lib/api-storymap";
 import { useState, useEffect } from "react";
-import { getSegments, type Segment } from "@/lib/api";
 
 interface StoryMapPlayerProps {
   mapId: string;

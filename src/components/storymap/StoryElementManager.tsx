@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getSegments, type Segment } from "@/lib/api";
 import StoryElementLayerPanel from "./StoryElementLayerPanel";
+import { getSegments, Segment } from "@/lib/api-storymap";
 
 interface Props {
   mapId: string;

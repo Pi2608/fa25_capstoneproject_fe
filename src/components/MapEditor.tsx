@@ -4,15 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
 import type { Map as LMap, TileLayer, LatLngTuple, Layer, FeatureGroup, LatLng, LatLngBounds } from "leaflet";
-import {
-  getMapDetail,
-  type MapDetail,
-  updateMap,
-  type UpdateMapRequest,
-  getMapById,
-  type RawLayer,
-  type UpdateMapFeatureRequest,
-} from "@/lib/api";
+
 import type { Position } from "geojson";
 import {
   saveFeature,
@@ -41,12 +33,8 @@ import {
   findFeatureIndex,
   removeFeatureFromGeoJSON
 } from "@/utils/zoneOperations";
-import {
-  copyZoneToLayer,
-  deleteZoneFromLayer,
-  updateLayerData
-} from "@/lib/api";
 import { useToast } from "@/contexts/ToastContext";
+import { copyZoneToLayer, getMapDetail, MapDetail, RawLayer, updateLayerData, updateMap, UpdateMapFeatureRequest, UpdateMapRequest } from "@/lib/api-maps";
 
 type BaseKey = "osm" | "sat" | "dark";
 

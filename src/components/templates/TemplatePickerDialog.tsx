@@ -2,17 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import TemplateCard from "./TemplateCard";
-import { apiFetch } from "@/lib/api";
+import { getMapTemplates, createMapFromTemplate, type MapTemplate } from "@/lib/api-maps";
 
-type Template = {
-  templateId: string;
-  templateName: string;
-  description?: string;
-  previewImage?: string | null;
-  category?: string;
-};
-
-type CreateFromTemplateRes = { mapId: string };
 
 interface ApiError {
   message?: string;
@@ -32,7 +23,7 @@ export default function TemplatePickerDialog({
   isPublic?: boolean;
 }) {
   const [loading, setLoading] = useState(false);
-  const [list, setList] = useState<Template[]>([]);
+  const [list, setList] = useState<MapTemplate[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,10 +31,8 @@ export default function TemplatePickerDialog({
     (async () => {
       setErr(null);
       try {
-        const res = await apiFetch<{ templates: Template[] }>("/maps/templates", {
-          method: "GET",
-        });
-        setList(res?.templates ?? []);
+        const templates = await getMapTemplates();
+        setList(templates ?? []);
       } catch (err: unknown) {
         const msg =
           typeof err === "object" && err !== null && "message" in err
@@ -59,16 +48,15 @@ export default function TemplatePickerDialog({
       setLoading(true);
       setErr(null);
       try {
-        const body = {
+        const res = await createMapFromTemplate({
           templateId,
           customName: mapName?.trim() || "Untitled Map",
           customDescription: "",
           isPublic,
-        };
-        const res = await apiFetch<CreateFromTemplateRes>("/maps/from-template", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          customInitialLatitude: undefined,
+          customInitialLongitude: undefined,
+          customInitialZoom: undefined,
+          workspaceId: null,
         });
         onDone(res.mapId);
       } catch (err: unknown) {

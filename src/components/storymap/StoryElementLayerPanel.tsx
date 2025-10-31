@@ -1,18 +1,9 @@
 "use client";
 
+import { createStoryElementLayer, deleteStoryElementLayer, getStoryElementLayers, updateStoryElementLayer } from "@/lib/api-storymap";
+import { AnimationEasingType, CreateStoryElementLayerRequest, StoryElementDisplayMode, StoryElementLayer, StoryElementType, UpdateStoryElementLayerRequest } from "@/types";
 import { useState, useEffect } from "react";
-import {
-  getStoryElementLayers,
-  createStoryElementLayer,
-  updateStoryElementLayer,
-  deleteStoryElementLayer,
-  type StoryElementLayer,
-  type CreateStoryElementLayerRequest,
-  type UpdateStoryElementLayerRequest,
-  type StoryElementType,
-  type StoryElementDisplayMode,
-  type AnimationEasingType,
-} from "@/lib/api";
+
 
 interface Props {
   elementId: string;

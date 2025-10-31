@@ -4,15 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
-import {
-  getPlans,
-  type Plan,
-  getJson,
-  getMyOrganizations,
-  type MyOrganizationDto,
-} from "@/lib/api";
-
-type MyMembership = { planId: number; status: string };
+import { getMyOrganizations, MyOrganizationDto } from "@/lib/api-organizations";
+import { getMyMembershipStatus, getPlans, Plan } from "@/lib/api-membership";
 
 const SidebarLink = ({ href, label }: { href: string; label: string }) => {
   const pathname = usePathname();
@@ -57,7 +50,7 @@ export default function WorkspaceShell({ children }: { children: ReactNode }) {
         if (!alive) return;
 
         try {
-          const me = await getJson<MyMembership>("/membership/me");
+          const me = await getMyMembershipStatus();
           if (!alive) return;
           const found = ps.find((p) => p.planId === me.planId);
           setPlanLabel(found?.planName ?? "Free");

@@ -11,11 +11,7 @@ import type {
   MapWithPM,
   LeafletMouseEvent,
 } from "@/types";
-import {
-  getMapDetail,
-  type MapDetail,
-  type MapStatus,
-} from "@/lib/api";
+
 import {
   type FeatureData,
   loadFeaturesToMap,
@@ -23,6 +19,7 @@ import {
 } from "@/utils/mapUtils";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
 import StoryMapPlayer from "@/components/StoryMapPlayer";
+import { getMapDetail, MapDetail, MapStatus } from "@/lib/api-maps";
 
 export default function ViewMapPage() {
   const params = useParams<{ mapId: string }>();
