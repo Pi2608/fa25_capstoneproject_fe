@@ -113,7 +113,7 @@ export default function WorkspaceShell({ children }: { children: ReactNode }) {
               </div>
               <div className="space-y-1">
                 <SidebarLink
-                  href="/profile/create-org"
+                  href="/register/organization"
                   label="Create Organization"
                 />
                 {orgsErr && (

@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getPlans, type Plan, getJson } from "@/lib/api";
 import Link from "next/link";
+import { getMyMembershipStatus, getPlans, Plan } from "@/lib/api-membership";
 
-type MyMembership = { planId: number; status: "active" | "expired" | "pending" | string };
 
 function usd(n?: number | null) {
   const v = typeof n === "number" ? n : 0;
@@ -25,7 +24,7 @@ export default function BillingPage() {
         setPlans(ps);
 
         try {
-          const me = await getJson<MyMembership>("/membership/me");
+          const me = await getMyMembershipStatus();
           if (!alive) return;
           setCurrent({ id: me.planId, status: me.status ?? "active" });
         } catch {

@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { login } from "@/lib/api";
 import { isFirstTimeUser } from "@/utils/authUtils";
 import { useToast } from "@/contexts/ToastContext";
 import InputField from "@/components/ui/InputField";
@@ -10,6 +9,7 @@ import PasswordInput from "@/components/auth/PasswordInput";
 import SubmitButton from "@/components/ui/SubmitButton";
 import AuthLinks from "@/components/auth/AuthLinks";
 import { AuthFormErrors } from "@/types/auth";
+import { login } from "@/lib/api-auth";
 
 export default function LoginClientSimple() {
   const router = useRouter();

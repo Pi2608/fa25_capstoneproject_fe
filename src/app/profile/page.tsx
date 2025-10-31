@@ -1,13 +1,9 @@
 "use client";
 
+import { getMe, Me } from "@/lib/api-auth";
+import { updateMyPersonalInfo, UpdateUserPersonalInfoRequest, UpdateUserPersonalInfoResponse } from "@/lib/api-user";
 import { useEffect, useMemo, useState } from "react";
-import {
-  getMe,
-  type Me,
-  updateMyPersonalInfo,
-  type UpdateUserPersonalInfoRequest,
-  type UpdateUserPersonalInfoResponse,
-} from "@/lib/api";
+
 
 export default function ThongTinCaNhanPage() {
   const [me, setMe] = useState<Me | null>(null);

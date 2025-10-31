@@ -29,7 +29,10 @@ import {
   type RawLayer,
   type UpdateMapFeatureRequest,
   uploadGeoJsonToMap,
-} from "@/lib/api";
+  updateLayerData,
+  MapStatus,     
+  updateMapFeature
+} from "@/lib/api-maps";
 import { 
   type FeatureData,
   serializeFeature,
@@ -44,11 +47,24 @@ import {
   loadLayerToMap,
   type ExtendedLayer,
 } from "@/utils/mapUtils";
-import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
+import {
+  getFeatureName,
+  getFeatureBounds,
+  formatCoordinates,
+  copyToClipboard,
+  findFeatureIndex,
+  removeFeatureFromGeoJSON
+} from "@/utils/zoneOperations";
+import { StylePanel, DataLayersPanel, MapControls } from "@/components/map/MapControls";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
-import SegmentPanel from "@/components/storymap/SegmentPanel";
+import StoryMapTimeline from "@/components/storymap/StoryMapTimeline";
 import PublishButton from "@/components/PublishButton";
-import type { MapStatus } from "@/lib/api";
+import ZoneContextMenu from "@/components/map/ZoneContextMenu";
+import CopyFeatureDialog from "@/components/CopyFeatureDialog";
+import MapPoiPanel from "@/components/poi/PoiPanel";
+
+import { useToast } from "@/contexts/ToastContext";
+import type { Feature as GeoJSONFeature } from "geojson";
 
 
 
@@ -65,13 +81,14 @@ export default function EditMapPage() {
 
   const [busySaveMeta, setBusySaveMeta] = useState<boolean>(false);
   const [busySaveView, setBusySaveView] = useState<boolean>(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const [name, setName] = useState<string>("");
   const [baseKey, setBaseKey] = useState<BaseKey>("osm");
   const [showStylePanel, setShowStylePanel] = useState(false);
   const [showDataLayersPanel, setShowDataLayersPanel] = useState(true);
   const [showSegmentPanel, setShowSegmentPanel] = useState(false);
+  const [showPoiPanel, setShowPoiPanel] = useState(false);
   const [features, setFeatures] = useState<FeatureData[]>([]);
   const [selectedLayer, setSelectedLayer] = useState<FeatureData | RawLayer | null>(null);
   const [layers, setLayers] = useState<RawLayer[]>([]);
@@ -82,6 +99,39 @@ export default function EditMapPage() {
   const [currentLayer, setCurrentLayer] = useState<Layer | null>(null);
   const [selectedLayers, setSelectedLayers] = useState<Set<Layer>>(new Set());
   const [hoveredLayer, setHoveredLayer] = useState<Layer | null>(null);
+
+  // Context menu state
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    feature: GeoJSONFeature | null;
+    layerId: string | null;
+    layerName: string | null;
+    leafletLayer: Layer | null;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    feature: null,
+    layerId: null,
+    layerName: null,
+    leafletLayer: null
+  });
+
+  const [copyFeatureDialog, setCopyFeatureDialog] = useState<{
+    isOpen: boolean;
+    sourceLayerId: string;
+    sourceLayerName: string;
+    featureIndex: number;
+    copyMode: "existing" | "new";
+  }>({
+    isOpen: false,
+    sourceLayerId: '',
+    sourceLayerName: '',
+    featureIndex: -1,
+    copyMode: "existing"
+  });
 
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapWithPM | null>(null);
@@ -831,6 +881,104 @@ export default function EditMapPage() {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
 
+  // Zone selection mode handler
+  useEffect(() => {
+    const handleEnableZoneSelection = (e: CustomEvent) => {
+      const { enabled } = e.detail;
+      // Set global flag for zone selection mode
+      (window as any).__zoneSelectionMode = enabled;
+      
+      // Optionally add visual feedback by changing cursor
+      if (mapRef.current) {
+        const mapContainer = mapRef.current.getContainer();
+        if (enabled) {
+          mapContainer.style.cursor = 'crosshair';
+        } else {
+          mapContainer.style.cursor = '';
+        }
+      }
+    };
+
+    window.addEventListener('storymap:enableZoneSelection', handleEnableZoneSelection as EventListener);
+    
+    return () => {
+      window.removeEventListener('storymap:enableZoneSelection', handleEnableZoneSelection as EventListener);
+    };
+  }, []);
+
+  // Context menu handler
+  useEffect(() => {
+    const handleZoneContextMenu = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { feature, layerId, layerName, x, y, leafletLayer } = customEvent.detail;
+
+      setContextMenu({
+        visible: true,
+        x,
+        y,
+        feature,
+        layerId,
+        layerName,
+        leafletLayer
+      });
+    };
+
+    window.addEventListener('zone-contextmenu', handleZoneContextMenu as EventListener);
+    
+    return () => {
+      window.removeEventListener('zone-contextmenu', handleZoneContextMenu as EventListener);
+    };
+  }, []);
+
+  // Layer feature click handler for highlighting
+  useEffect(() => {
+    const handleLayerFeatureClick = (e: CustomEvent) => {
+      const { leafletLayer } = e.detail;
+      
+      if (!leafletLayer || !('setStyle' in leafletLayer)) return;
+      
+      // Store original style if not already stored
+      if (!originalStylesRef.current.has(leafletLayer)) {
+        const currentOptions = (leafletLayer as any).options || {};
+        const style: LayerStyle = {
+          color: currentOptions.color || '#3388ff',
+          weight: currentOptions.weight || 3,
+          opacity: currentOptions.opacity || 1.0,
+          fillColor: currentOptions.fillColor || currentOptions.color || '#3388ff',
+          fillOpacity: currentOptions.fillOpacity || 0.2,
+          dashArray: currentOptions.dashArray || ''
+        };
+        originalStylesRef.current.set(leafletLayer, style);
+      }
+      
+      // Clear previous selections
+      selectedLayers.forEach(layer => {
+        if (layer !== leafletLayer) {
+          const originalStyle = originalStylesRef.current.get(layer);
+          if (originalStyle && 'setStyle' in layer) {
+            (layer as any).setStyle(originalStyle);
+          }
+        }
+      });
+      
+      // Apply selection style
+      (leafletLayer as any).setStyle({
+        color: '#ff6600',
+        weight: 4,
+        fillOpacity: 0.5
+      });
+      
+      setSelectedLayers(new Set([leafletLayer]));
+      setCurrentLayer(leafletLayer);
+    };
+
+    window.addEventListener('layer-feature-click', handleLayerFeatureClick as EventListener);
+    
+    return () => {
+      window.removeEventListener('layer-feature-click', handleLayerFeatureClick as EventListener);
+    };
+  }, [selectedLayers]);
+
   // Map click handler for deselecting when clicking on empty space or base layer
   useEffect(() => {
     if (!mapRef.current) return;
@@ -874,6 +1022,123 @@ export default function EditMapPage() {
   const toggleDrag = () => mapRef.current?.pm.toggleGlobalDragMode();
   const enableCutPolygon = () => mapRef.current?.pm.enableGlobalCutMode();
   const toggleRotate = () => mapRef.current?.pm?.toggleGlobalRotateMode?.();
+
+  // Map control functions
+  const zoomIn = () => {
+    if (mapRef.current) {
+      mapRef.current.zoomIn();
+    }
+  };
+  
+  const zoomOut = () => {
+    if (mapRef.current) {
+      mapRef.current.zoomOut();
+    }
+  };
+
+  // Context menu handlers
+  const handleZoomToFit = useCallback(async () => {
+    if (!mapRef.current || !contextMenu.feature) return;
+    const bounds = getFeatureBounds(contextMenu.feature);
+    if (bounds) {
+      const L = (await import("leaflet")).default;
+      const leafletBounds = L.latLngBounds(bounds);
+      mapRef.current.fitBounds(leafletBounds, { padding: [50, 50] });
+    }
+  }, [contextMenu.feature]);
+
+  const handleCopyCoordinates = useCallback(async () => {
+    if (!contextMenu.feature) return;
+    const coordsText = formatCoordinates(contextMenu.feature);
+    const success = await copyToClipboard(coordsText);
+    if (success) {
+      showToast("success", "📍 Coordinates copied to clipboard!");
+    } else {
+      showToast("error", "❌ Failed to copy coordinates");
+    }
+  }, [contextMenu.feature, showToast]);
+
+  const openCopyFeatureDialog = useCallback((copyMode: "existing" | "new") => {
+    if (!detail || !contextMenu.feature || !contextMenu.layerId) {
+      return;
+    }
+
+    const sourceLayerId = contextMenu.layerId;
+    const sourceLayer = detail.layers.find(l => l.id === sourceLayerId);
+    const sourceLayerName = sourceLayer?.name || 'Unknown Layer';
+
+    const layerData = JSON.parse(sourceLayer?.layerData || '{}');
+    const featureIndex = findFeatureIndex(layerData, contextMenu.feature);
+
+    if (featureIndex === -1) {
+      showToast("error", "❌ Feature not found in layer");
+      return;
+    }
+
+    setCopyFeatureDialog({
+      isOpen: true,
+      sourceLayerId,
+      sourceLayerName,
+      featureIndex,
+      copyMode
+    });
+  }, [detail, contextMenu.feature, contextMenu.layerId, showToast]);
+
+  const handleCopyToExistingLayer = useCallback(() => {
+    openCopyFeatureDialog("existing");
+  }, [openCopyFeatureDialog]);
+
+  const handleCopyToNewLayer = useCallback(() => {
+    openCopyFeatureDialog("new");
+  }, [openCopyFeatureDialog]);
+
+  const handleCopyFeatureSuccess = useCallback(async (message: string) => {
+    showToast("success", `✅ ${message}`);
+    if (detail) {
+      const updatedDetail = await getMapDetail(detail.id);
+      setDetail(updatedDetail);
+    }
+  }, [detail, showToast]);
+
+  const handleDeleteZone = useCallback(async () => {
+    if (!detail || !contextMenu.feature || !contextMenu.layerId) return;
+    const confirmed = window.confirm(
+      `Are you sure you want to delete "${getFeatureName(contextMenu.feature)}"?`
+    );
+    if (!confirmed) return;
+
+    const layerId = contextMenu.layerId;
+    const targetLayer = detail.layers.find(l => l.id === layerId);
+    if (!targetLayer) {
+      showToast("error", "❌ Layer not found");
+      return;
+    }
+
+    try {
+      const layerData = JSON.parse(targetLayer.layerData);
+      const featureIndex = findFeatureIndex(layerData, contextMenu.feature);
+      if (featureIndex === -1) {
+        showToast("error", "❌ Feature not found in layer");
+        return;
+      }
+
+      const updatedGeoJSON = removeFeatureFromGeoJSON(layerData, featureIndex);
+      const success = await updateLayerData(detail.id, layerId, updatedGeoJSON);
+      if (success) {
+        showToast("success", "✅ Zone deleted successfully!");
+        if (contextMenu.leafletLayer && mapRef.current) {
+          mapRef.current.removeLayer(contextMenu.leafletLayer);
+        }
+        const updatedDetail = await getMapDetail(detail.id);
+        setDetail(updatedDetail);
+      } else {
+        showToast("error", "❌ Failed to delete zone");
+      }
+    } catch (error) {
+      console.error('Error deleting zone:', error);
+      showToast("error", "❌ Error deleting zone");
+    }
+  }, [detail, contextMenu, showToast]);
 
   const clearSketch = useCallback(async () => {
     if (!detail) return;
@@ -938,7 +1203,6 @@ export default function EditMapPage() {
     if (!detail) return;
     
     try {
-      const { updateMapFeature } = await import("@/lib/api");
       await updateMapFeature(detail.id, featureId, updates);
       
       // Update local state
@@ -947,10 +1211,7 @@ export default function EditMapPage() {
           ? { ...f, name: updates.name || f.name } 
           : f
       ));
-      
-      setTimeout(() => setFeedback(null), 2000);
     } catch (error) {
-      setTimeout(() => setFeedback(null), 2000);
     }
   }, [detail]);
 
@@ -1060,24 +1321,22 @@ export default function EditMapPage() {
     return extractLayerStyle(feature.layer);
   }, [features]);
 
-   const saveMeta = useCallback(async () => {
-     if (!detail) return;
-     setBusySaveMeta(true);
-     setFeedback(null);
-     try {
-       const body: UpdateMapRequest = {
-         name: (name ?? "").trim() || "Untitled Map",
-         baseMapProvider: baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
-       };
-       await updateMap(detail.id, body);
-       setFeedback("Đã lưu thông tin bản đồ.");
-     } catch (e) {
-       setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
-     } finally {
-       setBusySaveMeta(false);
-       setTimeout(() => setFeedback(null), 1600);
-     }
-   }, [detail, name, baseKey]);
+  const saveMeta = useCallback(async () => {
+    if (!detail) return;
+    setBusySaveMeta(true);
+    try {
+      const body: UpdateMapRequest = {
+        name: (name ?? "").trim() || "Untitled Map",
+        baseMapProvider: baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
+      };
+      await updateMap(detail.id, body);
+      showToast("success", "Đã lưu thông tin bản đồ.");
+    } catch (e) {
+      showToast("error", e instanceof Error ? e.message : "Lưu thất bại");
+    } finally {
+      setBusySaveMeta(false);
+    }
+  }, [detail, name, baseKey, showToast]);
 
   const saveView = useCallback(async () => {
     if (!detail || !mapRef.current) {
@@ -1090,33 +1349,31 @@ export default function EditMapPage() {
       return;
     }
     setBusySaveView(true);
-    setFeedback(null);
     try {
       // Check if map is still valid
       if (!map.getCenter || typeof map.getCenter !== 'function') {
         console.warn("saveView: map.getCenter is not a function");
-        setFeedback("Bản đồ chưa sẵn sàng");
+        showToast("error", "Bản đồ chưa sẵn sàng");
         return;
       }
       const c = map.getCenter();
       if (!c) {
         console.warn("saveView: map.getCenter() returned null");
-        setFeedback("Bản đồ chưa sẵn sàng");
+        showToast("error", "Bản đồ chưa sẵn sàng");
         return;
       }
       const zoom = map.getZoom ? map.getZoom() : 10;
       const view = { center: [c.lat, c.lng] as [number, number], zoom };
       const body: UpdateMapRequest = { viewState: JSON.stringify(view) };
       await updateMap(detail.id, body);
-      setFeedback("Đã lưu vị trí hiển thị.");
+      showToast("success", "Đã lưu vị trí hiển thị.");
     } catch (e) {
       console.error("saveView error:", e);
-      setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
+      showToast("error", e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveView(false);
-      setTimeout(() => setFeedback(null), 1600);
     }
-  }, [detail]);
+  }, [detail, showToast]);
 
   const GuardBtn: React.FC<
     React.PropsWithChildren<{ title: string; onClick?: () => void; disabled?: boolean }>
@@ -1217,26 +1474,24 @@ export default function EditMapPage() {
                   const file = e.target.files?.[0];
                   if (file && mapId) {
                     try {
-                      setFeedback("Đang tải file lên...");
+                  showToast("info", "Đang tải file lên...");
                       
                       // Backend tự động tạo layer mới, chỉ cần truyền mapId
                       const result = await uploadGeoJsonToMap(mapId, file);
                       
-                      setFeedback("Đang load dữ liệu...");
+                  showToast("info", "Đang load dữ liệu...");
                       
                       // Refresh toàn bộ map detail để lấy layer mới
                       const updatedDetail = await getMapDetail(mapId);
                       setDetail(updatedDetail);
                       
-                      setFeedback(`Tải lên thành công! Đã thêm ${result.featuresAdded} đối tượng vào layer "${result.layerId}".`);
-                      setTimeout(() => setFeedback(null), 5000);
+                  showToast("success", `Tải lên thành công! Đã thêm ${result.featuresAdded} đối tượng vào layer "${result.layerId}".`);
                       
                       // Clear the input
                       e.target.value = '';
                     } catch (error) {
                       console.error("Upload error:", error);
-                      setFeedback(error instanceof Error ? error.message : "Tải file thất bại");
-                      setTimeout(() => setFeedback(null), 5000);
+                  showToast("error", error instanceof Error ? error.message : "Tải file thất bại");
                       e.target.value = '';
                     }
                   }
@@ -1274,22 +1529,10 @@ export default function EditMapPage() {
                 {busySaveMeta ? "Đang lưu…" : "Save"}
               </button>
               <button
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                  showSegmentPanel 
-                    ? 'bg-purple-600 hover:bg-purple-500' 
-                    : 'bg-purple-700 hover:bg-purple-600'
-                }`}
-                onClick={() => setShowSegmentPanel(!showSegmentPanel)}
-                title="Toggle Story Map Panel"
-              >
-                Story Map
-              </button>
-              <button
                 className="rounded-lg p-1.5 text-xs font-semibold bg-zinc-700 hover:bg-zinc-600"
                 onClick={() => {
                   localStorage.removeItem('skipDeleteConfirm');
-                  setFeedback("Delete confirmations re-enabled");
-                  setTimeout(() => setFeedback(null), 2000);
+                  showToast("info", "Delete confirmations re-enabled");
                 }}
                 title="Re-enable delete confirmation dialogs"
               >
@@ -1299,7 +1542,7 @@ export default function EditMapPage() {
               </button>
             </div>
           </div>
-          {feedback && <div className="px-1 pt-1 text-center text-[11px] text-emerald-300">{feedback}</div>}
+          {/* Toast messages are handled globally via ToastProvider */}
         </div>
       </div>
 
@@ -1332,16 +1575,61 @@ export default function EditMapPage() {
         onApplyStyle={onApplyStyle}
       />
 
+      <MapControls
+        zoomIn={zoomIn}
+        zoomOut={zoomOut}
+        showPoiPanel={showPoiPanel}
+        onTogglePoiPanel={() => {
+          setShowPoiPanel(!showPoiPanel);
+          if (!showPoiPanel) setShowSegmentPanel(false);
+        }}
+        showStoryMapPanel={showSegmentPanel}
+        onToggleStoryMapPanel={() => {
+          setShowSegmentPanel(!showSegmentPanel);
+          if (!showSegmentPanel) setShowPoiPanel(false);
+        }}
+      />
+
+      {/* POI Panel */}
+      {detail && <MapPoiPanel mapId={detail.id} isOpen={showPoiPanel} />}
+
+      {/* Story Map Timeline */}
       {showSegmentPanel && detail && (
-        <SegmentPanel
+        <StoryMapTimeline
           mapId={detail.id}
           layers={layers.map(layer => ({ 
             id: layer.id, 
             name: layer.name 
           }))}
-          currentLayerId={layers[0]?.id}
         />
       )}
+
+      <ZoneContextMenu
+        visible={contextMenu.visible}
+        x={contextMenu.x}
+        y={contextMenu.y}
+        zoneName={contextMenu.feature ? getFeatureName(contextMenu.feature) : 'Zone'}
+        onClose={() => setContextMenu(prev => ({ ...prev, visible: false }))}
+        onZoomToFit={handleZoomToFit}
+        onCopyCoordinates={handleCopyCoordinates}
+        onCopyToExistingLayer={handleCopyToExistingLayer}
+        onCopyToNewLayer={handleCopyToNewLayer}
+        onDeleteZone={handleDeleteZone}
+        mapId={detail?.id}
+        layerId={contextMenu.layerId ?? undefined}
+        feature={contextMenu.feature ?? undefined}
+      />
+
+      <CopyFeatureDialog
+        isOpen={copyFeatureDialog.isOpen}
+        onClose={() => setCopyFeatureDialog(prev => ({ ...prev, isOpen: false }))}
+        mapId={detail?.id || ''}
+        sourceLayerId={copyFeatureDialog.sourceLayerId}
+        sourceLayerName={copyFeatureDialog.sourceLayerName}
+        featureIndex={copyFeatureDialog.featureIndex}
+        initialCopyMode={copyFeatureDialog.copyMode}
+        onSuccess={handleCopyFeatureSuccess}
+      />
 
       <style jsx global>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }

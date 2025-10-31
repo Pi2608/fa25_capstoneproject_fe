@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createMapFromTemplate, createMap } from "@/lib/api";
 import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
+import { createMap, createMapFromTemplate } from "@/lib/api-maps";
 
 type Sample = {
   key: string;

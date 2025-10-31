@@ -2,16 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  getMyMaps,
-  createMapFromTemplate,
-  createMap,
-  updateMap,
-  deleteMap,
-  type MapDto,
-  type UpdateMapRequest,
-} from "@/lib/api";
+
 import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
+import { createMap, createMapFromTemplate, deleteMap, getMyMaps, MapDto, updateMap, UpdateMapRequest } from "@/lib/api-maps";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name";
@@ -255,8 +248,13 @@ export default function RecentsPage() {
       if (sortKey === "name") {
         return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
       }
-      const aTime = new Date(a.createdAt ?? 0).getTime();
-      const bTime = new Date(b.createdAt ?? 0).getTime();
+      // Use updatedAt for recentlyModified, createdAt for dateCreated
+      const aTime = new Date(
+        sortKey === "recentlyModified" ? (a.updatedAt ?? a.createdAt ?? 0) : (a.createdAt ?? 0)
+      ).getTime();
+      const bTime = new Date(
+        sortKey === "recentlyModified" ? (b.updatedAt ?? b.createdAt ?? 0) : (b.createdAt ?? 0)
+      ).getTime();
       return aTime - bTime;
     });
     if (sortOrder === "desc") arr.reverse();

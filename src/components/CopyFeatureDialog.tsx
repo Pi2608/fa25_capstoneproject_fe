@@ -99,7 +99,7 @@ export default function CopyFeatureDialog({
   if (!isOpen) return null;
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10002]">
       <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4">
         <h2 className="text-xl font-bold mb-4 text-gray-800">Copy Feature</h2>
         
@@ -204,11 +204,7 @@ export default function CopyFeatureDialog({
             Cancel
           </button>
           <button
-            onMouseDown={() => console.log("🖱️ Copy Feature button mouse down!")}
-            onMouseUp={() => console.log("🖱️ Copy Feature button mouse up!")}
-            onClick={() => {
-              handleCopy();
-            }}
+            onClick={handleCopy}
             disabled={loading || 
               (copyMode === "existing" && !selectedLayerId) ||
               (copyMode === "new" && !newLayerName.trim())

@@ -2,19 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatDateTime, formatNumber } from "@/utils/formatUtils";
-import {
-  getOrganizationMaps,
-  getMyOrgMembership,
-  getPlans,
-  getMapById,
-  getMyOrganizations,
-  getUserUsage,
-  checkUserQuota,
-  type MapDto,
-  type GetMyOrganizationsResDto,
-  type UserUsageResponse,
-  type CheckQuotaRequest,
-} from "@/lib/api";
+import { getMyOrganizations, GetMyOrganizationsResDto } from "@/lib/api-organizations";
+import { CheckQuotaRequest, checkUserQuota, getUserUsage, UserUsageResponse } from "@/lib/api-user";
+import { getMyOrgMembership, getPlans } from "@/lib/api-membership";
+import { getMapById, getOrganizationMaps, getMapViews, MapDto } from "@/lib/api-maps";
 
 type UsageLimits = {
   viewsMonthly?: number | null;
@@ -90,32 +81,6 @@ function fmtDate(d: Date) {
 function bytesToMB(b: number) {
   return Math.round((b / (1024 * 1024)) * 100) / 100;
 }
-async function tryGetMapViews(mapId: string): Promise<number> {
-  const mod = await import("@/lib/api");
-  const apiFetch = (mod as unknown as {
-    apiFetch<T>(p: string, o?: RequestInit & { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" }): Promise<T>;
-  }).apiFetch;
-  const paths = [
-    `/maps/${mapId}/views`,
-    `/maps/${mapId}/stats`,
-    `/analytics/maps/${mapId}/views`,
-    `/analytics/map-views?mapId=${encodeURIComponent(mapId)}`,
-  ];
-  for (const p of paths) {
-    try {
-      const res = await apiFetch<unknown>(p, { method: "GET" });
-      if (typeof res === "number") return res;
-      if (res && typeof res === "object") {
-        const obj = res as Record<string, unknown>;
-        if (typeof obj.views === "number") return obj.views as number;
-        if (typeof obj.viewsMonthly === "number") return obj.viewsMonthly as number;
-        if (typeof obj.total === "number") return obj.total as number;
-        if (typeof obj.month === "number") return obj.month as number;
-      }
-    } catch {}
-  }
-  return 0;
-}
 
 export default function Page() {
   const [orgId, setOrgId] = useState<string | null>(null);
@@ -174,7 +139,7 @@ export default function Page() {
         const list: MapDto[] = mapsRes.status === "fulfilled" ? (mapsRes.value ?? []) : [];
         const rows: MapRow[] = await Promise.all(
           list.map(async (m) => {
-            const [views, detail] = await Promise.allSettled([tryGetMapViews(m.id), getMapById(m.id)]);
+            const [views, detail] = await Promise.allSettled([getMapViews(m.id), getMapById(m.id)]);
             const v = views.status === "fulfilled" ? views.value : 0;
             const d = detail.status === "fulfilled" ? (detail.value as unknown) : null;
             let createdBy: string | null = null;

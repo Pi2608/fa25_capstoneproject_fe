@@ -2,17 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  getOrganizationById,
-  type OrganizationDetailDto,
-  getWorkspaceById,
-  getWorkspaceMaps,
-  removeMapFromWorkspace,
-  deleteMap,
-} from "@/lib/api";
 import { useToast } from "@/contexts/ToastContext";
 import { Workspace } from "@/types/workspace";
 import { formatDate } from "@/utils/formatUtils";
+import { getOrganizationById, OrganizationDetailDto } from "@/lib/api-organizations";
+import { createMap, deleteMap } from "@/lib/api-maps";
+import { getWorkspaceById, getWorkspaceMaps, removeMapFromWorkspace } from "@/lib/api-workspaces";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name" | "author";
@@ -49,6 +44,39 @@ export default function WorkspaceDetailPage() {
     mapName?: string;
   }>({ open: false });
   const [deleteMapLoading, setDeleteMapLoading] = useState(false);
+
+  const handleCreateMap = useCallback(async () => {
+    try {
+      const center = { lat: 10.78, lng: 106.69 };
+      const zoom = 13;
+      const latDiff = 180 / Math.pow(2, zoom);
+      const lngDiff = 360 / Math.pow(2, zoom);
+      const defaultBounds = JSON.stringify({
+        type: "Polygon",
+        coordinates: [[
+          [center.lng - lngDiff / 2, center.lat - latDiff / 2],
+          [center.lng + lngDiff / 2, center.lat - latDiff / 2],
+          [center.lng + lngDiff / 2, center.lat + latDiff / 2],
+          [center.lng - lngDiff / 2, center.lat + latDiff / 2],
+          [center.lng - lngDiff / 2, center.lat - latDiff / 2],
+        ]],
+      });
+      const viewState = JSON.stringify({ center: [center.lat, center.lng], zoom });
+
+      const created = await createMap({
+        name: "Untitled Map",
+        description: "",
+        isPublic: false,
+        defaultBounds,
+        viewState,
+        baseMapProvider: "OSM",
+        workspaceId,
+      });
+      router.push(`/maps/${created.mapId}?created=1`);
+    } catch (e) {
+      showToast("error", safeMessage(e));
+    }
+  }, [router, showToast, workspaceId]);
 
   const loadData = useCallback(async () => {
     try {
@@ -144,7 +172,7 @@ export default function WorkspaceDetailPage() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => router.push(`/maps/new?orgId=${orgId}&workspaceId=${workspaceId}`)}
+            onClick={() => void handleCreateMap()}
             className="px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
           >
             New Map
@@ -202,7 +230,7 @@ export default function WorkspaceDetailPage() {
           <h3 className="text-lg font-semibold text-zinc-200 mb-2">No maps in this workspace</h3>
           <p className="text-zinc-400 mb-4">Create your first map to get started</p>
           <button
-            onClick={() => router.push(`/maps/new?orgId=${orgId}&workspaceId=${workspaceId}`)}
+            onClick={() => void handleCreateMap()}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

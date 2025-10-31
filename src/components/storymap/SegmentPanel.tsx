@@ -278,6 +278,7 @@ export default function SegmentPanel({
 
   const [zoneDialogOpen, setZoneDialogOpen] = useState(false);
   const [editingZone, setEditingZone] = useState<SegmentZone | null>(null);
+  const [zoneSelectMode, setZoneSelectMode] = useState(false); // New state for selection mode
   const [zoneForm, setZoneForm] = useState<ZoneForm>({
     name: "",
     description: "",
@@ -347,6 +348,72 @@ export default function SegmentPanel({
       alive = false;
     };
   }, [mapId, selectedSegmentId]);
+
+  /* -------- handle zone selection from map layer ---------- */
+  useEffect(() => {
+    const handleZoneSelectedFromLayer = async (e: CustomEvent) => {
+      const { feature, layerId, layerName } = e.detail;
+      
+      if (!zoneSelectMode || !selectedSegmentId || !feature) return;
+      
+      try {
+        setBusy(true);
+        setError(null);
+        
+        // Extract geometry from feature
+        const geometry = feature.geometry as GeoJsonObject;
+        if (!geometry) {
+          setError("Không tìm thấy hình học của vùng");
+          return;
+        }
+        
+        // Determine zone type based on geometry type
+        let zoneType: "Area" | "Line" | "Point" = "Area";
+        if (geometry.type === "Point") {
+          zoneType = "Point";
+        } else if (geometry.type === "LineString" || geometry.type === "MultiLineString") {
+          zoneType = "Line";
+        }
+        
+        const center = getCenterFromGeo(geometry);
+        const focusCameraState = center ? JSON.stringify({ center, zoom: 14 }) : undefined;
+        
+        const payload: CreateSegmentZoneReq = {
+          name: feature.properties?.name || feature.properties?.Name || `Zone từ ${layerName || 'Layer'}`,
+          description: feature.properties?.description || feature.properties?.Description || undefined,
+          zoneType,
+          zoneGeometry: stringifyGeo(geometry) ?? "{}",
+          displayOrder: zones.length,
+          isPrimary: false,
+          ...(focusCameraState ? { focusCameraState } : {}),
+        };
+        
+        await createSegmentZone(mapId, selectedSegmentId, payload);
+        const list = await getSegmentZones(mapId, selectedSegmentId);
+        setZones(list ?? []);
+        
+        // Disable selection mode
+        setZoneSelectMode(false);
+        const evt = new CustomEvent("storymap:enableZoneSelection", {
+          detail: { enabled: false }
+        });
+        window.dispatchEvent(evt);
+        
+        setError(null);
+      } catch (error) {
+        console.error("Error creating zone from layer:", error);
+        setError("Không thể thêm zone");
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    window.addEventListener("storymap:zoneSelectedFromLayer", handleZoneSelectedFromLayer as unknown as EventListener);
+    
+    return () => {
+      window.removeEventListener("storymap:zoneSelectedFromLayer", handleZoneSelectedFromLayer as unknown as EventListener);
+    };
+  }, [zoneSelectMode, selectedSegmentId, mapId, zones.length]);
 
   /* -------- segment actions ---------- */
   const openCreateSegment = () => {
@@ -475,7 +542,19 @@ export default function SegmentPanel({
       displayOrder: zones.length,
       zoneGeometry: null,
     });
-    setZoneDialogOpen(true);
+    
+    // Enable zone selection mode
+    setZoneSelectMode(true);
+    setZoneDialogOpen(false);
+    
+    // Emit event to enable selection mode on map
+    const evt = new CustomEvent("storymap:enableZoneSelection", {
+      detail: { enabled: true, segmentId: selectedSegmentId }
+    });
+    window.dispatchEvent(evt);
+    
+    setError("Chọn một vùng trên layer để thêm vào Zone...");
+    setTimeout(() => setError(null), 3000);
   };
 
   const openEditZone = (zone: SegmentZone) => {
@@ -647,16 +726,40 @@ export default function SegmentPanel({
               <div className="flex items-center justify-between mb-1">
                 <div className="text-xs text-white/60">Danh sách Zone</div>
                 <div className="flex items-center gap-2">
-                  <button
-                    className="text-[11px] px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60"
-                    disabled={!selectedSegmentId || busy}
-                    onClick={openCreateZone}
-                  >
-                    + Thêm Zone
-                  </button>
-                  <div className="text-[11px] text-white/50">
-                    {loadingZone ? "Đang tải…" : `Tổng: ${zones.length}`}
-                  </div>
+                  {zoneSelectMode ? (
+                    <>
+                      <button
+                        className="text-[11px] px-2 py-1 rounded bg-amber-600 hover:bg-amber-500 disabled:opacity-60"
+                        disabled={busy}
+                        onClick={() => {
+                          setZoneSelectMode(false);
+                          const evt = new CustomEvent("storymap:enableZoneSelection", {
+                            detail: { enabled: false }
+                          });
+                          window.dispatchEvent(evt);
+                          setError(null);
+                        }}
+                      >
+                        Hủy
+                      </button>
+                      <div className="text-[11px] text-amber-400">
+                        Đang chọn...
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="text-[11px] px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60"
+                        disabled={!selectedSegmentId || busy}
+                        onClick={openCreateZone}
+                      >
+                        + Thêm Zone
+                      </button>
+                      <div className="text-[11px] text-white/50">
+                        {loadingZone ? "Đang tải…" : `Tổng: ${zones.length}`}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
 

@@ -3,32 +3,10 @@
 
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import {
-  type PaymentGateway,
-  getPlans,
-  type Plan,
-  subscribeToPlan,
-  type SubscribeRequest,
-  type SubscribeResponse,
-  confirmPayment,
-  type PaymentConfirmationRequest,
-  cancelPayment,
-  type CancelPaymentRequest,
-  getJson,
-  getMyOrganizations,
-  type MyOrganizationDto,
-  getMyInvitations,
-  type InvitationDto,
-  getMyMembership,
-  type CurrentMembershipDto,
-} from "@/lib/api";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
 import PaymentMethodPopup from "./PaymentMethodPopup";
-
-type MyMembership = {
-  planId: number;
-  status: "active" | "expired" | "pending" | string;
-};
+import { cancelPayment, CancelPaymentRequest, confirmPayment, CurrentMembershipDto, getMyMembership, getMyMembershipStatus, getPlans, PaymentConfirmationRequest, PaymentGateway, Plan, SubscribeRequest, SubscribeResponse, subscribeToPlan } from "@/lib/api-membership";
+import { getMyInvitations, getMyOrganizations, InvitationDto, MyOrganizationDto } from "@/lib/api-organizations";
 
 function safeMessage(err: unknown, fallback = "Yêu cầu thất bại"): string {
   if (err instanceof Error && err.message) return err.message;
@@ -127,7 +105,7 @@ export default function SelectPlanPage() {
         }
 
         try {
-          const me = await getJson<MyMembership>("/membership/me");
+          const me = await getMyMembershipStatus()
           if (!alive) return;
 
           const found = ps.find((p) => p.planId === me.planId) ?? null;

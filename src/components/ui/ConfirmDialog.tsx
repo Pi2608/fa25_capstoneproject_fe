@@ -2,54 +2,67 @@
 
 import { useState } from "react";
 
-interface DeleteConfirmModalProps {
+interface ConfirmDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
-  itemName: string;
+  title?: string;
+  message?: string;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: "danger" | "warning" | "info";
+  itemName?: string;
   itemType?: string;
 }
 
-export default function DeleteConfirmModal({
+export default function ConfirmDialog({
   isOpen,
   onClose,
   onConfirm,
+  title,
+  message,
+  confirmText = "Delete",
+  cancelText = "Cancel",
+  variant = "danger",
   itemName,
-  itemType = "item"
-}: DeleteConfirmModalProps) {
-  const [dontAskAgain, setDontAskAgain] = useState(false);
-
+  itemType = "item",
+}: ConfirmDialogProps) {
   if (!isOpen) return null;
+
+  // Align behavior with DeleteConfirmModal: include "Don't ask again" option
+  const [dontAskAgain, setDontAskAgain] = useState(false);
 
   const handleConfirm = () => {
     if (dontAskAgain) {
-      // Save preference to localStorage
-      localStorage.setItem('skipDeleteConfirm', 'true');
+      localStorage.setItem("skipDeleteConfirm", "true");
     }
     onConfirm();
     onClose();
   };
 
+  const headerTitle = title ?? `Delete ${itemType}`;
+  const primaryMessage = message ?? "This action cannot be undone";
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
-      
+
       {/* Modal */}
       <div className="relative bg-zinc-900 rounded-lg shadow-2xl border border-zinc-700 w-full max-w-md mx-4 overflow-hidden">
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-zinc-700">
           <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center">
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              width="20" 
-              height="20" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
               strokeWidth="2"
               className="text-red-400"
             >
@@ -57,8 +70,8 @@ export default function DeleteConfirmModal({
             </svg>
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-white">Delete {itemType}</h3>
-            <p className="text-sm text-zinc-400">This action cannot be undone</p>
+            <h3 className="text-lg font-semibold text-white">{headerTitle}</h3>
+            <p className="text-sm text-zinc-400">{primaryMessage}</p>
           </div>
           <button
             onClick={onClose}
@@ -72,10 +85,17 @@ export default function DeleteConfirmModal({
 
         {/* Body */}
         <div className="px-6 py-4">
-          <p className="text-sm text-zinc-300">
-            Are you sure you want to delete <span className="font-semibold text-white">"{itemName}"</span>?
-          </p>
-          
+          {itemName && (
+            <p className="text-sm text-zinc-300">
+              Are you sure you want to delete <span className="font-semibold text-white">"{itemName}"</span>?
+            </p>
+          )}
+          {!itemName && (
+            <p className="text-sm text-zinc-300">
+              Are you sure you want to delete this {itemType}?
+            </p>
+          )}
+
           {/* Don't ask again checkbox */}
           <div className="mt-4 flex items-start gap-2">
             <input
@@ -97,13 +117,13 @@ export default function DeleteConfirmModal({
             onClick={onClose}
             className="px-4 py-2 rounded-md text-sm font-medium text-zinc-300 hover:text-white hover:bg-zinc-700 transition-colors"
           >
-            Cancel
+            {cancelText}
           </button>
           <button
             onClick={handleConfirm}
             className="px-4 py-2 rounded-md text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
           >
-            Delete
+            {confirmText}
           </button>
         </div>
       </div>
