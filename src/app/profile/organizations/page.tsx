@@ -73,7 +73,7 @@ export default function OrganizationsPage() {
     localStorage.removeItem("account_type");
     
     // Redirect to create workspace
-    router.push("/profile/create-org");
+    router.push("/register/organization");
   };
 
   if (loading) {
@@ -94,7 +94,7 @@ export default function OrganizationsPage() {
           <h1 className="text-2xl font-bold mb-4">No Workspace Found</h1>
           <p className="text-gray-400 mb-6">It seems your workspace setup wasn't completed.</p>
           <Link 
-            href="/profile/create-org"
+            href="/register/organization"
             className="inline-block px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors"
           >
             Create Workspace

@@ -492,7 +492,7 @@ export default function PricingPage() {
             </p>
             <div className="flex gap-2">
               <button
-                onClick={() => router.push("/profile/create-org")}
+                onClick={() => router.push("/register/organization")}
                 className="px-3 py-1 text-xs bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded-lg transition-colors"
               >
                 Create Organization

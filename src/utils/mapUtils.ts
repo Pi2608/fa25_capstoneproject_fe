@@ -1106,6 +1106,25 @@ export async function loadLayerToMap(
               leafletLayer.bindPopup(popupContent);
             }
           }
+          
+          // Add click handler for zone selection mode
+          leafletLayer.on('click', (e: LeafletMouseEvent) => {
+            // Check if we're in zone selection mode by checking for custom event listener
+            const isZoneSelectionEnabled = (window as any).__zoneSelectionMode || false;
+            
+            if (isZoneSelectionEnabled) {
+              e.originalEvent.stopPropagation();
+              
+              const evt = new CustomEvent("storymap:zoneSelectedFromLayer", {
+                detail: {
+                  feature,
+                  layerId: layer.id,
+                  layerName: layer.name
+                }
+              });
+              window.dispatchEvent(evt);
+            }
+          });
         },
       });
 
@@ -1188,6 +1207,25 @@ export async function renderDataLayers(
                 leafletLayer.bindPopup(popupContent);
               }
             }
+            
+            // Add click handler for zone selection mode
+            leafletLayer.on('click', (e: LeafletMouseEvent) => {
+              // Check if we're in zone selection mode by checking for custom event listener
+              const isZoneSelectionEnabled = (window as any).__zoneSelectionMode || false;
+              
+              if (isZoneSelectionEnabled) {
+                e.originalEvent.stopPropagation();
+                
+                const evt = new CustomEvent("storymap:zoneSelectedFromLayer", {
+                  detail: {
+                    feature,
+                    layerId: layer.id,
+                    layerName: layer.name
+                  }
+                });
+                window.dispatchEvent(evt);
+              }
+            });
           },
         });
 

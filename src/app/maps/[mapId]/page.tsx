@@ -831,6 +831,31 @@ export default function EditMapPage() {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
 
+  // Zone selection mode handler
+  useEffect(() => {
+    const handleEnableZoneSelection = (e: CustomEvent) => {
+      const { enabled } = e.detail;
+      // Set global flag for zone selection mode
+      (window as any).__zoneSelectionMode = enabled;
+      
+      // Optionally add visual feedback by changing cursor
+      if (mapRef.current) {
+        const mapContainer = mapRef.current.getContainer();
+        if (enabled) {
+          mapContainer.style.cursor = 'crosshair';
+        } else {
+          mapContainer.style.cursor = '';
+        }
+      }
+    };
+
+    window.addEventListener('storymap:enableZoneSelection', handleEnableZoneSelection as EventListener);
+    
+    return () => {
+      window.removeEventListener('storymap:enableZoneSelection', handleEnableZoneSelection as EventListener);
+    };
+  }, []);
+
   // Map click handler for deselecting when clicking on empty space or base layer
   useEffect(() => {
     if (!mapRef.current) return;
