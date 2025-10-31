@@ -3,7 +3,7 @@ import { FeatureData, toggleLayerVisibility, toggleFeatureVisibility, addDataLay
 import { RawLayer, MapFeatureResponse, CreateMapFeatureRequest, UpdateMapFeatureRequest } from "@/lib/api";
 import type { Map as LMap, FeatureGroup } from "leaflet";
 
-import DeleteConfirmModal from "./DeleteConfirmModal";
+import ConfirmDialog from "../ui/ConfirmDialog";
 
 // ---------------- StylePanel ----------------
 export interface StylePanelProps {
@@ -780,7 +780,7 @@ export function DataLayersPanel({
       )}
       
       {/* Delete Confirmation Modal */}
-      <DeleteConfirmModal
+      <ConfirmDialog
         isOpen={deleteModal.isOpen}
         onClose={() => setDeleteModal({ ...deleteModal, isOpen: false })}
         onConfirm={() => {
@@ -792,6 +792,11 @@ export function DataLayersPanel({
         }}
         itemName={deleteModal.itemName}
         itemType={deleteModal.itemType}
+        title={`Delete ${deleteModal.itemType}`}
+        message="This action cannot be undone"
+        confirmText="Delete"
+        cancelText="Cancel"
+        variant="danger"
       />
     </>
   );

@@ -614,6 +614,7 @@ export type MapDto = {
   description?: string;
   previewImageUrl?: string | null;
   createdAt: string;
+  updatedAt?: string | null;
 };
 
 export function getMapById(mapId: string) {

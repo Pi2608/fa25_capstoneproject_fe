@@ -255,8 +255,13 @@ export default function RecentsPage() {
       if (sortKey === "name") {
         return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
       }
-      const aTime = new Date(a.createdAt ?? 0).getTime();
-      const bTime = new Date(b.createdAt ?? 0).getTime();
+      // Use updatedAt for recentlyModified, createdAt for dateCreated
+      const aTime = new Date(
+        sortKey === "recentlyModified" ? (a.updatedAt ?? a.createdAt ?? 0) : (a.createdAt ?? 0)
+      ).getTime();
+      const bTime = new Date(
+        sortKey === "recentlyModified" ? (b.updatedAt ?? b.createdAt ?? 0) : (b.createdAt ?? 0)
+      ).getTime();
       return aTime - bTime;
     });
     if (sortOrder === "desc") arr.reverse();

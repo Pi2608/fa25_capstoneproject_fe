@@ -1107,12 +1107,61 @@ export async function loadLayerToMap(
             }
           }
           
-          // Add click handler for zone selection mode
+          // Store original style for hover/selection effects
+          type LayerWithMeta = Layer & {
+            _feature?: GeoJSON.Feature;
+            _layerId?: string;
+            _layerName?: string;
+            _originalStyle?: any;
+          };
+          const meta = leafletLayer as LayerWithMeta;
+          meta._feature = feature;
+          meta._layerId = layer.id;
+          meta._layerName = layer.name;
+
+          // Add hover handlers
+          leafletLayer.on('mouseover', (e: LeafletMouseEvent) => {
+            if (!('setStyle' in leafletLayer)) return;
+            
+            // Store original style if not already stored
+            if (!meta._originalStyle) {
+              const currentOptions = (leafletLayer as any).options || {};
+              meta._originalStyle = {
+                color: currentOptions.color || '#3388ff',
+                weight: currentOptions.weight || 3,
+                opacity: currentOptions.opacity || 1.0,
+                fillColor: currentOptions.fillColor || currentOptions.color || '#3388ff',
+                fillOpacity: currentOptions.fillOpacity || 0.2,
+                dashArray: currentOptions.dashArray || ''
+              };
+            }
+            
+            // Apply hover style
+            (leafletLayer as any).setStyle({
+              weight: 5,
+              dashArray: '',
+              fillOpacity: 0.6
+            });
+            
+            // Bring to front
+            if ('bringToFront' in leafletLayer) {
+              (leafletLayer as any).bringToFront();
+            }
+          });
+
+          leafletLayer.on('mouseout', (e: LeafletMouseEvent) => {
+            if (!('setStyle' in leafletLayer) || !meta._originalStyle) return;
+            
+            // Reset to original style
+            (leafletLayer as any).setStyle(meta._originalStyle);
+          });
+
+          // Add click handler for zone selection mode OR normal selection
           leafletLayer.on('click', (e: LeafletMouseEvent) => {
-            // Check if we're in zone selection mode by checking for custom event listener
             const isZoneSelectionEnabled = (window as any).__zoneSelectionMode || false;
             
             if (isZoneSelectionEnabled) {
+              // Zone selection mode - handle in SegmentPanel
               e.originalEvent.stopPropagation();
               
               const evt = new CustomEvent("storymap:zoneSelectedFromLayer", {
@@ -1123,7 +1172,36 @@ export async function loadLayerToMap(
                 }
               });
               window.dispatchEvent(evt);
+            } else {
+              // Normal click - emit feature-selection event for highlighting
+              const evt = new CustomEvent("layer-feature-click", {
+                detail: {
+                  feature,
+                  layerId: layer.id,
+                  layerName: layer.name,
+                  leafletLayer
+                }
+              });
+              window.dispatchEvent(evt);
             }
+          });
+
+          // Add contextmenu (right-click) handler
+          leafletLayer.on("contextmenu", (e: LeafletMouseEvent) => {
+            const original = e.originalEvent as MouseEvent;
+            original.preventDefault();
+
+            const evt = new CustomEvent("zone-contextmenu", {
+              detail: {
+                feature,
+                layerId: layer.id,
+                layerName: layer.name,
+                x: original.clientX,
+                y: original.clientY,
+                leafletLayer,
+              },
+            });
+            window.dispatchEvent(evt);
           });
         },
       });
@@ -1208,12 +1286,61 @@ export async function renderDataLayers(
               }
             }
             
-            // Add click handler for zone selection mode
+            // Store original style for hover/selection effects
+            type LayerWithMeta2 = Layer & {
+              _feature?: GeoJSON.Feature;
+              _layerId?: string;
+              _layerName?: string;
+              _originalStyle?: any;
+            };
+            const meta2 = leafletLayer as LayerWithMeta2;
+            meta2._feature = feature;
+            meta2._layerId = layer.id;
+            meta2._layerName = layer.name;
+
+            // Add hover handlers
+            leafletLayer.on('mouseover', (e: LeafletMouseEvent) => {
+              if (!('setStyle' in leafletLayer)) return;
+              
+              // Store original style if not already stored
+              if (!meta2._originalStyle) {
+                const currentOptions = (leafletLayer as any).options || {};
+                meta2._originalStyle = {
+                  color: currentOptions.color || '#3388ff',
+                  weight: currentOptions.weight || 3,
+                  opacity: currentOptions.opacity || 1.0,
+                  fillColor: currentOptions.fillColor || currentOptions.color || '#3388ff',
+                  fillOpacity: currentOptions.fillOpacity || 0.2,
+                  dashArray: currentOptions.dashArray || ''
+                };
+              }
+              
+              // Apply hover style
+              (leafletLayer as any).setStyle({
+                weight: 5,
+                dashArray: '',
+                fillOpacity: 0.6
+              });
+              
+              // Bring to front
+              if ('bringToFront' in leafletLayer) {
+                (leafletLayer as any).bringToFront();
+              }
+            });
+
+            leafletLayer.on('mouseout', (e: LeafletMouseEvent) => {
+              if (!('setStyle' in leafletLayer) || !meta2._originalStyle) return;
+              
+              // Reset to original style
+              (leafletLayer as any).setStyle(meta2._originalStyle);
+            });
+
+            // Add click handler for zone selection mode OR normal selection
             leafletLayer.on('click', (e: LeafletMouseEvent) => {
-              // Check if we're in zone selection mode by checking for custom event listener
               const isZoneSelectionEnabled = (window as any).__zoneSelectionMode || false;
               
               if (isZoneSelectionEnabled) {
+                // Zone selection mode - handle in SegmentPanel
                 e.originalEvent.stopPropagation();
                 
                 const evt = new CustomEvent("storymap:zoneSelectedFromLayer", {
@@ -1224,7 +1351,36 @@ export async function renderDataLayers(
                   }
                 });
                 window.dispatchEvent(evt);
+              } else {
+                // Normal click - emit feature-selection event for highlighting
+                const evt = new CustomEvent("layer-feature-click", {
+                  detail: {
+                    feature,
+                    layerId: layer.id,
+                    layerName: layer.name,
+                    leafletLayer
+                  }
+                });
+                window.dispatchEvent(evt);
               }
+            });
+
+            // Add contextmenu (right-click) handler
+            leafletLayer.on("contextmenu", (e: LeafletMouseEvent) => {
+              const original = e.originalEvent as MouseEvent;
+              original.preventDefault();
+
+              const evt = new CustomEvent("zone-contextmenu", {
+                detail: {
+                  feature,
+                  layerId: layer.id,
+                  layerName: layer.name,
+                  x: original.clientX,
+                  y: original.clientY,
+                  leafletLayer,
+                },
+              });
+              window.dispatchEvent(evt);
             });
           },
         });
@@ -1942,15 +2098,83 @@ export async function renderAllDataLayers(
               }
             }
 
-            type LayerWithMeta = Layer & {
+            type LayerWithMeta3 = Layer & {
               _feature?: GeoJSON.Feature;
               _layerId?: string;
               _layerName?: string;
+              _originalStyle?: any;
             };
-            const meta = leafletLayer as LayerWithMeta;
-            meta._feature = feature;
-            meta._layerId = layer.id;
-            meta._layerName = layer.name;
+            const meta3 = leafletLayer as LayerWithMeta3;
+            meta3._feature = feature;
+            meta3._layerId = layer.id;
+            meta3._layerName = layer.name;
+
+            // Add hover handlers
+            leafletLayer.on('mouseover', (e: LeafletMouseEvent) => {
+              if (!('setStyle' in leafletLayer)) return;
+              
+              // Store original style if not already stored
+              if (!meta3._originalStyle) {
+                const currentOptions = (leafletLayer as any).options || {};
+                meta3._originalStyle = {
+                  color: currentOptions.color || '#3388ff',
+                  weight: currentOptions.weight || 3,
+                  opacity: currentOptions.opacity || 1.0,
+                  fillColor: currentOptions.fillColor || currentOptions.color || '#3388ff',
+                  fillOpacity: currentOptions.fillOpacity || 0.2,
+                  dashArray: currentOptions.dashArray || ''
+                };
+              }
+              
+              // Apply hover style
+              (leafletLayer as any).setStyle({
+                weight: 5,
+                dashArray: '',
+                fillOpacity: 0.6
+              });
+              
+              // Bring to front
+              if ('bringToFront' in leafletLayer) {
+                (leafletLayer as any).bringToFront();
+              }
+            });
+
+            leafletLayer.on('mouseout', (e: LeafletMouseEvent) => {
+              if (!('setStyle' in leafletLayer) || !meta3._originalStyle) return;
+              
+              // Reset to original style
+              (leafletLayer as any).setStyle(meta3._originalStyle);
+            });
+
+            // Add click handler for zone selection mode OR normal selection
+            leafletLayer.on('click', (e: LeafletMouseEvent) => {
+              const isZoneSelectionEnabled = (window as any).__zoneSelectionMode || false;
+              
+              if (isZoneSelectionEnabled) {
+                // Zone selection mode - handle in SegmentPanel
+                e.originalEvent.stopPropagation();
+                
+                const evt = new CustomEvent("storymap:zoneSelectedFromLayer", {
+                  detail: {
+                    feature,
+                    layerId: layer.id,
+                    layerName: layer.name
+                  }
+                });
+                window.dispatchEvent(evt);
+              } else {
+                // Normal click - emit feature-selection event for highlighting
+                const evt = new CustomEvent("layer-feature-click", {
+                  detail: {
+                    feature,
+                    layerId: layer.id,
+                    layerName: layer.name,
+                    leafletLayer
+                  }
+                });
+                window.dispatchEvent(evt);
+              }
+            });
 
             leafletLayer.on("contextmenu", (e: LeafletMouseEvent) => {
               const original = e.originalEvent as MouseEvent;
