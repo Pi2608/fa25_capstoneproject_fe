@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { searchFaqs, getFaqSuggestions, type FaqItem } from "@/lib/api";
 import Link from "next/link";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { FaqItem, getFaqSuggestions, searchFaqs } from "@/lib/api-support";
 gsap.registerPlugin(ScrollTrigger);
 
 export default function HelpCenterClient() {

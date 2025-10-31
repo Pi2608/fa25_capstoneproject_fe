@@ -2,13 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  getMyMaps,
-  getMapDetail,
-  publishMap,
-  type MapDto,
-  type MapStatus,
-} from "@/lib/api";
+import { getMapDetail, getMyMaps, MapDto, MapStatus, publishMap } from "@/lib/api-maps";
+
 
 type DraftItem = MapDto & { status?: MapStatus | string };
 

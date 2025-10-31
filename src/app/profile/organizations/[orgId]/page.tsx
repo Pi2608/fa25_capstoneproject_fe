@@ -3,26 +3,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
-import {
-  getOrganizationById,
-  type OrganizationDetailDto,
-  getOrganizationMembers,
-  type GetOrganizationMembersResDto,
-  inviteMember,
-  type InviteMemberOrganizationReqDto,
-  deleteOrganization,
-  getOrganizationMaps,
-  removeMember,
-  updateMemberRole,
-  createMap,
-  type CreateMapRequest,
-  getMyMembership,
-  type CurrentMembershipDto,
-  getProjectsByOrganization,
-  addMapToProject,
-} from "@/lib/api";
+
 import { useAuth } from "@/contexts/AuthContext";
 import { Workspace } from "@/types/workspace";
+import { getOrganizationMaps } from "@/lib/api-maps";
+import { deleteOrganization, getOrganizationById, getOrganizationMembers, GetOrganizationMembersResDto, inviteMember, InviteMemberOrganizationReqDto, OrganizationDetailDto, removeMember, updateMemberRole } from "@/lib/api-organizations";
+import { CurrentMembershipDto, getMyMembership } from "@/lib/api-membership";
+import { getProjectsByOrganization } from "@/lib/api-workspaces";
 type MapRow = Awaited<ReturnType<typeof getOrganizationMaps>>[number];
 
 

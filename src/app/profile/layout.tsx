@@ -4,16 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import {
-  getPlans,
-  type Plan,
-  getJson,
-  getMyOrganizations,
-  type MyOrganizationDto,
-  getUnreadNotificationCount,
-  getMyMembership,
-} from "@/lib/api";
+
 import { useAuthStatus } from "@/contexts/useAuthStatus";
+import { getMyMembership, getPlans, Plan } from "@/lib/api-membership";
+import { getMyOrganizations, MyOrganizationDto } from "@/lib/api-organizations";
+import { getUnreadNotificationCount } from "@/lib/api-user";
 
 type MyMembership = {
   planId: number;

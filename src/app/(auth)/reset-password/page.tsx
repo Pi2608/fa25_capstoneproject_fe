@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { resetPassword } from "@/lib/api";
 import InputField from "@/components/ui/InputField";
 import PasswordInput from "@/components/auth/PasswordInput";
 import SubmitButton from "@/components/ui/SubmitButton";
 import AuthLinks from "@/components/auth/AuthLinks";
+import { resetPassword } from "@/lib/api-auth";
 
 export default function ResetPasswordPage() {
   const router = useRouter();

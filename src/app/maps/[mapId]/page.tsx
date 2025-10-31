@@ -30,7 +30,9 @@ import {
   type UpdateMapFeatureRequest,
   uploadGeoJsonToMap,
   updateLayerData,
-} from "@/lib/api";
+  MapStatus,     
+  updateMapFeature
+} from "@/lib/api-maps";
 import { 
   type FeatureData,
   serializeFeature,
@@ -53,13 +55,14 @@ import {
   findFeatureIndex,
   removeFeatureFromGeoJSON
 } from "@/utils/zoneOperations";
-import { StylePanel, DataLayersPanel } from "@/components/map/MapControls";
+import { StylePanel, DataLayersPanel, MapControls } from "@/components/map/MapControls";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
 import StoryMapTimeline from "@/components/storymap/StoryMapTimeline";
 import PublishButton from "@/components/PublishButton";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import CopyFeatureDialog from "@/components/CopyFeatureDialog";
-import type { MapStatus } from "@/lib/api";
+import MapPoiPanel from "@/components/poi/PoiPanel";
+
 import { useToast } from "@/contexts/ToastContext";
 import type { Feature as GeoJSONFeature } from "geojson";
 
@@ -85,6 +88,7 @@ export default function EditMapPage() {
   const [showStylePanel, setShowStylePanel] = useState(false);
   const [showDataLayersPanel, setShowDataLayersPanel] = useState(true);
   const [showSegmentPanel, setShowSegmentPanel] = useState(false);
+  const [showPoiPanel, setShowPoiPanel] = useState(false);
   const [features, setFeatures] = useState<FeatureData[]>([]);
   const [selectedLayer, setSelectedLayer] = useState<FeatureData | RawLayer | null>(null);
   const [layers, setLayers] = useState<RawLayer[]>([]);
@@ -1019,6 +1023,19 @@ export default function EditMapPage() {
   const enableCutPolygon = () => mapRef.current?.pm.enableGlobalCutMode();
   const toggleRotate = () => mapRef.current?.pm?.toggleGlobalRotateMode?.();
 
+  // Map control functions
+  const zoomIn = () => {
+    if (mapRef.current) {
+      mapRef.current.zoomIn();
+    }
+  };
+  
+  const zoomOut = () => {
+    if (mapRef.current) {
+      mapRef.current.zoomOut();
+    }
+  };
+
   // Context menu handlers
   const handleZoomToFit = useCallback(async () => {
     if (!mapRef.current || !contextMenu.feature) return;
@@ -1186,7 +1203,6 @@ export default function EditMapPage() {
     if (!detail) return;
     
     try {
-      const { updateMapFeature } = await import("@/lib/api");
       await updateMapFeature(detail.id, featureId, updates);
       
       // Update local state
@@ -1513,17 +1529,6 @@ export default function EditMapPage() {
                 {busySaveMeta ? "Đang lưu…" : "Save"}
               </button>
               <button
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                  showSegmentPanel 
-                    ? 'bg-purple-600 hover:bg-purple-500' 
-                    : 'bg-purple-700 hover:bg-purple-600'
-                }`}
-                onClick={() => setShowSegmentPanel(!showSegmentPanel)}
-                title="Toggle Story Map Panel"
-              >
-                Story Map
-              </button>
-              <button
                 className="rounded-lg p-1.5 text-xs font-semibold bg-zinc-700 hover:bg-zinc-600"
                 onClick={() => {
                   localStorage.removeItem('skipDeleteConfirm');
@@ -1570,6 +1575,25 @@ export default function EditMapPage() {
         onApplyStyle={onApplyStyle}
       />
 
+      <MapControls
+        zoomIn={zoomIn}
+        zoomOut={zoomOut}
+        showPoiPanel={showPoiPanel}
+        onTogglePoiPanel={() => {
+          setShowPoiPanel(!showPoiPanel);
+          if (!showPoiPanel) setShowSegmentPanel(false);
+        }}
+        showStoryMapPanel={showSegmentPanel}
+        onToggleStoryMapPanel={() => {
+          setShowSegmentPanel(!showSegmentPanel);
+          if (!showSegmentPanel) setShowPoiPanel(false);
+        }}
+      />
+
+      {/* POI Panel */}
+      {detail && <MapPoiPanel mapId={detail.id} isOpen={showPoiPanel} />}
+
+      {/* Story Map Timeline */}
       {showSegmentPanel && detail && (
         <StoryMapTimeline
           mapId={detail.id}

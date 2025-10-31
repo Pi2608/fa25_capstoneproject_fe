@@ -1830,6 +1830,8 @@ export type MapPoi = {
   markerGeometry: string;      
   highlightOnEnter?: boolean;
   shouldPin?: boolean;
+  isVisible?: boolean;
+  zIndex?: number;
   displayOrder?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -1859,6 +1861,29 @@ export function updatePoi(poiId: string, body: UpdatePoiReq) {
 
 export function deletePoi(poiId: string) {
   return delJson<void>(`${POI_PREFIX}/${poiId}`);
+}
+
+// ----- POI Display / Interaction Config -----
+export type UpdatePoiDisplayConfigReq = {
+  isVisible?: boolean;
+  zIndex?: number;
+  showTooltip?: boolean;
+  tooltipContent?: string | null;
+};
+
+export type UpdatePoiInteractionConfigReq = {
+  openSlideOnClick?: boolean;
+  playAudioOnClick?: boolean;
+  audioUrl?: string | null;
+  externalUrl?: string | null;
+};
+
+export function updatePoiDisplayConfig(poiId: string, body: UpdatePoiDisplayConfigReq) {
+  return putJson<UpdatePoiDisplayConfigReq, MapPoi>(`${POI_PREFIX}/pois/${poiId}/display-config`, body);
+}
+
+export function updatePoiInteractionConfig(poiId: string, body: UpdatePoiInteractionConfigReq) {
+  return putJson<UpdatePoiInteractionConfigReq, MapPoi>(`${POI_PREFIX}/pois/${poiId}/interaction-config`, body);
 }
 
 // ===== Segment Zones =====

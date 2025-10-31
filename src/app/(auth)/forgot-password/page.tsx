@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { resetPasswordVerify } from "@/lib/api";
-import { getApiMessage } from "@/lib/errors";
 import InputField from "@/components/ui/InputField";
 import SubmitButton from "@/components/ui/SubmitButton";
 import AuthLinks from "@/components/auth/AuthLinks";
+import { resetPasswordVerify } from "@/lib/api-auth";
 
 export default function ForgotPasswordPage() {
   const router = useRouter();

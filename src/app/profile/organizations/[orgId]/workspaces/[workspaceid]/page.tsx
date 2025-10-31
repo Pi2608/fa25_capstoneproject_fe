@@ -2,18 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  getOrganizationById,
-  type OrganizationDetailDto,
-  getWorkspaceById,
-  getWorkspaceMaps,
-  removeMapFromWorkspace,
-  deleteMap,
-  createMap,
-} from "@/lib/api";
 import { useToast } from "@/contexts/ToastContext";
 import { Workspace } from "@/types/workspace";
 import { formatDate } from "@/utils/formatUtils";
+import { getOrganizationById, OrganizationDetailDto } from "@/lib/api-organizations";
+import { createMap, deleteMap } from "@/lib/api-maps";
+import { getWorkspaceById, getWorkspaceMaps, removeMapFromWorkspace } from "@/lib/api-workspaces";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name" | "author";

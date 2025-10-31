@@ -4,10 +4,10 @@ import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { RegisterFormData, RegisterErrors } from "@/types/register";
 import { useRegisterValidation } from "@/hooks/useRegisterValidation";
-import { postJson } from "@/lib/api";
 import { prettyError, splitVietnameseName } from "@/utils/registerUtils";
 import { setFirstTimeUser, clearRegistrationData } from "@/utils/authUtils";
 import { useToast } from "@/contexts/ToastContext";
+import { verifyEmail, verifyOtp } from "@/lib/api-auth";
 import AuthLinks from "@/components/auth/AuthLinks";
 import Step1BasicRegistration from "@/components/register/Step1BasicRegistration";
 import Step2OTPVerification from "@/components/register/Step2OTPVerification";
@@ -80,7 +80,7 @@ export default function RegisterPage() {
         setLoading(false);
         return;
       }
-      await postJson("/auth/verify-email", {
+      await verifyEmail({
         firstName,
         lastName,
         email: formData.email,
@@ -110,7 +110,7 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      await postJson("/auth/verify-otp", { otp: formData.otp });
+      await verifyOtp({ otp: formData.otp });
       
       // Mark as first-time user
       setFirstTimeUser(formData.email);

@@ -2,13 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  getUserNotifications,
-  markNotificationAsRead,
-  markAllNotificationsAsRead,
-  type GetUserNotificationsResponse,
-  type NotificationItem,
-} from "@/lib/api";
+import { getUserNotifications, GetUserNotificationsResponse, markAllNotificationsAsRead, markNotificationAsRead, NotificationItem } from "@/lib/api-user";
+
 
 function fmtTime(iso?: string) {
   if (!iso) return "—";

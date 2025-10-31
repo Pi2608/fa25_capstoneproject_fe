@@ -2,16 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  getMyMaps,
-  createMapFromTemplate,
-  createMap,
-  updateMap,
-  deleteMap,
-  type MapDto,
-  type UpdateMapRequest,
-} from "@/lib/api";
+
 import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
+import { createMap, createMapFromTemplate, deleteMap, getMyMaps, MapDto, updateMap, UpdateMapRequest } from "@/lib/api-maps";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name";

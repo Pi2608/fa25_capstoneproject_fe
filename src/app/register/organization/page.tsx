@@ -8,13 +8,11 @@ import {
   type SubscribeRequest, 
   type SubscribeResponse,
   type PaymentGateway,
-  getMyOrganizations,
-  postJson,
-  type OrganizationReqDto,
-  type OrganizationResDto
-} from "@/lib/api";
-import { createProject, type CreateProjectRequest } from "@/lib/api";
+} from "@/lib/api-membership";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
+import { getMyOrganizations, OrganizationReqDto, OrganizationResDto } from "@/lib/api-organizations";
+import { createProject, CreateProjectRequest } from "@/lib/api-workspaces";
+import { postJson } from "@/lib/api-core";
 
 export default function OrganizationSetupPage() {
   const router = useRouter();

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createMapTemplateFromGeoJson } from "@/lib/api";
+import { createMapTemplateFromGeoJson } from "@/lib/api-maps";
 
 interface ApiError {
   message?: string;
