@@ -124,7 +124,7 @@ export default function QgisPluginClient() {
           <ul className="mt-3 space-y-2 text-sm text-zinc-300">
             <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> QGIS 3.x on Windows, macOS, Linux</li>
             <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Internet connection for sync & sign-in</li>
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> CustomMapOSM account</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> IMOS account</li>
           </ul>
         </div>
         <div className="qg-info-card opacity-0 translate-y-[14px] rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-6 ring-1 ring-emerald-500/10">
@@ -133,7 +133,7 @@ export default function QgisPluginClient() {
             <div className="text-sm font-semibold">What it does</div>
           </div>
           <ul className="mt-3 space-y-2 text-sm text-zinc-300">
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Push QGIS layers and styles to CustomMapOSM</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Push QGIS layers and styles to IMOS</li>
             <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Pull updates from the cloud into a local project</li>
             <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Keep symbology and layer order in sync</li>
             <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Publish web maps and share links or embeds</li>
@@ -156,8 +156,8 @@ export default function QgisPluginClient() {
         <h2 className="text-xl font-semibold">Install</h2>
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-zinc-300">
           <li>Open QGIS → Plugins → Manage and Install…</li>
-          <li>Select <span className="font-medium">Install from ZIP</span> and choose the downloaded file, or add the CustomMapOSM repository URL.</li>
-          <li>Search for <span className="font-medium">CustomMapOSM</span> and click <span className="font-medium">Install</span>.</li>
+          <li>Select <span className="font-medium">Install from ZIP</span> and choose the downloaded file, or add the IMOS repository URL.</li>
+          <li>Search for <span className="font-medium">IMOS</span> and click <span className="font-medium">Install</span>.</li>
           <li>Restart QGIS if prompted, then open the plugin from the Plugins menu or toolbar.</li>
         </ol>
         <div className="mt-4 flex flex-wrap gap-3 text-sm">
@@ -170,7 +170,7 @@ export default function QgisPluginClient() {
         <h2 className="text-xl font-semibold">Quick start</h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {[
-            ["Sign in", "Use your CustomMapOSM account inside the plugin."],
+            ["Sign in", "Use your IMOS account inside the plugin."],
             ["Pick a project", "Create a new cloud project or select an existing one."],
             ["Choose layers", "Select which layers and styles to include."],
             ["Sync", "Push data and styles; pull updates when teammates publish."],
@@ -202,7 +202,7 @@ export default function QgisPluginClient() {
           <h2 className="text-xl font-semibold">FAQ</h2>
           <div className="mt-4 space-y-4 text-sm text-zinc-300">
             {[
-              ["Is the plugin free?", "Yes. Sync and publishing are included with your CustomMapOSM plan."],
+              ["Is the plugin free?", "Yes. Sync and publishing are included with your IMOS plan."],
               ["Which QGIS versions are supported?", "QGIS 3.x on Windows, macOS, and Linux. Keep QGIS updated for best results."],
               ["Does it upload my data or just styles?", "You can sync layers and styles. Choose exactly what you publish each time."],
               ["Can I roll back changes?", "Use project history on the web to review versions and restore when needed."],

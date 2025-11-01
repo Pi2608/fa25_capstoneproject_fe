@@ -4,17 +4,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
 import type { Map as LMap, TileLayer, LatLngTuple, Layer, FeatureGroup, LatLng, LatLngBounds } from "leaflet";
-import {
-  getMapDetail,
-  type MapDetail,
-  updateMap,
-  type UpdateMapRequest,
-  getActiveUserAccessTools,
-  type UserAccessTool,
-  getMapById,
-  type RawLayer,
-  type UpdateMapFeatureRequest,
-} from "@/lib/api";
+
 import type { Position } from "geojson";
 import {
   saveFeature,
@@ -43,11 +33,8 @@ import {
   findFeatureIndex,
   removeFeatureFromGeoJSON
 } from "@/utils/zoneOperations";
-import {
-  copyZoneToLayer,
-  deleteZoneFromLayer,
-  updateLayerData
-} from "@/lib/api";
+import { useToast } from "@/contexts/ToastContext";
+import { copyZoneToLayer, getMapDetail, MapDetail, RawLayer, updateLayerData, updateMap, UpdateMapFeatureRequest, UpdateMapRequest } from "@/lib/api-maps";
 
 type BaseKey = "osm" | "sat" | "dark";
 
@@ -120,7 +107,7 @@ export default function MapEditor() {
 
   const [busySaveMeta, setBusySaveMeta] = useState<boolean>(false);
   const [busySaveView, setBusySaveView] = useState<boolean>(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const [name, setName] = useState<string>("");
   const [description, setDescription] = useState<string>("");
@@ -141,6 +128,9 @@ export default function MapEditor() {
     layerName: null,
     leafletLayer: null
   });
+
+  const [, setFeatureVisibility] = useState<Record<string, boolean>>({});
+  const [, setLayerVisibility] = useState<Record<string, boolean>>({});
 
   const [copyFeatureDialog, setCopyFeatureDialog] = useState<{
     isOpen: boolean;
@@ -168,21 +158,6 @@ export default function MapEditor() {
   const sketchRef = useRef<FeatureGroup | null>(null);
   const dataLayerRefs = useRef<Map<string, Layer>>(new Map());
 
-  const [toolsLoading, setToolsLoading] = useState(true);
-  const [allowed, setAllowed] = useState<Set<string>>(new Set());
-  const perms = useMemo(() => {
-    const has = (n: string) => allowed.has(n);
-    return {
-      marker: has("Marker"),
-      line: has("Line") || has("Route"),
-      polygon: has("Polygon"),
-      rectangle: has("Polygon"),
-      circle: has("Circle"),
-      text: has("Text"),
-      cut: has("Polygon"),
-      rotate: has("Polygon"),
-    };
-  }, [allowed]);
 
   const applyBaseLayer = useCallback((kind: BaseKey) => {
     const map = mapRef.current;
@@ -280,28 +255,6 @@ export default function MapEditor() {
     };
   }, [mapId]);
 
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      try {
-        setToolsLoading(true);
-        const list = await getActiveUserAccessTools();
-        const names = new Set<string>();
-        (list ?? []).forEach((t: UserAccessTool) => {
-          const key = normalizeToolName(t.name);
-          if (key) names.add(key);
-        });
-        if (alive) setAllowed(names);
-      } catch {
-        if (alive) setAllowed(new Set());
-      } finally {
-        if (alive) setToolsLoading(false);
-      }
-    })();
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!detail || !mapEl.current || mapRef.current) return;
@@ -488,12 +441,30 @@ export default function MapEditor() {
 
   const onLayerVisibilityChange = useCallback(async (layerId: string, isVisible: boolean) => {
     if (!detail || !mapRef.current) return;
-    await handleLayerVisibilityChange(detail.id, layerId, isVisible, mapRef.current, detail.layers, dataLayerRefs);
+    const layerData = detail.layers.find(l => l.id === layerId);
+    await handleLayerVisibilityChange(
+      detail.id,
+      layerId,
+      isVisible,
+      mapRef.current,
+      dataLayerRefs,
+      setLayerVisibility,
+      layerData
+    );
   }, [detail]);
 
   const onFeatureVisibilityChange = useCallback(async (featureId: string, isVisible: boolean) => {
     if (!detail) return;
-    await handleFeatureVisibilityChange(detail.id, featureId, isVisible, features, setFeatures, mapRef.current, sketchRef.current);
+    await handleFeatureVisibilityChange(
+      detail.id,
+      featureId,
+      isVisible,
+      features,
+      setFeatures,
+      mapRef.current,
+      sketchRef.current,
+      setFeatureVisibility
+    );
   }, [detail, features]);
 
   const onSelectLayer = useCallback((layer: FeatureData | RawLayer) => {
@@ -525,7 +496,6 @@ export default function MapEditor() {
   const saveMeta = useCallback(async () => {
     if (!detail) return;
     setBusySaveMeta(true);
-    setFeedback(null);
     try {
       const body: UpdateMapRequest = {
         name: (name ?? "").trim() || "Untitled Map",
@@ -534,14 +504,13 @@ export default function MapEditor() {
           baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
       };
       await updateMap(detail.id, body);
-      setFeedback("Đã lưu thông tin bản đồ.");
+      showToast("success", "Đã lưu thông tin bản đồ.");
     } catch (e) {
-      setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
+      showToast("error", e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveMeta(false);
-      setTimeout(() => setFeedback(null), 1800);
     }
-  }, [detail, name, description, baseKey]);
+  }, [detail, name, description, baseKey, showToast]);
 
   const handleZoomToFit = useCallback(async () => {
     if (!mapRef.current || !contextMenu.feature) return;
@@ -561,21 +530,15 @@ export default function MapEditor() {
     const success = await copyToClipboard(coordsText);
 
     if (success) {
-      setFeedback('📍 Coordinates copied to clipboard!');
-      setTimeout(() => setFeedback(null), 2000);
+      showToast("success", "📍 Coordinates copied to clipboard!");
     } else {
-      setFeedback('❌ Failed to copy coordinates');
-      setTimeout(() => setFeedback(null), 2000);
+      showToast("error", "❌ Failed to copy coordinates");
     }
-  }, [contextMenu.feature]);
+  }, [contextMenu.feature, showToast]);
 
   const openCopyFeatureDialog = useCallback((copyMode: "existing" | "new") => {
-    console.log("📝 openCopyFeatureDialog called with mode:", copyMode);
-    console.log("📊 Detail:", detail);
-    console.log("📊 ContextMenu:", contextMenu);
 
     if (!detail || !contextMenu.feature || !contextMenu.layerId) {
-      console.log("❌ Missing required data:", { detail: !!detail, feature: !!contextMenu.feature, layerId: !!contextMenu.layerId });
       return;
     }
 
@@ -586,16 +549,12 @@ export default function MapEditor() {
     const layerData = JSON.parse(sourceLayer?.layerData || '{}');
     const featureIndex = findFeatureIndex(layerData, contextMenu.feature);
 
-    console.log("🔍 Feature search result:", { featureIndex, layerData, feature: contextMenu.feature });
 
     if (featureIndex === -1) {
-      console.log("❌ Feature not found in layer");
-      setFeedback('❌ Feature not found in layer');
-      setTimeout(() => setFeedback(null), 2000);
+      showToast("error", "❌ Feature not found in layer");
       return;
     }
 
-    console.log("✅ Opening copy dialog with:", { sourceLayerId, sourceLayerName, featureIndex, copyMode });
     setCopyFeatureDialog({
       isOpen: true,
       sourceLayerId,
@@ -610,7 +569,6 @@ export default function MapEditor() {
   }, [openCopyFeatureDialog]);
 
   const handleCopyToNewLayer = useCallback(() => {
-    console.log("🚀 handleCopyToNewLayer called!");
     openCopyFeatureDialog("new");
   }, [openCopyFeatureDialog]);
 
@@ -630,8 +588,7 @@ export default function MapEditor() {
   }, []);
 
   const handleCopyFeatureSuccess = useCallback(async (message: string) => {
-    setFeedback(`✅ ${message}`);
-    setTimeout(() => setFeedback(null), 3000);
+    showToast("success", `✅ ${message}`);
 
     if (detail) {
       const updatedDetail = await getMapDetail(detail.id);
@@ -646,8 +603,7 @@ export default function MapEditor() {
 
     const sourceLayer = detail.layers.find(l => l.id === sourceLayerId);
     if (!sourceLayer) {
-      setFeedback('❌ Source layer not found');
-      setTimeout(() => setFeedback(null), 2000);
+      showToast("error", "❌ Source layer not found");
       return;
     }
 
@@ -656,29 +612,25 @@ export default function MapEditor() {
       const featureIndex = findFeatureIndex(layerData, contextMenu.feature);
 
       if (featureIndex === -1) {
-        setFeedback('❌ Feature not found in layer');
-        setTimeout(() => setFeedback(null), 2000);
+        showToast("error", "❌ Feature not found in layer");
         return;
       }
 
       const success = await copyZoneToLayer(detail.id, sourceLayerId, targetLayerId, featureIndex);
 
       if (success) {
-        setFeedback('✅ Zone copied to layer successfully!');
-        setTimeout(() => setFeedback(null), 2000);
+        showToast("success", "✅ Zone copied to layer successfully!");
 
         const updatedDetail = await getMapDetail(detail.id);
         setDetail(updatedDetail);
       } else {
-        setFeedback('❌ Failed to copy zone to layer');
-        setTimeout(() => setFeedback(null), 2000);
+        showToast("error", "❌ Failed to copy zone to layer");
       }
     } catch (error) {
       console.error('Error copying zone:', error);
-      setFeedback('❌ Error copying zone');
-      setTimeout(() => setFeedback(null), 2000);
+      showToast("error", "❌ Error copying zone");
     }
-  }, [detail, contextMenu]);
+  }, [detail, contextMenu, showToast]);
 
   const handleDeleteZone = useCallback(async () => {
     if (!detail || !contextMenu.feature || !contextMenu.layerId) return;
@@ -693,8 +645,7 @@ export default function MapEditor() {
     const targetLayer = detail.layers.find(l => l.id === layerId);
 
     if (!targetLayer) {
-      setFeedback('❌ Layer not found');
-      setTimeout(() => setFeedback(null), 2000);
+      showToast("error", "❌ Layer not found");
       return;
     }
 
@@ -703,8 +654,7 @@ export default function MapEditor() {
       const featureIndex = findFeatureIndex(layerData, contextMenu.feature);
 
       if (featureIndex === -1) {
-        setFeedback('❌ Feature not found in layer');
-        setTimeout(() => setFeedback(null), 2000);
+        showToast("error", "❌ Feature not found in layer");
         return;
       }
 
@@ -713,8 +663,7 @@ export default function MapEditor() {
       const success = await updateLayerData(detail.id, layerId, updatedGeoJSON);
 
       if (success) {
-        setFeedback('✅ Zone deleted successfully!');
-        setTimeout(() => setFeedback(null), 2000);
+        showToast("success", "✅ Zone deleted successfully!");
 
         if (contextMenu.leafletLayer && mapRef.current) {
           mapRef.current.removeLayer(contextMenu.leafletLayer);
@@ -723,20 +672,17 @@ export default function MapEditor() {
         const updatedDetail = await getMapDetail(detail.id);
         setDetail(updatedDetail);
       } else {
-        setFeedback('❌ Failed to delete zone');
-        setTimeout(() => setFeedback(null), 2000);
+        showToast("error", "❌ Failed to delete zone");
       }
     } catch (error) {
       console.error('Error deleting zone:', error);
-      setFeedback('❌ Error deleting zone');
-      setTimeout(() => setFeedback(null), 2000);
+      showToast("error", "❌ Error deleting zone");
     }
-  }, [detail, contextMenu]);
+  }, [detail, contextMenu, showToast]);
 
   const saveView = useCallback(async () => {
     if (!detail || !mapRef.current) return;
     setBusySaveView(true);
-    setFeedback(null);
     try {
       const c = mapRef.current.getCenter();
       const view = {
@@ -745,14 +691,13 @@ export default function MapEditor() {
       };
       const body: UpdateMapRequest = { viewState: JSON.stringify(view) };
       await updateMap(detail.id, body);
-      setFeedback("Đã lưu vị trí hiển thị.");
+      showToast("success", "Đã lưu vị trí hiển thị.");
     } catch (e) {
-      setFeedback(e instanceof Error ? e.message : "Lưu thất bại");
+      showToast("error", e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
       setBusySaveView(false);
-      setTimeout(() => setFeedback(null), 1800);
     }
-  }, [detail]);
+  }, [detail, showToast]);
 
   const GuardBtn: React.FC<
     React.PropsWithChildren<{ can: boolean; title: string; onClick?: () => void; disabled?: boolean }>
@@ -824,14 +769,14 @@ export default function MapEditor() {
                 Properties
               </button>
 
-              <GuardBtn can={perms.marker} title="Vẽ điểm" onClick={() => enableDraw("Marker")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn can={!!mapRef.current} title="Vẽ điểm" onClick={() => enableDraw("Marker")}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 21s-6-4.5-6-10a6 6 0 1 1 12 0c0 5.5-6 10-6 10z" />
                   <circle cx="12" cy="11" r="2.5" />
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.line} title="Vẽ đường" onClick={() => enableDraw("Line")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn can={!!mapRef.current} title="Vẽ đường" onClick={() => enableDraw("Line")}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="5" cy="7" r="2" />
                   <circle cx="19" cy="17" r="2" />
@@ -839,31 +784,31 @@ export default function MapEditor() {
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.polygon} title="Vẽ vùng" onClick={() => enableDraw("Polygon")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn can={!!mapRef.current} title="Vẽ vùng" onClick={() => enableDraw("Polygon")}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M7 4h10l4 6-4 10H7L3 10 7 4z" />
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.rectangle} title="Vẽ hình chữ nhật" onClick={() => enableDraw("Rectangle")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn can={!!mapRef.current} title="Vẽ hình chữ nhật" onClick={() => enableDraw("Rectangle")}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="5" y="6" width="14" height="12" rx="1.5" />
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.circle} title="Vẽ hình tròn" onClick={() => enableDraw("Circle")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn can={!!mapRef.current} title="Vẽ hình tròn" onClick={() => enableDraw("Circle")}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="8.5" />
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.text} title="Thêm chữ" onClick={() => enableDraw("Text")} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn can={!!mapRef.current} title="Thêm chữ" onClick={() => enableDraw("Text")}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 6h16M12 6v12" />
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.cut} title="Cắt polygon" onClick={enableCutPolygon} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn can={!!mapRef.current} title="Cắt polygon" onClick={enableCutPolygon}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="5.5" cy="8" r="2" />
                   <circle cx="5.5" cy="16" r="2" />
@@ -871,7 +816,7 @@ export default function MapEditor() {
                 </svg>
               </GuardBtn>
 
-              <GuardBtn can={perms.rotate} title="Xoay đối tượng" onClick={toggleRotate} disabled={toolsLoading || !mapRef.current}>
+              <GuardBtn can={!!mapRef.current} title="Xoay đối tượng" onClick={toggleRotate}>
                 <svg viewBox="0 0 24 24" width="22" height="22" stroke="currentColor" fill="none" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M20 11a8 8 0 1 1-2.2-5.5" />
                   <path d="M20 4v7h-7" />
@@ -920,7 +865,6 @@ export default function MapEditor() {
             </div>
           </div>
 
-          {feedback && <div className="px-1 pt-2 text-center text-xs text-emerald-300">{feedback}</div>}
         </div>
       </div>
 
@@ -1003,8 +947,8 @@ export default function MapEditor() {
         onClose={() => setShowLayerPicker(false)}
       />
 
-      {/* Copy Feature Dialog - Temporarily disabled */}
-      {/* <CopyFeatureDialog
+      {/* Copy Feature Dialog */}
+      <CopyFeatureDialog
         isOpen={copyFeatureDialog.isOpen}
         onClose={() => setCopyFeatureDialog(prev => ({ ...prev, isOpen: false }))}
         mapId={detail?.id || ''}
@@ -1013,7 +957,7 @@ export default function MapEditor() {
         featureIndex={copyFeatureDialog.featureIndex}
         initialCopyMode={copyFeatureDialog.copyMode}
         onSuccess={handleCopyFeatureSuccess}
-      /> */}
+      />
 
       <style jsx global>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }

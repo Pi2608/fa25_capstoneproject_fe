@@ -4,15 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
-import {
-  getPlans,
-  type Plan,
-  getJson,
-  getMyOrganizations,
-  type MyOrganizationDto,
-  getUnreadNotificationCount,
-} from "@/lib/api";
+
 import { useAuthStatus } from "@/contexts/useAuthStatus";
+import { getMyMembership, getPlans, Plan } from "@/lib/api-membership";
+import { getMyOrganizations, MyOrganizationDto } from "@/lib/api-organizations";
+import { getUnreadNotificationCount } from "@/lib/api-user";
 
 type MyMembership = {
   planId: number;
@@ -72,8 +68,10 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
 
   const [orgs, setOrgs] = useState<MyOrganizationDto[] | null>(null);
   const [orgsErr, setOrgsErr] = useState<string | null>(null);
+  const [currentOrgMembership, setCurrentOrgMembership] = useState<any>(null);
 
   const [unread, setUnread] = useState<number>(0);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -88,26 +86,16 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
         const ps = await getPlans();
         if (!alive) return;
         setPlans(ps);
-        try {
-          const me = await getJson<MyMembership>("/membership/me");
-          if (!alive) return;
-          const found = ps.find((p) => p.planId === me.planId);
-          if (found) {
-            setPlanLabel(found.planName);
-            setPlanStatus(me.status ?? "active");
-            return;
-          }
-        } catch {}
-        const free = ps.find((p) => p.priceMonthly === 0);
-        setPlanLabel(free?.planName ?? "Miễn phí");
-        setPlanStatus("active");
+        // Don't set plan info here, let taiToChuc handle it
+        return ps;
       } catch {
         setPlanLabel("Miễn phí");
         setPlanStatus("active");
+        return null;
       }
     }
 
-    async function taiToChuc() {
+    async function taiToChuc(plansData?: Plan[] | null) {
       if (!isLoggedIn) {
         setOrgs(null);
         setOrgsErr(null);
@@ -128,6 +116,32 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
         }
         setOrgs(items);
         setOrgsErr(null);
+        
+        // Load membership for the first organization (current context)
+        if (items.length > 0) {
+          try {
+            const membership = await getMyMembership(items[0].orgId);
+            if (!alive) return;
+            setCurrentOrgMembership(membership);
+            
+            // Update plan info based on membership
+            if (membership && plansData) {
+              const found = plansData.find((p) => p.planId === membership.planId);
+              if (found) {
+                setPlanLabel(found.planName);
+                setPlanStatus(membership.status ?? "active");
+                return;
+              }
+            }
+          } catch {
+            // If no membership found, fall back to free plan
+            if (plansData) {
+              const free = plansData.find((p) => p.priceMonthly === 0);
+              setPlanLabel(free?.planName ?? "Miễn phí");
+              setPlanStatus("active");
+            }
+          }
+        }
       } catch {
         if (!alive) return;
         setOrgsErr("Không thể tải danh sách tổ chức.");
@@ -150,17 +164,20 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       }
     }
 
-    taiGoiThanhVien();
-    taiToChuc();
+    // Load plans first, then organizations with membership
+    taiGoiThanhVien().then((plans) => {
+      taiToChuc(plans);
+    });
     taiThongBaoChuaDoc();
 
     const onAuthChanged = () => {
-      taiGoiThanhVien();
-      taiToChuc();
+      taiGoiThanhVien().then((plans) => {
+        taiToChuc(plans);
+      });
       taiThongBaoChuaDoc();
     };
     const onOrgsChanged = () => {
-      taiToChuc();
+      taiToChuc(plans);
     };
     const onNotifChanged = () => {
       taiThongBaoChuaDoc();
@@ -199,8 +216,8 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
 
   return (
     <main className="min-h-screen text-zinc-100 bg-gradient-to-b from-[#0b0f0e] via-emerald-900/10 to-[#0b0f0e]">
-      <div className="flex min-h-screen">
-        <aside className="w-72 hidden md:flex md:flex-col justify-between border-r border-white/10 p-6 bg-gradient-to-b from-zinc-950/70 via-emerald-900/5 to-zinc-950/70 backdrop-blur">
+      <div className="flex min-h-screen flex-col lg:flex-row">
+        <aside className="w-64 hidden lg:flex lg:flex-col justify-between border-r border-white/10 p-6 bg-gradient-to-b from-zinc-950/70 via-emerald-900/5 to-zinc-950/70 backdrop-blur fixed left-0 top-0 h-screen overflow-y-auto z-10">
           <div>
             <div className="mb-6">
               <div className="text-[11px] uppercase tracking-widest text-emerald-300/70 mb-2">
@@ -232,7 +249,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 Tổ chức
               </div>
               <div className="space-y-1">
-                <SidebarLink href="/profile/create-org" label="Tạo tổ chức" />
+                <SidebarLink href="/register/organization" label="Tạo tổ chức" />
                 {orgs === null && (
                   <>
                     <div className="h-8 rounded-md bg-white/5 animate-pulse" />
@@ -302,12 +319,12 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <header className="md:hidden w-full sticky top-0 z-20 bg-zinc-900/70 backdrop-blur-sm border-b border-emerald-400/20">
+        <header className="lg:hidden w-full md:sticky md:top-0 z-20 bg-zinc-900/70 backdrop-blur-sm border-b border-emerald-400/20">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="h-3 w-3 rounded-md bg-emerald-400/90 shadow" />
               <span className="text-lg font-semibold bg-gradient-to-r from-emerald-300 to-emerald-200 bg-clip-text text-transparent">
-                CustomMapOSM
+              IMOS
               </span>
             </div>
             <div className="flex items-center gap-3">
@@ -340,11 +357,58 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
               >
                 Chọn gói
               </Link>
+              <button
+                type="button"
+                aria-label="Mở menu"
+                onClick={() => setMobileNavOpen(true)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+              >
+                {/* Hamburger */}
+                <span className="block h-0.5 w-4 bg-current" />
+                <span className="sr-only">Menu</span>
+              </button>
             </div>
           </div>
         </header>
 
-        <section className="flex-1 overflow-auto px-4 sm:px-8 lg:px-10 py-8 max-w-6xl mx-auto">
+        {/* Mobile drawer menu */}
+        {mobileNavOpen && (
+          <div className="lg:hidden fixed inset-0 z-30">
+            <button
+              type="button"
+              aria-label="Đóng menu"
+              className="absolute inset-0 bg-black/60"
+              onClick={() => setMobileNavOpen(false)}
+            />
+            <div className="absolute left-0 top-0 h-full w-80 max-w-[85vw] bg-zinc-950/95 backdrop-blur border-r border-white/10 p-4 overflow-y-auto">
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-sm text-zinc-400">Điều hướng</span>
+                <button
+                  type="button"
+                  aria-label="Đóng"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="space-y-1">
+                <SidebarLink href="/" label="Trang chủ" />
+                <SidebarLink href="/profile" label="Thông tin cá nhân" />
+                <SidebarLink href="/profile/recents" label="Gần đây" />
+                <SidebarLink href="/profile/drafts" label="Bản nháp" />
+                <SidebarLink href="/profile/invite" label="Mời thành viên" />
+                <SidebarLink href="/profile/notifications" label="Thông báo" />
+                <SidebarLink href="/profile/settings" label="Cài đặt" />
+                <div className="pt-3 mt-3 border-t border-white/10" />
+                <SidebarLink href="/register/organization" label="Tạo tổ chức" />
+                <SidebarLink href="/profile/help" label="Trợ giúp" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        <section className="flex-1 overflow-auto px-4 sm:px-8 lg:px-10 py-8 lg:ml-64">
           {children}
         </section>
       </div>

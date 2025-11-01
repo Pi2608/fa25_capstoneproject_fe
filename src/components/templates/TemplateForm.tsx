@@ -1,7 +1,7 @@
 "use client";
 
+import { createMapTemplateFromGeoJson } from "@/lib/api-maps";
 import { useState } from "react";
-import { createMapTemplateFromGeoJson } from "@/lib/api";
 
 interface ApiError {
   message?: string;

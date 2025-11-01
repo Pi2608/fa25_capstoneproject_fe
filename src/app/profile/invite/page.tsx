@@ -1,14 +1,8 @@
 "use client";
 
+import { acceptInvite, AcceptInviteOrganizationReqDto, GetInvitationsResDto, getMyInvitations, rejectInvite, RejectInviteOrganizationReqDto } from "@/lib/api-organizations";
 import { useEffect, useMemo, useState } from "react";
-import {
-  getMyInvitations,
-  type GetInvitationsResDto,
-  acceptInvite,
-  rejectInvite,
-  type AcceptInviteOrganizationReqDto,
-  type RejectInviteOrganizationReqDto,
-} from "@/lib/api";
+
 
 function fmtDate(iso?: string) {
   if (!iso) return "—";

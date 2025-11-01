@@ -1,13 +1,8 @@
 "use client";
 
+import { getMyMembershipStatus, getPlans, Plan } from "@/lib/api-membership";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getPlans, type Plan, getJson } from "@/lib/api";
-
-type MyMembership = {
-  planId: number;
-  status: "active" | "expired" | "pending" | string;
-};
 
 function safeMessage(err: unknown) {
   if (err instanceof Error) return err.message;
@@ -34,7 +29,7 @@ export default function MembershipPage() {
         setPlans(ps);
 
         try {
-          const me = await getJson<MyMembership>("/membership/me");
+          const me = await getMyMembershipStatus();
           if (!alive) return;
           const found = ps.find((p) => p.planId === me.planId);
           if (found) {

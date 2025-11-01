@@ -1,19 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  getOrganizationMaps,
-  getMyOrgMembership,
-  getPlans,
-  getMapById,
-  getMyOrganizations,
-  getUserUsage,
-  checkUserQuota,
-  type MapDto,
-  type GetMyOrganizationsResDto,
-  type UserUsageResponse,
-  type CheckQuotaRequest,
-} from "@/lib/api";
+import { formatDate, formatDateTime, formatNumber } from "@/utils/formatUtils";
+import { getMyOrganizations, GetMyOrganizationsResDto } from "@/lib/api-organizations";
+import { CheckQuotaRequest, checkUserQuota, getUserUsage, UserUsageResponse } from "@/lib/api-user";
+import { getMyOrgMembership, getPlans } from "@/lib/api-membership";
+import { getMapById, getOrganizationMaps, getMapViews, MapDto } from "@/lib/api-maps";
 
 type UsageLimits = {
   viewsMonthly?: number | null;
@@ -70,49 +62,24 @@ function normalize(s?: string | null) {
 }
 function capText(v?: number | null, unit?: string) {
   if (v == null) return "không giới hạn";
-  const t = v.toLocaleString();
+  const t = formatNumber(v);
   return unit ? `${t} ${unit}` : t;
 }
 function percent(used: number, max?: number | null) {
   if (max == null || max <= 0) return 0;
   return Math.min(100, Math.round((used / max) * 100));
 }
-function firstOfNextMonth(d = new Date()) {
-  const y = d.getFullYear();
-  const m = d.getMonth();
+function firstOfNextMonth(d?: Date) {
+  const date = d || new Date();
+  const y = date.getFullYear();
+  const m = date.getMonth();
   return new Date(y, m + 1, 1);
 }
 function fmtDate(d: Date) {
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return formatDate(d);
 }
 function bytesToMB(b: number) {
   return Math.round((b / (1024 * 1024)) * 100) / 100;
-}
-async function tryGetMapViews(mapId: string): Promise<number> {
-  const mod = await import("@/lib/api");
-  const apiFetch = (mod as unknown as {
-    apiFetch<T>(p: string, o?: RequestInit & { method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" }): Promise<T>;
-  }).apiFetch;
-  const paths = [
-    `/maps/${mapId}/views`,
-    `/maps/${mapId}/stats`,
-    `/analytics/maps/${mapId}/views`,
-    `/analytics/map-views?mapId=${encodeURIComponent(mapId)}`,
-  ];
-  for (const p of paths) {
-    try {
-      const res = await apiFetch<unknown>(p, { method: "GET" });
-      if (typeof res === "number") return res;
-      if (res && typeof res === "object") {
-        const obj = res as Record<string, unknown>;
-        if (typeof obj.views === "number") return obj.views as number;
-        if (typeof obj.viewsMonthly === "number") return obj.viewsMonthly as number;
-        if (typeof obj.total === "number") return obj.total as number;
-        if (typeof obj.month === "number") return obj.month as number;
-      }
-    } catch {}
-  }
-  return 0;
 }
 
 export default function Page() {
@@ -172,7 +139,7 @@ export default function Page() {
         const list: MapDto[] = mapsRes.status === "fulfilled" ? (mapsRes.value ?? []) : [];
         const rows: MapRow[] = await Promise.all(
           list.map(async (m) => {
-            const [views, detail] = await Promise.allSettled([tryGetMapViews(m.id), getMapById(m.id)]);
+            const [views, detail] = await Promise.allSettled([getMapViews(m.id), getMapById(m.id)]);
             const v = views.status === "fulfilled" ? views.value : 0;
             const d = detail.status === "fulfilled" ? (detail.value as unknown) : null;
             let createdBy: string | null = null;
@@ -327,7 +294,7 @@ export default function Page() {
                   />
                 </div>
                 <div className="mt-1 text-sm text-neutral-300">
-                  {mapsUsedFromUsage.toLocaleString()} / {capText(mapsLimitFromUsage)}
+                  {formatNumber(mapsUsedFromUsage)} / {capText(mapsLimitFromUsage)}
                 </div>
               </div>
               <div className="rounded-lg border border-neutral-800 p-3">
@@ -339,7 +306,7 @@ export default function Page() {
                   />
                 </div>
                 <div className="mt-1 text-sm text-neutral-300">
-                  {layersUsedFromUsage.toLocaleString()} / {capText(layersLimitFromUsage)}
+                  {formatNumber(layersUsedFromUsage)} / {capText(layersLimitFromUsage)}
                 </div>
               </div>
               <div className="rounded-lg border border-neutral-800 p-3">
@@ -351,7 +318,7 @@ export default function Page() {
                   />
                 </div>
                 <div className="mt-1 text-sm text-neutral-300">
-                  {membersUsedFromUsage.toLocaleString()} / {capText(membersLimitFromUsage)}
+                  {formatNumber(membersUsedFromUsage)} / {capText(membersLimitFromUsage)}
                 </div>
               </div>
               <div className="rounded-lg border border-neutral-800 p-3">
@@ -374,7 +341,7 @@ export default function Page() {
                   <div className="mt-1 text-xs text-neutral-500">Chu kỳ: {userUsage.period}</div>
                 )}
                 {userUsage?.lastReset && (
-                  <div className="text-xs text-neutral-500">Làm mới lần cuối: {new Date(userUsage.lastReset).toLocaleString()}</div>
+                  <div className="text-xs text-neutral-500">Làm mới lần cuối: {formatDateTime(userUsage.lastReset)}</div>
                 )}
               </div>
             </div>
@@ -473,7 +440,7 @@ export default function Page() {
                 <div className="h-full bg-pink-400" style={{ width: `${percent(totalViews, viewsMax)}%` }} />
               </div>
               <div className="mt-2 text-sm text-neutral-300">
-                <span className="text-pink-300 font-medium">{totalViews.toLocaleString()}</span> trong{" "}
+                <span className="text-pink-300 font-medium">{formatNumber(totalViews)}</span> trong{" "}
                 <span className="font-medium">{capText(viewsMax)}</span> / tháng
               </div>
               <p className="mt-1 text-xs text-neutral-400">Mỗi lần người dùng tải bản đồ trên trình duyệt hoặc nhúng đều được tính là một lượt xem.</p>
@@ -507,7 +474,7 @@ export default function Page() {
                           </a>
                         </td>
                         <td className="py-2 pr-4">{m.createdBy ?? "—"}</td>
-                        <td className="py-2 pr-4">{(m.views ?? 0).toLocaleString()}</td>
+                        <td className="py-2 pr-4">{formatNumber(m.views ?? 0)}</td>
                       </tr>
                     ))}
                 </tbody>

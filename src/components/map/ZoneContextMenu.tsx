@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import type { Feature as GeoJSONFeature } from "geojson";
 
 interface ZoneContextMenuProps {
@@ -33,15 +33,12 @@ export default function ZoneContextMenu(props: ZoneContextMenuProps) {
     zoneName = "Zone",
   } = props;
 
-  const [showCopySubmenu, setShowCopySubmenu] = useState(false);
-  const submenuRef = useRef<HTMLDivElement>(null);
-  const menuItemRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     if (!visible) return;
 
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
+      if (!target || !target.closest) return;
       if (!target.closest(".zone-context-menu")) onClose();
     };
     const handleEscape = (e: KeyboardEvent) => {
@@ -63,18 +60,11 @@ export default function ZoneContextMenu(props: ZoneContextMenuProps) {
         icon: string;
         label: string;
         onClick?: () => void;
-        hasSubmenu?: false;
         shortcut?: string;
         danger?: boolean;
         type?: undefined;
       }
     | { type: "divider" }
-    | {
-        icon: string;
-        label: string;
-        hasSubmenu: true;
-        shortcut?: string;
-      }
   > = [
     {
       icon: "🔍",
@@ -95,10 +85,20 @@ export default function ZoneContextMenu(props: ZoneContextMenuProps) {
       shortcut: "C",
     },
     {
-      icon: "📋",
-      label: "Copy to Layer",
-      hasSubmenu: true,
-      shortcut: "Ctrl+C",
+      icon: "📁",
+      label: "Copy to Existing Layer",
+      onClick: () => {
+        onCopyToExistingLayer();
+        onClose();
+      },
+    },
+    {
+      icon: "➕",
+      label: "Copy to New Layer",
+      onClick: () => {
+        onCopyToNewLayer();
+        onClose();
+      },
     },
     { type: "divider" },
     {
@@ -128,83 +128,6 @@ export default function ZoneContextMenu(props: ZoneContextMenuProps) {
         {menuItems.map((item, index) => {
           if ("type" in item && item.type === "divider") {
             return <div key={`divider-${index}`} className="my-1 border-t border-white/10" />;
-          }
-
-          if ("hasSubmenu" in item && item.hasSubmenu) {
-            return (
-              <div key={index} className="relative">
-                <div
-                  className="
-                    w-full px-3 py-2 text-left text-sm flex items-center justify-between gap-3
-                    transition-colors cursor-pointer
-                    text-white hover:bg-white/10
-                  "
-                  onMouseEnter={() => setShowCopySubmenu(true)}
-                  onMouseLeave={() => {
-                    setTimeout(() => {
-                      if (
-                        !submenuRef.current?.matches(":hover") &&
-                        !menuItemRef.current?.matches(":hover")
-                      ) {
-                        setShowCopySubmenu(false);
-                      }
-                    }, 50);
-                  }}
-                  ref={menuItemRef}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">{item.icon}</span>
-                    <span>{item.label}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {item.shortcut && (
-                      <span className="text-xs text-white/40">{item.shortcut}</span>
-                    )}
-                    <span className="text-xs text-white/40">▶</span>
-                  </div>
-                </div>
-
-                {showCopySubmenu && (
-                  <div
-                    ref={submenuRef}
-                    className="absolute left-full top-0 bg-zinc-900 border border-white/10 rounded-lg shadow-2xl py-1 min-w-[180px] z-[10001]"
-                    onMouseEnter={() => setShowCopySubmenu(true)}
-                    onMouseLeave={() => {
-                      setTimeout(() => {
-                        if (
-                          !submenuRef.current?.matches(":hover") &&
-                          !menuItemRef.current?.matches(":hover")
-                        ) {
-                          setShowCopySubmenu(false);
-                        }
-                      }, 50);
-                    }}
-                    style={{ marginLeft: "-1px", paddingLeft: "1px" }}
-                  >
-                    <button
-                      onClick={() => {
-                        onCopyToExistingLayer();
-                        onClose();
-                      }}
-                      className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 text-white hover:bg-white/10 transition-colors"
-                    >
-                      <span className="text-base">📁</span>
-                      <span>Copy to Existing Layer</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        onCopyToNewLayer();
-                        onClose();
-                      }}
-                      className="w-full px-3 py-2 text-left text-sm flex items-center gap-2 text-white hover:bg-white/10 transition-colors"
-                    >
-                      <span className="text-base">➕</span>
-                      <span>Copy to New Layer</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
           }
 
           return (

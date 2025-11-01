@@ -3,6 +3,9 @@ import "@/styles/globals.css";
 import { Manrope } from "next/font/google";
 import LeafletStylesClient from "@/components/LeafletStylesClient";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { ToastProvider } from "@/contexts/ToastContext";
+import { AuthProvider } from "@/contexts/AuthContext";
+import ToastContainer from "@/components/ui/ToastContainer";
 
 const manrope = Manrope({
   subsets: ["latin", "vietnamese"],
@@ -12,7 +15,7 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "CustomMapOSM",
+  title: "IMOS",
   description: "Create • Customize • Export maps",
 };
 
@@ -39,8 +42,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         "
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <LeafletStylesClient />
-          {children}
+          <AuthProvider>
+            <ToastProvider>
+              <LeafletStylesClient />
+              {children}
+              <ToastContainer />
+            </ToastProvider>
+          </AuthProvider>
         </ThemeProvider>
       </body>
     </html>

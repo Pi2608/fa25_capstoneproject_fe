@@ -3,8 +3,8 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createMapFromTemplate, createMap } from "@/lib/api";
 import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
+import { createMap, createMapFromTemplate } from "@/lib/api-maps";
 
 type Sample = {
   key: string;
@@ -12,7 +12,7 @@ type Sample = {
   author: string;
   lastViewed: string;
   blurb: string;
-  templateId?: string; 
+  templateId?: string;
   preset?: {
     name: string;
     description?: string;
@@ -124,7 +124,12 @@ export default function SamplesPage() {
     setBusy(s.key);
     try {
       if (s.templateId) {
-        const res = await createMapFromTemplate({ templateId: s.templateId });
+        const res = await createMapFromTemplate({
+          templateId: s.templateId,
+          customName: s.title?.trim() || "Bản đồ mới từ template",
+          workspaceId: null,
+        });
+
         router.push(`/maps/${res.mapId}`);
       } else if (s.preset) {
         const presetData = convertPresetToNewFormat(s.preset);
@@ -133,6 +138,7 @@ export default function SamplesPage() {
           description: s.blurb,
           isPublic: false,
           ...presetData,
+          workspaceId: null,
         });
         router.push(`/maps/${r.mapId}`);
       } else {

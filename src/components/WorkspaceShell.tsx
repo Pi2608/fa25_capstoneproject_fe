@@ -4,15 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
-import {
-  getPlans,
-  type Plan,
-  getJson,
-  getMyOrganizations,
-  type MyOrganizationDto,
-} from "@/lib/api";
-
-type MyMembership = { planId: number; status: string };
+import { getMyOrganizations, MyOrganizationDto } from "@/lib/api-organizations";
+import { getMyMembershipStatus, getPlans, Plan } from "@/lib/api-membership";
 
 const SidebarLink = ({ href, label }: { href: string; label: string }) => {
   const pathname = usePathname();
@@ -57,7 +50,7 @@ export default function WorkspaceShell({ children }: { children: ReactNode }) {
         if (!alive) return;
 
         try {
-          const me = await getJson<MyMembership>("/membership/me");
+          const me = await getMyMembershipStatus();
           if (!alive) return;
           const found = ps.find((p) => p.planId === me.planId);
           setPlanLabel(found?.planName ?? "Free");
@@ -113,7 +106,7 @@ export default function WorkspaceShell({ children }: { children: ReactNode }) {
               </div>
               <div className="space-y-1">
                 <SidebarLink
-                  href="/profile/create-org"
+                  href="/register/organization"
                   label="Create Organization"
                 />
                 {orgsErr && (
@@ -188,7 +181,7 @@ export default function WorkspaceShell({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2">
               <span className="h-3 w-3 rounded-md bg-emerald-400/90 shadow" />
               <span className="text-lg font-semibold bg-gradient-to-r from-emerald-300 to-emerald-200 bg-clip-text text-transparent">
-                CustomMapOSM
+              IMOS
               </span>
             </div>
             <div className="flex items-center gap-2 text-xs">

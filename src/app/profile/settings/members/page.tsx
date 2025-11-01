@@ -1,20 +1,20 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import {
-  getMyOrganizations,
-  type MyOrganizationDto,
-  getOrganizationMembers,
-  type GetOrganizationMembersResDto,
-  type MemberDto,
-  updateMemberRole as apiUpdateMemberRole,
-  removeMember as apiRemoveMember,
-  transferOwnership as apiTransferOwnership,
-  inviteMember as apiInviteMember,
-  getMe,
-  type Me,
-} from "@/lib/api";
+
 import { useAuthStatus } from "@/contexts/useAuthStatus";
+import { 
+  getMyOrganizations, 
+  getOrganizationMembers, 
+  updateMemberRole,
+  transferOwnership,
+  removeMember,
+  inviteMember,
+  GetOrganizationMembersResDto, 
+  MemberDto, 
+  MyOrganizationDto 
+} from "@/lib/api-organizations";
+import { getMe, Me } from "@/lib/api-auth";
 
 type MemberRow = {
   memberId: string;
@@ -219,7 +219,7 @@ export default function MembersPage() {
     );
     setBusy(memberId, true);
     try {
-      await apiUpdateMemberRole({ orgId: selectedOrgId, memberId, newRole });
+      await updateMemberRole({ orgId: selectedOrgId, memberId, newRole });
     } catch {
       setMembers(prev);
       alert("Failed to update role.");
@@ -256,9 +256,8 @@ export default function MembersPage() {
         newOwnerId: target.userId.trim(),
       };
 
-      console.log("transferOwnership payload:", payload);
 
-      const res = await apiTransferOwnership(payload);
+      const res = await transferOwnership(payload);
 
       await loadMembers(selectedOrgId);
       alert(res?.result || "Chuyển quyền sở hữu thành công.");
@@ -274,7 +273,7 @@ export default function MembersPage() {
     if (!confirm(`Remove ${nameOrEmail} from this organization?`)) return;
     setBusy(memberId, true);
     try {
-      await apiRemoveMember({ orgId: selectedOrgId, memberId });
+      await removeMember({ orgId: selectedOrgId, memberId });
       setMembers((list) => list.filter((m) => m.memberId !== memberId));
     } catch {
       alert("Failed to remove member.");
@@ -302,7 +301,7 @@ export default function MembersPage() {
     setInviteMsg(null);
     try {
       for (const email of emails) {
-        await apiInviteMember({
+        await inviteMember({
           orgId: selectedOrgId,
           memberEmail: email,
           memberType: inviteRole,

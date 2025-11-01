@@ -1,12 +1,7 @@
 "use client";
 
+import { copyFeatureToLayer, CopyFeatureToLayerRequest, getMapLayers, LayerInfo } from "@/lib/api-maps";
 import { useState, useEffect } from "react";
-import { 
-  getMapLayers, 
-  copyFeatureToLayer, 
-  type LayerInfo, 
-  type CopyFeatureToLayerRequest 
-} from "@/lib/api";
 
 interface CopyFeatureDialogProps {
   isOpen: boolean;
@@ -67,8 +62,6 @@ export default function CopyFeatureDialog({
   };
 
   const handleCopy = async () => {
-    console.log("🎯 handleCopy called!");
-    console.log("📊 Current state:", { copyMode, featureIndex, newLayerName, selectedLayerId });
     
     try {
       setLoading(true);
@@ -81,8 +74,6 @@ export default function CopyFeatureDialog({
         )
       };
 
-      console.log("🚀 Copying feature with request:", request);
-      console.log("📋 MapId:", mapId, "SourceLayerId:", sourceLayerId);
 
       const response = await copyFeatureToLayer(mapId, sourceLayerId, request);
       
@@ -102,19 +93,8 @@ export default function CopyFeatureDialog({
 
   if (!isOpen) return null;
   
-  console.log("🎨 CopyFeatureDialog rendering with props:", { isOpen, mapId, sourceLayerId, featureIndex });
-  console.log("🔍 Button state:", { 
-    loading, 
-    copyMode, 
-    selectedLayerId, 
-    newLayerName, 
-    isDisabled: loading || 
-      (copyMode === "existing" && !selectedLayerId) ||
-      (copyMode === "new" && !newLayerName.trim())
-  });
-
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10002]">
       <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4">
         <h2 className="text-xl font-bold mb-4 text-gray-800">Copy Feature</h2>
         
@@ -208,18 +188,6 @@ export default function CopyFeatureDialog({
           </div>
         </div>
 
-        {/* Test Button */}
-        <div className="mb-4">
-          <button
-            onClick={() => {
-              console.log("🧪 Test button clicked!");
-              alert("Test button works!");
-            }}
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
-          >
-            Test Button
-          </button>
-        </div>
 
         {/* Action Buttons */}
         <div className="flex justify-end space-x-3">
@@ -231,12 +199,7 @@ export default function CopyFeatureDialog({
             Cancel
           </button>
           <button
-            onMouseDown={() => console.log("🖱️ Copy Feature button mouse down!")}
-            onMouseUp={() => console.log("🖱️ Copy Feature button mouse up!")}
-            onClick={() => {
-              console.log("💥 Copy Feature button clicked!");
-              handleCopy();
-            }}
+            onClick={handleCopy}
             disabled={loading || 
               (copyMode === "existing" && !selectedLayerId) ||
               (copyMode === "new" && !newLayerName.trim())

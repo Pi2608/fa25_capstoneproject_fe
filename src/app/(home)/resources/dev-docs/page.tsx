@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-export const metadata: Metadata = { title: "Developer Docs — CustomMapOSM" };
+export const metadata: Metadata = { title: "Developer Docs — IMOS" };
 
 export default function DevDocsPage() {
   return (

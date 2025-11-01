@@ -5,20 +5,9 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
-import {
-  getJson,
-  getPlans,
-  type Plan,
-  subscribeToPlan,
-  type SubscribeRequest,
-  type SubscribeResponse,
-  getMyOrganizations,
-  type MyOrganizationDto,
-  getMyInvitations,
-  type InvitationDto,
-  getMyMembership,
-  type CurrentMembershipDto,
-} from "@/lib/api";
+import { CurrentMembershipDto, getMyMembership, getMyMembershipStatus, getPlans, Plan, SubscribeRequest, SubscribeResponse, subscribeToPlan } from "@/lib/api-membership";
+import { getMyInvitations, getMyOrganizations, InvitationDto, MyOrganizationDto } from "@/lib/api-organizations";
+
 
 function safeMessage(err: unknown) {
   if (err instanceof Error) return err.message;
@@ -35,10 +24,6 @@ const fmtCurrency = new Intl.NumberFormat(undefined, {
   minimumFractionDigits: 2,
 });
 
-type MyMembership = {
-  planId: number;
-  status: "active" | "expired" | "pending" | string;
-};
 
 export default function PricingPage() {
   const router = useRouter();
@@ -197,7 +182,7 @@ export default function PricingPage() {
 
         if (isLoggedIn) {
           try {
-            const me = await getJson<MyMembership>("/membership/me");
+            const me = await getMyMembershipStatus();
             if (!alive) return;
 
             const found = data.find((p) => p.planId === me.planId);
@@ -326,7 +311,7 @@ export default function PricingPage() {
           <Link href="/" className="flex items-center gap-2">
             <div className="h-6 w-6 rounded-md bg-emerald-400 shadow" />
             <span className="text-lg md:text-xl font-bold tracking-tight text-white">
-              CustomMapOSM
+              IMOS
             </span>
           </Link>
 
@@ -492,7 +477,7 @@ export default function PricingPage() {
             </p>
             <div className="flex gap-2">
               <button
-                onClick={() => router.push("/profile/create-org")}
+                onClick={() => router.push("/register/organization")}
                 className="px-3 py-1 text-xs bg-amber-500 hover:bg-amber-400 text-zinc-900 rounded-lg transition-colors"
               >
                 Create Organization

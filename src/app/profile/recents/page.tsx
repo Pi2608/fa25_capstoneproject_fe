@@ -2,16 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  getMyMaps,
-  createMapFromTemplate,
-  createMap,
-  updateMap,
-  deleteMap,
-  type MapDto,
-  type UpdateMapRequest,
-} from "@/lib/api";
+
 import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
+import { createMap, createMapFromTemplate, deleteMap, getMyMaps, MapDto, updateMap, UpdateMapRequest } from "@/lib/api-maps";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name";
@@ -243,6 +236,7 @@ export default function RecentsPage() {
       defaultBounds,
       viewState,
       baseMapProvider: "OSM",
+      workspaceId: null,
     });
 
     router.push(`/maps/${created.mapId}?created=1&name=${encodeURIComponent("Untitled Map")}`);
@@ -254,8 +248,13 @@ export default function RecentsPage() {
       if (sortKey === "name") {
         return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
       }
-      const aTime = new Date(a.createdAt ?? 0).getTime();
-      const bTime = new Date(b.createdAt ?? 0).getTime();
+      // Use updatedAt for recentlyModified, createdAt for dateCreated
+      const aTime = new Date(
+        sortKey === "recentlyModified" ? (a.updatedAt ?? a.createdAt ?? 0) : (a.createdAt ?? 0)
+      ).getTime();
+      const bTime = new Date(
+        sortKey === "recentlyModified" ? (b.updatedAt ?? b.createdAt ?? 0) : (b.createdAt ?? 0)
+      ).getTime();
       return aTime - bTime;
     });
     if (sortOrder === "desc") arr.reverse();
@@ -267,7 +266,11 @@ export default function RecentsPage() {
     setBusyKey(s.key);
     try {
       if (s.templateId) {
-        const r = await createMapFromTemplate({ templateId: s.templateId });
+        const r = await createMapFromTemplate({
+          templateId: s.templateId,
+          customName: (s.title ?? s.preset?.name ?? "Bản đồ mới từ template").trim(),
+          workspaceId: null,
+        });
         router.push(`/maps/${r.mapId}`);
       } else if (s.preset) {
         const presetData = convertPresetToNewFormat(s.preset);
@@ -276,6 +279,7 @@ export default function RecentsPage() {
           description: s.blurb,
           isPublic: false,
           ...presetData,
+          workspaceId: null,
         });
         router.push(`/maps/${r2.mapId}`);
       } else {
@@ -329,11 +333,11 @@ export default function RecentsPage() {
         ms.map((m) =>
           m.id === edit.map!.id
             ? {
-                ...m,
-                name: body.name ?? m.name,
-                description: body.description ?? m.description,
-                previewImageUrl: body.previewImageUrl ?? m.previewImageUrl,
-              }
+              ...m,
+              name: body.name ?? m.name,
+              description: body.description ?? m.description,
+              previewImageUrl: body.previewImageUrl ?? m.previewImageUrl,
+            }
             : m
         )
       );

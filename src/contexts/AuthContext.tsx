@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { parseToken } from "@/utils/jwt";
 
 export interface User {
   id: string;
@@ -11,6 +12,8 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoggedIn: boolean;
+  userId: string | null;
+  userEmail: string | null;
   setUser: (u: User | null) => void;
   setToken: (t: string | null) => void;
   logout: () => void;
@@ -24,12 +27,20 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
     try {
       const storedToken = localStorage.getItem(LS_TOKEN_KEY);
       const storedUserRaw = localStorage.getItem(LS_USER_KEY);
-      if (storedToken) setToken(storedToken);
+      if (storedToken) {
+        setToken(storedToken);
+        // Parse token to extract userId and email
+        const identity = parseToken(storedToken);
+        setUserId(identity.userId);
+        setUserEmail(identity.email);
+      }
       if (storedUserRaw) {
         const parsed = JSON.parse(storedUserRaw) as User;
         if (parsed && parsed.id) setUser(parsed);
@@ -40,8 +51,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      if (token) localStorage.setItem(LS_TOKEN_KEY, token);
-      else localStorage.removeItem(LS_TOKEN_KEY);
+      if (token) {
+        localStorage.setItem(LS_TOKEN_KEY, token);
+        // Parse token to extract userId and email
+        const identity = parseToken(token);
+        setUserId(identity.userId);
+        setUserEmail(identity.email);
+      } else {
+        localStorage.removeItem(LS_TOKEN_KEY);
+        setUserId(null);
+        setUserEmail(null);
+      }
     } catch {}
   }, [token]);
 
@@ -59,6 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {}
     setUser(null);
     setToken(null);
+    setUserId(null);
+    setUserEmail(null);
   };
 
   const value = useMemo<AuthContextType>(
@@ -66,11 +88,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       token,
       isLoggedIn: !!token,
+      userId,
+      userEmail,
       setUser,
       setToken,
       logout,
     }),
-    [user, token]
+    [user, token, userId, userEmail]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
