@@ -1,5 +1,5 @@
 import { clearAllAuthData } from "@/utils/authUtils";
-import { clearAuth } from "./api";
+import { clearAuth } from "./api-core";
 
 /**
  * Logout function that clears all authentication data

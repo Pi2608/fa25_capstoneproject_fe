@@ -77,6 +77,10 @@ export default function OrganizationSetupPage() {
       const res: SubscribeResponse = await subscribeToPlan(req);
       localStorage.setItem("planId", String(planIdMap[formData.orgPlan]));
       localStorage.setItem("orgId", orgId);
+      
+      // Store the organization ID for redirect after payment success
+      localStorage.setItem("redirect_after_payment", `/profile/organizations/${orgId}`);
+      
       window.location.href = res.paymentUrl;
     } catch (err) {
       console.error("Payment error:", err);
@@ -304,7 +308,14 @@ export default function OrganizationSetupPage() {
                     } else {
                       // Free plan - complete setup
                       showToast("success", "Organization ready! 🎉");
-                      setTimeout(() => router.push("/profile/organizations"), 1000);
+                      setTimeout(() => {
+                        const orgId = latestOrg?.orgId || createdOrgId;
+                        if (orgId) {
+                          router.push(`/profile/organizations/${orgId}`);
+                        } else {
+                          router.push("/profile/organizations");
+                        }
+                      }, 1000);
                     }
                   } catch (e: unknown) {
                     console.error("Organization creation error:", e);
@@ -366,7 +377,14 @@ export default function OrganizationSetupPage() {
                     type="button"
                     onClick={() => {
                       showToast("success", "Organization created successfully! 🎉");
-                      setTimeout(() => router.push("/profile/organizations"), 1000);
+                      setTimeout(() => {
+                        const orgId = createdOrgId || localStorage.getItem("created_org_id");
+                        if (orgId) {
+                          router.push(`/profile/organizations/${orgId}`);
+                        } else {
+                          router.push("/profile/organizations");
+                        }
+                      }, 1000);
                     }}
                     className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                   >
