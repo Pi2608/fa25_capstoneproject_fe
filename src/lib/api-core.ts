@@ -17,9 +17,9 @@ export function getToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
-export function setAuthTokens(args: { accessToken?: string; token?: string; refreshToken?: string }) {
+export function setAuthTokens(args: { accessToken?: string;  refreshToken?: string }) {
   if (typeof window === "undefined") return;
-  const t = args.accessToken ?? args.token;
+  const t = args.accessToken;
   if (t) localStorage.setItem(ACCESS_TOKEN_KEY, t);
   else localStorage.removeItem(ACCESS_TOKEN_KEY);
 

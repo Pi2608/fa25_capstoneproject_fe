@@ -23,7 +23,7 @@ export async function login(req: LoginRequest): Promise<LoginResponse> {
   
   if (response.token ) {
     setAuthTokens({
-      token: response.token,
+      accessToken: response.token,
       refreshToken: response.refreshToken
     });
   }
