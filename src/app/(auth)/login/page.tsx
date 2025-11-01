@@ -10,6 +10,7 @@ import SubmitButton from "@/components/ui/SubmitButton";
 import AuthLinks from "@/components/auth/AuthLinks";
 import { AuthFormErrors } from "@/types/auth";
 import { login } from "@/lib/api-auth";
+import { getMe } from "@/lib/api-auth";
 
 export default function LoginClientSimple() {
   const router = useRouter();
@@ -20,7 +21,6 @@ export default function LoginClientSimple() {
 
   const [loading, setLoading] = useState<boolean>(false);
   const [errors, setErrors] = useState<AuthFormErrors>({});
-
 
   const validate = useCallback(() => {
     const newErrors: AuthFormErrors = {};
@@ -38,17 +38,25 @@ export default function LoginClientSimple() {
     setLoading(true);
     try {
       await login({ email, password });
-      
-      const isFirstTime = isFirstTimeUser();
-      
-      if (isFirstTime) {
-        showToast("success", "Login successful! Let's set up your account...");
-        setTimeout(() => router.push("/login/account-type"), 1000);
-      } else {
-        showToast("success", "Login successful! Redirecting...");
-        setTimeout(() => router.push("/"), 1000);
+
+      const me = await getMe();
+      const role = String(me?.role || "").toLowerCase();
+
+      if (role === "admin") {
+        showToast("success", "Login successful! Redirecting to dashboard…");
+        router.push("/dashboard");
+        return;
       }
-    } catch (err: unknown) {
+
+      const first = isFirstTimeUser();
+      if (first) {
+        showToast("success", "Login successful! Let's set up your account…");
+        router.push("/login/account-type");
+      } else {
+        showToast("success", "Login successful! Redirecting…");
+        router.push("/");
+      }
+    } catch {
       showToast("error", "Invalid email or password");
     } finally {
       setLoading(false);
@@ -59,7 +67,7 @@ export default function LoginClientSimple() {
     <div className="w-full max-w-md mx-auto">
       <h1 className="text-3xl md:text-4xl font-bold mb-2">Welcome back</h1>
       <p className="text-gray-600 dark:text-gray-300 mb-8">Sign in to your account</p>
-      
+
       <form onSubmit={onSubmit} className="space-y-6" noValidate>
         <InputField
           type="email"
@@ -94,7 +102,7 @@ export default function LoginClientSimple() {
       <AuthLinks
         links={[
           { href: "/forgot-password", text: "Forgot your password?" },
-          { href: "/register", text: "Create an account" }
+          { href: "/register", text: "Create an account" },
         ]}
         className="space-y-2"
       />

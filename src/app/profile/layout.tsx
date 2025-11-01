@@ -2,12 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
-
+import { ReactNode, useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
-import { getMyMembership, getPlans, Plan } from "@/lib/api-membership";
-import { getMyOrganizations, MyOrganizationDto } from "@/lib/api-organizations";
+import { getPlans, getMyMembership, type Plan } from "@/lib/api-membership";
+import { getMyOrganizations, type MyOrganizationDto } from "@/lib/api-organizations";
 import { getUnreadNotificationCount } from "@/lib/api-user";
 
 type MyMembership = {
@@ -15,26 +14,37 @@ type MyMembership = {
   status: "active" | "expired" | "pending" | string;
 };
 
-const SidebarLink = ({ href, label, right }: { href: string; label: string; right?: ReactNode }) => {
-  const pathname = usePathname();
-  const active = pathname === href;
+const SidebarLink = ({
+  href,
+  label,
+  right,
+  match = "prefix",
+}: {
+  href: string;
+  label: string;
+  right?: ReactNode;
+  match?: "exact" | "prefix";
+}) => {
+  const pathname = usePathname() || "";
+  const active =
+    match === "exact" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+
   return (
     <Link
       href={href}
       aria-current={active ? "page" : undefined}
       className={[
         "relative flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors",
-        "outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60",
         active
-          ? "text-emerald-300 bg-emerald-500/10 ring-1 ring-emerald-400/30"
-          : "text-zinc-300 hover:text-white hover:bg-white/5",
+          ? "text-emerald-800 bg-emerald-100 ring-1 ring-emerald-300 dark:text-emerald-100 dark:bg-emerald-900/40 dark:ring-emerald-800"
+          : "text-zinc-800 hover:text-emerald-700 hover:bg-emerald-50 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-white/5",
       ].join(" ")}
     >
       <span className="truncate">
         {active && (
           <span
             aria-hidden
-            className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded bg-emerald-400/80"
+            className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded bg-emerald-500"
           />
         )}
         {label}
@@ -57,36 +67,79 @@ function Bell({ className }: { className?: string }) {
   );
 }
 
+function Sun({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none">
+      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2m16 0h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
+
+function Moon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none">
+      <path
+        d="M21 12.79A9 9 0 1111.21 3a7 7 0 109.79 9.79z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
+
+function ThemeToggle() {
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return <div className="h-8 w-[100px] rounded-lg bg-zinc-200/60 dark:bg-zinc-800/60" />;
+
+  const isDark = (resolvedTheme ?? "light") === "dark";
+  return (
+    <button
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      aria-label="Đổi chế độ sáng/tối"
+      title={isDark ? "Chuyển sang nền sáng" : "Chuyển sang nền tối"}
+      className="inline-flex items-center gap-2 h-8 px-3 text-xs rounded-lg border transition-colors bg-white border-zinc-300 text-zinc-800 hover:bg-zinc-50 dark:bg-zinc-900/40 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-900/60"
+    >
+      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      <span>{isDark ? "Light" : "Dark"}</span>
+    </button>
+  );
+}
+
 export default function ProfileLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { isLoggedIn } = useAuthStatus();
+
   const isFullScreenMap = /\/profile\/organizations\/[^/]+\/maps\/new\/?$/.test(pathname || "");
 
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [planLabel, setPlanLabel] = useState<string | null>(null);
   const [planStatus, setPlanStatus] = useState<string | null>(null);
-
   const [orgs, setOrgs] = useState<MyOrganizationDto[] | null>(null);
   const [orgsErr, setOrgsErr] = useState<string | null>(null);
-  const [currentOrgMembership, setCurrentOrgMembership] = useState<any>(null);
-
+  const [currentOrgMembership, setCurrentOrgMembership] = useState<MyMembership | null>(null);
   const [unread, setUnread] = useState<number>(0);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
 
-    async function taiGoiThanhVien() {
+    async function loadPlans() {
       if (!isLoggedIn) {
         setPlanLabel(null);
         setPlanStatus(null);
-        return;
+        return null;
       }
       try {
         const ps = await getPlans();
-        if (!alive) return;
+        if (!alive) return null;
         setPlans(ps);
-        // Don't set plan info here, let taiToChuc handle it
         return ps;
       } catch {
         setPlanLabel("Miễn phí");
@@ -95,7 +148,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       }
     }
 
-    async function taiToChuc(plansData?: Plan[] | null) {
+    async function loadOrgs(plansData?: Plan[] | null) {
       if (!isLoggedIn) {
         setOrgs(null);
         setOrgsErr(null);
@@ -116,25 +169,20 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
         }
         setOrgs(items);
         setOrgsErr(null);
-        
-        // Load membership for the first organization (current context)
+
         if (items.length > 0) {
           try {
-            const membership = await getMyMembership(items[0].orgId);
+            const membership = (await getMyMembership(items[0].orgId)) as MyMembership;
             if (!alive) return;
             setCurrentOrgMembership(membership);
-            
-            // Update plan info based on membership
             if (membership && plansData) {
               const found = plansData.find((p) => p.planId === membership.planId);
               if (found) {
                 setPlanLabel(found.planName);
                 setPlanStatus(membership.status ?? "active");
-                return;
               }
             }
           } catch {
-            // If no membership found, fall back to free plan
             if (plansData) {
               const free = plansData.find((p) => p.priceMonthly === 0);
               setPlanLabel(free?.planName ?? "Miễn phí");
@@ -149,7 +197,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       }
     }
 
-    async function taiThongBaoChuaDoc() {
+    async function loadUnread() {
       if (!isLoggedIn) {
         setUnread(0);
         return;
@@ -164,31 +212,22 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       }
     }
 
-    // Load plans first, then organizations with membership
-    taiGoiThanhVien().then((plans) => {
-      taiToChuc(plans);
-    });
-    taiThongBaoChuaDoc();
+    loadPlans().then((ps) => loadOrgs(ps));
+    loadUnread();
 
     const onAuthChanged = () => {
-      taiGoiThanhVien().then((plans) => {
-        taiToChuc(plans);
-      });
-      taiThongBaoChuaDoc();
+      loadPlans().then((ps) => loadOrgs(ps));
+      loadUnread();
     };
-    const onOrgsChanged = () => {
-      taiToChuc(plans);
-    };
-    const onNotifChanged = () => {
-      taiThongBaoChuaDoc();
-    };
+    const onOrgsChanged = () => loadOrgs(plans);
+    const onNotifChanged = () => loadUnread();
 
     let timer: number | undefined;
     if (typeof window !== "undefined") {
       window.addEventListener("auth-changed", onAuthChanged);
       window.addEventListener("orgs-changed", onOrgsChanged as EventListener);
       window.addEventListener("notifications-changed", onNotifChanged as EventListener);
-      timer = window.setInterval(taiThongBaoChuaDoc, 30000);
+      timer = window.setInterval(loadUnread, 30000);
     }
 
     return () => {
@@ -207,25 +246,47 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       <main className="fixed inset-0 m-0 p-0 overflow-hidden bg-black">
         {children}
         <style jsx global>{`
-          html, body { height: 100%; overflow: hidden; }
-          .leaflet-container { width: 100%; height: 100%; }
+          html,
+          body {
+            height: 100%;
+            overflow: hidden;
+          }
+          .leaflet-container {
+            width: 100%;
+            height: 100%;
+          }
         `}</style>
       </main>
     );
   }
 
+  const pageBg =
+    "min-h-screen text-zinc-900 dark:text-zinc-100 bg-gradient-to-b from-emerald-50 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]";
+  const asideClass =
+    "hidden lg:flex lg:flex-col justify-between w-64 fixed left-0 top-0 h-screen z-10 border-r border-zinc-200 bg-white p-6 dark:border-white/10 dark:bg-background/80 supports-[backdrop-filter]:dark:bg-background/60 dark:backdrop-blur";
+  const headerClass =
+    "lg:hidden w-full md:sticky md:top-0 z-20 border-b border-zinc-200 bg-white/95 backdrop-blur dark:border-white/10 dark:bg-background/80 supports-[backdrop-filter]:dark:bg-background/60";
+
   return (
-    <main className="min-h-screen text-zinc-100 bg-gradient-to-b from-[#0b0f0e] via-emerald-900/10 to-[#0b0f0e]">
+    <main className={pageBg}>
       <div className="flex min-h-screen flex-col lg:flex-row">
-        <aside className="w-64 hidden lg:flex lg:flex-col justify-between border-r border-white/10 p-6 bg-gradient-to-b from-zinc-950/70 via-emerald-900/5 to-zinc-950/70 backdrop-blur fixed left-0 top-0 h-screen overflow-y-auto z-10">
+        <aside className={asideClass}>
           <div>
+            <div className="mb-6 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-md bg-emerald-600 shadow" />
+                <span className="text-lg font-semibold">IMOS</span>
+              </div>
+              <ThemeToggle />
+            </div>
+
             <div className="mb-6">
-              <div className="text-[11px] uppercase tracking-widest text-emerald-300/70 mb-2">
+              <div className="text-[11px] uppercase tracking-widest text-emerald-800 dark:text-emerald-300/70 mb-2">
                 Chung
               </div>
               <div className="space-y-1">
                 <SidebarLink href="/" label="Trang chủ" />
-                <SidebarLink href="/profile" label="Thông tin cá nhân" />
+                <SidebarLink match="exact" href="/profile" label="Thông tin cá nhân" />
                 <SidebarLink href="/profile/recents" label="Gần đây" />
                 <SidebarLink href="/profile/drafts" label="Bản nháp" />
                 <SidebarLink href="/profile/invite" label="Mời thành viên" />
@@ -234,7 +295,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                   label="Thông báo"
                   right={
                     unread > 0 ? (
-                      <span className="ml-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-500/20 px-2 text-[11px] font-semibold text-emerald-300 ring-1 ring-emerald-400/30">
+                      <span className="ml-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300 px-2 text-[11px] font-semibold dark:bg-emerald-500/20 dark:text-emerald-300 dark:ring-emerald-800">
                         {unread > 99 ? "99+" : unread}
                       </span>
                     ) : null
@@ -245,48 +306,48 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
             </div>
 
             <div className="mb-6">
-              <div className="text-[11px] uppercase tracking-widest text-emerald-300/70 mb-2">
+              <div className="text-[11px] uppercase tracking-widest text-emerald-800 dark:text-emerald-300/70 mb-2">
                 Tổ chức
               </div>
               <div className="space-y-1">
                 <SidebarLink href="/register/organization" label="Tạo tổ chức" />
                 {orgs === null && (
                   <>
-                    <div className="h-8 rounded-md bg-white/5 animate-pulse" />
-                    <div className="h-8 rounded-md bg-white/5 animate-pulse" />
+                    <div className="h-8 rounded-md bg-zinc-100 dark:bg-white/5 animate-pulse" />
+                    <div className="h-8 rounded-md bg-zinc-100 dark:bg-white/5 animate-pulse" />
                   </>
                 )}
                 {orgsErr && (
-                  <div className="px-3 py-2 text-xs rounded-md border border-red-400/40 bg-red-500/10 text-red-200">
+                  <div className="px-3 py-2 text-xs rounded-md border border-red-300 bg-red-50 text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200">
                     {orgsErr}
                   </div>
                 )}
                 {orgs && !orgsErr && orgs.length === 0 && (
-                  <div className="px-3 py-2 text-xs rounded-md border border-white/10 bg-white/5 text-zinc-300">
+                  <div className="px-3 py-2 text-xs rounded-md border border-zinc-300 bg-zinc-50 text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
                     Chưa có tổ chức nào. Hãy tạo tổ chức đầu tiên!
                   </div>
                 )}
                 {(orgs ?? []).slice(0, 5).map((o) => (
                   <SidebarLink key={o.orgId} href={`/profile/organizations/${o.orgId}`} label={o.orgName} />
                 ))}
-                {(orgs ?? []).length > 5 && (
-                  <SidebarLink href="/organizations" label="Xem tất cả tổ chức" />
-                )}
+                {(orgs ?? []).length > 5 && <SidebarLink href="/organizations" label="Xem tất cả tổ chức" />}
                 <SidebarLink href="/profile/help" label="Trợ giúp" />
               </div>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-white/10 space-y-3">
+          <div className="pt-4 border-t border-zinc-200 dark:border-white/10 space-y-3">
             {isLoggedIn && (
-              <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+              <div className="rounded-xl border border-zinc-200 bg-white dark:border-white/10 dark:bg-zinc-900/60 p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-zinc-400">Gói hiện tại</span>
+                  <span className="text-[12px] text-zinc-700 dark:text-zinc-400">Gói hiện tại</span>
                   {planLabel ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-emerald-300">{planLabel}</span>
+                      <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                        {planLabel}
+                      </span>
                       {planStatus === "active" && (
-                        <span className="rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 text-[11px] font-semibold">
+                        <span className="rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-0.5 text-[11px] font-semibold dark:bg-emerald-500/15 dark:text-emerald-300 dark:border-emerald-400/30">
                           Đang hoạt động
                         </span>
                       )}
@@ -299,12 +360,12 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
             )}
 
             <div>
-              <div className="text-[11px] uppercase tracking-widest text-emerald-300/80 mb-2">
+              <div className="text-[11px] uppercase tracking-widest text-emerald-800 dark:text-emerald-300/80 mb-2">
                 Nâng cấp
               </div>
               <Link
                 href="/profile/select-plan"
-                className="block w-full text-center text-sm font-semibold rounded-lg px-4 py-2 bg-gradient-to-r from-emerald-400 to-emerald-500 text-zinc-950 shadow-lg shadow-emerald-900/30 ring-1 ring-emerald-300/40 hover:from-emerald-300 hover:to-emerald-400 transition"
+                className="block w-full text-center text-sm font-semibold rounded-lg px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-500 dark:bg-emerald-500 dark:text-zinc-950 dark:hover:bg-emerald-400"
               >
                 Chọn gói
               </Link>
@@ -312,58 +373,48 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
 
             <Link
               href="/login"
-              className="block w-full text-center text-sm font-medium rounded-lg px-4 py-2 bg-red-500/90 hover:bg-red-400 ring-1 ring-transparent hover:ring-red-300/40 transition"
+              className="block w-full text-center text-sm font-medium rounded-lg px-4 py-2 bg-red-500 text-white hover:bg-red-400"
             >
               Đăng xuất
             </Link>
           </div>
         </aside>
 
-        <header className="lg:hidden w-full md:sticky md:top-0 z-20 bg-zinc-900/70 backdrop-blur-sm border-b border-emerald-400/20">
+        <header className={headerClass}>
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-md bg-emerald-400/90 shadow" />
-              <span className="text-lg font-semibold bg-gradient-to-r from-emerald-300 to-emerald-200 bg-clip-text text-transparent">
-              IMOS
-              </span>
+              <span className="h-3 w-3 rounded-md bg-emerald-600 shadow" />
+              <span className="text-lg font-semibold">IMOS</span>
             </div>
             <div className="flex items-center gap-3">
               <Link
                 href="/profile/notifications"
-                className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
                 aria-label="Thông báo"
               >
                 <Bell className="h-5 w-5" />
                 {unread > 0 && (
-                  <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-500 text-[11px] font-bold text-zinc-950 px-1">
+                  <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-600 text-[11px] font-bold text-white px-1">
                     {unread > 99 ? "99+" : unread}
                   </span>
                 )}
               </Link>
-              {isLoggedIn && planLabel && (
-                <span className="hidden xs:flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5">
-                  <span className="text-[11px] text-zinc-400">Gói:</span>
-                  <span className="text-[12px] font-semibold text-emerald-300">{planLabel}</span>
-                  {planStatus === "active" && (
-                    <span className="ml-1 rounded bg-emerald-500/15 border border-emerald-400/30 px-1 text-[10px] text-emerald-300">
-                      Đang hoạt động
-                    </span>
-                  )}
-                </span>
-              )}
+
+              <ThemeToggle />
+
               <Link
                 href="/profile/select-plan"
-                className="rounded px-2 py-1 font-semibold bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
+                className="rounded px-2 py-1 font-semibold bg-emerald-600 text-white hover:bg-emerald-500 dark:bg-emerald-500 dark:text-zinc-950 dark:hover:bg-emerald-400"
               >
                 Chọn gói
               </Link>
+
               <button
                 type="button"
                 aria-label="Mở menu"
                 onClick={() => setMobileNavOpen(true)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
               >
-                {/* Hamburger */}
                 <span className="block h-0.5 w-4 bg-current" />
                 <span className="sr-only">Menu</span>
               </button>
@@ -371,7 +422,6 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        {/* Mobile drawer menu */}
         {mobileNavOpen && (
           <div className="lg:hidden fixed inset-0 z-30">
             <button
@@ -380,14 +430,14 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
               className="absolute inset-0 bg-black/60"
               onClick={() => setMobileNavOpen(false)}
             />
-            <div className="absolute left-0 top-0 h-full w-80 max-w-[85vw] bg-zinc-950/95 backdrop-blur border-r border-white/10 p-4 overflow-y-auto">
+            <div className="absolute left-0 top-0 h-full w-80 max-w-[85vw] bg-white dark:bg-zinc-950/95 backdrop-blur border-r border-zinc-200 dark:border-white/10 p-4 overflow-y-auto">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-sm text-zinc-400">Điều hướng</span>
+                <span className="text-sm text-zinc-700 dark:text-zinc-400">Điều hướng</span>
                 <button
                   type="button"
                   aria-label="Đóng"
                   onClick={() => setMobileNavOpen(false)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200 dark:hover:bg-white/10"
                 >
                   ✕
                 </button>
@@ -400,7 +450,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 <SidebarLink href="/profile/invite" label="Mời thành viên" />
                 <SidebarLink href="/profile/notifications" label="Thông báo" />
                 <SidebarLink href="/profile/settings" label="Cài đặt" />
-                <div className="pt-3 mt-3 border-t border-white/10" />
+                <div className="pt-3 mt-3 border-t border-zinc-200 dark:border-white/10" />
                 <SidebarLink href="/register/organization" label="Tạo tổ chức" />
                 <SidebarLink href="/profile/help" label="Trợ giúp" />
               </div>

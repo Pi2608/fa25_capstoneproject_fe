@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
+import { clearAllAuthData } from "@/utils/authUtils";
 import s from "./admin.module.css";
 
 const NAV = [
@@ -18,9 +19,38 @@ const NAV = [
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const rawPathname = usePathname();
   const pathname = rawPathname ?? "";
   const [open, setOpen] = useState(true);
+  const [signingOut, setSigningOut] = useState(false);
+
+  const onSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      const base = process.env.NEXT_PUBLIC_API_BASE ?? "";
+      const token =
+        (typeof window !== "undefined" && localStorage.getItem("token")) ||
+        (typeof window !== "undefined" && localStorage.getItem("accessToken")) ||
+        "";
+      if (base) {
+        try {
+          await fetch(`${base}/api/v1/auth/logout`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            credentials: "include",
+          });
+        } catch {}
+      }
+    } finally {
+      clearAllAuthData();
+      router.replace("/login");
+    }
+  };
 
   return (
     <div className={`${s.shell} ${s.light}`}>
@@ -48,17 +78,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </nav>
 
         <div className={s.sideFooter}>
-          <button className={s.ghostBtn}>
+          <button className={s.ghostBtn} onClick={() => router.push("/settings")}>
             <span className={s.ic}>
               <SettingsIcon />
             </span>
             <span>Cài đặt</span>
           </button>
-          <button className={s.ghostBtn}>
+          <button
+            className={s.ghostBtn}
+            onClick={onSignOut}
+            disabled={signingOut}
+            aria-busy={signingOut}
+          >
             <span className={s.ic}>
               <SignOutIcon />
             </span>
-            <span>Đăng xuất</span>
+            <span>{signingOut ? "Đang đăng xuất…" : "Đăng xuất"}</span>
           </button>
         </div>
       </aside>
@@ -99,7 +134,6 @@ function DashIcon() {
     </svg>
   );
 }
-
 function ChartIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -110,7 +144,6 @@ function ChartIcon() {
     </svg>
   );
 }
-
 function UsersIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -121,7 +154,6 @@ function UsersIcon() {
     </svg>
   );
 }
-
 function FileIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -130,7 +162,6 @@ function FileIcon() {
     </svg>
   );
 }
-
 function CardIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -140,7 +171,6 @@ function CardIcon() {
     </svg>
   );
 }
-
 function SettingsIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -154,7 +184,6 @@ function SettingsIcon() {
     </svg>
   );
 }
-
 function SignOutIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -164,7 +193,6 @@ function SignOutIcon() {
     </svg>
   );
 }
-
 function BurgerIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
@@ -172,7 +200,6 @@ function BurgerIcon() {
     </svg>
   );
 }
-
 function BellIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -181,7 +208,6 @@ function BellIcon() {
     </svg>
   );
 }
-
 function MapIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -190,7 +216,6 @@ function MapIcon() {
     </svg>
   );
 }
-
 function OrgIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -200,7 +225,6 @@ function OrgIcon() {
     </svg>
   );
 }
-
 function PlanIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -209,7 +233,6 @@ function PlanIcon() {
     </svg>
   );
 }
-
 function TicketIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
