@@ -28,14 +28,16 @@ export default function AccountTypePage() {
         showToast("success", "Welcome to your personal dashboard! 🎉");
         setTimeout(() => {
           // Clear first-time user flag
-          clearAllAuthData();
+          // clearAllAuthData();
+          localStorage.removeItem("is_first_time_user");
           router.push("/profile");
         }, 1000);
       } else {
         showToast("success", "Setting up organization 🏢");
         setTimeout(() => {
           // Clear first-time user flag
-          clearAllAuthData();
+          // clearAllAuthData();
+          localStorage.removeItem("is_first_time_user");
           router.push("/register/organization");
         }, 1000);
       }
