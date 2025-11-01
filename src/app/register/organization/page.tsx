@@ -304,7 +304,7 @@ export default function OrganizationSetupPage() {
                     } else {
                       // Free plan - complete setup
                       showToast("success", "Organization ready! 🎉");
-                      setTimeout(() => router.push("/profile/organizations"), 1000);
+                      setTimeout(() => router.push(`/profile/organizations/${latestOrg.orgId}`), 1000);
                     }
                   } catch (e: unknown) {
                     console.error("Organization creation error:", e);
