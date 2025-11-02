@@ -1,183 +1,156 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useAuthStatus } from "@/contexts/useAuthStatus";
-import { useState, useEffect, useRef, useLayoutEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect, ReactNode } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { getOrganizations } from "@/lib/api-organizations";
+import { getMapTemplates } from "@/lib/api-maps";
 
 gsap.registerPlugin(ScrollTrigger);
 
-function NavDropdown({
-  label,
-  items,
-}: {
-  label: string;
-  items: { label: string; desc?: string; href: string }[];
-}) {
-  const [open, setOpen] = useState(false);
+function Pill({ children }: { children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-emerald-300/50 bg-emerald-50 text-emerald-700 px-3 py-1 text-xs font-semibold dark:border-emerald-400/30 dark:bg-emerald-400/10 dark:text-emerald-300">
+      {children}
+    </span>
+  );
+}
+
+function CountUp({ value, className }: { value: number; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+  const reduce = useReducedMotion();
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (!ref.current) return;
-      if (!ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDoc);
-      document.removeEventListener("keydown", onKey);
-    };
+    const el = ref.current;
+    if (!el) return;
+    let done = false;
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting && !done) {
+            done = true;
+            setReady(true);
+            io.disconnect();
+          }
+        });
+      },
+      { threshold: 0.6 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
   }, []);
 
-  const reduceMotion = useReducedMotion();
-
   useEffect(() => {
-    const el = ref.current?.querySelector<HTMLDivElement>("[data-menu]");
-    if (!el) return;
-    if (open) {
-      gsap.fromTo(
-        el,
-        { autoAlpha: 0, y: -8, scale: 0.98 },
-        { autoAlpha: 1, y: 0, scale: 1, duration: reduceMotion ? 0 : 0.2, ease: "power2.out" }
-      );
-    } else {
-      gsap.to(el, { autoAlpha: 0, y: -8, scale: 0.98, duration: reduceMotion ? 0 : 0.15, ease: "power1.in" });
+    const el = ref.current;
+    if (!el || !ready) return;
+    if (reduce) {
+      el.textContent = value.toLocaleString();
+      return;
     }
-  }, [open, reduceMotion]);
+    const obj = { v: 0 };
+    gsap.to(obj, {
+      v: value,
+      duration: 1.2,
+      ease: "power1.out",
+      onUpdate: () => {
+        el.textContent = Math.round(obj.v).toLocaleString();
+      },
+    });
+  }, [value, ready, reduce]);
 
+  return <div ref={ref} className={className} />;
+}
+
+function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="relative" ref={ref}>
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 text-gray-700 dark:text-gray-100
-                   font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 transition"
-      >
-        {label}
-        <svg className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
-          <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" />
-        </svg>
-      </button>
-
-      <div
-        data-menu
-        role="menu"
-        tabIndex={-1}
-        className={`${open ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 -translate-x-1/2 mt-4 w-[640px] max-w-[90vw]
-                    rounded-2xl p-4 md:p-5 backdrop-blur-md shadow-2xl
-                    bg-white/80 ring-1 ring-black/10
-                    dark:bg-zinc-900/90 dark:ring-white/10`}
-        onMouseEnter={() => setOpen(true)}
-        onMouseLeave={() => setOpen(false)}
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-          {items.map((it) => (
-            <Link
-              key={it.label}
-              href={it.href}
-              className="group flex items-start gap-3 rounded-xl p-3 md:p-4
-                         hover:bg-emerald-50 dark:hover:bg-white/10 transition"
-              onClick={() => setOpen(false)}
-            >
-              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full
-                               bg-emerald-500/15 ring-1 ring-emerald-400/30">
-                <svg viewBox="0 0 24 24" className="h-4 w-4 text-emerald-500 dark:text-emerald-400">
-                  <path fill="currentColor" d="M12 2a10 10 0 100 20 10 10 0 000-20Zm1 5v5l4 2-.7 1.2L11 13V7h2Z" />
-                </svg>
-              </span>
-              <div className="leading-tight">
-                <div className="text-[15px] md:text-[16px] font-semibold
-                                text-gray-900 dark:text-white
-                                group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
-                  {it.label}
-                </div>
-                {it.desc && <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{it.desc}</p>}
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
+    <div className="rounded-2xl px-6 py-5 bg-gray-50 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10 text-center">
+      <CountUp value={value} className="text-3xl font-extrabold tracking-tight" />
+      <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{label}</p>
     </div>
   );
 }
 
 export default function HomePage() {
-  const router = useRouter();
-  const { isLoggedIn, clear } = useAuthStatus();
+  const reduce = useReducedMotion();
+  const [orgCount, setOrgCount] = useState<number>(0);
+  const [tplCount, setTplCount] = useState<number>(0);
+  const mouseRAF = useRef<number>(0);
 
-  const onLogout = () => {
-    clear();
-    router.push("/login");
-    router.refresh();
-  };
+  useEffect(() => {
+    let cancel = false;
+    const load = async () => {
+      try {
+        const [orgRes, tplRes] = await Promise.allSettled([getOrganizations(), getMapTemplates()]);
+        if (cancel) return;
+        const orgs =
+          orgRes.status === "fulfilled" && orgRes.value && typeof orgRes.value === "object"
+            ? (orgRes.value as { organizations?: unknown[] }).organizations?.length ?? 0
+            : 0;
+        const tpls = tplRes.status === "fulfilled" && Array.isArray(tplRes.value) ? tplRes.value.length : 0;
+        setOrgCount(orgs);
+        setTplCount(tpls);
+      } catch {
+        setOrgCount(0);
+        setTplCount(0);
+      }
+    };
+    load();
+    return () => {
+      cancel = true;
+    };
+  }, []);
 
-  const SERVICES = [
-    { label: "Map Builder", desc: "Create interactive web maps quickly.", href: "/service/map-builder" },
-    { label: "Data Layers", desc: "Vector & raster with flexible styling.", href: "/service/data-layers" },
-    { label: "Cloud Sources", desc: "PostGIS, GeoServer, S3, Google Drive…", href: "/service/cloud-sources" },
-    { label: "Dashboards", desc: "Maps + charts & metrics.", href: "/service/dashboards" },
-    { label: "Collaboration", desc: "Share & edit with teams.", href: "/service/collaboration" },
-    { label: "Export & Embed", desc: "Export PNG/PDF, embed anywhere.", href: "/service/export-embed" },
-  ];
-
-  const RESOURCES = [
-    { label: "Customers", desc: "How 500+ teams build GIS with us.", href: "/resources/customers" },
-    { label: "Webinars", desc: "Live and on-demand sessions.", href: "/resources/webinars" },
-    { label: "Help Center", desc: "Guides & troubleshooting.", href: "/resources/help-center" },
-    { label: "Developer Docs", desc: "APIs, SDKs, integration.", href: "/resources/developer-docs" },
-    { label: "Map Gallery", desc: "Curated maps from community.", href: "/resources/map-gallery" },
-    { label: "Blog", desc: "Updates and tutorials.", href: "/resources/blog" },
-    { label: "QGIS Plugin", desc: "Sync projects to cloud.", href: "/resources/qgis-plugin" },
-  ];
+  // hiệu ứng “cursor light”
+  useEffect(() => {
+    if (reduce) return;
+    const onMove = (e: MouseEvent) => {
+      if (mouseRAF.current) cancelAnimationFrame(mouseRAF.current);
+      mouseRAF.current = requestAnimationFrame(() => {
+        document.documentElement.style.setProperty("--mx", `${e.clientX}px`);
+        document.documentElement.style.setProperty("--my", `${e.clientY}px`);
+      });
+    };
+    window.addEventListener("mousemove", onMove);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      if (mouseRAF.current) cancelAnimationFrame(mouseRAF.current);
+    };
+  }, [reduce]);
 
   useLayoutEffect(() => {
-    const reduce =
+    if ("scrollRestoration" in window.history) {
+      const prev = (window.history.scrollRestoration ?? "auto") as string;
+      window.history.scrollRestoration = "manual";
+      window.scrollTo(0, 0);
+      return () => {
+        // @ts-ignore
+        window.history.scrollRestoration = prev;
+      };
+    } else {
+      window.scrollTo(0, 0);
+    }
+  }, []);
+
+  // GSAP in-view animations
+  useLayoutEffect(() => {
+    const prefersReduced =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const base = { ease: "power2.out", duration: prefersReduced || reduce ? 0 : 0.9 } as const;
 
     const ctx = gsap.context(() => {
-      const base = { ease: "power2.out", duration: reduce ? 0 : 0.9 } as const;
       gsap.set([".hero-title", ".hero-subtitle", ".hero-cta"], { autoAlpha: 0, y: 20 });
-      gsap.timeline()
+      gsap
+        .timeline()
         .to(".hero-title", { autoAlpha: 1, y: 0, ...base })
         .to(".hero-subtitle", { autoAlpha: 1, y: 0, ...base }, "<0.08")
         .to(".hero-cta", { autoAlpha: 1, y: 0, ...base }, "<0.08");
 
-      gsap.set(".tpl-card", { autoAlpha: 0, y: 24 });
-      ScrollTrigger.batch(".tpl-card", {
-        start: "top 80%",
-        onEnter: (els) =>
-          gsap.to(els, {
-            autoAlpha: 1,
-            y: 0,
-            stagger: 0.08,
-            duration: reduce ? 0 : 0.7,
-            ease: "power2.out",
-          }),
-      });
-      gsap.utils.toArray<HTMLElement>(".step").forEach((s) => {
-        gsap.set(s, { autoAlpha: 0, y: 16 });
-        ScrollTrigger.create({
-          trigger: s,
-          start: "top 85%",
-          onEnter: () =>
-            gsap.to(s, {
-              autoAlpha: 1,
-              y: 0,
-              duration: reduce ? 0 : 0.6,
-              ease: "power2.out",
-            }),
-        });
-      });
-      gsap.utils.toArray<HTMLElement>(".section-title").forEach((el) => {
-        gsap.set(el, { autoAlpha: 0, y: 12 });
+      gsap.utils.toArray<HTMLElement>(".fade-in").forEach((el) => {
+        gsap.set(el, { autoAlpha: 0, y: 20 });
         ScrollTrigger.create({
           trigger: el,
           start: "top 85%",
@@ -185,120 +158,158 @@ export default function HomePage() {
             gsap.to(el, {
               autoAlpha: 1,
               y: 0,
-              duration: reduce ? 0 : 0.6,
+              duration: prefersReduced || reduce ? 0 : 0.7,
+              ease: "power2.out",
+            }),
+        });
+      });
+
+      gsap.utils.toArray<HTMLElement>(".stagger-card").forEach((container) => {
+        const cards = container.querySelectorAll<HTMLElement>(".card");
+        gsap.set(cards, { autoAlpha: 0, y: 18 });
+        ScrollTrigger.create({
+          trigger: container,
+          start: "top 80%",
+          onEnter: () =>
+            gsap.to(cards, {
+              autoAlpha: 1,
+              y: 0,
+              stagger: 0.08,
+              duration: prefersReduced || reduce ? 0 : 0.7,
               ease: "power2.out",
             }),
         });
       });
     });
-
     return () => ctx.revert();
-  }, []);
+  }, [reduce]);
 
   return (
     <main className="relative min-h-screen text-gray-900 dark:text-white transition-colors">
-      <div className="absolute inset-0 -z-20 bg-white dark:bg-[#070b0b]" aria-hidden />
-      <div
-        className="absolute inset-0 -z-10
-                   bg-[radial-gradient(1000px_520px_at_50%_-120px,rgba(16,185,129,0.18),transparent_60%)]
-                   dark:bg-[radial-gradient(1000px_520px_at_50%_-120px,rgba(16,185,129,0.12),transparent_60%)]"
-        aria-hidden
-      />
-      <div
-        className="absolute inset-0 -z-10
-                   bg-[linear-gradient(to_bottom,rgba(16,185,129,0.08),transparent_35%)]
-                   dark:bg-[linear-gradient(to_bottom,rgba(16,185,129,0.06),transparent_35%)]"
-        aria-hidden
-      />
+      {/* nền động */}
+      <div className="bg-scene" aria-hidden />
+      <div className="gridlines" aria-hidden />
+      <div className="beam beam-a" aria-hidden />
+      <div className="beam beam-b" aria-hidden />
+      <div className="mesh-blob blob-a" aria-hidden />
+      <div className="mesh-blob blob-b" aria-hidden />
+      <div className="mesh-blob blob-c" aria-hidden />
+      <div className="cursor-light" aria-hidden />
+      <div className="vignette" aria-hidden />
+      <div className="noise" aria-hidden />
 
-      <header className="sticky top-0 z-40">
-        <div
-          className="pointer-events-none absolute inset-x-0 h-20 -z-10
-                     bg-[linear-gradient(to_bottom,rgba(255,255,255,0.85),transparent)]
-                     dark:bg-[linear-gradient(to_bottom,rgba(7,11,11,0.65),transparent)]"
-          aria-hidden
-        />
-        <div className="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-md bg-emerald-500 shadow" />
-            <span className="text-lg md:text-xl font-bold tracking-tight">IMOS</span>
-          </Link>
-
-          <nav className="hidden md:flex items-center gap-8">
-            <NavDropdown label="Services" items={SERVICES} />
-            <Link href="/tutorial" className="font-semibold text-gray-700 hover:text-emerald-600
-                                              dark:text-gray-200 dark:hover:text-emerald-400 transition">
-              Tutorials
-            </Link>
-            <Link href="/pricing" className="font-semibold text-gray-700 hover:text-emerald-600
-                                             dark:text-gray-200 dark:hover:text-emerald-400 transition">
-              Pricing
-            </Link>
-            <NavDropdown label="Resources" items={RESOURCES} />
-            <Link href="/community" className="font-semibold text-gray-700 hover:text-emerald-600
-                                              dark:text-gray-200 dark:hover:text-emerald-400 transition">
-              Community
-            </Link>
-          </nav>
-
-          <div className="hidden md:flex items-center gap-3">
-            {!isLoggedIn ? (
-              <>
-                <Link href="/login" className="rounded-lg px-3 py-2 font-semibold 
-                                               text-gray-700 hover:text-emerald-600
-                                               dark:text-gray-200 dark:hover:text-emerald-400 transition">
-                  Log in
-                </Link>
-                <Link href="/register" className="rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white 
-                                                  shadow hover:bg-emerald-400 transition">
-                  Get Started
-                </Link>
-              </>
-            ) : (
-              <>
-                <Link href="/profile" className="rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white 
-                                                  shadow hover:bg-emerald-400 transition">
-                  Profile
-                </Link>
-                <button
-                  onClick={onLogout}
-                  className="rounded-lg px-3 py-2 font-semibold 
-                             text-gray-700 hover:text-red-500
-                             dark:text-gray-200 dark:hover:text-red-400 transition"
-                >
-                  Log out
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
-
+      {/* HERO */}
       <div className="relative z-10 max-w-7xl mx-auto px-6">
-        <section className="min-h-[60vh] md:min-h-[70vh] flex flex-col items-center justify-center text-center space-y-6">
-          <h1 className="hero-title text-4xl md:text-5xl font-extrabold leading-tight tracking-tight">
-            Create maps. Customize easily.
+        <section className="min-h-[64vh] md:min-h-[72vh] flex flex-col items-center justify-center text-center gap-6">
+          <Pill>
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            Build maps in minutes
+          </Pill>
+          <h1 className="hero-title text-4xl md:text-6xl font-extrabold leading-tight tracking-tight">
+            <span className="bg-clip-text text-transparent bg-gradient-to-b from-emerald-500 via-emerald-400 to-emerald-600">
+              Create maps
+            </span>
+            . <span className="text-gray-900 dark:text-white">Customize easily.</span>
           </h1>
-          <p className="hero-subtitle text-lg text-gray-600 dark:text-gray-300 max-w-xl leading-relaxed">
-            Build interactive, high-quality maps in minutes — perfect for planning, reporting, and exploration.
+          <p className="hero-subtitle text-lg text-gray-600 dark:text-gray-300 max-w-2xl leading-relaxed">
+            Build interactive, high-quality maps in minutes — perfect for planning, reporting,
+            teaching, and exploration.
           </p>
-          <Link
-            href="/service"
-            className="hero-cta inline-block px-6 py-3 bg-emerald-500 text-white 
-                       rounded-lg font-medium hover:bg-emerald-400 transition-colors"
-          >
-            Start now
-          </Link>
+          <div className="hero-cta flex items-center gap-3">
+            <Link
+              href="/service"
+              className="inline-block px-6 py-3 bg-emerald-500 text-white rounded-lg font-semibold shadow hover:bg-emerald-400 transition"
+            >
+              Start now
+            </Link>
+            <Link
+              href="/resources/webinars"
+              className="inline-flex items-center gap-2 px-5 py-3 rounded-lg ring-1 ring-black/10 dark:ring-white/15"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              Watch demo
+            </Link>
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400">
+            Free plan available • No credit card required
+          </div>
         </section>
       </div>
 
-      <section className="relative z-10 max-w-7xl mx-auto px-6 py-20 space-y-24">
+      {/* marquee */}
+      <section className="relative z-10 py-6">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="overflow-hidden rounded-2xl ring-1 ring-black/5 dark:ring-white/10 bg-white/70 dark:bg-white/5 backdrop-blur">
+            <div className="relative flex items-center gap-12 whitespace-nowrap px-6 py-3 marquee">
+              {["EduTech", "GeoGov", "FieldLab", "GreenMaps", "CivilWorks", "OpenGIS"]
+                .concat(["EduTech", "GeoGov", "FieldLab", "GreenMaps", "CivilWorks", "OpenGIS"])
+                .map((b, i) => (
+                  <div key={i} className="flex items-center gap-3 text-gray-700 dark:text-gray-200">
+                    <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                    <span className="font-semibold">{b}</span>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* stats */}
+      <section className="relative z-10 max-w-7xl mx-auto px-6 py-14">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+          <StatCard label="Maps created" value={12480} />
+          <StatCard label="Organizations" value={orgCount} />
+          <StatCard label="Templates" value={tplCount} />
+          <StatCard label="Monthly exports" value={8421} />
+        </div>
+      </section>
+
+      {/* features */}
+      <section className="relative z-10 max-w-7xl mx-auto px-6 py-6">
+        <div className="text-center space-y-6 fade-in">
+          <h2 className="text-3xl font-bold section-title">Why teams choose IMOS</h2>
+          <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
+            Powerful GIS features with a clean UI: build, style, animate, and export — all in your
+            browser.
+          </p>
+        </div>
+        <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 stagger-card">
+          {[
+            ["No-code Map Builder", "Draw, style, and organize layers visually with precision tools."],
+            ["Story Maps & Timeline", "Turn maps into narratives with segments, zones, and playback."],
+            ["Team Collaboration", "Invite members, set roles, comment, and track history."],
+            ["Cloud & External Sources", "Upload GeoJSON or connect WMS/WFS, PostGIS, S3."],
+            ["Fast Exports", "Generate PDF/PNG/GeoJSON with admin-approved workflows."],
+            ["Secure by Design", "RBAC, audit logs, MFA for admins, and encrypted storage."],
+          ].map(([title, desc], idx) => (
+            <div
+              key={idx}
+              className="card rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 bg-gray-50 dark:bg-white/5"
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/15 ring-1 ring-emerald-400/30">
+                  <svg className="h-4 w-4 text-emerald-500" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2a10 10 0 100 20 10 10 0 000-20Zm-1 14l-4-4 1.4-1.4L11 12.2l5.6-5.6L18 8l-7 8z" />
+                  </svg>
+                </span>
+                <h3 className="font-semibold">{title}</h3>
+              </div>
+              <p className="text-sm text-gray-600 dark:text-gray-300">{desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* templates */}
+      <section className="relative z-10 max-w-7xl mx-auto px-6 py-16">
         <div className="text-center space-y-6">
           <h2 className="section-title text-3xl font-bold">Featured Templates</h2>
           <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-            Choose from many ready-to-use map templates for different fields.
+            Choose from many ready-to-use templates.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pt-6">
+          <div className="stagger-card grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pt-6">
             {[
               ["Urban Planning", "/templates/urban-planning"],
               ["Field Survey", "/templates/field-survey"],
@@ -307,47 +318,130 @@ export default function HomePage() {
               <Link
                 key={href}
                 href={href as string}
-                className="tpl-card rounded-xl p-6 h-40 flex items-center justify-center font-bold text-lg
-                           bg-gray-50 hover:bg-gray-100 
-                           dark:bg-white/10 dark:hover:bg-white/20 transition"
+                className="card rounded-xl p-6 h-44 flex items-center justify-center font-bold text-lg bg-gray-50 hover:bg-gray-100 dark:bg-white/10 dark:hover:bg-white/20 transition"
               >
                 {label}
               </Link>
             ))}
           </div>
         </div>
+      </section>
 
+      {/* how it works + dev quotes */}
+      <section className="relative z-10 max-w-7xl mx-auto px-6 py-20">
         <div className="text-center space-y-6">
           <h2 className="section-title text-3xl font-bold">How it works</h2>
           <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-            Just 3 steps to get a complete map.
+            Three simple steps to a complete map.
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left pt-6">
-            {[
-              ["1. Choose a template", "Start from a pre-made template or a blank page."],
-              ["2. Customize the map", "Add data, markers, layers, and personalize the look."],
-              ["3. Export & Share", "Download or embed the map to use anywhere."],
-            ].map(([title, desc]) => (
-              <div
-                key={title}
-                className="step rounded-xl p-6 transition 
-                           bg-gray-50 hover:bg-gray-100 
-                           dark:bg-white/10 dark:hover:bg-white/20"
-              >
-                <h4 className="font-semibold mb-2">{title}</h4>
-                <p className="text-sm text-gray-600 dark:text-gray-300">{desc}</p>
-              </div>
-            ))}
-          </div>
         </div>
-
-        <div className="text-center space-y-6">
-          <h2 className="section-title text-3xl font-bold">Trusted by professionals</h2>
-          <p className="text-gray-600 dark:text-gray-300 max-w-2xl mx-auto">
-            Used by teams of engineers, educators, NGOs, and governments.
-          </p>
+        <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6">
+          {[
+            ["Choose a template", "Start from a pre-made template or a blank page."],
+            ["Customize the map", "Add data, markers, layers, and personalize the look."],
+            ["Export & Share", "Download or embed the map anywhere with one click."],
+          ].map(([t, d], i) => (
+            <div
+              key={i}
+              className="fade-in rounded-2xl p-6 bg-gray-50 dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10"
+            >
+              <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-1">
+                Step {i + 1}
+              </div>
+              <h4 className="font-semibold mb-1">{t}</h4>
+              <p className="text-sm text-gray-600 dark:text-gray-300">{d}</p>
+            </div>
+          ))}
         </div>
       </section>
+
+      {/* dev API + testimonials */}
+      <section className="relative z-10 max-w-7xl mx-auto px-6 pb-12">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
+          <div className="rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 bg-gray-50 dark:bg-white/5">
+            <h3 className="font-semibold mb-3">Developer-friendly APIs</h3>
+            <pre className="rounded-xl p-4 text-sm overflow-auto bg-black text-gray-100">{`POST /api/maps
+{
+  "name": "Field Survey 2025",
+  "visibility": "public",
+  "layers": [
+    { "type": "Point", "geometry": [106.7, 10.8], "props": { "label": "Site A" } }
+  ]
+}`}</pre>
+            <p className="mt-3 text-sm text-gray-500">
+              Use our REST endpoints to automate creation, import GeoJSON, and trigger exports.
+            </p>
+          </div>
+          <div className="rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 bg-gray-50 dark:bg-white/5">
+            <h3 className="font-semibold mb-3">What users say</h3>
+            <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2">
+              {[
+                ["“IMOS cut our reporting time in half.”", "CivilWorks"],
+                ["“Story Maps made lessons engaging instantly.”", "EduTech"],
+                ["“Exports are crisp and on-brand.”", "GreenMaps"],
+              ].map(([q, by], idx) => (
+                <figure
+                  key={idx}
+                  className="min-w-[80%] md:min-w-[60%] snap-center rounded-xl p-5 bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10"
+                >
+                  <blockquote className="text-sm md:text-base text-gray-700 dark:text-gray-200">
+                    {q}
+                  </blockquote>
+                  <figcaption className="mt-2 text-xs text-gray-500">— {by}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="relative z-10 max-w-7xl mx-auto px-6 py-16">
+        <div className="rounded-3xl p-8 md:p-12 text-center ring-1 ring-black/5 dark:ring-white/10 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white">
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">
+            Ready to build maps faster?
+          </h2>
+          <p className="mt-2 opacity-90">
+            Start free — upgrade anytime for team collaboration, exports, and more.
+          </p>
+          <div className="mt-5 flex items-center justify-center gap-3">
+            <Link href="/register" className="px-6 py-3 rounded-lg bg-white text-emerald-700 font-semibold hover:bg-gray-100 transition">
+              Get Started
+            </Link>
+            <Link href="/pricing" className="px-6 py-3 rounded-lg ring-1 ring-white/50 font-semibold hover:bg-white/10">
+              View Pricing
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* styles nền động */}
+      <style jsx global>{`
+        :root{--mx:50vw;--my:50vh}
+        .bg-scene{position:fixed;inset:0;z-index:-30;background:#070b0b}
+        .gridlines{position:fixed;inset:0;z-index:-28;pointer-events:none;opacity:.35;background:repeating-linear-gradient(to right,rgba(255,255,255,.04) 0,rgba(255,255,255,.04) 1px,transparent 1px,transparent 100px),repeating-linear-gradient(to bottom,rgba(255,255,255,.04) 0,rgba(255,255,255,.04) 1px,transparent 1px,transparent 100px);animation:gridMove 30s linear infinite}
+        @keyframes gridMove{0%{background-position:0 0,0 0}100%{background-position:1000px 0,0 1000px}}
+        .beam{position:fixed;left:50%;top:50%;width:120vmax;height:120vmax;z-index:-27;transform:translate(-50%,-50%);filter:blur(70px);opacity:.45;pointer-events:none}
+        .beam-a{background:conic-gradient(from 0deg,rgba(16,185,129,0) 0deg,rgba(16,185,129,.14) 30deg,rgba(16,185,129,0) 65deg);animation:spinA 42s linear infinite}
+        .beam-b{background:conic-gradient(from 90deg,rgba(59,130,246,0) 0deg,rgba(59,130,246,.12) 28deg,rgba(59,130,246,0) 62deg);animation:spinB 56s linear infinite reverse}
+        @keyframes spinA{to{transform:translate(-50%,-50%) rotate(360deg)}}
+        @keyframes spinB{to{transform:translate(-50%,-50%) rotate(-360deg)}}
+        .mesh-blob{position:fixed;left:50%;top:35%;transform:translate(-50%,-50%);width:70vmax;height:70vmax;border-radius:50%;filter:blur(80px);opacity:.35;z-index:-20;pointer-events:none}
+        .blob-a{background:radial-gradient(circle at 30% 40%,rgba(16,185,129,.55),transparent 60%);animation:driftA 22s linear infinite}
+        .blob-b{background:radial-gradient(circle at 70% 60%,rgba(59,130,246,.45),transparent 55%);animation:driftB 28s linear infinite reverse}
+        .blob-c{background:radial-gradient(circle at 50% 50%,rgba(34,197,94,.35),transparent 60%);animation:driftC 26s ease-in-out infinite}
+        .cursor-light{position:fixed;inset:0;z-index:-15;pointer-events:none;mix-blend-mode:screen;background:radial-gradient(600px 600px at var(--mx) var(--my),rgba(16,185,129,.25),transparent 60%)}
+        .vignette{position:fixed;inset:0;z-index:-10;box-shadow:inset 0 0 220px rgba(0,0,0,.55);pointer-events:none}
+        .noise{position:fixed;inset:0;z-index:-5;pointer-events:none;opacity:.25;mix-blend-mode:overlay;background-image:radial-gradient(rgba(255,255,255,.03) 1px, transparent 1px);background-size:3px 3px;animation:noiseShift 1.6s steps(2,end) infinite}
+        @keyframes noiseShift{0%{transform:translate(0,0)}100%{transform:translate(3px,-3px)}}
+        .marquee{animation:marquee 24s linear infinite}
+        .marquee:hover{animation-play-state:paused}
+        @keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+        @keyframes driftA{0%{transform:translate(-60%,-40%) scale(1)}33%{transform:translate(-30%,-30%) scale(1.05)}66%{transform:translate(-45%,-5%) scale(.95)}100%{transform:translate(-60%,-40%) scale(1)}}
+        @keyframes driftB{0%{transform:translate(10%,-10%) scale(1)}33%{transform:translate(25%,10%) scale(1.08)}66%{transform:translate(-5%,25%) scale(.92)}100%{transform:translate(10%,-10%) scale(1)}}
+        @keyframes driftC{0%{transform:translate(-10%,30%) scale(1)}50%{transform:translate(20%,20%) scale(1.06)}100%{transform:translate(-10%,30%) scale(1)}}
+        @media (prefers-reduced-motion:reduce){.gridlines,.beam,.mesh-blob,.noise{animation:none}.beam,.cursor-light{opacity:.18}}
+      `}</style>
     </main>
   );
 }

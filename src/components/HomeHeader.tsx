@@ -120,7 +120,7 @@ export default function HomeHeader() {
     { label: "Data Layers", desc: "Vector & raster with flexible styling.", href: "/service/data-layers" },
     { label: "Cloud Sources", desc: "PostGIS, GeoServer, S3, Google Drive…", href: "/service/cloud-sources" },
     { label: "Dashboards", desc: "Maps + charts & metrics.", href: "/service/dashboards" },
-    { label: "Collaboration", desc: "Share & edit with teams.", href: "/service/collaboration" },
+    // { label: "Collaboration", desc: "Share & edit with teams.", href: "/service/collaboration" },
     { label: "Export & Embed", desc: "Export PNG/PDF, embed anywhere.", href: "/service/export-embed" },
   ];
 
@@ -128,7 +128,7 @@ export default function HomeHeader() {
     { label: "Customers", desc: "How 500+ teams build GIS with us.", href: "/resources/customers" },
     { label: "Webinars", desc: "Live and on-demand sessions.", href: "/resources/webinars" },
     { label: "Help Center", desc: "Guides & troubleshooting.", href: "/resources/help-center" },
-    { label: "Developer Docs", desc: "APIs, SDKs, integration.", href: "/resources/developer-docs" },
+    { label: "Developer Docs", desc: "APIs, SDKs, integration.", href: "/resources/dev-docs" },
     { label: "Map Gallery", desc: "Curated maps from community.", href: "/resources/map-gallery" },
     { label: "Blog", desc: "Updates and tutorials.", href: "/resources/blog" },
     { label: "QGIS Plugin", desc: "Sync projects to cloud.", href: "/resources/qgis-plugin" },
@@ -180,7 +180,7 @@ export default function HomeHeader() {
             </>
           ) : (
             <>
-              <Link href="/profile" className="rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white 
+              <Link href="/profile/information" className="rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white 
                                                 shadow hover:bg-emerald-400 transition">
                 Profile
               </Link>

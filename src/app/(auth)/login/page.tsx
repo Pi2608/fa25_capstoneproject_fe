@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { isFirstTimeUser } from "@/utils/authUtils";
 import { useToast } from "@/contexts/ToastContext";
 import InputField from "@/components/ui/InputField";
 import PasswordInput from "@/components/auth/PasswordInput";
@@ -37,23 +36,25 @@ export default function LoginClientSimple() {
     setLoading(true);
     try {
       await login({ email, password });
-      
-      // Get user info to check if this is first time login
       try {
-        const userInfo = await getMe();
-        const isFirstTime = !userInfo.lastLogin || userInfo.lastLogin === null;
-        
+        const me = await getMe();
+        const role = (me.role || "").toLowerCase();
+        if (role === "admin") {
+          showToast("success", "Welcome, Admin! Redirecting to dashboard...");
+          setTimeout(() => router.push("/dashboard"), 800);
+          return;
+        }
+        const isFirstTime = !me.lastLogin;
         if (isFirstTime) {
           showToast("success", "Login successful! Let's set up your account...");
-          setTimeout(() => router.push("/login/account-type"), 1000);
+          setTimeout(() => router.push("/login/account-type"), 800);
         } else {
           showToast("success", "Login successful! Redirecting...");
-          setTimeout(() => router.push("/"), 1000);
+          setTimeout(() => router.push("/"), 800);
         }
       } catch {
-        // If can't get user info, default to regular login flow
         showToast("success", "Login successful! Redirecting...");
-        setTimeout(() => router.push("/"), 1000);
+        setTimeout(() => router.push("/"), 800);
       }
     } catch {
       showToast("error", "Invalid email or password");
@@ -93,7 +94,7 @@ export default function LoginClientSimple() {
         />
         {errors.password && <p className="text-sm text-red-600 dark:text-red-400">{errors.password}</p>}
 
-        <SubmitButton loading={loading} disabled={!email || !password}>
+        <SubmitButton loading={loading} disabled={!email || !password || loading}>
           Sign in
         </SubmitButton>
       </form>

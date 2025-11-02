@@ -8,7 +8,6 @@ import { useAuthStatus } from "@/contexts/useAuthStatus";
 import { CurrentMembershipDto, getMyMembership, getMyMembershipStatus, getPlans, Plan, SubscribeRequest, SubscribeResponse, subscribeToPlan } from "@/lib/api-membership";
 import { getMyInvitations, getMyOrganizations, InvitationDto, MyOrganizationDto } from "@/lib/api-organizations";
 
-
 function safeMessage(err: unknown) {
   if (err instanceof Error) return err.message;
   if (err && typeof err === "object" && "message" in err) {
@@ -82,6 +81,15 @@ export default function PricingPage() {
   };
 
   useEffect(() => {
+    const els = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => { if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target as Element); } });
+    }, { threshold: 0.18 });
+    els.forEach(el => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+
+  useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       if (!menuRef.current) return;
       if (!menuRef.current.contains(e.target as Node)) setOpen(false);
@@ -96,11 +104,11 @@ export default function PricingPage() {
   }, []);
 
   const NAV = [
-    { label: "Dịch vụ", href: "/service" },
-    { label: "Hướng dẫn", href: "/tutorial" },
-    { label: "Mẫu", href: "/templates" },
-    { label: "Bảng giá", href: "/pricing" },
-    { label: "Cộng đồng", href: "/community" },
+    { label: "Service", href: "/service" },
+    { label: "Tutorials", href: "/tutorial" },
+    { label: "Templates", href: "/templates" },
+    { label: "Pricing", href: "/pricing" },
+    { label: "Community", href: "/community" },
   ] as const;
 
   const DICH_VU: { label: string; desc: string; href: string }[] = [
@@ -124,7 +132,7 @@ export default function PricingPage() {
   const [invitations, setInvitations] = useState<InvitationDto[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<MyOrganizationDto | null>(null);
   const [showOrgSelection, setShowOrgSelection] = useState(false);
-  
+
   // Membership state by organization
   const [orgMemberships, setOrgMemberships] = useState<Record<string, CurrentMembershipDto | null>>({});
   const [loadingMemberships, setLoadingMemberships] = useState(false);
@@ -132,10 +140,10 @@ export default function PricingPage() {
   // Load memberships for all organizations
   const loadOrgMemberships = async (orgs: MyOrganizationDto[]) => {
     if (orgs.length === 0) return;
-    
+
     setLoadingMemberships(true);
     const memberships: Record<string, CurrentMembershipDto | null> = {};
-    
+
     try {
       await Promise.all(
         orgs.map(async (org) => {
@@ -148,7 +156,7 @@ export default function PricingPage() {
           }
         })
       );
-      
+
       setOrgMemberships(memberships);
     } catch (error) {
       console.error("Error loading memberships:", error);
@@ -167,7 +175,7 @@ export default function PricingPage() {
           isLoggedIn ? getMyOrganizations().catch(() => ({ organizations: [] })) : Promise.resolve({ organizations: [] }),
           isLoggedIn ? getMyInvitations().catch(() => ({ invitations: [] })) : Promise.resolve({ invitations: [] })
         ]);
-        
+
         if (!alive) return;
         setPlans(data);
         setOrganizations(orgsRes.organizations || []);
@@ -225,7 +233,7 @@ export default function PricingPage() {
   const getCurrentPlanForOrg = (orgId: string): Plan | null => {
     const membership = orgMemberships[orgId];
     if (!membership) return null;
-    
+
     return plans.find(p => p.planId === membership.planId) || null;
   };
 
@@ -238,32 +246,32 @@ export default function PricingPage() {
   // Check if a plan should be disabled for the selected organization
   const isPlanDisabled = (plan: Plan): boolean => {
     if (!selectedOrg) return false;
-    
+
     const currentPlan = getCurrentPlanForOrg(selectedOrg.orgId);
     const membershipStatus = getMembershipStatusForOrg(selectedOrg.orgId);
-    
+
     // If no current membership, all plans are available
     if (!currentPlan || !membershipStatus) return false;
-    
+
     // If current plan is active, disable current plan and lower-tier plans
     if (membershipStatus === "active") {
       const currentPlanPrice = currentPlan.priceMonthly || 0;
       const planPrice = plan.priceMonthly || 0;
-      
+
       // Disable if it's the same plan or a lower-tier plan
       return planPrice <= currentPlanPrice;
     }
-    
+
     // If membership is pending or expired, allow all plans
     return false;
   };
 
   const renderStatusBadge = (p: Plan) => {
     if (!selectedOrg) return null;
-    
+
     const currentPlan = getCurrentPlanForOrg(selectedOrg.orgId);
     const membershipStatus = getMembershipStatusForOrg(selectedOrg.orgId);
-    
+
     const isCurrent = currentPlan?.planId === p.planId && membershipStatus === "active";
     const isPending = currentPlan?.planId === p.planId && membershipStatus === "pending";
     const isExpired = currentPlan?.planId === p.planId && membershipStatus === "expired";
@@ -305,113 +313,20 @@ export default function PricingPage() {
         <div className="absolute inset-0 bg-black/20" />
       </div> */}
 
-      <header className="sticky top-0 z-40">
-        <div className="pointer-events-none absolute inset-x-0 -z-10 h-20 bg-gradient-to-b from-black/30 to-transparent" />
-        <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-md bg-emerald-400 shadow" />
-            <span className="text-lg md:text-xl font-bold tracking-tight text-white">
-              IMOS
-            </span>
-          </Link>
-
-          <nav className="hidden md:flex items-center gap-8">
-            <div className="relative" ref={menuRef}>
-              <button
-                type="button"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                aria-controls="mega-menu"
-                onClick={() => setOpen((v) => !v)}
-                className="inline-flex items-center gap-1 text-white/90 text-base md:text-lg font-semibold hover:text-emerald-400 transition"
-              >
-                Dịch vụ
-                <svg className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor">
-                  <path d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.24a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z" />
-                </svg>
-              </button>
-
-              {open && (
-                <div
-                  id="mega-menu"
-                  role="menu"
-                  tabIndex={-1}
-                  className="absolute left-1/2 -translate-x-1/2 mt-4 w-[640px] max-w-[90vw] rounded-2xl bg-zinc-900/90 backdrop-blur-md ring-1 ring-white/10 shadow-2xl p-4 md:p-5"
-                  onMouseEnter={() => setOpen(true)}
-                >
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">
-                    {DICH_VU.map((it) => (
-                      <Link
-                        key={it.label}
-                        href={it.href}
-                        className="group flex items-start gap-3 rounded-xl p-3 md:p-4 hover:bg-white/10 focus:bg-white/10 outline-none transition"
-                        onClick={() => setOpen(false)}
-                      >
-                        <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 ring-1 ring-emerald-400/30">
-                          <svg viewBox="0 0 24 24" className="h-4 w-4 text-emerald-400">
-                            <path fill="currentColor" d="M12 2a10 10 0 100 20 10 10 0 000-20Zm1 5v5l4 2-.7 1.2L11 13V7h2Z" />
-                          </svg>
-                        </span>
-                        <div className="leading-tight">
-                          <div className="text-[15px] md:text-[16px] font-semibold text-white group-hover:text-emerald-400">
-                            {it.label}
-                          </div>
-                          <p className="text-sm text-white/70 mt-1">{it.desc}</p>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                  <div className="mt-3 border-t border-white/10 pt-3 flex justify-end">
-                    <Link href="/service" className="text-sm font-semibold text-emerald-400 hover:text-emerald-300" onClick={() => setOpen(false)}>
-                      Xem thêm →
-                    </Link>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {NAV.slice(1).map((n) => (
-              <Link
-                key={n.label}
-                href={n.href}
-                className="text-white/90 text-base md:text-lg font-semibold hover:text-emerald-400 transition"
-              >
-                {n.label}
-              </Link>
-            ))}
-          </nav>
-
-          <div className="hidden md:flex items-center gap-3">
-            {!isLoggedIn ? (
-              <>
-                <Link href="/login" className="rounded-lg px-3 py-2 text-base font-semibold text-white/90 hover:text-white">Đăng nhập</Link>
-                <Link href="/register" className="rounded-lg bg-emerald-500 px-4 py-2 text-base font-bold text-zinc-950 shadow hover:bg-emerald-400 transition">Bắt đầu</Link>
-              </>
-            ) : (
-              <>
-                <Link href="/profile" className="rounded-lg bg-emerald-500 px-4 py-2 text-base font-bold text-zinc-950 shadow hover:bg-emerald-400 transition">Hồ sơ</Link>
-                <button onClick={onLogout} className="rounded-lg px-3 py-2 text-base font-semibold text-white/90 hover:text-red-400">Đăng xuất</button>
-              </>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <section className="relative z-10 max-w-7xl mx-auto px-6 py-14">
+      <section className="relative z-10 max-w-7xl mx-auto px-6 py-14" data-reveal>
         <h1 className="text-3xl md:text-4xl font-bold tracking-tight">Bảng giá</h1>
         <p className="mt-2 text-zinc-200">
           Các gói đơn giản, mở rộng theo nhu cầu. Không phí ẩn.
         </p>
       </section>
 
-      <section className="relative z-10 max-w-7xl mx-auto px-6 pb-16">
+      <section className="relative z-10 max-w-7xl mx-auto px-6 pb-16" data-reveal>
         {error && (
           <div className="mb-6 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
             {error}
           </div>
         )}
 
-        {/* Organization Selection */}
         {isLoggedIn && organizations.length > 0 && (
           <div className="mb-6 p-4 bg-zinc-800/50 rounded-xl border border-zinc-700">
             <h3 className="text-sm font-medium text-zinc-300 mb-2">Selected Organization</h3>
@@ -427,20 +342,19 @@ export default function PricingPage() {
                         const membership = orgMemberships[selectedOrg.orgId];
                         const currentPlan = getCurrentPlanForOrg(selectedOrg.orgId);
                         const membershipStatus = getMembershipStatusForOrg(selectedOrg.orgId);
-                        
+
                         if (membership && currentPlan) {
                           return (
                             <div className="flex items-center gap-2">
-                              <span className={`text-xs px-2 py-1 rounded-full ${
-                                membershipStatus === "active" 
-                                  ? "bg-emerald-500/20 text-emerald-300" 
-                                  : membershipStatus === "pending"
+                              <span className={`text-xs px-2 py-1 rounded-full ${membershipStatus === "active"
+                                ? "bg-emerald-500/20 text-emerald-300"
+                                : membershipStatus === "pending"
                                   ? "bg-yellow-500/20 text-yellow-300"
                                   : "bg-zinc-500/20 text-zinc-400"
-                              }`}>
-                                {membershipStatus === "active" ? "Active" : 
-                                 membershipStatus === "pending" ? "Pending" : 
-                                 membershipStatus || "No Plan"}
+                                }`}>
+                                {membershipStatus === "active" ? "Active" :
+                                  membershipStatus === "pending" ? "Pending" :
+                                    membershipStatus || "No Plan"}
                               </span>
                               <span className="text-xs text-zinc-400">
                                 {currentPlan.planName} - ${currentPlan.priceMonthly}/month
@@ -525,8 +439,8 @@ export default function PricingPage() {
                 className={[
                   "relative rounded-2xl border p-6",
                   "bg-zinc-900/60 backdrop-blur-sm border-white/10",
-                  isDisabled 
-                    ? "opacity-60 cursor-not-allowed" 
+                  isDisabled
+                    ? "opacity-60 cursor-not-allowed"
                     : "shadow-lg transition hover:-translate-y-0.5 hover:ring-1 hover:ring-emerald-400/30",
                   isPopular ? "ring-1 ring-emerald-400/30" : "",
                 ].join(" ")}
@@ -605,15 +519,14 @@ export default function PricingPage() {
                 const membership = orgMemberships[org.orgId];
                 const currentPlan = getCurrentPlanForOrg(org.orgId);
                 const membershipStatus = getMembershipStatusForOrg(org.orgId);
-                
+
                 return (
                   <div
                     key={org.orgId}
-                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                      selectedOrg?.orgId === org.orgId
-                        ? "border-emerald-400/60 bg-emerald-500/10"
-                        : "border-zinc-700 hover:border-zinc-600"
-                    }`}
+                    className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedOrg?.orgId === org.orgId
+                      ? "border-emerald-400/60 bg-emerald-500/10"
+                      : "border-zinc-700 hover:border-zinc-600"
+                      }`}
                     onClick={() => setSelectedOrg(org)}
                   >
                     <div className="flex items-center justify-between">
@@ -622,16 +535,15 @@ export default function PricingPage() {
                         <p className="text-sm text-zinc-400">Role: {org.myRole}</p>
                         {membership && currentPlan ? (
                           <div className="mt-1 flex items-center gap-2">
-                            <span className={`text-xs px-2 py-1 rounded-full ${
-                              membershipStatus === "active" 
-                                ? "bg-emerald-500/20 text-emerald-300" 
-                                : membershipStatus === "pending"
+                            <span className={`text-xs px-2 py-1 rounded-full ${membershipStatus === "active"
+                              ? "bg-emerald-500/20 text-emerald-300"
+                              : membershipStatus === "pending"
                                 ? "bg-yellow-500/20 text-yellow-300"
                                 : "bg-zinc-500/20 text-zinc-400"
-                            }`}>
-                              {membershipStatus === "active" ? "Active" : 
-                               membershipStatus === "pending" ? "Pending" : 
-                               membershipStatus || "No Plan"}
+                              }`}>
+                              {membershipStatus === "active" ? "Active" :
+                                membershipStatus === "pending" ? "Pending" :
+                                  membershipStatus || "No Plan"}
                             </span>
                             <span className="text-xs text-zinc-400">
                               {currentPlan.planName}
@@ -666,6 +578,10 @@ export default function PricingPage() {
           </div>
         </div>
       )}
+      <style jsx>{`
+        [data-reveal]{opacity:0;transform:translateY(16px);transition:opacity .6s ease,transform .6s ease}
+        [data-reveal].in{opacity:1;transform:none}
+      `}</style>
     </main>
   );
 }

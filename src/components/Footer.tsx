@@ -1,17 +1,108 @@
-// components/Footer.tsx
+"use client";
+
+import Link from "next/link";
+import { useState, FormEvent } from "react";
 
 export default function Footer() {
+  const [email, setEmail] = useState("");
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    setEmail("");
+  };
+
   return (
-    <footer className="bg-black/70 text-gray-400 text-sm py-10 px-6 mt-20">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between gap-6">
-        <div>
-          <h3 className="text-white font-semibold mb-2">IMOS</h3>
-          <p>Map your world with precision and simplicity.</p>
+    <footer className="relative mt-24 text-gray-900 dark:text-gray-100">
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(1200px_600px_at_50%_-180px,rgba(16,185,129,0.16),transparent_60%)] dark:bg-[radial-gradient(1200px_600px_at_50%_-180px,rgba(16,185,129,0.12),transparent_60%)]" />
+      <div aria-hidden className="absolute inset-0 -z-10 bg-[linear-gradient(to_bottom,rgba(16,185,129,0.08),transparent_35%)] dark:bg-[linear-gradient(to_bottom,rgba(16,185,129,0.06),transparent_35%)]" />
+      <div className="border-t border-black/10 dark:border-white/10" />
+
+      <div className="max-w-7xl mx-auto px-6 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-10">
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-md bg-emerald-500 shadow" />
+              <span className="text-lg font-bold tracking-tight">IMOS</span>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              Build and share interactive maps with ease. Powerful for teams, simple for everyone.
+            </p>
+            <div className="flex items-center gap-3">
+              <Link href="#" className="group inline-flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-black/10 dark:ring-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition">
+                <svg viewBox="0 0 24 24" className="h-4 w-4"><path fill="currentColor" d="M22 5.9c-.7.3-1.4.5-2.2.6.8-.5 1.3-1.1 1.6-2-.8.5-1.7.8-2.6 1-1.6-1.7-4.4-1.1-5.3 1.2-.3.7-.3 1.5-.1 2.2-3.3-.2-6.3-1.7-8.3-4.2-.9 1.6-.4 3.6 1.1 4.7-.6 0-1.2-.2-1.7-.5 0 1.7 1.2 3.2 2.9 3.6-.5.1-1 .1-1.5 0 .4 1.5 1.8 2.6 3.4 2.6-1.3 1-3 1.5-4.6 1.3 1.7 1.1 3.7 1.7 5.7 1.7 6.9 0 10.8-6 10.6-11.4.7-.5 1.3-1.1 1.8-1.8z"/></svg>
+              </Link>
+              <Link href="#" className="group inline-flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-black/10 dark:ring-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition">
+                <svg viewBox="0 0 24 24" className="h-4 w-4"><path fill="currentColor" d="M12 .5C5.7.5.5 5.7.5 12S5.7 23.5 12 23.5 23.5 18.3 23.5 12 18.3.5 12 .5Zm3.3 7.1h-1.9c-.7 0-.9.3-.9.9v1.7h2.7l-.3 2.7h-2.4V20h-2.8v-5.1H6.9V12h2.1V9.9c0-2 1.1-3.1 3.3-3.1h2.1v2.8Z"/></svg>
+              </Link>
+              <Link href="#" className="group inline-flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-black/10 dark:ring-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition">
+                <svg viewBox="0 0 24 24" className="h-4 w-4"><path fill="currentColor" d="M10 15.5 15.5 12 10 8.5v7ZM21 7.5v9c0 1.7-1.3 3-3 3H6c-1.7 0-3-1.3-3-3v-9c0-1.7 1.3-3 3-3h12c1.7 0 3 1.3 3 3Z"/></svg>
+              </Link>
+              <Link href="#" className="group inline-flex h-9 w-9 items-center justify-center rounded-full ring-1 ring-black/10 dark:ring-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition">
+                <svg viewBox="0 0 24 24" className="h-4 w-4"><path fill="currentColor" d="M19 3H5a2 2 0 0 0-2 2v14l4-4h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Z"/></svg>
+              </Link>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-10 md:col-span-2">
+            <div>
+              <h4 className="text-sm font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-3">Product</h4>
+              <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                <li><Link href="/service/map-builder" className="hover:text-emerald-500">Map Builder</Link></li>
+                <li><Link href="/service/data-layers" className="hover:text-emerald-500">Data Layers</Link></li>
+                <li><Link href="/service/dashboards" className="hover:text-emerald-500">Dashboards</Link></li>
+                <li><Link href="/service/export-embed" className="hover:text-emerald-500">Export & Embed</Link></li>
+                <li><Link href="/pricing" className="hover:text-emerald-500">Pricing</Link></li>
+                <li><Link href="/templates" className="hover:text-emerald-500">Templates</Link></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-3">Resources</h4>
+              <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+                <li><Link href="/tutorial" className="hover:text-emerald-500">Tutorials</Link></li>
+                <li><Link href="/resources/developer-docs" className="hover:text-emerald-500">Developer Docs</Link></li>
+                <li><Link href="/resources/help-center" className="hover:text-emerald-500">Help Center</Link></li>
+                <li><Link href="/resources/webinars" className="hover:text-emerald-500">Webinars</Link></li>
+                <li><Link href="/resources/blog" className="hover:text-emerald-500">Blog</Link></li>
+                <li><Link href="/community" className="hover:text-emerald-500">Community</Link></li>
+              </ul>
+            </div>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-3">Newsletter</h4>
+            <p className="text-sm text-gray-700 dark:text-gray-300 mb-3">Get product updates, templates, and tutorials.</p>
+            <form onSubmit={onSubmit} className="flex items-center gap-2">
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="you@example.com"
+                className="w-full rounded-lg px-3 py-2 bg-white/60 dark:bg-white/10 ring-1 ring-black/10 dark:ring-white/10 outline-none focus:ring-emerald-400"
+              />
+              <button
+                type="submit"
+                className="shrink-0 rounded-lg px-4 py-2 bg-emerald-500 text-white font-semibold hover:bg-emerald-400 transition"
+              >
+                Subscribe
+              </button>
+            </form>
+          </div>
         </div>
-        <div>
-          <h4 className="text-white font-medium mb-2">Contact</h4>
-          <p>Email: support@imos.com</p>
-          <p>Phone: +1 (555) 123-4567</p>
+
+        <div className="mt-10 rounded-2xl bg-white/60 dark:bg-white/5 ring-1 ring-black/10 dark:ring-white/10 backdrop-blur px-5 py-4">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-3 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="h-5 w-5 rounded-md bg-emerald-500" />
+              <span className="font-semibold">IMOS</span>
+              <span>© {new Date().getFullYear()}</span>
+            </div>
+            <nav className="flex items-center gap-5 text-gray-700 dark:text-gray-300">
+              <Link href="/resources/help-center" className="hover:text-emerald-500">Help</Link>
+              <Link href="/resources/blog" className="hover:text-emerald-500">Blog</Link>
+              <Link href="/privacy" className="hover:text-emerald-500">Privacy</Link>
+              <Link href="/terms" className="hover:text-emerald-500">Terms</Link>
+            </nav>
+          </div>
         </div>
       </div>
     </footer>
