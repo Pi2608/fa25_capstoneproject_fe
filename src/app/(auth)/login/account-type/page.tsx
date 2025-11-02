@@ -29,7 +29,7 @@ export default function AccountTypePage() {
         setTimeout(() => {
           // Clear first-time user flag only, keep the auth token
           clearFirstTimeFlags();
-          router.push("/profile");
+          router.push("/profile/information");
         }, 1000);
       } else {
         showToast("success", "Setting up organization 🏢");
