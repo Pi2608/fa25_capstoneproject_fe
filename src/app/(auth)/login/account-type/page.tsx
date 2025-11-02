@@ -55,7 +55,7 @@ export default function AccountTypePage() {
       if (selectedType === "personal") {
         showToast("success", "Welcome to your personal dashboard! 🎉");
         setTimeout(() => {
-          router.push("/profile");
+          router.push("/profile/information");
         }, 1000);
       } else {
         showToast("success", "Setting up organization 🏢");
