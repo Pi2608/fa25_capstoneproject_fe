@@ -9,8 +9,7 @@ import PasswordInput from "@/components/auth/PasswordInput";
 import SubmitButton from "@/components/ui/SubmitButton";
 import AuthLinks from "@/components/auth/AuthLinks";
 import { AuthFormErrors } from "@/types/auth";
-import { login } from "@/lib/api-auth";
-import { getMe } from "@/lib/api-auth";
+import { login, getMe } from "@/lib/api-auth";
 
 export default function LoginClientSimple() {
   const router = useRouter();
@@ -38,23 +37,23 @@ export default function LoginClientSimple() {
     setLoading(true);
     try {
       await login({ email, password });
-
-      const me = await getMe();
-      const role = String(me?.role || "").toLowerCase();
-
-      if (role === "admin") {
-        showToast("success", "Login successful! Redirecting to dashboard…");
-        router.push("/dashboard");
-        return;
-      }
-
-      const first = isFirstTimeUser();
-      if (first) {
-        showToast("success", "Login successful! Let's set up your account…");
-        router.push("/login/account-type");
-      } else {
-        showToast("success", "Login successful! Redirecting…");
-        router.push("/");
+      
+      // Get user info to check if this is first time login
+      try {
+        const userInfo = await getMe();
+        const isFirstTime = !userInfo.lastLogin || userInfo.lastLogin === null;
+        
+        if (isFirstTime) {
+          showToast("success", "Login successful! Let's set up your account...");
+          setTimeout(() => router.push("/login/account-type"), 1000);
+        } else {
+          showToast("success", "Login successful! Redirecting...");
+          setTimeout(() => router.push("/"), 1000);
+        }
+      } catch {
+        // If can't get user info, default to regular login flow
+        showToast("success", "Login successful! Redirecting...");
+        setTimeout(() => router.push("/"), 1000);
       }
     } catch {
       showToast("error", "Invalid email or password");

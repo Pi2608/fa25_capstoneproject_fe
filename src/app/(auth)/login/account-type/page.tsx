@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearAllAuthData } from "@/utils/authUtils";
+import { clearFirstTimeFlags } from "@/utils/authUtils";
 import { useToast } from "@/contexts/ToastContext";
 
 export default function AccountTypePage() {
@@ -27,15 +27,15 @@ export default function AccountTypePage() {
       if (selectedType === "personal") {
         showToast("success", "Welcome to your personal dashboard! 🎉");
         setTimeout(() => {
-          // Clear first-time user flag
-          clearAllAuthData();
+          // Clear first-time user flag only, keep the auth token
+          clearFirstTimeFlags();
           router.push("/profile");
         }, 1000);
       } else {
         showToast("success", "Setting up organization 🏢");
         setTimeout(() => {
-          // Clear first-time user flag
-          clearAllAuthData();
+          // Clear first-time user flag only, keep the auth token
+          clearFirstTimeFlags();
           router.push("/register/organization");
         }, 1000);
       }

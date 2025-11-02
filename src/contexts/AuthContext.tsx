@@ -50,6 +50,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Listen for auth changes from api-core
+    const handleAuthChange = () => {
+      try {
+        const newToken = localStorage.getItem(LS_TOKEN_KEY);
+        setToken(newToken);
+        if (newToken) {
+          const identity = parseToken(newToken);
+          setUserId(identity.userId);
+          setUserEmail(identity.email);
+        } else {
+          setUserId(null);
+          setUserEmail(null);
+          setUser(null);
+        }
+      } catch {
+      }
+    };
+
+    window.addEventListener("auth-changed", handleAuthChange);
+    return () => {
+      window.removeEventListener("auth-changed", handleAuthChange);
+    };
+  }, []);
+
+  useEffect(() => {
     try {
       if (token) {
         localStorage.setItem(LS_TOKEN_KEY, token);
