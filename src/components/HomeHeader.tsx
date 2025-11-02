@@ -15,7 +15,15 @@ function NavDropdown({
   items: { label: string; desc?: string; href: string }[];
 }) {
   const [open, setOpen] = useState(false);
+  const [canHover, setCanHover] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const isFirstRender = useRef(true);
+
+  // Đợi user di chuyển chuột trước khi cho phép hover
+  useEffect(() => {
+    const timer = setTimeout(() => setCanHover(true), 300);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -36,6 +44,14 @@ function NavDropdown({
   useEffect(() => {
     const el = ref.current?.querySelector<HTMLDivElement>("[data-menu]");
     if (!el) return;
+    
+    // Không chạy animation lần đầu khi component mount
+    if (isFirstRender.current) {
+      gsap.set(el, { autoAlpha: 0, y: -8, scale: 0.98 });
+      isFirstRender.current = false;
+      return;
+    }
+    
     if (open) {
       gsap.fromTo(
         el,
@@ -67,11 +83,12 @@ function NavDropdown({
         data-menu
         role="menu"
         tabIndex={-1}
+        style={{ opacity: 0, visibility: 'hidden' }}
         className={`${open ? "pointer-events-auto" : "pointer-events-none"} absolute left-1/2 -translate-x-1/2 mt-4 w-[640px] max-w-[90vw]
                     rounded-2xl p-4 md:p-5 backdrop-blur-md shadow-2xl
                     bg-white/80 ring-1 ring-black/10
                     dark:bg-zinc-900/90 dark:ring-white/10`}
-        onMouseEnter={() => setOpen(true)}
+        onMouseEnter={() => canHover && setOpen(true)}
         onMouseLeave={() => setOpen(false)}
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4">

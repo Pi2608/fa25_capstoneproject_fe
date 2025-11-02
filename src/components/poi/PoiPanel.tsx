@@ -52,6 +52,7 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
   const [busy, setBusy] = useState(false);
   const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
   const [expandedPoiId, setExpandedPoiId] = useState<string | null>(null);
+  const [isPickingLocation, setIsPickingLocation] = useState(false);
 
   const [displayConfig, setDisplayConfig] = useState({
     isVisible: undefined as boolean | undefined,
@@ -96,16 +97,65 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
   };
 
   const openCreate = () => {
-    setEditingPoiId(null);
-    setForm({
-      title: "",
-      subtitle: "",
-      markerGeometry: "",
-      highlightOnEnter: false,
-      shouldPin: false,
-    });
-    setDialogOpen(true);
+    // Bật chế độ chọn vị trí trên map
+    console.log('🎯 PoiPanel: Starting pick location mode');
+    setIsPickingLocation(true);
+    window.dispatchEvent(
+      new CustomEvent("poi:startPickLocation", {
+        detail: { mapId },
+      })
+    );
+    console.log('📡 PoiPanel: Dispatched poi:startPickLocation event');
   };
+
+  // Lắng nghe sự kiện khi user chọn vị trí trên map
+  useEffect(() => {
+    console.log('👂 PoiPanel: Setting up poi:locationPicked listener, isPickingLocation:', isPickingLocation);
+    
+    const handleLocationPicked = async (e: Event) => {
+      console.log('📍 PoiPanel: Received poi:locationPicked event', { isPickingLocation });
+      if (!isPickingLocation) {
+        console.warn('⚠️ PoiPanel: Not in picking mode, ignoring event');
+        return;
+      }
+      
+      const customEvent = e as CustomEvent;
+      const { lngLat } = customEvent.detail;
+      console.log('✅ PoiPanel: Processing location:', lngLat);
+      setIsPickingLocation(false);
+      
+      // Tạo POI với tên mặc định
+      const defaultPoi: CreatePoiReq = {
+        title: `POI ${pois.length + 1}`,
+        subtitle: "",
+        markerGeometry: JSON.stringify({
+          type: "Point",
+          coordinates: [lngLat[0], lngLat[1]],
+        }),
+        highlightOnEnter: false,
+        shouldPin: true,
+      };
+      
+      console.log('💾 PoiPanel: Creating POI:', defaultPoi);
+      try {
+        setBusy(true);
+        await createMapPoi(mapId, defaultPoi);
+        await refresh();
+        console.log('✅ PoiPanel: POI created successfully');
+      } catch (err) {
+        console.error('❌ PoiPanel: Failed to create POI:', err);
+        setError("Tạo POI thất bại");
+      } finally {
+        setBusy(false);
+      }
+    };
+
+    window.addEventListener("poi:locationPicked", handleLocationPicked);
+    return () => {
+      console.log('🧹 PoiPanel: Cleaning up poi:locationPicked listener');
+      window.removeEventListener("poi:locationPicked", handleLocationPicked);
+    };
+  }, [isPickingLocation, pois.length, mapId]);
 
   const openEdit = (p: MapPoi) => {
     setEditingPoiId(p.poiId);
@@ -211,12 +261,21 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
         </div>
         <button
           onClick={openCreate}
-          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium flex items-center gap-1"
+          disabled={isPickingLocation}
+          className={`px-3 py-1.5 ${
+            isPickingLocation 
+              ? "bg-yellow-600 hover:bg-yellow-500" 
+              : "bg-emerald-600 hover:bg-emerald-500"
+          } text-white rounded-lg text-sm font-medium flex items-center gap-1 disabled:cursor-not-allowed`}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            {isPickingLocation ? (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+            ) : (
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            )}
           </svg>
-          POI
+          {isPickingLocation ? "Chọn vị trí..." : "POI"}
         </button>
       </div>
 

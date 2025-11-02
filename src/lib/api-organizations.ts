@@ -29,6 +29,7 @@ export type OrganizationDetailDto = {
   createdAt?: string;
   isActive?: boolean;
 };
+export type GetOrganizationNumberResDto = { organizationNumber: number };
 
 export type GetAllOrganizationsResDto = { organizations: OrganizationDetailDto[] };
 export type GetOrganizationByIdResDto = { organization: OrganizationDetailDto };
@@ -104,6 +105,10 @@ export function createOrganization(body: OrganizationReqDto) {
 
 export function getOrganizations() {
   return getJson<GetAllOrganizationsResDto>("/organizations");
+}
+
+export function getOrganizationNumber() {
+  return getJson<GetOrganizationNumberResDto>("/organizations/organization-number");
 }
 
 export function getOrganizationById(orgId: string) {
