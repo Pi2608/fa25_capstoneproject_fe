@@ -44,11 +44,16 @@ export default function LoginClientSimple() {
           setTimeout(() => router.push("/dashboard"), 800);
           return;
         }
-        const isFirstTime = !me.lastLogin;
-        if (isFirstTime) {
+        const accountTypeKey = `account_type_${email}`;
+        const hasAccountType = typeof window !== "undefined" && localStorage.getItem(accountTypeKey);
+        
+        if (!hasAccountType) {
           showToast("success", "Login successful! Let's set up your account...");
           setTimeout(() => router.push("/login/account-type"), 800);
         } else {
+          if (typeof window !== "undefined") {
+            localStorage.setItem("account_type", hasAccountType);
+          }
           showToast("success", "Login successful! Redirecting...");
           setTimeout(() => router.push("/"), 800);
         }

@@ -98,6 +98,10 @@ export interface GeomanLayer extends Layer {
 export interface LeafletMouseEvent {
   originalEvent: MouseEvent & { shiftKey: boolean };
   target: Layer;
+  latlng: {
+    lat: number;
+    lng: number;
+  };
 }
 
 export interface LeafletMapClickEvent {

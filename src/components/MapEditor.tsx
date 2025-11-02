@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import "leaflet/dist/leaflet.css";
-import type { Map as LMap, TileLayer, LatLngTuple, Layer, FeatureGroup, LatLng, LatLngBounds } from "leaflet";
+import type { Map as LMap, TileLayer, LatLngTuple, Layer, FeatureGroup, LatLng, LatLngBounds, LeafletMouseEvent } from "leaflet";
 
 import type { Position } from "geojson";
 import {
@@ -382,6 +382,71 @@ export default function MapEditor() {
 
     return () => {
       window.removeEventListener('zone-contextmenu', handleZoneContextMenu);
+    };
+  }, []);
+
+  // Xử lý POI picking mode
+  useEffect(() => {
+    let isPickingPoi = false;
+    let clickHandler: ((e: LeafletMouseEvent) => void) | null = null;
+
+    const handleStartPickLocation = (e: Event) => {
+      console.log('🎯 MapEditor received poi:startPickLocation event');
+      const map = mapRef.current;
+      if (!map) {
+        console.warn('⚠️ Map not ready yet');
+        return;
+      }
+
+      console.log('✅ Starting POI picking mode');
+      isPickingPoi = true;
+      
+      // Thay đổi cursor khi đang pick location
+      const mapContainer = map.getContainer();
+      mapContainer.style.cursor = 'crosshair';
+      console.log('🖱️ Cursor changed to crosshair');
+
+      // Xử lý click trên map
+      clickHandler = (e: LeafletMouseEvent) => {
+        if (!isPickingPoi) return;
+
+        const { lat, lng } = e.latlng;
+        console.log('📍 Location picked:', { lat, lng });
+        
+        // Dispatch event với tọa độ đã chọn
+        window.dispatchEvent(
+          new CustomEvent("poi:locationPicked", {
+            detail: {
+              lngLat: [lng, lat],
+            },
+          })
+        );
+        console.log('✅ Dispatched poi:locationPicked event');
+
+        // Reset cursor và tắt picking mode
+        mapContainer.style.cursor = '';
+        isPickingPoi = false;
+        console.log('🔄 Reset picking mode');
+        
+        if (clickHandler) {
+          map.off('click', clickHandler);
+          clickHandler = null;
+        }
+      };
+
+      map.on('click', clickHandler);
+      console.log('👂 Click handler attached to map');
+    };
+
+    console.log('🎬 Setting up POI picking event listener');
+    window.addEventListener('poi:startPickLocation', handleStartPickLocation);
+
+    return () => {
+      console.log('🧹 Cleaning up POI picking event listener');
+      window.removeEventListener('poi:startPickLocation', handleStartPickLocation);
+      if (clickHandler && mapRef.current) {
+        mapRef.current.off('click', clickHandler);
+      }
     };
   }, []);
 

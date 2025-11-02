@@ -1,15 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { clearFirstTimeFlags } from "@/utils/authUtils";
 import { useToast } from "@/contexts/ToastContext";
+import { getMe } from "@/lib/api-auth";
 
 export default function AccountTypePage() {
   const router = useRouter();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [selectedType, setSelectedType] = useState<"personal" | "organization" | null>(null);
+  const [userEmail, setUserEmail] = useState<string>("");
+
+  // Lấy email của user hiện tại
+  useEffect(() => {
+    const fetchUserEmail = async () => {
+      try {
+        const me = await getMe();
+        setUserEmail(me.email);
+      } catch (error) {
+        console.error("Failed to get user email:", error);
+      }
+    };
+    fetchUserEmail();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,21 +36,30 @@ export default function AccountTypePage() {
 
     setLoading(true);
     try {
-      // Save account type choice
+      // Save account type cho session hiện tại
       localStorage.setItem("account_type", selectedType);
+      
+      // Lưu account type theo email để persistent qua các lần logout/login
+      if (userEmail) {
+        const accountTypeKey = `account_type_${userEmail}`;
+        localStorage.setItem(accountTypeKey, selectedType);
+      }
+      
+      // Clear first-time flags (NHƯNG GIỮ LẠI account_type)
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("is_first_time_user");
+        localStorage.removeItem("user_email");
+        // KHÔNG xóa account_type
+      }
       
       if (selectedType === "personal") {
         showToast("success", "Welcome to your personal dashboard! 🎉");
         setTimeout(() => {
-          // Clear first-time user flag only, keep the auth token
-          clearFirstTimeFlags();
-          router.push("/profile/information");
+          router.push("/profile");
         }, 1000);
       } else {
         showToast("success", "Setting up organization 🏢");
         setTimeout(() => {
-          // Clear first-time user flag only, keep the auth token
-          clearFirstTimeFlags();
           router.push("/register/organization");
         }, 1000);
       }

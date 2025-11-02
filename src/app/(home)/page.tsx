@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useLayoutEffect, ReactNode } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
-import { getOrganizations } from "@/lib/api-organizations";
+import { getOrganizationNumber, GetOrganizationNumberResDto } from "@/lib/api-organizations";
 import { getMapTemplates } from "@/lib/api-maps";
 
 gsap.registerPlugin(ScrollTrigger);
@@ -83,11 +83,11 @@ export default function HomePage() {
     let cancel = false;
     const load = async () => {
       try {
-        const [orgRes, tplRes] = await Promise.allSettled([getOrganizations(), getMapTemplates()]);
+        const [orgRes, tplRes] = await Promise.allSettled([getOrganizationNumber(), getMapTemplates()]);
         if (cancel) return;
         const orgs =
           orgRes.status === "fulfilled" && orgRes.value && typeof orgRes.value === "object"
-            ? (orgRes.value as { organizations?: unknown[] }).organizations?.length ?? 0
+            ? (orgRes.value as GetOrganizationNumberResDto).organizationNumber ?? 0
             : 0;
         const tpls = tplRes.status === "fulfilled" && Array.isArray(tplRes.value) ? tplRes.value.length : 0;
         setOrgCount(orgs);
