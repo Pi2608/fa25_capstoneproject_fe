@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { ReactNode } from "react";
 
 const TABS = [
   { href: "/profile/settings/members", label: "Members" },
@@ -12,31 +13,45 @@ const TABS = [
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   return (
-    <div className="max-w-6xl mx-auto">
-      <div className="flex items-center gap-6 border-b border-white/10">
+    <div className="mx-auto max-w-6xl">
+      <div className="flex items-center gap-6 border-b border-zinc-200 dark:border-white/10">
         {TABS.map((t) => {
-          const active = pathname?.startsWith(t.href);
+          const active = isActive(t.href);
           return (
             <Link
               key={t.href}
               href={t.href}
-              className={[
-                "relative pb-2 px-1 text-sm transition-colors",
-                active
-                  ? "text-white font-semibold border-b-2 border-emerald-400"
-                  : "text-zinc-400 hover:text-white",
-              ].join(" ")}
+              aria-current={active ? "page" : undefined}
+              className="group relative -mb-px px-1 pb-3 text-sm"
             >
-              {t.label}
+              <span
+                className={
+                  active
+                    ? "font-semibold text-emerald-700 dark:text-emerald-300"
+                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white"
+                }
+              >
+                {t.label}
+              </span>
+
+              <span
+                aria-hidden
+                className={
+                  active
+                    ? "absolute left-0 -bottom-[1px] h-0.5 w-full rounded-full bg-emerald-600 dark:bg-emerald-400"
+                    : "absolute left-0 -bottom-[1px] h-0.5 w-0 rounded-full bg-transparent transition-all duration-200 group-hover:w-full group-hover:bg-zinc-300/70 dark:group-hover:bg-white/30"
+                }
+              />
             </Link>
           );
         })}
       </div>
 
-      <div className="mt-2">{children}</div>
+      <div className="mt-4">{children}</div>
     </div>
   );
 }

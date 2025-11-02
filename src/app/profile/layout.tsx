@@ -3,99 +3,153 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
-
-import { useAuthStatus } from "@/contexts/useAuthStatus";
-import { getMyMembership, getPlans, Plan } from "@/lib/api-membership";
-import { getMyOrganizations, MyOrganizationDto } from "@/lib/api-organizations";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getPlans, type Plan, getMyMembership } from "@/lib/api-membership";
 import { getUnreadNotificationCount } from "@/lib/api-user";
+import { getMyOrganizations, type MyOrganizationDto } from "@/lib/api-organizations";
+import { useAuthStatus } from "@/contexts/useAuthStatus";
+import { useTheme } from "next-themes";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Bell,
+  Home,
+  User,
+  Clock,
+  FileText,
+  UserPlus,
+  Settings,
+  HelpCircle,
+  Building2,
+  PlusCircle,
+  LogOut,
+  Sun,
+  Moon,
+  Menu,
+} from "lucide-react";
 
-type MyMembership = {
+export type MyMembership = {
   planId: number;
   status: "active" | "expired" | "pending" | string;
 };
 
-const SidebarLink = ({ href, label, right }: { href: string; label: string; right?: ReactNode }) => {
-  const pathname = usePathname();
-  const active = pathname === href;
+function NavItem({
+  href,
+  label,
+  icon: Icon,
+  active,
+  right,
+}: {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  active: boolean;
+  right?: ReactNode;
+}) {
+  const activeCls = active
+    ? "relative bg-emerald-500/10 text-emerald-900 ring-1 ring-emerald-500/35 " +
+    "before:absolute before:left-0 before:top-1 before:bottom-1 before:w-1 before:rounded before:bg-emerald-500 " +
+    "dark:bg-emerald-500/15 dark:text-emerald-50"
+    : "hover:bg-muted/60 dark:hover:bg-white/10";
+
   return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={[
-        "relative flex items-center justify-between px-3 py-2 text-sm rounded-lg transition-colors",
-        "outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/60",
-        active
-          ? "text-emerald-300 bg-emerald-500/10 ring-1 ring-emerald-400/30"
-          : "text-zinc-300 hover:text-white hover:bg-white/5",
-      ].join(" ")}
-    >
-      <span className="truncate">
-        {active && (
-          <span
-            aria-hidden
-            className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded bg-emerald-400/80"
-          />
-        )}
-        {label}
-      </span>
-      {right}
+    <Link href={href} aria-current={active ? "page" : undefined}>
+      <Button
+        variant="ghost"
+        className={`w-full justify-between px-3 py-2 h-9 transition-colors ${activeCls}`}
+      >
+        <span className="flex items-center gap-2 truncate">
+          <Icon className="h-4 w-4 opacity-90" />
+          <span className="truncate text-sm">{label}</span>
+        </span>
+        {right}
+      </Button>
     </Link>
   );
-};
+}
 
-function Bell({ className }: { className?: string }) {
+function ThemeToggle() {
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) {
+    return (
+      <div className="inline-flex h-8 w-[100px] items-center justify-center rounded-md border border-zinc-300 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-800/80" />
+    );
+  }
+
+  const current = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = current === "dark";
+
+  const base =
+    "inline-flex items-center gap-2 h-8 px-3 rounded-md text-xs font-medium transition-colors " +
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60";
+
+  const lightCls = "bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50 shadow-sm";
+  const darkCls = "bg-zinc-800/80 text-zinc-50 border border-white/10 hover:bg-zinc-700/80 shadow-sm";
+
   return (
-    <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <path
-        d="M12 3a6 6 0 00-6 6v2.586l-.707 1.414A1 1 0 006.172 14h11.656a1 1 0 00.879-1.5L18 11.586V9a6 6 0 00-6-6z"
-        stroke="currentColor"
-        strokeWidth="1.5"
-      />
-      <path d="M9 18a3 3 0 006 0" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
+    <button
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      aria-label="Đổi chế độ giao diện"
+      title={isDark ? "Chuyển sang nền sáng" : "Chuyển sang nền tối"}
+      className={`${base} ${isDark ? darkCls : lightCls}`}
+    >
+      {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+      <span>{isDark ? "Dark" : "Light"}</span>
+    </button>
   );
 }
 
 export default function ProfileLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
   const { isLoggedIn } = useAuthStatus();
-  const isFullScreenMap = /\/profile\/organizations\/[^/]+\/maps\/new\/?$/.test(pathname || "");
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
 
-  const [plans, setPlans] = useState<Plan[] | null>(null);
+  const isFullScreenMap = useMemo(
+    () => /\/profile\/organizations\/[^/]+\/maps\/new\/?$/.test(pathname),
+    [pathname]
+  );
+
+  const plansRef = useRef<Plan[] | null>(null);
+  const timerRef = useRef<number | null>(null);
+
   const [planLabel, setPlanLabel] = useState<string | null>(null);
   const [planStatus, setPlanStatus] = useState<string | null>(null);
-
   const [orgs, setOrgs] = useState<MyOrganizationDto[] | null>(null);
   const [orgsErr, setOrgsErr] = useState<string | null>(null);
-  const [currentOrgMembership, setCurrentOrgMembership] = useState<any>(null);
-
   const [unread, setUnread] = useState<number>(0);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     let alive = true;
 
-    async function taiGoiThanhVien() {
+    const loadPlans = async () => {
       if (!isLoggedIn) {
+        plansRef.current = null;
         setPlanLabel(null);
         setPlanStatus(null);
-        return;
+        return null;
       }
       try {
         const ps = await getPlans();
-        if (!alive) return;
-        setPlans(ps);
-        // Don't set plan info here, let taiToChuc handle it
-        return ps;
+        if (!alive) return null;
+        plansRef.current = ps ?? null;
+        return ps ?? null;
       } catch {
+        plansRef.current = null;
         setPlanLabel("Miễn phí");
         setPlanStatus("active");
         return null;
       }
-    }
+    };
 
-    async function taiToChuc(plansData?: Plan[] | null) {
+    const loadOrgs = async (plansData?: Plan[] | null) => {
       if (!isLoggedIn) {
         setOrgs(null);
         setOrgsErr(null);
@@ -104,6 +158,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       try {
         const res = await getMyOrganizations();
         if (!alive) return;
+
         let items: MyOrganizationDto[] = [];
         if (
           typeof res === "object" &&
@@ -114,32 +169,27 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
         } else if (Array.isArray(res)) {
           items = res as MyOrganizationDto[];
         }
+
         setOrgs(items);
         setOrgsErr(null);
-        
-        // Load membership for the first organization (current context)
+
         if (items.length > 0) {
           try {
-            const membership = await getMyMembership(items[0].orgId);
+            const membership = (await getMyMembership(items[0].orgId)) as MyMembership;
             if (!alive) return;
-            setCurrentOrgMembership(membership);
-            
-            // Update plan info based on membership
             if (membership && plansData) {
-              const found = plansData.find((p) => p.planId === membership.planId);
+              const found = plansData.find((p) => (p as unknown as { planId: number }).planId === membership.planId);
               if (found) {
-                setPlanLabel(found.planName);
+                const name = (found as unknown as { planName?: string; name?: string }).planName ?? (found as any).name;
+                setPlanLabel(name ?? "Miễn phí");
                 setPlanStatus(membership.status ?? "active");
-                return;
               }
             }
           } catch {
-            // If no membership found, fall back to free plan
-            if (plansData) {
-              const free = plansData.find((p) => p.priceMonthly === 0);
-              setPlanLabel(free?.planName ?? "Miễn phí");
-              setPlanStatus("active");
-            }
+            const free = plansData?.find((p: any) => p.priceMonthly === 0) ?? null;
+            const name = (free as any)?.planName ?? (free as any)?.name;
+            setPlanLabel(name ?? "Miễn phí");
+            setPlanStatus("active");
           }
         }
       } catch {
@@ -147,9 +197,9 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
         setOrgsErr("Không thể tải danh sách tổ chức.");
         setOrgs([]);
       }
-    }
+    };
 
-    async function taiThongBaoChuaDoc() {
+    const loadUnread = async () => {
       if (!isLoggedIn) {
         setUnread(0);
         return;
@@ -162,33 +212,25 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
         if (!alive) return;
         setUnread(0);
       }
-    }
+    };
 
-    // Load plans first, then organizations with membership
-    taiGoiThanhVien().then((plans) => {
-      taiToChuc(plans);
-    });
-    taiThongBaoChuaDoc();
+    loadPlans().then((ps) => loadOrgs(ps));
+    loadUnread();
 
     const onAuthChanged = () => {
-      taiGoiThanhVien().then((plans) => {
-        taiToChuc(plans);
-      });
-      taiThongBaoChuaDoc();
+      loadPlans().then((ps) => loadOrgs(ps));
+      loadUnread();
     };
-    const onOrgsChanged = () => {
-      taiToChuc(plans);
-    };
-    const onNotifChanged = () => {
-      taiThongBaoChuaDoc();
-    };
+    const onOrgsChanged = () => loadOrgs(plansRef.current);
+    const onNotifChanged = () => loadUnread();
 
-    let timer: number | undefined;
     if (typeof window !== "undefined") {
       window.addEventListener("auth-changed", onAuthChanged);
       window.addEventListener("orgs-changed", onOrgsChanged as EventListener);
       window.addEventListener("notifications-changed", onNotifChanged as EventListener);
-      timer = window.setInterval(taiThongBaoChuaDoc, 30000);
+
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = window.setInterval(loadUnread, 30000);
     }
 
     return () => {
@@ -197,218 +239,273 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
         window.removeEventListener("auth-changed", onAuthChanged);
         window.removeEventListener("orgs-changed", onOrgsChanged as EventListener);
         window.removeEventListener("notifications-changed", onNotifChanged as EventListener);
-        if (timer) clearInterval(timer);
+        if (timerRef.current) {
+          clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
       }
     };
   }, [isLoggedIn]);
+
+  const commonNav = [
+    { href: "/", label: "Trang chủ", icon: Home },
+    { href: "/profile/information", label: "Thông tin cá nhân", icon: User },
+    { href: "/profile/recents", label: "Gần đây", icon: Clock },
+    { href: "/profile/drafts", label: "Bản nháp", icon: FileText },
+    { href: "/profile/invite", label: "Mời thành viên", icon: UserPlus },
+    { href: "/profile/notifications", label: "Thông báo", icon: Bell },
+    { href: "/profile/settings", label: "Cài đặt", icon: Settings },
+  ];
 
   if (isFullScreenMap) {
     return (
       <main className="fixed inset-0 m-0 p-0 overflow-hidden bg-black">
         {children}
         <style jsx global>{`
-          html, body { height: 100%; overflow: hidden; }
-          .leaflet-container { width: 100%; height: 100%; }
+          html,
+          body {
+            height: 100%;
+            overflow: hidden;
+          }
+          .leaflet-container {
+            width: 100%;
+            height: 100%;
+          }
         `}</style>
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen text-zinc-100 bg-gradient-to-b from-[#0b0f0e] via-emerald-900/10 to-[#0b0f0e]">
-      <div className="flex min-h-screen flex-col lg:flex-row">
-        <aside className="w-64 hidden lg:flex lg:flex-col justify-between border-r border-white/10 p-6 bg-gradient-to-b from-zinc-950/70 via-emerald-900/5 to-zinc-950/70 backdrop-blur fixed left-0 top-0 h-screen overflow-y-auto z-10">
-          <div>
-            <div className="mb-6">
-              <div className="text-[11px] uppercase tracking-widest text-emerald-300/70 mb-2">
-                Chung
+    <main
+      key={currentTheme}
+      className={
+        isDark
+          ? "min-h-screen text-zinc-100 bg-gradient-to-b from-[#0b0f0e] via-emerald-900/10 to-[#0b0f0e]"
+          : "min-h-screen text-zinc-900 bg-gradient-to-b from-emerald-50 via-white to-emerald-50"
+      }
+    >
+      <div className="flex min-h-screen">
+        <aside className="hidden md:flex md:flex-col w-72 fixed left-0 top-0 h-screen z-20 border-r bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="flex-1 p-4 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-md bg-emerald-500 shadow" />
+                <span className="text-lg font-semibold">IMOS</span>
               </div>
-              <div className="space-y-1">
-                <SidebarLink href="/" label="Trang chủ" />
-                <SidebarLink href="/profile" label="Thông tin cá nhân" />
-                <SidebarLink href="/profile/recents" label="Gần đây" />
-                <SidebarLink href="/profile/drafts" label="Bản nháp" />
-                <SidebarLink href="/profile/invite" label="Mời thành viên" />
-                <SidebarLink
-                  href="/profile/notifications"
-                  label="Thông báo"
-                  right={
-                    unread > 0 ? (
-                      <span className="ml-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-500/20 px-2 text-[11px] font-semibold text-emerald-300 ring-1 ring-emerald-400/30">
-                        {unread > 99 ? "99+" : unread}
-                      </span>
-                    ) : null
-                  }
-                />
-                <SidebarLink href="/profile/settings" label="Cài đặt" />
-              </div>
+              <ThemeToggle />
             </div>
 
-            <div className="mb-6">
-              <div className="text-[11px] uppercase tracking-widest text-emerald-300/70 mb-2">
-                Tổ chức
+            <ScrollArea className="flex-1">
+              <div className="px-1 space-y-1">
+                {commonNav.map((n) => (
+                  <NavItem
+                    key={n.href}
+                    href={n.href}
+                    label={n.label}
+                    icon={n.icon}
+                    active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
+                    right={
+                      n.href === "/profile/notifications" && unread > 0 ? (
+                        <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
+                          {unread > 99 ? "99+" : unread}
+                        </Badge>
+                      ) : undefined
+                    }
+                  />
+                ))}
               </div>
-              <div className="space-y-1">
-                <SidebarLink href="/register/organization" label="Tạo tổ chức" />
+
+              <div className="px-1 mt-5">
+                <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Tổ chức</div>
+
+                <NavItem
+                  href="/profile/create-org"
+                  label="Tạo tổ chức"
+                  icon={PlusCircle}
+                  active={pathname === "/profile/create-org"}
+                />
+
                 {orgs === null && (
-                  <>
-                    <div className="h-8 rounded-md bg-white/5 animate-pulse" />
-                    <div className="h-8 rounded-md bg-white/5 animate-pulse" />
-                  </>
-                )}
-                {orgsErr && (
-                  <div className="px-3 py-2 text-xs rounded-md border border-red-400/40 bg-red-500/10 text-red-200">
-                    {orgsErr}
+                  <div className="space-y-2 py-2">
+                    <div className="h-8 rounded-md bg-muted animate-pulse" />
+                    <div className="h-8 rounded-md bg-muted animate-pulse" />
                   </div>
                 )}
+
+                {orgsErr && (
+                  <div className="px-3 py-2 text-xs rounded-md border bg-destructive/10 text-destructive">{orgsErr}</div>
+                )}
+
                 {orgs && !orgsErr && orgs.length === 0 && (
-                  <div className="px-3 py-2 text-xs rounded-md border border-white/10 bg-white/5 text-zinc-300">
+                  <div className="px-3 py-2 text-xs rounded-md border bg-muted/30 text-muted-foreground">
                     Chưa có tổ chức nào. Hãy tạo tổ chức đầu tiên!
                   </div>
                 )}
-                {(orgs ?? []).slice(0, 5).map((o) => (
-                  <SidebarLink key={o.orgId} href={`/profile/organizations/${o.orgId}`} label={o.orgName} />
-                ))}
-                {(orgs ?? []).length > 5 && (
-                  <SidebarLink href="/organizations" label="Xem tất cả tổ chức" />
-                )}
-                <SidebarLink href="/profile/help" label="Trợ giúp" />
-              </div>
-            </div>
-          </div>
 
-          <div className="pt-4 border-t border-white/10 space-y-3">
-            {isLoggedIn && (
-              <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-3">
+                {(orgs ?? []).slice(0, 5).map((o) => (
+                  <NavItem
+                    key={o.orgId}
+                    href={`/profile/organizations/${o.orgId}`}
+                    label={o.orgName}
+                    icon={Building2}
+                    active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
+                  />
+                ))}
+
+                {(orgs ?? []).length > 5 && (
+                  <NavItem
+                    href="/organizations"
+                    label="Xem tất cả tổ chức"
+                    icon={Building2}
+                    active={pathname === "/organizations"}
+                  />
+                )}
+
+                <NavItem href="/profile/help" label="Trợ giúp" icon={HelpCircle} active={pathname === "/profile/help"} />
+              </div>
+            </ScrollArea>
+
+            <Separator className="my-2" />
+
+            <div className="space-y-3">
+              <div className="rounded-xl border p-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-zinc-400">Gói hiện tại</span>
+                  <span className="text-[12px] text-muted-foreground">Gói hiện tại</span>
                   {planLabel ? (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-emerald-300">{planLabel}</span>
+                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">{planLabel}</span>
                       {planStatus === "active" && (
-                        <span className="rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 text-[11px] font-semibold">
+                        <Badge variant="secondary" className="text-[11px] font-semibold">
                           Đang hoạt động
-                        </span>
+                        </Badge>
                       )}
                     </div>
                   ) : (
-                    <span className="text-[12px] text-zinc-500">—</span>
+                    <span className="text-[12px] text-muted-foreground">—</span>
                   )}
                 </div>
               </div>
-            )}
 
-            <div>
-              <div className="text-[11px] uppercase tracking-widest text-emerald-300/80 mb-2">
-                Nâng cấp
-              </div>
-              <Link
-                href="/profile/select-plan"
-                className="block w-full text-center text-sm font-semibold rounded-lg px-4 py-2 bg-gradient-to-r from-emerald-400 to-emerald-500 text-zinc-950 shadow-lg shadow-emerald-900/30 ring-1 ring-emerald-300/40 hover:from-emerald-300 hover:to-emerald-400 transition"
-              >
-                Chọn gói
+              <Link href="/profile/select-plan">
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white">Chọn gói</Button>
+              </Link>
+
+              <Link href="/login">
+                <Button variant="destructive" className="w-full">
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Đăng xuất
+                </Button>
               </Link>
             </div>
-
-            <Link
-              href="/login"
-              className="block w-full text-center text-sm font-medium rounded-lg px-4 py-2 bg-red-500/90 hover:bg-red-400 ring-1 ring-transparent hover:ring-red-300/40 transition"
-            >
-              Đăng xuất
-            </Link>
           </div>
         </aside>
 
-        <header className="lg:hidden w-full md:sticky md:top-0 z-20 bg-zinc-900/70 backdrop-blur-sm border-b border-emerald-400/20">
+        <header className="md:hidden w-full sticky top-0 z-30 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-md bg-emerald-400/90 shadow" />
-              <span className="text-lg font-semibold bg-gradient-to-r from-emerald-300 to-emerald-200 bg-clip-text text-transparent">
-              IMOS
-              </span>
-            </div>
             <div className="flex items-center gap-3">
-              <Link
-                href="/profile/notifications"
-                className="relative inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
-                aria-label="Thông báo"
-              >
-                <Bell className="h-5 w-5" />
-                {unread > 0 && (
-                  <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-500 text-[11px] font-bold text-zinc-950 px-1">
-                    {unread > 99 ? "99+" : unread}
-                  </span>
-                )}
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="Mở menu">
+                    <Menu className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+
+                <SheetContent side="left" className="w-72 p-0">
+                  <div className="p-4 flex items-center justify-between border-b">
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-3 rounded-md bg-emerald-500 shadow" />
+                      <span className="text-lg font-semibold">IMOS</span>
+                    </div>
+                    <ThemeToggle />
+                  </div>
+
+                  <ScrollArea className="h-[calc(100vh-64px)] p-3">
+                    <div className="px-1 space-y-1">
+                      {commonNav.map((n) => (
+                        <NavItem
+                          key={n.href}
+                          href={n.href}
+                          label={n.label}
+                          icon={n.icon}
+                          active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
+                          right={
+                            n.href === "/profile/notifications" && unread > 0 ? (
+                              <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
+                                {unread > 99 ? "99+" : unread}
+                              </Badge>
+                            ) : undefined
+                          }
+                        />
+                      ))}
+                    </div>
+
+                    <div className="px-1 mt-5">
+                      <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Tổ chức</div>
+
+                      <NavItem
+                        href="/profile/create-org"
+                        label="Tạo tổ chức"
+                        icon={PlusCircle}
+                        active={pathname === "/profile/create-org"}
+                      />
+
+                      {(orgs ?? []).slice(0, 5).map((o) => (
+                        <NavItem
+                          key={o.orgId}
+                          href={`/profile/organizations/${o.orgId}`}
+                          label={o.orgName}
+                          icon={Building2}
+                          active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
+                        />
+                      ))}
+
+                      <NavItem
+                        href="/profile/help"
+                        label="Trợ giúp"
+                        icon={HelpCircle}
+                        active={pathname === "/profile/help"}
+                      />
+                    </div>
+                  </ScrollArea>
+                </SheetContent>
+              </Sheet>
+
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-md bg-emerald-500 shadow" />
+                <span className="text-lg font-semibold">IMOS</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link href="/profile/notifications">
+                      <Button variant="outline" size="icon" className="relative" aria-label="Thông báo">
+                        <Bell className="h-5 w-5" />
+                        {unread > 0 && (
+                          <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-600 text-[11px] font-bold text-white px-1">
+                            {unread > 99 ? "99+" : unread}
+                          </span>
+                        )}
+                      </Button>
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent>Thông báo</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+
+              <Link href="/profile/select-plan">
+                <Button className="font-semibold">Chọn gói</Button>
               </Link>
-              {isLoggedIn && planLabel && (
-                <span className="hidden xs:flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5">
-                  <span className="text-[11px] text-zinc-400">Gói:</span>
-                  <span className="text-[12px] font-semibold text-emerald-300">{planLabel}</span>
-                  {planStatus === "active" && (
-                    <span className="ml-1 rounded bg-emerald-500/15 border border-emerald-400/30 px-1 text-[10px] text-emerald-300">
-                      Đang hoạt động
-                    </span>
-                  )}
-                </span>
-              )}
-              <Link
-                href="/profile/select-plan"
-                className="rounded px-2 py-1 font-semibold bg-emerald-500 text-zinc-950 hover:bg-emerald-400"
-              >
-                Chọn gói
-              </Link>
-              <button
-                type="button"
-                aria-label="Mở menu"
-                onClick={() => setMobileNavOpen(true)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
-              >
-                {/* Hamburger */}
-                <span className="block h-0.5 w-4 bg-current" />
-                <span className="sr-only">Menu</span>
-              </button>
             </div>
           </div>
         </header>
 
-        {/* Mobile drawer menu */}
-        {mobileNavOpen && (
-          <div className="lg:hidden fixed inset-0 z-30">
-            <button
-              type="button"
-              aria-label="Đóng menu"
-              className="absolute inset-0 bg-black/60"
-              onClick={() => setMobileNavOpen(false)}
-            />
-            <div className="absolute left-0 top-0 h-full w-80 max-w-[85vw] bg-zinc-950/95 backdrop-blur border-r border-white/10 p-4 overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-sm text-zinc-400">Điều hướng</span>
-                <button
-                  type="button"
-                  aria-label="Đóng"
-                  onClick={() => setMobileNavOpen(false)}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10"
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="space-y-1">
-                <SidebarLink href="/" label="Trang chủ" />
-                <SidebarLink href="/profile" label="Thông tin cá nhân" />
-                <SidebarLink href="/profile/recents" label="Gần đây" />
-                <SidebarLink href="/profile/drafts" label="Bản nháp" />
-                <SidebarLink href="/profile/invite" label="Mời thành viên" />
-                <SidebarLink href="/profile/notifications" label="Thông báo" />
-                <SidebarLink href="/profile/settings" label="Cài đặt" />
-                <div className="pt-3 mt-3 border-t border-white/10" />
-                <SidebarLink href="/register/organization" label="Tạo tổ chức" />
-                <SidebarLink href="/profile/help" label="Trợ giúp" />
-              </div>
-            </div>
-          </div>
-        )}
-
-        <section className="flex-1 overflow-auto px-4 sm:px-8 lg:px-10 py-8 lg:ml-64">
+        <section className="flex-1 overflow-auto px-4 sm:px-8 lg:px-10 py-8 md:ml-72">
           {children}
         </section>
       </div>

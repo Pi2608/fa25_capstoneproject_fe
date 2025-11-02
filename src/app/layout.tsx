@@ -29,19 +29,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="vi"
-      className={`${manrope.variable}`}
-      suppressHydrationWarning
-    >
-      <body
-        className="
-          min-h-screen font-sans antialiased transition-colors
-          bg-white text-gray-900
-          dark:bg-black dark:text-gray-100
-        "
-      >
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+    <html lang="vi" className={manrope.variable} suppressHydrationWarning>
+      <body className="min-h-screen font-sans antialiased transition-colors bg-white text-gray-900 dark:bg-black dark:text-gray-100">
+        <ThemeProvider>
           <AuthProvider>
             <ToastProvider>
               <LeafletStylesClient />
