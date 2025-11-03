@@ -51,17 +51,12 @@ function NavItem({
   right?: ReactNode;
 }) {
   const activeCls = active
-    ? "relative bg-emerald-500/10 text-emerald-900 ring-1 ring-emerald-500/35 " +
-    "before:absolute before:left-0 before:top-1 before:bottom-1 before:w-1 before:rounded before:bg-emerald-500 " +
-    "dark:bg-emerald-500/15 dark:text-emerald-50"
+    ? "relative bg-emerald-500/10 text-emerald-900 ring-1 ring-emerald-500/35 before:absolute before:left-0 before:top-1 before:bottom-1 before:w-1 before:rounded before:bg-emerald-500 dark:bg-emerald-500/15 dark:text-emerald-50"
     : "hover:bg-muted/60 dark:hover:bg-white/10";
 
   return (
     <Link href={href} aria-current={active ? "page" : undefined}>
-      <Button
-        variant="ghost"
-        className={`w-full justify-between px-3 py-2 h-9 transition-colors ${activeCls}`}
-      >
+      <Button variant="ghost" className={`w-full justify-between px-3 py-2 h-9 transition-colors ${activeCls}`}>
         <span className="flex items-center gap-2 truncate">
           <Icon className="h-4 w-4 opacity-90" />
           <span className="truncate text-sm">{label}</span>
@@ -86,8 +81,7 @@ function ThemeToggle() {
   const isDark = current === "dark";
 
   const base =
-    "inline-flex items-center gap-2 h-8 px-3 rounded-md text-xs font-medium transition-colors " +
-    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60";
+    "inline-flex items-center gap-2 h-8 px-3 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60";
 
   const lightCls = "bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50 shadow-sm";
   const darkCls = "bg-zinc-800/80 text-zinc-50 border border-white/10 hover:bg-zinc-700/80 shadow-sm";
@@ -286,8 +280,11 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       }
     >
       <div className="flex min-h-screen">
+        {/* SIDEBAR DESKTOP */}
         <aside className="hidden md:flex md:flex-col w-72 fixed left-0 top-0 h-screen z-20 border-r bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="flex-1 p-4 flex flex-col gap-4">
+          {/* quan trọng: min-h-0 + overflow-hidden để vùng cuộn hoạt động đúng */}
+          <div className="flex-1 min-h-0 overflow-hidden p-4 flex flex-col gap-4">
+            {/* Header logo + theme */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-md bg-emerald-500 shadow" />
@@ -296,7 +293,8 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
               <ThemeToggle />
             </div>
 
-            <ScrollArea className="flex-1">
+            {/* Khu vực cuộn (nav + org + help) */}
+            <ScrollArea className="flex-1 min-h-0">
               <div className="px-1 space-y-1">
                 {commonNav.map((n) => (
                   <NavItem
@@ -363,11 +361,14 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 )}
 
                 <NavItem href="/profile/help" label="Trợ giúp" icon={HelpCircle} active={pathname === "/profile/help"} />
+
+                {/* đệm để không bị dính sát đáy khi cuộn */}
+                <div className="h-3" />
               </div>
             </ScrollArea>
 
+            {/* Khu vực cố định (luôn còn chỗ vì bên trên đã min-h-0) */}
             <Separator className="my-2" />
-
             <div className="space-y-3">
               <div className="rounded-xl border p-3">
                 <div className="flex items-center justify-between">
@@ -401,6 +402,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
+        {/* HEADER MOBILE */}
         <header className="md:hidden w-full sticky top-0 z-30 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -411,63 +413,62 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                   </Button>
                 </SheetTrigger>
 
+                {/* quan trọng: biến nội dung sheet thành cột full-height + ScrollArea flex-1 min-h-0 */}
                 <SheetContent side="left" className="w-72 p-0">
-                  <div className="p-4 flex items-center justify-between border-b">
-                    <div className="flex items-center gap-2">
-                      <span className="h-3 w-3 rounded-md bg-emerald-500 shadow" />
-                      <span className="text-lg font-semibold">IMOS</span>
+                  <div className="h-full flex flex-col">
+                    <div className="p-4 flex items-center justify-between border-b">
+                      <div className="flex items-center gap-2">
+                        <span className="h-3 w-3 rounded-md bg-emerald-500 shadow" />
+                        <span className="text-lg font-semibold">IMOS</span>
+                      </div>
+                      <ThemeToggle />
                     </div>
-                    <ThemeToggle />
+
+                    <ScrollArea className="flex-1 min-h-0 p-3">
+                      <div className="px-1 space-y-1">
+                        {commonNav.map((n) => (
+                          <NavItem
+                            key={n.href}
+                            href={n.href}
+                            label={n.label}
+                            icon={n.icon}
+                            active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
+                            right={
+                              n.href === "/profile/notifications" && unread > 0 ? (
+                                <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
+                                  {unread > 99 ? "99+" : unread}
+                                </Badge>
+                              ) : undefined
+                            }
+                          />
+                        ))}
+                      </div>
+
+                      <div className="px-1 mt-5">
+                        <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Tổ chức</div>
+
+                        <NavItem
+                          href="/profile/create-org"
+                          label="Tạo tổ chức"
+                          icon={PlusCircle}
+                          active={pathname === "/profile/create-org"}
+                        />
+
+                        {(orgs ?? []).slice(0, 5).map((o) => (
+                          <NavItem
+                            key={o.orgId}
+                            href={`/profile/organizations/${o.orgId}`}
+                            label={o.orgName}
+                            icon={Building2}
+                            active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
+                          />
+                        ))}
+
+                        <NavItem href="/profile/help" label="Trợ giúp" icon={HelpCircle} active={pathname === "/profile/help"} />
+                        <div className="h-3" />
+                      </div>
+                    </ScrollArea>
                   </div>
-
-                  <ScrollArea className="h-[calc(100vh-64px)] p-3">
-                    <div className="px-1 space-y-1">
-                      {commonNav.map((n) => (
-                        <NavItem
-                          key={n.href}
-                          href={n.href}
-                          label={n.label}
-                          icon={n.icon}
-                          active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
-                          right={
-                            n.href === "/profile/notifications" && unread > 0 ? (
-                              <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
-                                {unread > 99 ? "99+" : unread}
-                              </Badge>
-                            ) : undefined
-                          }
-                        />
-                      ))}
-                    </div>
-
-                    <div className="px-1 mt-5">
-                      <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Tổ chức</div>
-
-                      <NavItem
-                        href="/profile/create-org"
-                        label="Tạo tổ chức"
-                        icon={PlusCircle}
-                        active={pathname === "/profile/create-org"}
-                      />
-
-                      {(orgs ?? []).slice(0, 5).map((o) => (
-                        <NavItem
-                          key={o.orgId}
-                          href={`/profile/organizations/${o.orgId}`}
-                          label={o.orgName}
-                          icon={Building2}
-                          active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
-                        />
-                      ))}
-
-                      <NavItem
-                        href="/profile/help"
-                        label="Trợ giúp"
-                        icon={HelpCircle}
-                        active={pathname === "/profile/help"}
-                      />
-                    </div>
-                  </ScrollArea>
                 </SheetContent>
               </Sheet>
 
@@ -505,6 +506,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
+        {/* CONTENT */}
         <section className="flex-1 overflow-auto px-4 sm:px-8 lg:px-10 py-8 md:ml-72">
           {children}
         </section>

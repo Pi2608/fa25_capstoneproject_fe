@@ -5,8 +5,7 @@ import { useState, useEffect, useRef, useLayoutEffect, ReactNode } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
-import { getOrganizationNumber, GetOrganizationNumberResDto } from "@/lib/api-organizations";
-import { getMapTemplates } from "@/lib/api-maps";
+import { getHomeStats, type HomeStatsResponse } from "@/lib/api-home";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -75,35 +74,36 @@ function StatCard({ label, value }: { label: string; value: number }) {
 
 export default function HomePage() {
   const reduce = useReducedMotion();
-  const [orgCount, setOrgCount] = useState<number>(0);
-  const [tplCount, setTplCount] = useState<number>(0);
+  const [stats, setStats] = useState<HomeStatsResponse>({
+    organizationCount: 0,
+    templateCount: 0,
+    totalMaps: 0,
+    monthlyExports: 0,
+  });
   const mouseRAF = useRef<number>(0);
 
   useEffect(() => {
     let cancel = false;
-    const load = async () => {
+    (async () => {
       try {
-        const [orgRes, tplRes] = await Promise.allSettled([getOrganizationNumber(), getMapTemplates()]);
-        if (cancel) return;
-        const orgs =
-          orgRes.status === "fulfilled" && orgRes.value && typeof orgRes.value === "object"
-            ? (orgRes.value as GetOrganizationNumberResDto).organizationNumber ?? 0
-            : 0;
-        const tpls = tplRes.status === "fulfilled" && Array.isArray(tplRes.value) ? tplRes.value.length : 0;
-        setOrgCount(orgs);
-        setTplCount(tpls);
+        const res = await getHomeStats();
+        if (!cancel && res) {
+          setStats({
+            organizationCount: Number(res.organizationCount) || 0,
+            templateCount: Number(res.templateCount) || 0,
+            totalMaps: Number(res.totalMaps) || 0,
+            monthlyExports: Number(res.monthlyExports) || 0,
+          });
+        }
       } catch {
-        setOrgCount(0);
-        setTplCount(0);
+        if (!cancel) {
+          setStats({ organizationCount: 0, templateCount: 0, totalMaps: 0, monthlyExports: 0 });
+        }
       }
-    };
-    load();
-    return () => {
-      cancel = true;
-    };
+    })();
+    return () => { cancel = true; };
   }, []);
 
-  // hiệu ứng “cursor light”
   useEffect(() => {
     if (reduce) return;
     const onMove = (e: MouseEvent) => {
@@ -259,10 +259,10 @@ export default function HomePage() {
       {/* stats */}
       <section className="relative z-10 max-w-7xl mx-auto px-6 py-14">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-          <StatCard label="Maps created" value={12480} />
-          <StatCard label="Organizations" value={orgCount} />
-          <StatCard label="Templates" value={tplCount} />
-          <StatCard label="Monthly exports" value={8421} />
+          <StatCard label="Maps created" value={stats.totalMaps} />
+          <StatCard label="Organizations" value={stats.organizationCount} />
+          <StatCard label="Templates" value={stats.templateCount} />
+          <StatCard label="Monthly exports" value={stats.monthlyExports} />
         </div>
       </section>
 
