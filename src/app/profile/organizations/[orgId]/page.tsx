@@ -10,8 +10,10 @@ import { getOrganizationMaps } from "@/lib/api-maps";
 import { deleteOrganization, getOrganizationById, getOrganizationMembers, GetOrganizationMembersResDto, inviteMember, InviteMemberOrganizationReqDto, OrganizationDetailDto, removeMember, updateMemberRole } from "@/lib/api-organizations";
 import { CurrentMembershipDto, getMyMembership } from "@/lib/api-membership";
 import { getProjectsByOrganization } from "@/lib/api-workspaces";
-type MapRow = Awaited<ReturnType<typeof getOrganizationMaps>>[number];
+import { bulkCreateStudents, type BulkCreateStudentsRes } from "@/lib/api-organizations";
 
+
+type MapRow = Awaited<ReturnType<typeof getOrganizationMaps>>[number];
 
 
 function isValidEmail(s: string) {
@@ -97,8 +99,13 @@ export default function OrgDetailPage() {
   const [roleBusyId, setRoleBusyId] = useState<string | null>(null);
   const [removeBusyId, setRemoveBusyId] = useState<string | null>(null);
   const title = useMemo(() => org?.orgName ?? "—", [org?.orgName]);
+  const [importOpen, setImportOpen] = useState(false);
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [domain, setDomain] = useState("");
+  const [importBusy, setImportBusy] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [importResult, setImportResult] = useState<BulkCreateStudentsRes | null>(null);
 
-  // Get user identity from auth context
   const { userId: myId, userEmail: myEmail } = useAuth();
 
   const isOwner = useMemo(() => {
@@ -113,6 +120,28 @@ export default function OrgDetailPage() {
       return Boolean(matchById || matchByEmail);
     });
   }, [members, myEmail, myId]);
+
+  // Tôi có phải Admin/Owner không?
+  const isAdminOrOwner = useMemo(() => {
+    const list = asMemberArray(members?.members ?? []);
+    return list.some((m) => {
+      const role = (m.role ?? m.memberType ?? "").toLowerCase();
+      const isAO = role === "owner" || role === "admin";
+      if (!isAO) return false;
+      const matchById =
+        myId && typeof m.memberId === "string" && m.memberId.toLowerCase() === myId.toLowerCase();
+      const matchByEmail =
+        myEmail && typeof m.email === "string" && m.email.toLowerCase() === myEmail.toLowerCase();
+      return Boolean(matchById || matchByEmail);
+    });
+  }, [members, myId, myEmail]);
+
+  const planAllows = [2, 3].includes(Number(membership?.planId ?? 0));
+
+  const disabledImport = !(isAdminOrOwner && planAllows);
+  const tooltipText = !isAdminOrOwner
+    ? "Chỉ Owner/Admin mới dùng chức năng này"
+    : "Nâng cấp gói (plan 2 hoặc 3) để sử dụng";
 
   const refreshMembers = useCallback(async () => {
     const memRes = await getOrganizationMembers(orgId);
@@ -200,7 +229,7 @@ export default function OrgDetailPage() {
     let alive = true;
     async function loadMembership() {
       if (!orgId) return;
-      
+
       try {
         setLoadingMembership(true);
         const membershipData = await getMyMembership(orgId);
@@ -213,7 +242,7 @@ export default function OrgDetailPage() {
         if (alive) setLoadingMembership(false);
       }
     }
-    
+
     void loadMembership();
     return () => {
       alive = false;
@@ -251,7 +280,6 @@ export default function OrgDetailPage() {
     }
   }, [inviteInput, orgId, refreshMembers]);
 
-  // ... ở trong OrgDetailPage, sau onInvite(...)
   const onDeleteOrg = useCallback(async () => {
     if (!org) return;
     if (!isOwner) {
@@ -272,6 +300,56 @@ export default function OrgDetailPage() {
       setDeleteBusy(false);
     }
   }, [org, router, isOwner]);
+
+  const onImportStudents = useCallback(async () => {
+    if (!isAdminOrOwner) { setImportMsg("Chỉ Owner mới được dùng chức năng này."); return; }
+    if (!planAllows) { setImportMsg("Tính năng yêu cầu gói có planId = 2 hoặc 3."); return; }
+    if (!excelFile) { setImportMsg("Hãy chọn file Excel (.xlsx)."); return; }
+    if (!domain.trim()) { setImportMsg("Hãy nhập domain (ví dụ: se1739.edu)."); return; }
+
+    try {
+      setImportBusy(true);
+      setImportMsg("Đang xử lý...");
+      setImportResult(null);
+
+      const res = await bulkCreateStudents(orgId, excelFile, domain.trim());
+
+      setImportResult(res);
+      setImportMsg(`Tạo thành công ${res.totalCreated} tài khoản, bỏ qua ${res.totalSkipped}.`);
+    } catch (e) {
+      setImportMsg(safeMessage(e));
+      setImportResult(null);
+    } finally {
+      setImportBusy(false);
+    }
+  }, [isAdminOrOwner, planAllows, excelFile, domain, orgId]);
+
+  const downloadCreatedCsv = () => {
+    if (!importResult) return;
+    const rows = [
+      ["email", "fullName", "password", "class"],
+      ...importResult.createdAccounts.map(a => [a.email, a.fullName, a.password, a.class]),
+    ];
+    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "created_students.csv";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const copyCreatedList = async () => {
+    if (!importResult) return;
+    const text = importResult.createdAccounts
+      .map(a => `${a.email}\t${a.password}\t${a.fullName}\t${a.class}`)
+      .join("\n");
+    await navigator.clipboard.writeText(text);
+    setImportMsg("Đã copy danh sách tài khoản vào clipboard.");
+  };
 
   const onRemoveMember = useCallback(
     async (memberId?: string | null) => {
@@ -414,9 +492,9 @@ export default function OrgDetailPage() {
             Share
           </button>
 
-          <button 
+          <button
             onClick={() => router.push(`/profile/workspaces`)}
-            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10" 
+            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10"
             title="Manage workspaces"
           >
             Workspaces
@@ -430,7 +508,7 @@ export default function OrgDetailPage() {
             Settings
           </button>
 
-          <div className="relative">
+          <div className="relative z-50">
             <button
               onClick={() => setMoreOpen((v) => !v)}
               className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
@@ -474,12 +552,54 @@ export default function OrgDetailPage() {
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Workspaces</h2>
-          <button
-            onClick={() => router.push(`/profile/workspaces`)}
-            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
-          >
-            Manage Workspaces
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => router.push(`/profile/workspaces`)}
+              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+            >
+              Manage Workspaces
+            </button>
+
+            {isOwner && (
+              <span className="relative inline-block group">
+                <button
+                  onClick={() => setImportOpen(true)}
+                  disabled={disabledImport}
+                  aria-disabled={disabledImport}
+                  className={`px-3 py-2 rounded-lg text-sm transition
+          ${disabledImport
+                      ? "border border-white/10 bg-white/5 text-zinc-300 opacity-70 cursor-not-allowed"
+                      : "border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
+                    }`}
+                >
+                  Import Students (.xlsx)
+                </button>
+
+                {disabledImport && (
+                  <span
+                    role="tooltip"
+                    className="
+        pointer-events-none absolute left-1/2 -translate-x-1/2
+        -bottom-2 translate-y-full opacity-0
+        group-hover:opacity-100 group-hover:translate-y-[calc(100%+6px)]
+        transition-all duration-150 ease-out z-50
+        whitespace-nowrap rounded-md border border-white/10
+        bg-zinc-900/95 px-3 py-1.5 text-xs text-zinc-100 shadow-lg
+      "
+                  >
+                    {tooltipText}
+                    <span
+                      className="
+          absolute -top-1 left-1/2 -translate-x-1/2
+          w-2 h-2 rotate-45
+          bg-zinc-900/95 border-l border-t border-white/10
+        "
+                    />
+                  </span>
+                )}
+              </span>
+            )}
+          </div>
         </div>
 
         {workspaces.length === 0 && (
@@ -690,6 +810,125 @@ export default function OrgDetailPage() {
                 className="px-3 py-2 rounded-lg bg-red-500 text-zinc-900 text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
               >
                 {removeBusyId === removeDialog.memberId ? "Đang xoá..." : "Xoá thành viên"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {importOpen && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60"
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="w-[40rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-white">Import Students (.xlsx)</h2>
+              <button
+                onClick={() => setImportOpen(false)}
+                className="text-zinc-400 hover:text-white"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Excel file (.xlsx)</label>
+                <input
+                  type="file"
+                  accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  onChange={(e) => setExcelFile(e.target.files?.[0] ?? null)}
+                  className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100 file:mr-3 file:rounded file:border-0 file:bg-emerald-600 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-zinc-900 hover:file:bg-emerald-500"
+                />
+                {excelFile && (
+                  <div className="mt-1 text-xs text-zinc-400">Selected: {excelFile.name}</div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">Domain</label>
+                <input
+                  type="text"
+                  value={domain}
+                  onChange={(e) => setDomain(e.target.value)}
+                  placeholder="vd: se1739.edu"
+                  className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
+                />
+              </div>
+
+              {importMsg && (
+                <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200">
+                  {importMsg}
+                </div>
+              )}
+            </div>
+
+            {/* Kết quả import + nút tải/copy — chỉ hiện khi importResult có dữ liệu */}
+            {importResult && importResult.createdAccounts.length > 0 && (
+              <div className="mt-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-zinc-200">
+                    <b>{importResult.totalCreated}</b> tài khoản mới,
+                    bỏ qua <b>{importResult.totalSkipped}</b>.
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={copyCreatedList}
+                      className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      onClick={downloadCreatedCsv}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
+                    >
+                      Download CSV
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-56 overflow-auto rounded-lg border border-white/10">
+                  <table className="w-full text-sm">
+                    <thead className="bg-white/5 text-zinc-300">
+                      <tr>
+                        <th className="text-left px-3 py-2">Email</th>
+                        <th className="text-left px-3 py-2">Họ tên</th>
+                        <th className="text-left px-3 py-2">Mật khẩu</th>
+                        <th className="text-left px-3 py-2">Lớp</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importResult.createdAccounts.map(acc => (
+                        <tr key={acc.userId} className="border-t border-white/5">
+                          <td className="px-3 py-2 text-zinc-100">{acc.email}</td>
+                          <td className="px-3 py-2 text-zinc-100">{acc.fullName}</td>
+                          <td className="px-3 py-2 text-emerald-300 font-mono">{acc.password}</td>
+                          <td className="px-3 py-2 text-zinc-100">{acc.class}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                onClick={() => setImportOpen(false)}
+                disabled={importBusy}
+              >
+                Huỷ
+              </button>
+              <button
+                onClick={() => void onImportStudents()}
+                disabled={importBusy}
+                className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
+              >
+                {importBusy ? "Đang nhập..." : "Nhập danh sách"}
               </button>
             </div>
           </div>

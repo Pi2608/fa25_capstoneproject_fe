@@ -48,7 +48,6 @@ export default function Footer() {
               <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                 <li><Link href="/service/map-builder" className="hover:text-emerald-500">Map Builder</Link></li>
                 <li><Link href="/service/data-layers" className="hover:text-emerald-500">Data Layers</Link></li>
-                <li><Link href="/service/dashboards" className="hover:text-emerald-500">Dashboards</Link></li>
                 <li><Link href="/service/export-embed" className="hover:text-emerald-500">Export & Embed</Link></li>
                 <li><Link href="/pricing" className="hover:text-emerald-500">Pricing</Link></li>
                 <li><Link href="/templates" className="hover:text-emerald-500">Templates</Link></li>

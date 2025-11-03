@@ -125,7 +125,7 @@ export function deleteOrganization(orgId: string) {
 
 // ===== My Organizations & Invitations =====
 export function getMyOrganizations() {
-  return getJson<GetMyOrganizationsResDto>("/organizations");
+  return getJson<GetMyOrganizationsResDto>("/organizations/my-organizations");
 }
 
 export function getMyInvitations() {
@@ -297,4 +297,38 @@ export function checkOrganizationQuota(orgId: string, body: CheckQuotaRequest) {
     `/organization-admin/usage/${orgId}/check-quota`,
     body
   );
+}
+
+export type BulkCreateStudentsRes = {
+  totalCreated: number;
+  totalSkipped: number;
+  createdAccounts: Array<{
+    userId: string;
+    email: string;
+    fullName: string;
+    password: string;
+    class: string;
+  }>;
+  skippedAccounts: Array<{
+    name: string;
+    class: string;
+    reason: string;
+  }>;
+};
+
+
+export async function bulkCreateStudents(
+  organizationId: string,
+  excelFile: File,
+  domain: string
+): Promise<BulkCreateStudentsRes> {
+  const form = new FormData();
+  form.append("organizationId", organizationId);
+  form.append("excelFile", excelFile);
+  form.append("domain", domain);
+
+  return apiFetch<BulkCreateStudentsRes>("/organizations/bulk-create-students", {
+    method: "POST",
+    body: form,
+  });
 }
