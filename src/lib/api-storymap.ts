@@ -317,22 +317,37 @@ export async function reorderSegments(mapId: string, segmentIds: string[]): Prom
 // ================== ZONE APIs (Master Data) ==================
 
 export async function getZones(): Promise<Zone[]> {
-  return await getJson<Zone[]>(`/zones`);
+  return await getJson<Zone[]>(`/storymaps/zones`);
 }
 
 export async function getZonesByParent(parentZoneId?: string): Promise<Zone[]> {
   const url = parentZoneId 
-    ? `/zones/parent/${parentZoneId}`
-    : `/zones/parent`;
+    ? `/storymaps/zones/parent/${parentZoneId}`
+    : `/storymaps/zones`;
   return await getJson<Zone[]>(url);
 }
 
 export async function searchZones(searchTerm: string): Promise<Zone[]> {
-  return await getJson<Zone[]>(`/zones/search?q=${encodeURIComponent(searchTerm)}`);
+  return await getJson<Zone[]>(`/storymaps/zones/search?name=${encodeURIComponent(searchTerm)}`);
 }
 
 export async function createZone(data: any): Promise<Zone> {
-  return await postJson<any, Zone>(`/zones`, data);
+  return await postJson<any, Zone>(`/storymaps/zones`, data);
+}
+
+export async function createZoneFromOsm(data: {
+  osmType: string;
+  osmId: number;
+  displayName: string;
+  lat: number;
+  lon: number;
+  geoJson: string;
+  category?: string;
+  type?: string;
+  adminLevel?: number;
+  parentZoneId?: string;
+}): Promise<Zone> {
+  return await postJson<any, Zone>(`/storymaps/zones/from-osm`, data);
 }
 
 // ================== SEGMENT ZONE APIs ==================

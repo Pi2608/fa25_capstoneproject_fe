@@ -49,3 +49,10 @@ body {
 .animate-slide-in-right {
   animation: slide-in-right 0.3s ease-out;
 }
+
+/* Zone label styling for Leaflet markers */
+.zone-label {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}

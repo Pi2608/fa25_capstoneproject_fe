@@ -15,6 +15,7 @@ interface SortableSegmentItemProps {
   onAddZone: (segmentId: string) => void;
   onDeleteZone: (zone: SegmentZone) => void;
   onCaptureCamera?: (segment: Segment) => void; // Quick capture camera
+  onViewOnMap?: (segment: TimelineSegment) => void; // View segment on map
 }
 
 export default function SortableSegmentItem({ 
@@ -27,6 +28,7 @@ export default function SortableSegmentItem({
   onAddZone,
   onDeleteZone,
   onCaptureCamera,
+  onViewOnMap,
 }: SortableSegmentItemProps) {
   const {
     attributes,
@@ -85,6 +87,18 @@ export default function SortableSegmentItem({
           </div>
 
           {/* Actions */}
+          {onViewOnMap && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewOnMap(segment);
+              }}
+              className="p-1 text-purple-400 hover:text-purple-300"
+              title="View segment on map"
+            >
+              👁️
+            </button>
+          )}
           {onCaptureCamera && (
             <button
               onClick={(e) => {
