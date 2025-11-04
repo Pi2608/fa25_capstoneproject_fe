@@ -1,4 +1,5 @@
 export { default as StoryMapTimeline } from './StoryMapTimeline';
+export { default as StoryMapPlayer } from './StoryMapPlayer';
 
 // Dialogs
 export { default as SegmentDialog } from './dialogs/SegmentDialog';
