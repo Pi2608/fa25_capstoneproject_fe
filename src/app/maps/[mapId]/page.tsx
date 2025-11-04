@@ -1589,6 +1589,32 @@ export default function EditMapPage() {
               >
                 {busySaveMeta ? "Đang lưu…" : "Save"}
               </button>
+              {/* Story Map Buttons */}
+              {mapStatus === "Published" && (
+                <>
+                  <button
+                    className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1"
+                    onClick={() => window.open(`/storymap/control/${mapId}`, '_blank')}
+                    title="Open control panel (presenter view)"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    </svg>
+                    Control
+                  </button>
+                  <button
+                    className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 flex items-center gap-1"
+                    onClick={() => window.open(`/storymap/${mapId}`, '_blank')}
+                    title="Open viewer (audience view)"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    View
+                  </button>
+                </>
+              )}
               <button
                 className="rounded-lg p-1.5 text-xs font-semibold bg-zinc-700 hover:bg-zinc-600"
                 onClick={() => {
@@ -1651,18 +1677,19 @@ export default function EditMapPage() {
         }}
       />
 
-      {/* POI Panel */}
-      {detail && <MapPoiPanel mapId={detail.id} isOpen={showPoiPanel} />}
-
-      {/* Story Map Timeline */}
+      {/* Right Panel - POI or Story Map Timeline */}
+      {detail && showPoiPanel && <MapPoiPanel mapId={detail.id} isOpen={showPoiPanel} />}
+      
       {showSegmentPanel && detail && (
-        <StoryMapTimeline
-          mapId={detail.id}
-          layers={layers.map(layer => ({ 
-            id: layer.id, 
-            name: layer.name 
-          }))}
-        />
+        <div className="fixed right-0 top-16 bottom-0 w-[420px] z-[1000]">
+          <StoryMapTimeline
+            mapId={detail.id}
+            currentMap={mapRef.current}
+            onSegmentSelect={(segment) => {
+              console.log("Segment selected:", segment);
+            }}
+          />
+        </div>
       )}
 
       <ZoneContextMenu

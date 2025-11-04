@@ -50,7 +50,7 @@ function CountUp({ value, className }: { value: number; className?: string }) {
       return;
     }
     const obj = { v: 0 };
-    const tween = gsap.to(obj, {
+  const tween = gsap.to(obj, {
       v: value,
       duration: 1.2,
       ease: "power1.out",
@@ -58,7 +58,7 @@ function CountUp({ value, className }: { value: number; className?: string }) {
         el.textContent = Math.round(obj.v).toLocaleString();
       },
     });
-    return () => tween.kill();
+  return () => { tween.kill(); };
   }, [value, reduce]);
 
   return <div ref={ref} className={className} />;
@@ -193,7 +193,7 @@ export default function TutorialPage() {
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
     const base = { ease: "power2.out", duration: prefersReduced || reduce ? 0 : 0.9 } as const;
-    const ctx = gsap.context(() => {
+  const ctx = gsap.context(() => {
       gsap.set([".tu-hero-title", ".tu-hero-sub", ".tu-hero-cta"], { autoAlpha: 0, y: 20 });
       gsap
         .timeline()
@@ -234,7 +234,7 @@ export default function TutorialPage() {
       });
     });
 
-    return () => ctx.revert();
+  return () => { ctx.revert(); };
   }, [reduce]);
 
   // Filter transition
@@ -243,7 +243,7 @@ export default function TutorialPage() {
     if (!el) return;
     const q = gsap.utils.selector(el);
     const items = q(".card");
-    const tl = gsap.timeline();
+  const tl = gsap.timeline();
     tl.to(items, { autoAlpha: 0, y: 8, duration: 0.15, ease: "power1.in" })
       .set({}, {}, "+=0.02")
       .fromTo(
@@ -251,7 +251,7 @@ export default function TutorialPage() {
         { autoAlpha: 0, y: 16 },
         { autoAlpha: 1, y: 0, duration: 0.25, ease: "power2.out", stagger: 0.05 }
       );
-    return () => tl.kill();
+  return () => { tl.kill(); };
   }, [level, topic, query]);
 
   const onSubmitSearch = (e: React.FormEvent) => {

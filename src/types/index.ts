@@ -1,8 +1,14 @@
 // Re-export all types from auth
 export * from "./auth";
 
-// Re-export register types if they exist
-export * from "./register";
+// Re-export register types (avoid Banner name collision)
+export type {
+	NameParts,
+	UnknownApiError,
+	RegisterErrors,
+	RegisterFormData,
+	RegisterStepProps,
+} from "./register";
 
 // Re-export common types
 export * from "./common";
