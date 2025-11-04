@@ -1,6 +1,6 @@
 "use client";
 
-import { getSegments, Segment } from "@/lib/api-poi";
+import { getSegments, Segment } from "@/lib/api-storymap";
 import { useState, useEffect } from "react";
 
 interface StoryMapPlayerProps {
@@ -76,8 +76,8 @@ export default function StoryMapPlayer({ mapId }: StoryMapPlayerProps) {
               </span>
             </div>
             <h2 className="text-2xl font-bold text-white mb-2">{current?.name || "Untitled Segment"}</h2>
-            {current?.summary && (
-              <p className="text-gray-300 text-sm">{current.summary}</p>
+            {current?.description && (
+              <p className="text-gray-300 text-sm">{current.description}</p>
             )}
           </div>
 

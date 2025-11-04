@@ -28,6 +28,7 @@ import {
   CreateSegmentZoneRequest,
   getCurrentCameraState,
 } from "@/lib/api-storymap";
+import { TimelineSegment } from "@/types/storymap";
 
 type Props = {
   mapId: string;
@@ -160,6 +161,170 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
     }
   };
 
+  const handleViewSegment = useCallback(async (segment: TimelineSegment) => {
+    if (!currentMap) {
+      console.warn("⚠️ No map instance available");
+      return;
+    }
+
+    try {
+      // Import Leaflet dynamically
+      const L = (await import("leaflet")).default;
+
+      // Clear previous visualization layers (optional)
+      // Store layer references if you want to manage cleanup
+
+      // 1. Fly to segment camera position if available
+      if (segment.cameraState) {
+        const camera = segment.cameraState;
+        // Leaflet uses [lat, lng] format
+        currentMap.flyTo(
+          [camera.center[1], camera.center[0]], // [lat, lng]
+          camera.zoom,
+          {
+            duration: 1.5,
+            animate: true,
+          }
+        );
+      }
+
+      // 2. Render zones
+      if (segment.zones && segment.zones.length > 0) {
+        const allBounds: any[] = [];
+
+        for (const segmentZone of segment.zones) {
+          const zone = segmentZone.zone;
+          if (!zone) continue;
+
+          // Validate geometry exists and is not empty
+          if (!zone.geometry || zone.geometry.trim() === '') {
+            console.warn(`⚠️ Zone ${zone.zoneId} has no geometry`);
+            continue;
+          }
+
+          try {
+            let geoJsonData;
+            try {
+              geoJsonData = JSON.parse(zone.geometry);
+            } catch (parseError) {
+              console.error(`❌ Failed to parse geometry for zone ${zone.zoneId}:`, parseError);
+              console.error("Geometry length:", zone.geometry?.length);
+              console.error("Geometry preview:", zone.geometry?.substring(0, 200));
+              continue;
+            }
+
+            // Create GeoJSON layer with Leaflet
+            const geoJsonLayer = L.geoJSON(geoJsonData, {
+              style: () => {
+                const style: any = {};
+                
+                // Fill zone styling
+                if (segmentZone.fillZone) {
+                  style.fillColor = segmentZone.fillColor || '#FFD700';
+                  style.fillOpacity = segmentZone.fillOpacity || 0.3;
+                } else {
+                  style.fillOpacity = 0;
+                }
+
+                // Boundary styling
+                if (segmentZone.highlightBoundary) {
+                  style.color = segmentZone.boundaryColor || '#FFD700';
+                  style.weight = segmentZone.boundaryWidth || 2;
+                } else {
+                  style.weight = 0;
+                }
+
+                return style;
+              },
+            });
+
+            // Add layer to map
+            geoJsonLayer.addTo(currentMap);
+
+            // Collect bounds for fitBounds
+            const layerBounds = geoJsonLayer.getBounds();
+            if (layerBounds.isValid()) {
+              allBounds.push(layerBounds);
+            }
+
+            // Add label if enabled
+            if (segmentZone.showLabel) {
+              try {
+                let labelPosition;
+                
+                // Try to get centroid from zone data
+                if (zone.centroid) {
+                  const centroid = JSON.parse(zone.centroid);
+                  // GeoJSON Point format: [lng, lat]
+                  labelPosition = [centroid.coordinates[1], centroid.coordinates[0]];
+                } else {
+                  // Fallback: use layer center
+                  const center = layerBounds.getCenter();
+                  labelPosition = [center.lat, center.lng];
+                }
+
+                // Create a marker with custom icon (text label)
+                const labelMarker = L.marker(labelPosition as [number, number], {
+                  icon: L.divIcon({
+                    className: 'zone-label',
+                    html: `<div style="
+                      background: rgba(0, 0, 0, 0.7);
+                      color: white;
+                      padding: 4px 8px;
+                      border-radius: 4px;
+                      font-size: 14px;
+                      font-weight: 500;
+                      white-space: nowrap;
+                      border: 2px solid rgba(255, 255, 255, 0.8);
+                    ">${segmentZone.labelOverride || zone.name}</div>`,
+                    iconSize: undefined,
+                  }),
+                });
+                labelMarker.addTo(currentMap);
+              } catch (labelError) {
+                console.error(`Failed to add label for zone ${zone.zoneId}:`, labelError);
+              }
+            }
+
+          } catch (error) {
+            console.error(`❌ Failed to render zone ${zone.zoneId}:`, error);
+          }
+        }
+
+        // Fit bounds to show all zones
+        if (allBounds.length > 0) {
+          try {
+            // Create a bounds that encompasses all zone bounds
+            const combinedBounds = allBounds[0];
+            for (let i = 1; i < allBounds.length; i++) {
+              combinedBounds.extend(allBounds[i]);
+            }
+            
+            currentMap.fitBounds(combinedBounds, {
+              padding: [50, 50],
+              animate: true,
+              duration: 1.5,
+            });
+            console.log("📦 Fitted bounds to show all zones");
+          } catch (error) {
+            console.error("❌ Failed to fit bounds:", error);
+          }
+        }
+      }
+
+      // 3. TODO: Render layers when implemented
+      // if (segment.layers && segment.layers.length > 0) { ... }
+
+      // 4. TODO: Render locations/POIs when implemented
+      // if (segment.locations && segment.locations.length > 0) { ... }
+
+      console.log(`✅ Viewing segment: ${segment.name}`);
+      
+    } catch (error) {
+      console.error("❌ Failed to view segment on map:", error);
+    }
+  }, [currentMap]);
+
   return (
     <div className="h-full flex flex-col bg-zinc-900 border-r border-zinc-800">
       {/* Header */}
@@ -208,6 +373,7 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
                   }}
                   onDeleteZone={(zone) => setConfirmDeleteZone(zone)}
                   onCaptureCamera={handleCaptureCamera}
+                  onViewOnMap={handleViewSegment}
                 />
               ))}
             </SortableContext>
