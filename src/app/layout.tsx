@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import "@/styles/globals.css";
 import { Manrope } from "next/font/google";
-import LeafletStylesClient from "@/components/LeafletStylesClient";
-import { ThemeProvider } from "@/components/ThemeProvider";
+import { LeafletStylesClient } from "@/components/map-editor";
+import { ThemeProvider } from "@/components/common";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ToastContainer from "@/components/ui/ToastContainer";

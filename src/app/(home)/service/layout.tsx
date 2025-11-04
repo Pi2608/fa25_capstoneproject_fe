@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import ImosBg from "@/components/ImosBg";
-import RevealOnScroll from "@/components/RevealOnScroll";
+import { ImosBg, RevealOnScroll } from "@/components/common";
 
 export default function ServiceLayout({ children }: { children: ReactNode }) {
   return (

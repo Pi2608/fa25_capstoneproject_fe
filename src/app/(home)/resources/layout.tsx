@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
-import ImosBg from "@/components/ImosBg";
-import RevealOnScroll from "@/components/RevealOnScroll";
-import Footer from "@/components/Footer";
+import { ImosBg, RevealOnScroll } from "@/components/common";
+import { Footer } from "@/components/layout";
 
 export default function ServiceLayout({ children }: { children: ReactNode }) {
   return (

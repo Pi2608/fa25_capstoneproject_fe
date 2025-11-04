@@ -18,7 +18,7 @@ import {
   loadLayerToMap,
 } from "@/utils/mapUtils";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
-import StoryMapPlayer from "@/components/StoryMapPlayer";
+import { StoryMapPlayer } from "@/components/storymap";
 import { getMapDetail, MapDetail, MapStatus } from "@/lib/api-maps";
 
 export default function ViewMapPage() {

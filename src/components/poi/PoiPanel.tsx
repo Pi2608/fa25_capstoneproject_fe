@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 
 import type { GeoJsonObject, Point, GeometryCollection } from "geojson";
-import { createMapPoi, CreatePoiReq, deletePoi, getMapPois, MapPoi, updatePoi, updatePoiDisplayConfig, updatePoiInteractionConfig } from "@/lib/api-storymap";
+import { createMapPoi, CreatePoiReq, deletePoi, getMapPois, MapPoi, updatePoi, updatePoiDisplayConfig, updatePoiInteractionConfig } from "@/lib/api-poi";
 
 type Props = { mapId: string };
 
@@ -98,22 +98,17 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
 
   const openCreate = () => {
     // Bật chế độ chọn vị trí trên map
-    console.log('🎯 PoiPanel: Starting pick location mode');
     setIsPickingLocation(true);
     window.dispatchEvent(
       new CustomEvent("poi:startPickLocation", {
         detail: { mapId },
       })
     );
-    console.log('📡 PoiPanel: Dispatched poi:startPickLocation event');
   };
 
   // Lắng nghe sự kiện khi user chọn vị trí trên map
   useEffect(() => {
-    console.log('👂 PoiPanel: Setting up poi:locationPicked listener, isPickingLocation:', isPickingLocation);
-    
     const handleLocationPicked = async (e: Event) => {
-      console.log('📍 PoiPanel: Received poi:locationPicked event', { isPickingLocation });
       if (!isPickingLocation) {
         console.warn('⚠️ PoiPanel: Not in picking mode, ignoring event');
         return;
@@ -121,7 +116,6 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
       
       const customEvent = e as CustomEvent;
       const { lngLat } = customEvent.detail;
-      console.log('✅ PoiPanel: Processing location:', lngLat);
       setIsPickingLocation(false);
       
       // Tạo POI với tên mặc định
@@ -136,12 +130,10 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
         shouldPin: true,
       };
       
-      console.log('💾 PoiPanel: Creating POI:', defaultPoi);
       try {
         setBusy(true);
         await createMapPoi(mapId, defaultPoi);
         await refresh();
-        console.log('✅ PoiPanel: POI created successfully');
       } catch (err) {
         console.error('❌ PoiPanel: Failed to create POI:', err);
         setError("Tạo POI thất bại");
@@ -152,7 +144,6 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
 
     window.addEventListener("poi:locationPicked", handleLocationPicked);
     return () => {
-      console.log('🧹 PoiPanel: Cleaning up poi:locationPicked listener');
       window.removeEventListener("poi:locationPicked", handleLocationPicked);
     };
   }, [isPickingLocation, pois.length, mapId]);

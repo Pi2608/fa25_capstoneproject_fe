@@ -1,4 +1,4 @@
-import { Segment, SegmentZone, SegmentLayer, Location } from "@/lib/api-storymap-v2";
+import { Segment, SegmentZone, SegmentLayer, Location } from "@/lib/api-storymap";
 
 /**
  * Extended segment type with related data for timeline display
@@ -41,4 +41,5 @@ export interface SortableSegmentItemProps {
   onDelete: (segment: Segment) => void;
   onAddZone: (segmentId: string) => void;
   onDeleteZone: (zone: SegmentZone) => void;
+  onCaptureCamera?: (segment: Segment) => void;
 }

@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Segment, SegmentZone } from "@/lib/api-storymap-v2";
+import { Segment, SegmentZone } from "@/lib/api-storymap";
 import { TimelineSegment } from "@/types/storymap";
 
 interface SortableSegmentItemProps {
@@ -14,6 +14,7 @@ interface SortableSegmentItemProps {
   onDelete: (segment: Segment) => void;
   onAddZone: (segmentId: string) => void;
   onDeleteZone: (zone: SegmentZone) => void;
+  onCaptureCamera?: (segment: Segment) => void; // Quick capture camera
 }
 
 export default function SortableSegmentItem({ 
@@ -25,6 +26,7 @@ export default function SortableSegmentItem({
   onDelete,
   onAddZone,
   onDeleteZone,
+  onCaptureCamera,
 }: SortableSegmentItemProps) {
   const {
     attributes,
@@ -77,12 +79,24 @@ export default function SortableSegmentItem({
           {/* Name */}
           <div className="flex-1">
             <div className="font-medium text-white">{segment.name}</div>
-            {segment.summary && (
-              <div className="text-xs text-zinc-500">{segment.summary}</div>
+            {segment.description && (
+              <div className="text-xs text-zinc-500">{segment.description}</div>
             )}
           </div>
 
           {/* Actions */}
+          {onCaptureCamera && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCaptureCamera(segment);
+              }}
+              className="p-1 text-emerald-400 hover:text-emerald-300"
+              title="Capture current camera view"
+            >
+              📷
+            </button>
+          )}
           <button
             onClick={(e) => {
               e.stopPropagation();

@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
-import ImosBg from "@/components/ImosBg";
-import RevealOnScroll from "@/components/RevealOnScroll";
-import HomeHeader from "@/components/HomeHeader";
-import Footer from "@/components/Footer";
+import { ImosBg, RevealOnScroll } from "@/components/common";
+import { HomeHeader, Footer } from "@/components/layout";
 
 export const metadata: Metadata = {
   title: "IMOS",

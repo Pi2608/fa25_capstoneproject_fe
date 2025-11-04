@@ -9,7 +9,7 @@ import {
   applyCameraState,
   CreateSegmentRequest,
   Segment,
-} from "@/lib/api-storymap-v2";
+} from "@/lib/api-storymap";
 
 interface SegmentDialogProps {
   editing?: Segment;
@@ -25,18 +25,26 @@ export default function SegmentDialog({
   onSave,
 }: SegmentDialogProps) {
   const [name, setName] = useState(editing?.name || "");
-  const [summary, setSummary] = useState(editing?.summary || "");
+  const [description, setDescription] = useState(editing?.description || "");
   
-  // Camera state
   const [cameraState, setCameraState] = useState<CameraState>(() => {
     if (editing?.cameraState) {
-      return parseCameraState(editing.cameraState) || {
-        center: [106.63, 10.82],
-        zoom: 12,
-        bearing: 0,
-        pitch: 0,
-      };
+      if (typeof editing.cameraState === "string") {
+        const parsed = parseCameraState(editing.cameraState);
+        if (parsed) return parsed;
+      } else if (editing.cameraState && typeof editing.cameraState === "object") {
+        return editing.cameraState as CameraState;
+      }
     }
+    if (currentMap) {
+      try {
+        const current = getCurrentCameraState(currentMap);
+        if (current) return current;
+      } catch (error) {
+        console.warn("Failed to get current camera state:", error);
+      }
+    }
+    // Fallback default
     return {
       center: [106.63, 10.82],
       zoom: 12,
@@ -50,9 +58,24 @@ export default function SegmentDialog({
   const [durationMs, setDurationMs] = useState(editing?.durationMs || 6000);
   
   const handleCaptureView = () => {
-    if (currentMap) {
+    if (!currentMap) {
+      console.warn("⚠️ No map instance for capture");
+      return;
+    }
+    
+    // Validate map instance
+    if (typeof currentMap.getCenter !== 'function' || typeof currentMap.getZoom !== 'function') {
+      console.error("❌ Invalid map instance");
+      return;
+    }
+    
+    try {
       const captured = getCurrentCameraState(currentMap);
-      setCameraState(captured);
+      if (captured) {
+        setCameraState(captured);
+      }
+    } catch (error) {
+      console.error("❌ Failed to capture:", error);
     }
   };
   
@@ -66,7 +89,7 @@ export default function SegmentDialog({
     if (name.trim()) {
       onSave({
         name,
-        summary,
+        description,
         cameraState: stringifyCameraState(cameraState),
         playbackMode: autoAdvance ? "Auto" : "Manual",
       });
@@ -104,8 +127,8 @@ export default function SegmentDialog({
           <div>
             <label className="block text-sm text-zinc-400 mb-1">Description</label>
             <textarea
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
               rows={2}
               className="w-full bg-zinc-800 text-white rounded px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500"
               placeholder="Brief description..."

@@ -51,12 +51,12 @@ import {
   findFeatureIndex,
   removeFeatureFromGeoJSON
 } from "@/utils/zoneOperations";
-import { StylePanel, DataLayersPanel, MapControls } from "@/components/map/MapControls";
+import { StylePanel, DataLayersPanel, MapControls } from "@/components/map";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
-import StoryMapTimeline from "@/components/storymap/StoryMapTimeline";
-import PublishButton from "@/components/PublishButton";
+import { StoryMapTimeline } from "@/components/storymap";
+import { PublishButton } from "@/components/map-editor";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
-import CopyFeatureDialog from "@/components/CopyFeatureDialog";
+import { CopyFeatureDialog } from "@/components/features";
 import MapPoiPanel from "@/components/poi/PoiPanel";
 
 import { useToast } from "@/contexts/ToastContext";
@@ -932,27 +932,23 @@ export default function EditMapPage() {
     let clickHandler: ((e: LeafletMouseEvent) => void) | null = null;
 
     const handleStartPickLocation = () => {
-      console.log('🎯 EditMapPage received poi:startPickLocation event');
       const map = mapRef.current;
       if (!map) {
         console.warn('⚠️ Map not ready yet');
         return;
       }
 
-      console.log('✅ Starting POI picking mode');
       isPickingPoi = true;
       
       // Thay đổi cursor thành crosshair
       const mapContainer = map.getContainer();
       mapContainer.style.cursor = 'crosshair';
-      console.log('🖱️ Cursor changed to crosshair');
 
       // Xử lý click trên map
       clickHandler = (e: LeafletMouseEvent) => {
         if (!isPickingPoi) return;
 
         const { lat, lng } = e.latlng;
-        console.log('📍 Location picked:', { lat, lng });
         
         // Dispatch event với tọa độ đã chọn
         window.dispatchEvent(
@@ -962,12 +958,10 @@ export default function EditMapPage() {
             },
           })
         );
-        console.log('✅ Dispatched poi:locationPicked event');
 
         // Reset cursor và tắt picking mode
         mapContainer.style.cursor = '';
         isPickingPoi = false;
-        console.log('🔄 Reset picking mode');
         
         if (clickHandler) {
           map.off('click', clickHandler);
@@ -976,14 +970,11 @@ export default function EditMapPage() {
       };
 
       map.on('click', clickHandler);
-      console.log('👂 Click handler attached to map');
     };
 
-    console.log('🎬 Setting up POI picking event listener');
     window.addEventListener('poi:startPickLocation', handleStartPickLocation);
 
     return () => {
-      console.log('🧹 Cleaning up POI picking event listener');
       window.removeEventListener('poi:startPickLocation', handleStartPickLocation);
       if (clickHandler && mapRef.current) {
         mapRef.current.off('click', clickHandler);
