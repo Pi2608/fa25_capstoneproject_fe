@@ -8,7 +8,7 @@ import type L from "leaflet";
 import type { MapWithPM, Layer } from "@/types";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
 import { loadLayerToMap } from "@/utils/mapUtils";
-import { getSegments, Segment } from "@/lib/api-storymap";
+import { getSegmentLayers, getSegments, Segment } from "@/lib/api-storymap";
 import { getMapDetail, MapDetail, RawLayer } from "@/lib/api-maps";
 
 type StoryElement = {
@@ -111,7 +111,6 @@ export default function StoryMapPlayerPage() {
           segmentsData.map(async (segment) => {
             try {
               // Import getSegmentLayers dynamically
-              const { getSegmentLayers } = await import("@/lib/api-poi");
               const segmentLayers = await getSegmentLayers(mapId, segment.segmentId);
               
               // Convert to StoryElement format

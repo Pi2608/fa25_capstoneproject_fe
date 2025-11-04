@@ -9,7 +9,7 @@ import type { MapWithPM, Layer } from "@/types";
 import { getMapDetail, type MapDetail, type RawLayer } from "@/lib/api-maps";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
 import { loadLayerToMap } from "@/utils/mapUtils";
-import { getSegments, Segment } from "@/lib/api-storymap";
+import { getSegmentLayers, getSegments, Segment } from "@/lib/api-storymap";
 
 type StoryElement = {
   id: string;
@@ -122,7 +122,6 @@ export default function StoryMapControlPage() {
         const segmentsWithElements = await Promise.all(
           segmentsData.map(async (segment) => {
             try {
-              const { getSegmentLayers } = await import("@/lib/api-poi");
               const segmentLayers = await getSegmentLayers(mapId, segment.segmentId);
               
               const elements: StoryElement[] = segmentLayers.map((sl, index) => ({
