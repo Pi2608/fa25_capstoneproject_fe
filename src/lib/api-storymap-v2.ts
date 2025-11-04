@@ -27,10 +27,10 @@ export type Segment = {
   segmentId: string;
   mapId: string;
   name: string;
-  summary?: string;
+  description?: string;
   storyContent?: string;
   displayOrder: number;
-  cameraState: string; // JSON stringify của CameraState
+  cameraState: CameraState; // JSON stringify của CameraState
   autoAdvance: boolean;
   durationMs: number;
   requireUserAction: boolean;
@@ -41,19 +41,25 @@ export type Segment = {
 export type CreateSegmentRequest = {
   mapId?: string; // Will be enriched by endpoint
   name: string;
-  summary?: string;
+  description?: string;
   storyContent?: string;
   displayOrder?: number;
-  cameraState?: string;
+  cameraState?: string; // JSON stringified CameraState
+  autoAdvance?: boolean;
+  durationMs?: number;
+  requireUserAction?: boolean;
   playbackMode?: "Auto" | "Manual" | "Timed";
 };
 
 export type UpdateSegmentRequest = {
   name: string;
-  summary?: string;
+  description?: string;
   storyContent?: string;
   displayOrder?: number;
-  cameraState?: string;
+  cameraState?: string; // JSON stringified CameraState
+  autoAdvance?: boolean;
+  durationMs?: number;
+  requireUserAction?: boolean;
   playbackMode?: "Auto" | "Manual" | "Timed";
 };
 
@@ -73,6 +79,7 @@ export type Zone = {
   description?: string;
   isActive: boolean;
   createdAt: string;
+  updatedAt?: string;
 };
 
 // SegmentZone (Link Segment → Zone với highlight config)
@@ -488,11 +495,16 @@ export function stringifyCameraState(cameraState: CameraState): string {
 }
 
 export function getCurrentCameraState(map: any): CameraState {
+  // Validate map instance has required methods
+  if (!map || typeof map.getCenter !== 'function' || typeof map.getZoom !== 'function') {
+    throw new Error('Invalid map instance: missing required methods');
+  }
+  
   return {
     center: [map.getCenter().lng, map.getCenter().lat],
     zoom: map.getZoom(),
-    bearing: map.getBearing(),
-    pitch: map.getPitch(),
+    bearing: typeof map.getBearing === 'function' ? map.getBearing() : 0,
+    pitch: typeof map.getPitch === 'function' ? map.getPitch() : 0,
   };
 }
 

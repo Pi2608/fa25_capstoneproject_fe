@@ -26,6 +26,7 @@ import {
   SegmentZone,
   CreateSegmentRequest,
   CreateSegmentZoneRequest,
+  getCurrentCameraState,
 } from "@/lib/api-storymap-v2";
 
 type Props = {
@@ -64,14 +65,13 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
     removeZoneFromSegment,
     reorder,
     toggleExpanded,
+    updateCameraState,
   } = useSegments(mapId);
 
   useEffect(() => {
-    console.log("🎬 StoryMapTimeline mounted/updated, mapId:", mapId);
     loadSegments();
   }, [loadSegments]);
 
-  console.log("🎨 Rendering StoryMapTimeline, segments count:", segments.length, "loading:", loading);
 
   // Handlers
   const handleCreateSegment = async (data: CreateSegmentRequest) => {
@@ -138,6 +138,28 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
     }
   };
 
+  const handleCaptureCamera = async (segment: Segment) => {
+    if (!currentMap) {
+      console.warn("⚠️ No map instance available for capture");
+      return;
+    }
+    
+    // Validate map instance
+    if (typeof currentMap.getCenter !== 'function' || typeof currentMap.getZoom !== 'function') {
+      console.error("❌ Invalid map instance - missing required methods");
+      return;
+    }
+    
+    try {
+      const capturedState = getCurrentCameraState(currentMap);
+      
+      await updateCameraState(segment.segmentId, capturedState);
+    } catch (error) {
+      console.error("❌ Failed to capture camera:", error);
+      console.error("Map instance:", currentMap);
+    }
+  };
+
   return (
     <div className="h-full flex flex-col bg-zinc-900 border-r border-zinc-800">
       {/* Header */}
@@ -185,6 +207,7 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
                     setShowZoneDialog(true);
                   }}
                   onDeleteZone={(zone) => setConfirmDeleteZone(zone)}
+                  onCaptureCamera={handleCaptureCamera}
                 />
               ))}
             </SortableContext>

@@ -41,4 +41,5 @@ export interface SortableSegmentItemProps {
   onDelete: (segment: Segment) => void;
   onAddZone: (segmentId: string) => void;
   onDeleteZone: (zone: SegmentZone) => void;
+  onCaptureCamera?: (segment: Segment) => void;
 }
