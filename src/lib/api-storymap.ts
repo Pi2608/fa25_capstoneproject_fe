@@ -1,296 +1,507 @@
-/**
- * Story Map API (Segments, POIs, Zones, Timeline, Story Elements)
- */
-
 import { getJson, postJson, putJson, delJson } from "./api-core";
-import type { StoryElementLayer, CreateStoryElementLayerRequest, UpdateStoryElementLayerRequest } from "@/types/map";
 
-const STORYMAP_PREFIX = "/story-map";
-const POI_PREFIX = "/points-of-interest";
+// ================== TYPES ==================
 
-// ===== SEGMENTS =====
+// Camera State
+export type CameraState = {
+  center: [number, number]; // [lng, lat]
+  zoom: number;
+  bearing?: number;
+  pitch?: number;
+};
+
+// Segment (Slide trong StoryMap)
 export type Segment = {
   segmentId: string;
   mapId: string;
-  name?: string;
-  summary?: string;
+  name: string;
+  description?: string;
   storyContent?: string;
-  displayOrder?: number;
-  isVisible?: boolean;
-  createdBy?: string;
-  createdAt?: string;
+  displayOrder: number;
+  cameraState: CameraState; // JSON stringify của CameraState
+  autoAdvance: boolean;
+  durationMs: number;
+  requireUserAction: boolean;
+  createdAt: string;
   updatedAt?: string;
 };
 
 export type CreateSegmentRequest = {
+  mapId?: string; // Will be enriched by endpoint
   name: string;
-  summary?: string;
+  description?: string;
   storyContent?: string;
   displayOrder?: number;
-  isVisible?: boolean;
+  cameraState?: string; // JSON stringified CameraState
+  autoAdvance?: boolean;
+  durationMs?: number;
+  requireUserAction?: boolean;
+  playbackMode?: "Auto" | "Manual" | "Timed";
 };
 
-export type UpdateSegmentRequest = Partial<CreateSegmentRequest>;
+export type UpdateSegmentRequest = {
+  name: string;
+  description?: string;
+  storyContent?: string;
+  displayOrder?: number;
+  cameraState?: string; // JSON stringified CameraState
+  autoAdvance?: boolean;
+  durationMs?: number;
+  requireUserAction?: boolean;
+  playbackMode?: "Auto" | "Manual" | "Timed";
+};
 
-export function getSegments(mapId: string) {
-  return getJson<Segment[]>(`${STORYMAP_PREFIX}/${mapId}/segments`);
-}
+// Zone (Master Data - Administrative boundaries)
+export type Zone = {
+  zoneId: string;
+  externalId?: string;
+  zoneCode?: string;
+  name: string;
+  zoneType: string; // "Country", "Province", "District", "Ward"
+  adminLevel?: number;
+  parentZoneId?: string;
+  geometry: string; // GeoJSON
+  simplifiedGeometry?: string;
+  centroid?: string;
+  boundingBox?: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+};
 
-export function createSegment(mapId: string, body: CreateSegmentRequest) {
-  return postJson<CreateSegmentRequest, Segment>(
-    `${STORYMAP_PREFIX}/${mapId}/segments`,
-    body
-  );
-}
+// SegmentZone (Link Segment → Zone với highlight config)
+export type SegmentZone = {
+  segmentZoneId: string;
+  segmentId: string;
+  zoneId: string;
+  zone?: Zone; // Populated
+  displayOrder: number;
+  isVisible: boolean;
+  zIndex: number;
+  
+  // Highlight config
+  highlightBoundary: boolean;
+  boundaryColor?: string;
+  boundaryWidth?: number;
+  fillZone: boolean;
+  fillColor?: string;
+  fillOpacity?: number;
+  showLabel: boolean;
+  labelOverride?: string;
+  labelStyle?: string;
+  
+  // Animation
+  entryDelayMs?: number;
+  entryDurationMs?: number;
+  exitDelayMs?: number;
+  exitDurationMs?: number;
+  entryEffect?: string;
+  exitEffect?: string;
+  
+  fitBoundsOnEntry: boolean;
+  cameraOverride?: string;
+  createdAt: string;
+};
 
-export function updateSegment(
-  mapId: string,
-  segmentId: string,
-  body: UpdateSegmentRequest
-) {
-  return putJson<UpdateSegmentRequest, Segment>(
-    `${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}`,
-    body
-  );
-}
+export type CreateSegmentZoneRequest = {
+  segmentId?: string; // Will be enriched
+  zoneId: string; // ⭐ Select from Zone master data
+  displayOrder?: number;
+  isVisible?: boolean;
+  zIndex?: number;
+  highlightBoundary?: boolean;
+  boundaryColor?: string;
+  boundaryWidth?: number;
+  fillZone?: boolean;
+  fillColor?: string;
+  fillOpacity?: number;
+  showLabel?: boolean;
+  labelOverride?: string;
+  entryDelayMs?: number;
+  entryDurationMs?: number;
+  entryEffect?: string;
+  fitBoundsOnEntry?: boolean;
+};
 
-export function deleteSegment(mapId: string, segmentId: string) {
-  return delJson<void>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}`);
-}
+export type UpdateSegmentZoneRequest = CreateSegmentZoneRequest;
 
-// ===== SEGMENT ↔ LAYERS =====
+// SegmentLayer (Link Segment → Layer)
 export type SegmentLayer = {
   segmentLayerId: string;
   segmentId: string;
   layerId: string;
+  displayOrder: number;
+  isVisible: boolean;
+  opacity: number;
+  zIndex: number;
+  entryDelayMs?: number;
+  entryDurationMs?: number;
+  exitDelayMs?: number;
+  exitDurationMs?: number;
+  entryEffect?: string;
+  exitEffect?: string;
+  styleOverride?: string;
+  createdAt: string;
+};
+
+export type AttachLayerRequest = {
+  layerId: string;
+  displayOrder?: number;
   isVisible?: boolean;
+  opacity?: number;
   zIndex?: number;
 };
 
-export function getSegmentLayers(mapId: string, segmentId: string) {
-  return getJson<SegmentLayer[]>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/layers`);
-}
-
-export function attachLayerToSegment(
-  mapId: string,
-  segmentId: string,
-  payload: { layerId: string; isVisible?: boolean; zIndex?: number }
-) {
-  return postJson<typeof payload, SegmentLayer>(
-    `${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/layers`,
-    payload
-  );
-}
-
-export function updateSegmentLayer(
-  mapId: string,
-  segmentId: string,
-  layerId: string,
-  payload: { isVisible?: boolean; zIndex?: number }
-) {
-  return putJson<typeof payload, SegmentLayer>(
-    `${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/layers/${layerId}`,
-    payload
-  );
-}
-
-export function detachLayerFromSegment(mapId: string, segmentId: string, layerId: string) {
-  return delJson<void>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/layers/${layerId}`);
-}
-
-// ===== POIs (Points of Interest) =====
-export type CreatePoiReq = {
+// Location (POI markers)
+export type Location = {
+  locationId: string;
+  segmentId: string;
   title: string;
   subtitle?: string;
-  locationType?: string; 
-  markerGeometry: string; 
-  storyContext?: string;
-  mediaResources?: string;
-  displayOrder?: number;
-  highlightOnEnter?: boolean;
-  shouldPin?: boolean;
-  tooltipContent?: string;
-  slideContent?: string;
-  playAudioOnClick?: boolean;
-  audioUrl?: string;
-  layerUrl?: string;
-  animationOverrides?: string;
-};
-
-export type UpdatePoiReq = Partial<CreatePoiReq>;
-
-export type MapPoi = {
-  poiId: string;
-  mapId: string;
-  title: string;
-  subtitle?: string;
-  markerGeometry: string;      
-  highlightOnEnter?: boolean;
-  shouldPin?: boolean;
-  isVisible?: boolean;
-  zIndex?: number;
-  displayOrder?: number;
-  createdAt?: string;
-  updatedAt?: string;
-};
-
-export type SegmentPoi = MapPoi & {
-  segmentId: string;
-};
-
-export function getMapPois(mapId: string) {
-  return getJson<MapPoi[]>(`${POI_PREFIX}/${mapId}`);
-}
-
-export function createMapPoi(mapId: string, body: CreatePoiReq) {
-  return postJson<CreatePoiReq, MapPoi>(`${POI_PREFIX}/${mapId}`, body);
-}
-
-export function getSegmentPois(mapId: string, segmentId: string) {
-  return getJson<SegmentPoi[]>(`${POI_PREFIX}/${mapId}/segments/${segmentId}`);
-}
-
-export function createSegmentPoi(mapId: string, segmentId: string, body: CreatePoiReq) {
-  return postJson<CreatePoiReq, SegmentPoi>(`${POI_PREFIX}/${mapId}/segments/${segmentId}`, body);
-}
-
-export function updatePoi(poiId: string, body: UpdatePoiReq) {
-  return putJson<UpdatePoiReq, MapPoi>(`${POI_PREFIX}/${poiId}`, body);
-}
-
-export function deletePoi(poiId: string) {
-  return delJson<void>(`${POI_PREFIX}/${poiId}`);
-}
-
-// ===== POI Display / Interaction Config =====
-export type UpdatePoiDisplayConfigReq = {
-  isVisible?: boolean;
-  zIndex?: number;
-  showTooltip?: boolean;
-  tooltipContent?: string | null;
-};
-
-export type UpdatePoiInteractionConfigReq = {
-  openSlideOnClick?: boolean;
-  playAudioOnClick?: boolean;
-  audioUrl?: string | null;
-  externalUrl?: string | null;
-};
-
-export function updatePoiDisplayConfig(poiId: string, body: UpdatePoiDisplayConfigReq) {
-  return putJson<UpdatePoiDisplayConfigReq, MapPoi>(`${POI_PREFIX}/pois/${poiId}/display-config`, body);
-}
-
-export function updatePoiInteractionConfig(poiId: string, body: UpdatePoiInteractionConfigReq) {
-  return putJson<UpdatePoiInteractionConfigReq, MapPoi>(`${POI_PREFIX}/pois/${poiId}/interaction-config`, body);
-}
-
-// ===== SEGMENT ZONES =====
-export type SegmentZone = {
-  segmentZoneId: string;
-  segmentId: string;
-  name?: string;
   description?: string;
-  zoneGeometry?: string;
-  focusCameraState?: string;
-  displayOrder?: number;
-  isPrimary?: boolean;
-  isVisible?: boolean;
-  createdAt?: string;
-  updatedAt?: string;
+  locationType: "POI" | "Marker" | "Annotation";
+  markerGeometry: string; // GeoJSON Point
+  iconType?: string;
+  iconUrl?: string;
+  iconColor?: string;
+  iconSize?: number;
+  displayOrder: number;
+  showTooltip: boolean;
+  tooltipContent?: string;
+  openPopupOnClick: boolean;
+  popupContent?: string;
+  mediaUrls?: string;
+  playAudioOnClick: boolean;
+  audioUrl?: string;
+  entryDelayMs?: number;
+  entryDurationMs?: number;
+  exitDelayMs?: number;
+  exitDurationMs?: number;
+  entryEffect?: string;
+  exitEffect?: string;
+  linkedSegmentId?: string;
+  linkedLocationId?: string;
+  externalUrl?: string;
+  isVisible: boolean;
+  zIndex: number;
+  createdAt: string;
 };
 
-export type CreateSegmentZoneReq = {
+// TimelineTransition (Camera animation between segments)
+export type TimelineTransition = {
+  timelineTransitionId: string;
+  mapId: string;
+  fromSegmentId: string;
+  toSegmentId: string;
+  transitionName?: string;
+  durationMs: number;
+  transitionType: "Jump" | "Ease" | "Linear";
+  animateCamera: boolean;
+  cameraAnimationType: "Jump" | "Ease" | "Fly";
+  cameraAnimationDurationMs: number;
+  showOverlay: boolean;
+  overlayContent?: string;
+  autoTrigger: boolean;
+  requireUserAction: boolean;
+  triggerButtonText?: string;
+  createdAt: string;
+};
+
+export type CreateTransitionRequest = {
+  mapId?: string; // Will be enriched
+  fromSegmentId: string;
+  toSegmentId: string;
+  transitionName?: string;
+  durationMs?: number;
+  transitionType?: "Jump" | "Ease" | "Linear";
+  animateCamera?: boolean;
+  cameraAnimationType?: "Jump" | "Ease" | "Fly";
+  cameraAnimationDurationMs?: number;
+  showOverlay?: boolean;
+  overlayContent?: string;
+  autoTrigger?: boolean;
+  requireUserAction?: boolean;
+};
+
+// AnimatedLayer (GIF/Video overlays)
+export type AnimatedLayer = {
+  animatedLayerId: string;
+  layerId?: string;
+  segmentId?: string;
   name: string;
   description?: string;
-  zoneType: "Area" | "Line" | "Point"; 
-  zoneGeometry: string; 
-  focusCameraState?: string; 
-  displayOrder?: number;
-  isPrimary?: boolean;
+  displayOrder: number;
+  mediaType: "GIF" | "Video" | "Lottie";
+  sourceUrl: string;
+  thumbnailUrl?: string;
+  coordinates?: string; // GeoJSON for map overlay
+  isScreenOverlay: boolean;
+  screenPosition?: string;
+  rotationDeg: number;
+  scale: number;
+  opacity: number;
+  zIndex: number;
+  cssFilter?: string;
+  autoPlay: boolean;
+  loop: boolean;
+  playbackSpeed: number;
+  startTimeMs?: number;
+  endTimeMs?: number;
+  entryDelayMs?: number;
+  entryDurationMs?: number;
+  entryEffect?: string;
+  exitDelayMs?: number;
+  exitDurationMs?: number;
+  exitEffect?: string;
+  enableClick: boolean;
+  onClickAction?: string;
+  isVisible: boolean;
+  createdAt: string;
 };
 
-export type UpdateSegmentZoneReq = Partial<CreateSegmentZoneReq>;
-
-export function getSegmentZones(mapId: string, segmentId: string) {
-  return getJson<SegmentZone[]>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/zones`);
-}
-
-export function createSegmentZone(mapId: string, segmentId: string, body: CreateSegmentZoneReq) {
-  return postJson<CreateSegmentZoneReq, SegmentZone>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/zones`, body);
-}
-
-export function updateSegmentZone(mapId: string, segmentId: string, zoneId: string, body: UpdateSegmentZoneReq) {
-  return putJson<UpdateSegmentZoneReq, SegmentZone>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/zones/${zoneId}`, body);
-}
-
-export function deleteSegmentZone(mapId: string, segmentId: string, zoneId: string) {
-  return delJson<void>(`${STORYMAP_PREFIX}/${mapId}/segments/${segmentId}/zones/${zoneId}`);
-}
-
-// ===== TIMELINE =====
-export type TimelineStep = {
-  timelineStepId: string;
-  mapId: string;
-  segmentId?: string | null;
-  title?: string;
+export type AnimatedLayerPreset = {
+  animatedLayerPresetId: string;
+  name: string;
   description?: string;
-  order?: number;
-  viewState?: string;
-  mediaUrl?: string;
+  category: string; // "Weather", "Effects", "Nature"
+  tags?: string;
+  mediaType: "GIF" | "Video" | "Lottie";
+  sourceUrl: string;
+  thumbnailUrl?: string;
+  defaultCoordinates?: string;
+  defaultIsScreenOverlay: boolean;
+  defaultScreenPosition?: string;
+  defaultScale: number;
+  defaultOpacity: number;
+  defaultAutoPlay: boolean;
+  defaultLoop: boolean;
+  isSystemPreset: boolean;
+  isPublic: boolean;
+  usageCount: number;
+  isActive: boolean;
+  createdAt: string;
 };
 
-export type CreateTimelineStepReq = {
-  segmentId?: string | null;
-  title?: string;
-  description?: string;
-  order?: number;
-  viewState?: string;
-  mediaUrl?: string;
-};
+// ================== SEGMENT APIs ==================
 
-export type UpdateTimelineStepReq = Partial<CreateTimelineStepReq>;
-
-export function getTimeline(mapId: string) {
-  return getJson<TimelineStep[]>(`${STORYMAP_PREFIX}/${mapId}/timeline`);
+export async function getSegments(mapId: string): Promise<Segment[]> {
+  const response = await getJson<Segment[]>(`/storymaps/${mapId}/segments`);
+  return response || [];
 }
 
-export function createTimelineStep(mapId: string, body: CreateTimelineStepReq) {
-  return postJson<CreateTimelineStepReq, TimelineStep>(`${STORYMAP_PREFIX}/${mapId}/timeline`, body);
+export async function getSegment(mapId: string, segmentId: string): Promise<Segment> {
+  return await getJson<Segment>(`/storymaps/${mapId}/segments/${segmentId}`);
 }
 
-export function updateTimelineStep(mapId: string, stepId: string, body: UpdateTimelineStepReq) {
-  return putJson<UpdateTimelineStepReq, TimelineStep>(`${STORYMAP_PREFIX}/${mapId}/timeline/${stepId}`, body);
+export async function createSegment(mapId: string, data: CreateSegmentRequest): Promise<Segment> {
+  return await postJson<CreateSegmentRequest, Segment>(`/storymaps/${mapId}/segments`, data);
 }
 
-export function deleteTimelineStep(mapId: string, stepId: string) {
-  return delJson<void>(`${STORYMAP_PREFIX}/${mapId}/timeline/${stepId}`);
+export async function updateSegment(mapId: string, segmentId: string, data: UpdateSegmentRequest): Promise<Segment> {
+  return await putJson<UpdateSegmentRequest, Segment>(`/storymaps/${mapId}/segments/${segmentId}`, data);
 }
 
-// ===== ZONE ANALYTICS =====
-export type ZoneAnalyticsRequest = Record<string, unknown>;
-export type ZoneAnalyticsResponse = Record<string, unknown>; 
+export async function deleteSegment(mapId: string, segmentId: string): Promise<void> {
+  await delJson<void>(`/storymaps/${mapId}/segments/${segmentId}`);
+}
 
-export function getZoneAnalytics(mapId: string, body: ZoneAnalyticsRequest) {
-  return postJson<ZoneAnalyticsRequest, ZoneAnalyticsResponse>(
-    `${STORYMAP_PREFIX}/${mapId}/analytics/zones`,
-    body
+export async function duplicateSegment(mapId: string, segmentId: string): Promise<Segment> {
+  return await postJson<{}, Segment>(`/storymaps/${mapId}/segments/${segmentId}/duplicate`, {});
+}
+
+export async function reorderSegments(mapId: string, segmentIds: string[]): Promise<Segment[]> {
+  return await postJson<string[], Segment[]>(`/storymaps/${mapId}/segments/reorder`, segmentIds);
+}
+
+// ================== ZONE APIs (Master Data) ==================
+
+export async function getZones(): Promise<Zone[]> {
+  return await getJson<Zone[]>(`/zones`);
+}
+
+export async function getZonesByParent(parentZoneId?: string): Promise<Zone[]> {
+  const url = parentZoneId 
+    ? `/zones/parent/${parentZoneId}`
+    : `/zones/parent`;
+  return await getJson<Zone[]>(url);
+}
+
+export async function searchZones(searchTerm: string): Promise<Zone[]> {
+  return await getJson<Zone[]>(`/zones/search?q=${encodeURIComponent(searchTerm)}`);
+}
+
+export async function createZone(data: any): Promise<Zone> {
+  return await postJson<any, Zone>(`/zones`, data);
+}
+
+// ================== SEGMENT ZONE APIs ==================
+
+export async function getSegmentZones(mapId: string, segmentId: string): Promise<SegmentZone[]> {
+  const response = await getJson<SegmentZone[]>(`/storymaps/${mapId}/segments/${segmentId}/zones`);
+  return response || [];
+}
+
+export async function createSegmentZone(
+  mapId: string, 
+  segmentId: string, 
+  data: CreateSegmentZoneRequest
+): Promise<SegmentZone> {
+  return await postJson<CreateSegmentZoneRequest, SegmentZone>(`/storymaps/${mapId}/segments/${segmentId}/zones`, data);
+}
+
+export async function updateSegmentZone(
+  mapId: string,
+  segmentId: string,
+  zoneId: string,
+  data: UpdateSegmentZoneRequest
+): Promise<SegmentZone> {
+  return await putJson<UpdateSegmentZoneRequest, SegmentZone>(`/storymaps/${mapId}/segments/${segmentId}/zones/${zoneId}`, data);
+}
+
+export async function deleteSegmentZone(mapId: string, segmentId: string, zoneId: string): Promise<void> {
+  await delJson<void>(`/storymaps/${mapId}/segments/${segmentId}/zones/${zoneId}`);
+}
+
+// ================== SEGMENT LAYER APIs ==================
+
+export async function getSegmentLayers(mapId: string, segmentId: string): Promise<SegmentLayer[]> {
+  const response = await getJson<SegmentLayer[]>(`/storymaps/${mapId}/segments/${segmentId}/layers`);
+  return response || [];
+}
+
+export async function attachLayerToSegment(
+  mapId: string,
+  segmentId: string,
+  data: AttachLayerRequest
+): Promise<SegmentLayer> {
+  return await postJson<AttachLayerRequest, SegmentLayer>(`/storymaps/${mapId}/segments/${segmentId}/layers`, data);
+}
+
+export async function detachLayerFromSegment(
+  mapId: string,
+  segmentId: string,
+  layerId: string
+): Promise<void> {
+  await delJson<void>(`/storymaps/${mapId}/segments/${segmentId}/layers/${layerId}`);
+}
+
+// ================== LOCATION (POI) APIs ==================
+
+export async function getSegmentLocations(mapId: string, segmentId: string): Promise<Location[]> {
+  const response = await getJson<Location[]>(`/storymaps/${mapId}/segments/${segmentId}/locations`);
+  return response || [];
+}
+
+// ================== TIMELINE TRANSITION APIs ==================
+
+export async function getTimelineTransitions(mapId: string): Promise<TimelineTransition[]> {
+  return await getJson<TimelineTransition[]>(`/timeline-transitions/${mapId}`);
+}
+
+export async function createTimelineTransition(
+  mapId: string,
+  data: CreateTransitionRequest
+): Promise<TimelineTransition> {
+  return await postJson<CreateTransitionRequest, TimelineTransition>(`/timeline-transitions/${mapId}`, data);
+}
+
+export async function generateTransition(
+  mapId: string,
+  fromSegmentId: string,
+  toSegmentId: string
+): Promise<TimelineTransition> {
+  return await postJson<{ fromSegmentId: string; toSegmentId: string }, TimelineTransition>(
+    `/timeline-transitions/${mapId}/generate`,
+    { fromSegmentId, toSegmentId }
   );
 }
 
-// ===== STORY ELEMENT LAYERS =====
-export function getStoryElementLayers(elementId: string) {
-  return getJson<StoryElementLayer[]>(`${STORYMAP_PREFIX}/story-elements/${elementId}/layers`);
+export async function deleteTimelineTransition(mapId: string, transitionId: string): Promise<void> {
+  await delJson<void>(`/timeline-transitions/${mapId}/${transitionId}`);
 }
 
-export function createStoryElementLayer(body: CreateStoryElementLayerRequest) {
-  return postJson<CreateStoryElementLayerRequest, StoryElementLayer>(`${STORYMAP_PREFIX}/story-elements/layers`, body);
+// ================== ANIMATED LAYER APIs ==================
+
+export async function getAnimatedLayers(mapId: string): Promise<AnimatedLayer[]> {
+  return await getJson<AnimatedLayer[]>(`/animated-layers/map/${mapId}`);
 }
 
-export function updateStoryElementLayer(storyElementLayerId: string, body: UpdateStoryElementLayerRequest) {
-  return putJson<UpdateStoryElementLayerRequest, StoryElementLayer>(`${STORYMAP_PREFIX}/story-elements/layers/${storyElementLayerId}`, body);
+export async function getAnimatedLayersBySegment(mapId: string, segmentId: string): Promise<AnimatedLayer[]> {
+  return await getJson<AnimatedLayer[]>(`/animated-layers/segment/${segmentId}`);
 }
 
-export function deleteStoryElementLayer(storyElementLayerId: string) {
-  return delJson<{ success: boolean }>(`${STORYMAP_PREFIX}/story-elements/layers/${storyElementLayerId}`);
+export async function createAnimatedLayer(data: any): Promise<AnimatedLayer> {
+  return await postJson<any, AnimatedLayer>(`/animated-layers`, data);
+}
+
+export async function updateAnimatedLayer(layerId: string, data: any): Promise<AnimatedLayer> {
+  return await putJson<any, AnimatedLayer>(`/animated-layers/${layerId}`, data);
+}
+
+export async function deleteAnimatedLayer(layerId: string): Promise<void> {
+  await delJson<void>(`/animated-layers/${layerId}`);
+}
+
+// ================== ANIMATED LAYER PRESET APIs ==================
+
+export async function getAnimatedLayerPresets(): Promise<AnimatedLayerPreset[]> {
+  return await getJson<AnimatedLayerPreset[]>(`/animated-layer-presets`);
+}
+
+export async function getPresetsByCategory(category: string): Promise<AnimatedLayerPreset[]> {
+  return await getJson<AnimatedLayerPreset[]>(`/animated-layer-presets/category/${category}`);
+}
+
+export async function searchPresets(searchTerm: string): Promise<AnimatedLayerPreset[]> {
+  return await getJson<AnimatedLayerPreset[]>(`/animated-layer-presets/search?q=${encodeURIComponent(searchTerm)}`);
+}
+
+export async function createAnimatedLayerFromPreset(
+  presetId: string,
+  layerId?: string,
+  segmentId?: string
+): Promise<AnimatedLayer> {
+  return await postJson<{ layerId?: string; segmentId?: string }, AnimatedLayer>(`/animated-layer-presets/${presetId}/create`, {
+    layerId,
+    segmentId
+  });
+}
+
+// ================== HELPER FUNCTIONS ==================
+
+export function parseCameraState(cameraStateJson: string): CameraState | null {
+  try {
+    return JSON.parse(cameraStateJson);
+  } catch {
+    return null;
+  }
+}
+
+export function stringifyCameraState(cameraState: CameraState): string {
+  return JSON.stringify(cameraState);
+}
+
+export function getCurrentCameraState(map: any): CameraState {
+  // Validate map instance has required methods
+  if (!map || typeof map.getCenter !== 'function' || typeof map.getZoom !== 'function') {
+    throw new Error('Invalid map instance: missing required methods');
+  }
+  
+  return {
+    center: [map.getCenter().lng, map.getCenter().lat],
+    zoom: map.getZoom(),
+    bearing: typeof map.getBearing === 'function' ? map.getBearing() : 0,
+    pitch: typeof map.getPitch === 'function' ? map.getPitch() : 0,
+  };
+}
+
+export function applyCameraState(map: any, cameraState: CameraState, options?: any) {
+  map.flyTo({
+    center: cameraState.center,
+    zoom: cameraState.zoom,
+    bearing: cameraState.bearing || 0,
+    pitch: cameraState.pitch || 0,
+    ...options,
+  });
 }

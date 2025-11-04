@@ -7,9 +7,9 @@ import type { TileLayer, LatLngTuple } from "leaflet";
 import type L from "leaflet";
 import type { MapWithPM, Layer } from "@/types";
 import { getMapDetail, type MapDetail, type RawLayer } from "@/lib/api-maps";
-import { getSegments, type Segment } from "@/lib/api-storymap";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
 import { loadLayerToMap } from "@/utils/mapUtils";
+import { getSegments, Segment } from "@/lib/api-storymap";
 
 type StoryElement = {
   id: string;
@@ -122,7 +122,7 @@ export default function StoryMapControlPage() {
         const segmentsWithElements = await Promise.all(
           segmentsData.map(async (segment) => {
             try {
-              const { getSegmentLayers } = await import("@/lib/api-storymap");
+              const { getSegmentLayers } = await import("@/lib/api-poi");
               const segmentLayers = await getSegmentLayers(mapId, segment.segmentId);
               
               const elements: StoryElement[] = segmentLayers.map((sl, index) => ({
@@ -418,9 +418,9 @@ export default function StoryMapControlPage() {
               <h2 className="text-xl font-bold text-white mb-2">
                 {currentSegment.name}
               </h2>
-              {currentSegment.summary && (
+              {currentSegment.description && (
                 <p className="text-sm text-zinc-400 mb-3">
-                  {currentSegment.summary}
+                  {currentSegment.description}
                 </p>
               )}
               {currentSegment.storyContent && (
@@ -503,9 +503,9 @@ export default function StoryMapControlPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">{segment.name}</div>
-                    {segment.summary && (
+                    {segment.description && (
                       <div className="text-xs opacity-70 truncate">
-                        {segment.summary}
+                        {segment.description}
                       </div>
                     )}
                   </div>

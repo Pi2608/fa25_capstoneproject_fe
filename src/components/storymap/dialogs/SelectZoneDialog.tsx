@@ -6,7 +6,7 @@ import {
   Zone,
   searchZones,
   getZonesByParent,
-} from "@/lib/api-storymap-v2";
+} from "@/lib/api-storymap";
 
 interface SelectZoneDialogProps {
   segmentId: string;

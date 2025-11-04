@@ -2,7 +2,7 @@
 
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Segment, SegmentZone } from "@/lib/api-storymap-v2";
+import { Segment, SegmentZone } from "@/lib/api-storymap";
 import { TimelineSegment } from "@/types/storymap";
 
 interface SortableSegmentItemProps {

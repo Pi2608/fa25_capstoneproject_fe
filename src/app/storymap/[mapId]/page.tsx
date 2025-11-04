@@ -6,10 +6,10 @@ import "leaflet/dist/leaflet.css";
 import type { TileLayer, LatLngTuple, FeatureGroup } from "leaflet";
 import type L from "leaflet";
 import type { MapWithPM, Layer } from "@/types";
-import { getMapDetail, type MapDetail, type RawLayer } from "@/lib/api-maps";
-import { getSegments, type Segment } from "@/lib/api-storymap";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
 import { loadLayerToMap } from "@/utils/mapUtils";
+import { getSegments, Segment } from "@/lib/api-storymap";
+import { getMapDetail, MapDetail, RawLayer } from "@/lib/api-maps";
 
 type StoryElement = {
   id: string;
@@ -111,7 +111,7 @@ export default function StoryMapPlayerPage() {
           segmentsData.map(async (segment) => {
             try {
               // Import getSegmentLayers dynamically
-              const { getSegmentLayers } = await import("@/lib/api-storymap");
+              const { getSegmentLayers } = await import("@/lib/api-poi");
               const segmentLayers = await getSegmentLayers(mapId, segment.segmentId);
               
               // Convert to StoryElement format
@@ -406,9 +406,9 @@ export default function StoryMapPlayerPage() {
           <h2 className="text-2xl font-bold text-white mb-3">
             {currentSegment.name}
           </h2>
-          {currentSegment.summary && (
+          {currentSegment.description && (
             <p className="text-zinc-300 text-sm mb-4">
-              {currentSegment.summary}
+              {currentSegment.description}
             </p>
           )}
           {currentSegment.storyContent && (

@@ -9,7 +9,7 @@ import {
   applyCameraState,
   CreateSegmentRequest,
   Segment,
-} from "@/lib/api-storymap-v2";
+} from "@/lib/api-storymap";
 
 interface SegmentDialogProps {
   editing?: Segment;

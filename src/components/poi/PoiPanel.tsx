@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 
 import type { GeoJsonObject, Point, GeometryCollection } from "geojson";
-import { createMapPoi, CreatePoiReq, deletePoi, getMapPois, MapPoi, updatePoi, updatePoiDisplayConfig, updatePoiInteractionConfig } from "@/lib/api-storymap";
+import { createMapPoi, CreatePoiReq, deletePoi, getMapPois, MapPoi, updatePoi, updatePoiDisplayConfig, updatePoiInteractionConfig } from "@/lib/api-poi";
 
 type Props = { mapId: string };
 

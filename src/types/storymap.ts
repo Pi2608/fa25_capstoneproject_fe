@@ -1,4 +1,4 @@
-import { Segment, SegmentZone, SegmentLayer, Location } from "@/lib/api-storymap-v2";
+import { Segment, SegmentZone, SegmentLayer, Location } from "@/lib/api-storymap";
 
 /**
  * Extended segment type with related data for timeline display

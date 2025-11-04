@@ -27,7 +27,7 @@ import {
   CreateSegmentRequest,
   CreateSegmentZoneRequest,
   getCurrentCameraState,
-} from "@/lib/api-storymap-v2";
+} from "@/lib/api-storymap";
 
 type Props = {
   mapId: string;

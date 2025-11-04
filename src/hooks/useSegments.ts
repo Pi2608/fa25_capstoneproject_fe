@@ -14,7 +14,7 @@ import {
     CreateSegmentZoneRequest,
     CameraState,
     stringifyCameraState,
-} from "@/lib/api-storymap-v2";
+} from "@/lib/api-storymap";
 import { TimelineSegment } from "@/types/storymap";
 
 /**
