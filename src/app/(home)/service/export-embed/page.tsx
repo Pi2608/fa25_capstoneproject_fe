@@ -17,7 +17,7 @@ export default function ExportEmbedPage() {
     { title: "Access control", desc: "Domain allowlist, signed URLs, SSO tokens, and view permissions." },
   ];
 
-  const formats = [
+  const formats: [string, string][] = [
     ["PNG", "Raster image for reports and slides. Supports HiDPI and transparency."],
     ["PDF", "Vector printing with selectable text, CMYK-friendly colors, and layers legend."],
     ["SVG", "Scalable vector for design tools; great for posters and infographics."],
@@ -46,14 +46,14 @@ export default function ExportEmbedPage() {
     signed: `GET /embed/map/abc123?expires=1735689600&sig=2d9f2c...`,
   };
 
-  const controls = [
+  const controls: [string, string][] = [
     ["Legend", "Dock left/right, collapsed by default, custom titles."],
     ["Watermark", "Per-org or per-export watermark, opacity and position."],
     ["Safe areas", "Guides for titles/logos; prevent overlap with important features."],
     ["Localization", "Date/number formats, locale labels, and RTL support in PDFs."],
   ];
 
-  const faqs = [
+  const faqs: [string, string][] = [
     ["Can I lock embeds to my domain?", "Yes. Add domains to the allowlist. Requests from other domains are blocked."],
     ["Do PDFs keep vector quality?", "Yes. Symbols and labels remain vector where possible; rasters are tiled with overviews."],
     ["How are export jobs delivered?", "Large jobs run in a queue. Poll the job endpoint or register a webhook to receive the file URL."],

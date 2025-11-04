@@ -48,7 +48,7 @@ export default function DashboardsPage() {
     { title: "Quick search", desc: "Spotlight for places, layers, and records with jump-to actions." },
   ];
 
-  const faqs = [
+  const faqs: [string, string][] = [
     ["Can I embed a dashboard?", "Yes. Publish with an embed code or private link with SSO/role checks."],
     ["Does it support big rasters?", "Yes. Add GeoTIFF/MBTiles or XYZ; rendering uses tiling, overviews, and WebGL."],
     ["How fast are filters?", "Typical interactions resolve in under 200 ms with server-side aggregation and caching."],

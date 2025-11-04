@@ -48,7 +48,7 @@ export default function DashboardsClient({
   useEffect(() => {
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const base = { duration: reduce ? 0 : 0.6, ease: "power2.out", clearProps: "transform,opacity" } as const;
-    const ctx = gsap.context(() => {
+  const ctx = gsap.context(() => {
       gsap.set("[data-reveal]", { autoAlpha: 0, y: 18 });
       ScrollTrigger.batch("[data-reveal]", {
         start: "top 90%",
@@ -66,7 +66,7 @@ export default function DashboardsClient({
         });
       });
     });
-    return () => ctx.revert();
+  return () => { ctx.revert(); };
   }, []);
 
   return (

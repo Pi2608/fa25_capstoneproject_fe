@@ -17,13 +17,13 @@ export default function CloudSourcesPage() {
     { cat: "Generic web", items: ["HTTPS tiles (XYZ/TMS)", "Signed URLs"] },
   ];
 
-  const syncModes = [
+  const syncModes: [string, string][] = [
     ["Live proxy", "Forward queries to the origin in real-time, with smart CDN caching and cache-busting on edits."],
     ["Schedule pulls", "Mirror data to IMOS on a cadence (minutely/hourly/daily). Delta-aware to save bandwidth."],
     ["Webhooks", "Trigger incremental refresh when upstream changes. Ideal for ETL pipelines & CI/CD."],
   ];
 
-  const reliability = [
+  const reliability: [string, string][] = [
     ["Retries & backoff", "Auto-retries with jittered exponential backoff for flaky endpoints."],
     ["Health checks", "Background pings and fast-failover for primary/replica origins."],
     ["Cold → warm cache", "Seamless warmup as tiles/queries get popular; LRU eviction."],

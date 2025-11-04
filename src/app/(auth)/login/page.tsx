@@ -39,21 +39,17 @@ export default function LoginClientSimple() {
       try {
         const me = await getMe();
         const role = (me.role || "").toLowerCase();
+        
         if (role === "admin") {
           showToast("success", "Welcome, Admin! Redirecting to dashboard...");
           setTimeout(() => router.push("/dashboard"), 800);
           return;
         }
-        const accountTypeKey = `account_type_${email}`;
-        const hasAccountType = typeof window !== "undefined" && localStorage.getItem(accountTypeKey);
         
-        if (!hasAccountType) {
+        if (me.lastLogin === null || me.lastLogin === undefined) {
           showToast("success", "Login successful! Let's set up your account...");
           setTimeout(() => router.push("/login/account-type"), 800);
         } else {
-          if (typeof window !== "undefined") {
-            localStorage.setItem("account_type", hasAccountType);
-          }
           showToast("success", "Login successful! Redirecting...");
           setTimeout(() => router.push("/"), 800);
         }
