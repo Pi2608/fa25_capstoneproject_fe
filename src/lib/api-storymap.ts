@@ -403,9 +403,63 @@ export async function detachLayerFromSegment(
 
 // ================== LOCATION (POI) APIs ==================
 
+export type CreateLocationRequest = {
+  segmentId?: string;
+  title: string;
+  subtitle?: string;
+  description?: string;
+  locationType: "POI" | "Marker" | "Annotation";
+  markerGeometry: string; // GeoJSON Point
+  iconType?: string;
+  iconUrl?: string;
+  iconColor?: string;
+  iconSize?: number;
+  displayOrder?: number;
+  showTooltip?: boolean;
+  tooltipContent?: string;
+  openPopupOnClick?: boolean;
+  popupContent?: string;
+  mediaUrls?: string;
+  playAudioOnClick?: boolean;
+  audioUrl?: string;
+  linkedSegmentId?: string;
+  linkedLocationId?: string;
+  externalUrl?: string;
+  isVisible?: boolean;
+  zIndex?: number;
+};
+
 export async function getSegmentLocations(mapId: string, segmentId: string): Promise<Location[]> {
   const response = await getJson<Location[]>(`/storymaps/${mapId}/segments/${segmentId}/locations`);
   return response || [];
+}
+
+export async function createLocation(
+  mapId: string,
+  segmentId: string,
+  data: CreateLocationRequest
+): Promise<Location> {
+  return await postJson<CreateLocationRequest, Location>(`/storymaps/${mapId}/segments/${segmentId}/locations`, data);
+}
+
+export async function updateLocation(
+  mapId: string,
+  segmentId: string,
+  locationId: string,
+  data: Partial<CreateLocationRequest>
+): Promise<Location> {
+  return await putJson<Partial<CreateLocationRequest>, Location>(
+    `/storymaps/${mapId}/segments/${segmentId}/locations/${locationId}`,
+    data
+  );
+}
+
+export async function deleteLocation(
+  mapId: string,
+  segmentId: string,
+  locationId: string
+): Promise<void> {
+  await delJson<void>(`/storymaps/${mapId}/segments/${segmentId}/locations/${locationId}`);
 }
 
 // ================== TIMELINE TRANSITION APIs ==================

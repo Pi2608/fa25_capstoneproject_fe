@@ -19,6 +19,8 @@ import {
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import SegmentDialog from "@/components/storymap/dialogs/SegmentDialog";
 import SelectZoneDialog from "@/components/storymap/dialogs/SelectZoneDialog";
+import SelectLayerDialog from "@/components/storymap/dialogs/SelectLayerDialog";
+import CreateLocationDialog from "@/components/storymap/dialogs/CreateLocationDialog";
 import SortableSegmentItem from "@/components/storymap/items/SortableSegmentItem";
 import { useSegments } from "@/hooks/useSegments";
 import { 
@@ -27,6 +29,12 @@ import {
   CreateSegmentRequest,
   CreateSegmentZoneRequest,
   getCurrentCameraState,
+  AttachLayerRequest,
+  attachLayerToSegment,
+  detachLayerFromSegment,
+  CreateLocationRequest,
+  createLocation,
+  deleteLocation,
 } from "@/lib/api-storymap";
 import { TimelineSegment } from "@/types/storymap";
 
@@ -40,10 +48,15 @@ type Props = {
 export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }: Props) {
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
   
+  // Track current segment layers for cleanup
+  const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
+  
   // Dialogs
   const [showSegmentDialog, setShowSegmentDialog] = useState(false);
   const [editingSegment, setEditingSegment] = useState<Segment | undefined>();
   const [showZoneDialog, setShowZoneDialog] = useState(false);
+  const [showLayerDialog, setShowLayerDialog] = useState(false);
+  const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [targetSegmentId, setTargetSegmentId] = useState<string>("");
   const [confirmDelete, setConfirmDelete] = useState<Segment | null>(null);
   const [confirmDeleteZone, setConfirmDeleteZone] = useState<SegmentZone | null>(null);
@@ -124,6 +137,58 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
     }
   };
 
+  const handleAddLayer = async (data: AttachLayerRequest) => {
+    try {
+      await attachLayerToSegment(mapId, targetSegmentId, data);
+      setShowLayerDialog(false);
+      await loadSegments(); // Reload to show new layer
+    } catch (error) {
+      console.error("Failed to add layer:", error);
+      throw error;
+    }
+  };
+
+  const handleDeleteLayer = async (segmentLayerId: string) => {
+    // TODO: You might want to add confirmation dialog
+    // For now, find the segment and layer to delete
+    const segment = segments.find(s => s.layers.some(l => l.segmentLayerId === segmentLayerId));
+    if (!segment) return;
+    
+    const layer = segment.layers.find(l => l.segmentLayerId === segmentLayerId);
+    if (!layer) return;
+
+    try {
+      await detachLayerFromSegment(mapId, segment.segmentId, layer.layerId);
+      await loadSegments(); // Reload to remove layer
+    } catch (error) {
+      console.error("Failed to delete layer:", error);
+    }
+  };
+
+  const handleAddLocation = async (data: CreateLocationRequest) => {
+    try {
+      await createLocation(mapId, targetSegmentId, data);
+      setShowLocationDialog(false);
+      await loadSegments(); // Reload to show new location
+    } catch (error) {
+      console.error("Failed to add location:", error);
+      throw error;
+    }
+  };
+
+  const handleDeleteLocation = async (locationId: string) => {
+    // Find the segment containing this location
+    const segment = segments.find(s => s.locations.some(l => l.locationId === locationId));
+    if (!segment) return;
+
+    try {
+      await deleteLocation(mapId, segment.segmentId, locationId);
+      await loadSegments(); // Reload to remove location
+    } catch (error) {
+      console.error("Failed to delete location:", error);
+    }
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
@@ -171,8 +236,18 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
       // Import Leaflet dynamically
       const L = (await import("leaflet")).default;
 
-      // Clear previous visualization layers (optional)
-      // Store layer references if you want to manage cleanup
+      // ===== CLEAR ALL PREVIOUS SEGMENT LAYERS =====
+      console.log(`🧹 Clearing ${currentSegmentLayers.length} previous layers...`);
+      currentSegmentLayers.forEach(layer => {
+        try {
+          currentMap.removeLayer(layer);
+        } catch (e) {
+          console.warn("Failed to remove layer:", e);
+        }
+      });
+      
+      // Reset layer tracking
+      const newLayers: any[] = [];
 
       // 1. Fly to segment camera position if available
       if (segment.cameraState) {
@@ -238,8 +313,9 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
               },
             });
 
-            // Add layer to map
+            // Add layer to map and track it
             geoJsonLayer.addTo(currentMap);
+            newLayers.push(geoJsonLayer);
 
             // Collect bounds for fitBounds
             const layerBounds = geoJsonLayer.getBounds();
@@ -281,6 +357,7 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
                   }),
                 });
                 labelMarker.addTo(currentMap);
+                newLayers.push(labelMarker);
               } catch (labelError) {
                 console.error(`Failed to add label for zone ${zone.zoneId}:`, labelError);
               }
@@ -318,12 +395,14 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
       // 4. TODO: Render locations/POIs when implemented
       // if (segment.locations && segment.locations.length > 0) { ... }
 
-      console.log(`✅ Viewing segment: ${segment.name}`);
+      // ===== SAVE NEW LAYERS FOR FUTURE CLEANUP =====
+      setCurrentSegmentLayers(newLayers);
+      console.log(`✅ Viewing segment: ${segment.name} (${newLayers.length} layers)`);
       
     } catch (error) {
       console.error("❌ Failed to view segment on map:", error);
     }
-  }, [currentMap]);
+  }, [currentMap, currentSegmentLayers, setCurrentSegmentLayers]);
 
   return (
     <div className="h-full flex flex-col bg-zinc-900 border-r border-zinc-800">
@@ -372,6 +451,16 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
                     setShowZoneDialog(true);
                   }}
                   onDeleteZone={(zone) => setConfirmDeleteZone(zone)}
+                  onAddLayer={(segId) => {
+                    setTargetSegmentId(segId);
+                    setShowLayerDialog(true);
+                  }}
+                  onDeleteLayer={handleDeleteLayer}
+                  onAddLocation={(segId) => {
+                    setTargetSegmentId(segId);
+                    setShowLocationDialog(true);
+                  }}
+                  onDeleteLocation={handleDeleteLocation}
                   onCaptureCamera={handleCaptureCamera}
                   onViewOnMap={handleViewSegment}
                 />
@@ -399,6 +488,23 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
           segmentId={targetSegmentId}
           onClose={() => setShowZoneDialog(false)}
           onSave={handleAddZone}
+        />
+      )}
+
+      {showLayerDialog && (
+        <SelectLayerDialog
+          segmentId={targetSegmentId}
+          onClose={() => setShowLayerDialog(false)}
+          onSave={handleAddLayer}
+        />
+      )}
+
+      {showLocationDialog && (
+        <CreateLocationDialog
+          segmentId={targetSegmentId}
+          currentMap={currentMap}
+          onClose={() => setShowLocationDialog(false)}
+          onSave={handleAddLocation}
         />
       )}
 
