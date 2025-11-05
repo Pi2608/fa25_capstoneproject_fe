@@ -39,14 +39,15 @@ export default function LoginClientSimple() {
       try {
         const me = await getMe();
         const role = (me.role || "").toLowerCase();
-        
+
         if (role === "admin") {
           showToast("success", "Welcome, Admin! Redirecting to dashboard...");
           setTimeout(() => router.push("/dashboard"), 800);
           return;
         }
-        
-        if (me.lastLogin === null || me.lastLogin === undefined) {
+        const isFirstLogin = !me.lastLogin ||
+          me.lastLogin.startsWith("0001-01-01");
+        if (isFirstLogin) {
           showToast("success", "Login successful! Let's set up your account...");
           setTimeout(() => router.push("/login/account-type"), 800);
         } else {

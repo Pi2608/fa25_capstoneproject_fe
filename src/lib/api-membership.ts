@@ -8,12 +8,70 @@ import { getJson, postJson, apiFetch, ApiErrorShape } from "./api-core";
 export type Plan = {
   planId: number;
   planName: string;
-  description: string;
-  priceMonthly: number;
+  description?: string | null;
+  priceMonthly?: number | null;
+  durationMonths: number;
+  maxOrganizations: number;
+  maxLocationsPerOrg: number;
+  maxMapsPerMonth: number;
+  maxUsersPerOrg: number;
+  mapQuota: number;
+  exportQuota: number;
+  maxCustomLayers: number;
+  monthlyTokens: number;
+  prioritySupport: boolean;
+  features?: string | null; // JSON string
+  // Interactive Points Feature Limits
+  maxInteractionsPerMap: number;
+  maxMediaFileSizeBytes: number;
+  maxVideoFileSizeBytes: number;
+  maxAudioFileSizeBytes: number;
+  maxConnectionsPerMap: number;
+  allow3DEffects: boolean;
+  allowVideoContent: boolean;
+  allowAudioContent: boolean;
+  allowAnimatedConnections: boolean;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string | null;
+};
+
+export type PlanSummary = {
+  planId: number;
+  planName: string;
+  description?: string | null;
+  priceMonthly?: number | null;
+  features: string[];
 };
 
 export function getPlans() {
   return getJson<Plan[]>("/membership-plan/active");
+}
+
+export function getPlanById(planId: number) {
+  return getJson<Plan>(`/membership-plan/${planId}`);
+}
+
+// Helper function to parse features JSON
+export function parsePlanFeatures(plan: Plan): string[] {
+  if (!plan.features) return [];
+  try {
+    const parsed = JSON.parse(plan.features);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+// Helper function to get plan summary for display
+export function getPlanSummary(plan: Plan): PlanSummary {
+  return {
+    planId: plan.planId,
+    planName: plan.planName,
+    description: plan.description,
+    priceMonthly: plan.priceMonthly,
+    features: parsePlanFeatures(plan),
+  };
 }
 
 // ===== MEMBERSHIP =====

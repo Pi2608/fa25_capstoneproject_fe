@@ -15,7 +15,10 @@ export type OrganizationReqDto = {
   address?: string;
 };
 
-export type OrganizationResDto = { result?: string };
+export type OrganizationResDto = { 
+  result?: string;
+  orgId: string;
+};
 
 export type OrganizationDetailDto = {
   orgId: string;
