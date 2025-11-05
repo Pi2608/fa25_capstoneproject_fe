@@ -94,7 +94,7 @@ export default function MembersPage() {
         const u = await getMe();
         if (!alive) return;
         setMe(u);
-      } catch {}
+      } catch { }
       try {
         const res = await getMyOrganizations();
         if (!alive) return;
@@ -169,6 +169,7 @@ export default function MembersPage() {
     [members, me]
   );
 
+  const isOwner = currentUserRow?.license === "Owner";
   const canTransfer = (target: MemberRow) => {
     if (!currentUserRow) return false;
     if (currentUserRow.license !== "Owner") return false;
@@ -180,7 +181,7 @@ export default function MembersPage() {
   };
 
   const handleChangeRole = async (memberId: string, newRole: MemberRow["license"]) => {
-    if (!selectedOrgId) return;
+    if (!selectedOrgId || !isOwner) return;
     const prev = members;
     setMembers((list) => list.map((m) => (m.memberId === memberId ? { ...m, license: newRole } : m)));
     setBusy(memberId, true);
@@ -213,8 +214,8 @@ export default function MembersPage() {
 
     setBusy(target.memberId, true);
     try {
-      const payload = { orgId: String(selectedOrgId).trim(), newOwnerId: target.userId.trim() };
-      const res = await transferOwnership(payload);
+      const res = await transferOwnership(String(selectedOrgId).trim(), target.userId.trim());
+
       await loadMembers(selectedOrgId);
       alert(res?.result || "Chuyển quyền sở hữu thành công.");
     } catch (e) {
@@ -224,8 +225,9 @@ export default function MembersPage() {
     }
   };
 
+
   const handleRemove = async (memberId: string, nameOrEmail: string) => {
-    if (!selectedOrgId) return;
+    if (!selectedOrgId || !isOwner) return;
     if (!confirm(`Remove ${nameOrEmail} from this organization?`)) return;
     setBusy(memberId, true);
     try {
@@ -271,22 +273,24 @@ export default function MembersPage() {
 
   return (
     <div className="p-4">
-      {/* header */}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold">Members</h2>
         <div className="flex items-center gap-2">
           <StatPill text={`${members.length} members out of 25`} />
           <StatPill text={`${editorsCount} editors out of 3`} />
           <button
-            className="ml-2 rounded-lg bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-500"
-            onClick={() => setInviteOpen(true)}
+            className="ml-2 rounded-lg bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-500
+             disabled:opacity-60 disabled:cursor-not-allowed"
+            onClick={() => isOwner && setInviteOpen(true)}
+            disabled={inviteBusy || !isOwner}
+            title={isOwner ? "Invite members" : "Only owner can invite members"}
           >
             + Invite members
           </button>
+
         </div>
       </div>
 
-      {/* org select */}
       <div className="mb-4 flex items-center gap-3">
         <label className="text-sm text-zinc-600 dark:text-zinc-400">Organization</label>
         <select
@@ -336,7 +340,7 @@ export default function MembersPage() {
             </button>
           </div>
 
-        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
             <div>
               <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">Emails</label>
               <input
@@ -414,37 +418,55 @@ export default function MembersPage() {
                 const title = !isGuid(m.userId)
                   ? "Không có userId dạng GUID"
                   : !isGuid(String(selectedOrgId))
-                  ? "orgId không phải GUID"
-                  : currentUserRow?.license !== "Owner"
-                  ? "Chỉ Owner mới được chuyển quyền"
-                  : m.email?.toLowerCase() === me?.email?.toLowerCase()
-                  ? "Không thể chuyển cho chính bạn"
-                  : m.license === "Owner"
-                  ? "Không thể chuyển cho Owner hiện tại"
-                  : "Transfer ownership";
+                    ? "orgId không phải GUID"
+                    : currentUserRow?.license !== "Owner"
+                      ? "Chỉ Owner mới được chuyển quyền"
+                      : m.email?.toLowerCase() === me?.email?.toLowerCase()
+                        ? "Không thể chuyển cho chính bạn"
+                        : m.license === "Owner"
+                          ? "Không thể chuyển cho Owner hiện tại"
+                          : "Transfer ownership";
 
                 return (
-                  <tr key={m.memberId} className="border-t border-zinc-200 hover:bg-zinc-50 dark:border-white/5 dark:hover:bg-white/5">
+                  <tr
+                    key={m.memberId}
+                    className="border-t border-zinc-200 hover:bg-zinc-50 dark:border-white/5 dark:hover:bg-white/5"
+                  >
                     <td className="px-3 py-3">
                       <div className="font-medium text-zinc-900 dark:text-white">{m.displayName}</div>
                       <div className="text-xs text-zinc-600 dark:text-zinc-400">{m.email}</div>
                     </td>
-                    <td className="px-3 py-3 text-sm text-zinc-700 dark:text-zinc-200">{m.lastViewedAgo ?? "—"}</td>
+
+                    <td className="px-3 py-3 text-sm text-zinc-700 dark:text-zinc-200">
+                      {m.lastViewedAgo ?? "—"}
+                    </td>
+
                     <td className="px-3 py-3 text-sm">
-                      <span className="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 text-zinc-700 ring-1 ring-zinc-200
-                                         dark:bg-white/5 dark:text-zinc-200 dark:ring-white/10">
+                      <span
+                        className="inline-flex items-center rounded-md bg-zinc-100 px-2 py-0.5 text-zinc-700 ring-1 ring-zinc-200
+                   dark:bg-white/5 dark:text-zinc-200 dark:ring-white/10"
+                      >
                         {m.permissions}
                       </span>
                     </td>
+
+                    {/* License */}
                     <td className="px-3 py-3 text-sm">
                       <select
                         className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-800 shadow-sm
-                                   hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40
-                                   disabled:opacity-60
-                                   dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                   hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40
+                   disabled:opacity-60 disabled:cursor-not-allowed
+                   dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
                         value={m.license}
-                        disabled={busy || m.license === "Owner"}
+                        disabled={busy || m.license === "Owner" || !isOwner}
                         onChange={(e) => handleChangeRole(m.memberId, e.target.value as MemberRow["license"])}
+                        title={
+                          !isOwner
+                            ? "Only owner can change roles"
+                            : m.license === "Owner"
+                              ? "Owner role cannot be changed"
+                              : "Change role"
+                        }
                       >
                         <option value="Owner">Owner</option>
                         <option value="Admin">Admin</option>
@@ -452,6 +474,8 @@ export default function MembersPage() {
                         <option value="Viewer">Viewer</option>
                       </select>
                     </td>
+
+                    {/* Actions */}
                     <td className="px-3 py-3 text-sm">
                       <div className="flex items-center gap-2">
                         <button
@@ -459,19 +483,21 @@ export default function MembersPage() {
                           onClick={() => handleTransferOwnership(m)}
                           title={title}
                           className={`px-2 py-1 text-xs font-medium rounded-md
-                                      border border-sky-300 text-sky-700 bg-white hover:bg-sky-50
-                                      disabled:opacity-50 disabled:cursor-not-allowed
-                                      dark:border-sky-400/40 dark:text-sky-300 dark:bg-transparent dark:hover:bg-sky-500/10`}
+                      border border-sky-300 text-sky-700 bg-white hover:bg-sky-50
+                      disabled:opacity-50 disabled:cursor-not-allowed
+                      dark:border-sky-400/40 dark:text-sky-300 dark:bg-transparent dark:hover:bg-sky-500/10`}
                         >
                           Transfer ownership
                         </button>
+
                         <button
-                          disabled={busy || m.license === "Owner" || isMe === true}
+                          disabled={busy || m.license === "Owner" || isMe === true || !isOwner}
                           onClick={() => handleRemove(m.memberId, m.displayName || m.email)}
                           className={`px-2 py-1 text-xs font-medium rounded-md
-                                      bg-red-600 text-white hover:bg-red-500
-                                      disabled:opacity-60 disabled:cursor-not-allowed
-                                      dark:bg-red-500/85 dark:hover:bg-red-500`}
+                      bg-red-600 text-white hover:bg-red-500
+                      disabled:opacity-60 disabled:cursor-not-allowed
+                      dark:bg-red-500/85 dark:hover:bg-red-500`}
+                          title={isOwner ? "Remove member" : "Only owner can remove members"}
                         >
                           Remove
                         </button>
@@ -479,6 +505,7 @@ export default function MembersPage() {
                     </td>
                   </tr>
                 );
+
               })}
           </tbody>
         </table>

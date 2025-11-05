@@ -11,7 +11,7 @@ import { deleteOrganization, getOrganizationById, getOrganizationMembers, GetOrg
 import { CurrentMembershipDto, getMyMembership } from "@/lib/api-membership";
 import { getProjectsByOrganization } from "@/lib/api-workspaces";
 import { bulkCreateStudents, type BulkCreateStudentsRes } from "@/lib/api-organizations";
-
+import ManageWorkspaces from "@/components/ManageWorkspaces";
 
 type MapRow = Awaited<ReturnType<typeof getOrganizationMaps>>[number];
 
@@ -40,6 +40,7 @@ type MemberLike = {
   role?: string | null;
   memberType?: string | null;
 };
+
 function asMemberArray(x: unknown): MemberLike[] {
   if (!Array.isArray(x)) return [];
   return x.map((m) => {
@@ -121,7 +122,6 @@ export default function OrgDetailPage() {
     });
   }, [members, myEmail, myId]);
 
-  // Tôi có phải Admin/Owner không?
   const isAdminOrOwner = useMemo(() => {
     const list = asMemberArray(members?.members ?? []);
     return list.some((m) => {
@@ -250,6 +250,10 @@ export default function OrgDetailPage() {
   }, [orgId]);
 
   const onInvite = useCallback(async () => {
+    if (!isOwner) {
+      setInviteMsg("Chỉ Owner mới được mời thành viên.");
+      return;
+    }
     const emails = inviteInput
       .split(/[,\s]+/)
       .map((x) => x.trim())
@@ -486,27 +490,43 @@ export default function OrgDetailPage() {
           </div>
 
           <button
-            onClick={() => setShareOpen(true)}
-            className="px-3 py-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 text-sm hover:bg-emerald-500/20"
+            onClick={() => (isOwner ? setShareOpen(true) : setPermMsg("Chỉ Owner mới dùng Share"))}
+            disabled={!isOwner}
+            aria-disabled={!isOwner}
+            className={`px-3 py-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 text-sm
+              ${!isOwner ? "opacity-50 cursor-not-allowed text-emerald-300/60" : "text-emerald-300 hover:bg-emerald-500/20"}`}
           >
             Share
           </button>
 
-          <button
+          {/* <button
             onClick={() => router.push(`/profile/workspaces`)}
             className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10"
             title="Manage workspaces"
           >
             Workspaces
-          </button>
+          </button> */}
 
-          <button
-            onClick={handleWorkspaceSettings}
-            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10"
-            title="Workspace settings"
-          >
-            Settings
-          </button>
+          {isOwner ? (
+            <button
+              onClick={handleWorkspaceSettings}
+              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10"
+              title="Workspace settings"
+            >
+              Settings
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled
+              aria-disabled
+              title="Owner only"
+              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm
+               opacity-60 cursor-not-allowed"
+            >
+              Settings
+            </button>
+          )}
 
           <div className="relative z-50">
             <button
@@ -553,12 +573,7 @@ export default function OrgDetailPage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Workspaces</h2>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => router.push(`/profile/workspaces`)}
-              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
-            >
-              Manage Workspaces
-            </button>
+            <ManageWorkspaces orgId={orgId} canManage={isAdminOrOwner} />
 
             {isOwner && (
               <span className="relative inline-block group">
@@ -685,7 +700,7 @@ export default function OrgDetailPage() {
         </div>
       </section>
 
-      {shareOpen && (
+      {shareOpen && isOwner && (
         <div className="absolute top-12 right-0 w-[28rem] rounded-xl border border-white/10 bg-zinc-900/95 shadow-xl p-4">
           <div className="flex items-center justify-between mb-2">
             <div className="text-sm font-medium text-zinc-200">Share workspace</div>
@@ -705,6 +720,7 @@ export default function OrgDetailPage() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !inviteBusy) void onInvite();
                 }}
+                disabled={!isOwner}
               />
               <button
                 onClick={() => void onInvite()}

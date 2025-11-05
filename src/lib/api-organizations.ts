@@ -64,6 +64,7 @@ export type GetInvitationsResDto = { invitations: InvitationDto[] };
 
 export type MemberDto = {
   memberId: string;
+  userId?: string; 
   email: string;
   fullName: string;
   role: "Owner" | "Admin" | "Member" | "Viewer" | string;
@@ -185,13 +186,12 @@ export function cancelInvite(body: CancelInviteOrganizationReqDto) {
 }
 
 // ===== Transfer Ownership =====
-export function transferOwnership(body: TransferOwnershipReqDto) {
-  return postJson<TransferOwnershipReqDto, TransferOwnershipResDto>(
-    "/organizations/transfer-ownership",
-    body
+export function transferOwnership(orgId: string, newOwnerId: string) {
+  return postJson<{ orgId: string; newOwnerId: string }, TransferOwnershipResDto>(
+    `/organizations/${orgId}/ownership`,
+    { orgId, newOwnerId } 
   );
 }
-
 // ===== ORGANIZATION ADMIN =====
 export type OrganizationUsageDto = {
   orgId: string;
@@ -284,20 +284,20 @@ export type CheckQuotaResponse = {
 };
 
 export function getOrganizationUsage(orgId: string) {
-  return getJson<OrganizationUsageDto>(`/organization-admin/usage/${orgId}`);
+  return getJson<OrganizationUsageDto>(`/api/organization-admin/usage/${orgId}`);
 }
 
 export function getOrganizationSubscription(orgId: string) {
-  return getJson<OrganizationSubscriptionDto>(`/organization-admin/subscription/${orgId}`);
+  return getJson<OrganizationSubscriptionDto>(`/api/organization-admin/subscription/${orgId}`);
 }
 
 export function getOrganizationBilling(orgId: string) {
-  return getJson<OrganizationBillingDto>(`/organization-admin/billing/${orgId}`);
+  return getJson<OrganizationBillingDto>(`/api/organization-admin/billing/${orgId}`);
 }
 
 export function checkOrganizationQuota(orgId: string, body: CheckQuotaRequest) {
   return postJson<CheckQuotaRequest, CheckQuotaResponse>(
-    `/organization-admin/usage/${orgId}/check-quota`,
+    `/api/organization-admin/usage/${orgId}/check-quota`,
     body
   );
 }
