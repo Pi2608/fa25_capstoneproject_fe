@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatDateTime, formatNumber } from "@/utils/formatUtils";
-import { getMyOrganizations, GetMyOrganizationsResDto } from "@/lib/api-organizations";
-import { CheckQuotaRequest, checkUserQuota, getUserUsage, UserUsageResponse } from "@/lib/api-user";
-import { getMyOrgMembership, getPlans } from "@/lib/api-membership";
-import { getMapById, getOrganizationMaps, getMapViews, MapDto } from "@/lib/api-maps";
+import { getMyOrganizations, type GetMyOrganizationsResDto } from "@/lib/api-organizations";
+import { getMyOrgMembership } from "@/lib/api-membership";
+import { getOrganizationMaps, getMapViews, getMapById, type MapDto } from "@/lib/api-maps";
+import { getUserUsage, checkUserQuota, type UserUsageResponse, type CheckQuotaRequest } from "@/lib/api-user";
 
 type UsageLimits = {
   viewsMonthly?: number | null;
@@ -82,36 +82,32 @@ function bytesToMB(b: number) {
   return Math.round((b / (1024 * 1024)) * 100) / 100;
 }
 
-export default function Page() {
+export default function UsagePage() {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [orgs, setOrgs] = useState<GetMyOrganizationsResDto["organizations"]>([]);
   const [maps, setMaps] = useState<MapRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [planName, setPlanName] = useState<string>("free");
   const [limits, setLimits] = useState<UsageLimits>(PLAN_LIMITS.free);
   const [userUsage, setUserUsage] = useState<UserUsageResponse | null>(null);
   const [usageBars, setUsageBars] = useState<FakeUsage>(EMPTY_FAKE);
 
   useEffect(() => {
+    let preferred: string | null = null;
     try {
       const url = new URL(window.location.href);
-      const qid = url.searchParams.get("orgId");
-      if (qid) {
-        setOrgId(qid);
-        localStorage.setItem("cmosm:selectedOrgId", qid);
-        return;
-      }
+      preferred = url.searchParams.get("orgId");
     } catch {}
-    const saved = localStorage.getItem("cmosm:selectedOrgId");
-    if (saved) {
-      setOrgId(saved);
-      return;
+    if (!preferred) {
+      const saved = localStorage.getItem("cmosm:selectedOrgId");
+      if (saved) preferred = saved;
     }
     getMyOrganizations()
       .then((res) => {
         const list = res.organizations ?? [];
         setOrgs(list);
-        if (list.length > 0) {
+        if (preferred && list.some((o) => o.orgId === preferred)) {
+          setOrgId(preferred);
+        } else if (list.length) {
           setOrgId(list[0].orgId);
           localStorage.setItem("cmosm:selectedOrgId", list[0].orgId);
         }
@@ -122,17 +118,16 @@ export default function Page() {
   useEffect(() => {
     if (!orgId) return;
     setLoading(true);
-    Promise.allSettled([getMyOrgMembership(orgId), getPlans(), getOrganizationMaps(orgId), getUserUsage(orgId)])
-      .then(async ([membershipRes, , mapsRes, usageRes]) => {
-        let pName = "free";
+    Promise.allSettled([getMyOrgMembership(orgId), getOrganizationMaps(orgId), getUserUsage(orgId)])
+      .then(async ([membershipRes, mapsRes, usageRes]) => {
+        let planName = "free";
         if (membershipRes.status === "fulfilled") {
           const nm = normalize(membershipRes.value?.membership?.planName);
-          if (nm) pName = nm;
+          if (nm) planName = nm;
         }
-        setPlanName(pName);
         const base =
-          PLAN_LIMITS[pName] ??
-          Object.entries(PLAN_LIMITS).find(([k]) => pName.includes(k))?.[1] ??
+          PLAN_LIMITS[planName] ??
+          Object.entries(PLAN_LIMITS).find(([k]) => planName.includes(k))?.[1] ??
           PLAN_LIMITS.free;
         setLimits(base);
 
@@ -141,10 +136,9 @@ export default function Page() {
           list.map(async (m) => {
             const [views, detail] = await Promise.allSettled([getMapViews(m.id), getMapById(m.id)]);
             const v = views.status === "fulfilled" ? views.value : 0;
-            const d = detail.status === "fulfilled" ? (detail.value as unknown) : null;
             let createdBy: string | null = null;
-            if (d && typeof d === "object") {
-              const obj = d as Record<string, unknown>;
+            if (detail.status === "fulfilled" && detail.value && typeof detail.value === "object") {
+              const obj = detail.value as Record<string, unknown>;
               const ownerName = typeof obj.ownerName === "string" ? obj.ownerName : null;
               const ownerEmail = typeof obj.ownerEmail === "string" ? obj.ownerEmail : null;
               const ownerId = typeof obj.ownerId === "string" ? obj.ownerId : null;
@@ -161,17 +155,11 @@ export default function Page() {
         if (usageRes.status === "fulfilled") {
           setUserUsage(usageRes.value);
           const storageUsedBytes = Number(usageRes.value.storageUsedBytes ?? 0);
-          const storageLimitBytesRaw = usageRes.value.storageLimitBytes;
+          const rawLimit = usageRes.value.storageLimitBytes;
           const storageLimitBytes =
-            typeof storageLimitBytesRaw === "number"
-              ? storageLimitBytesRaw
-              : storageLimitBytesRaw == null
-              ? null
-              : Number(storageLimitBytesRaw);
-
+            typeof rawLimit === "number" ? rawLimit : rawLimit == null ? null : Number(rawLimit);
           const hostingUsedMb = bytesToMB(storageUsedBytes);
           const hostingCapMb = storageLimitBytes == null ? null : bytesToMB(storageLimitBytes);
-
           setUsageBars({
             processingUsedMb: 0,
             processingCapMb: 0,
@@ -193,33 +181,16 @@ export default function Page() {
   const viewsMax = limits.viewsMonthly;
 
   const mapsLimitFromUsage =
-    userUsage?.mapsLimit == null
-      ? null
-      : typeof userUsage.mapsLimit === "number"
-      ? userUsage.mapsLimit
-      : Number(userUsage.mapsLimit);
-
-  const mapsUsedFromUsage =
-    typeof userUsage?.mapsUsed === "number" ? userUsage.mapsUsed : maps.length;
+    userUsage?.mapsLimit == null ? null : typeof userUsage.mapsLimit === "number" ? userUsage.mapsLimit : Number(userUsage.mapsLimit);
+  const mapsUsedFromUsage = typeof userUsage?.mapsUsed === "number" ? userUsage.mapsUsed : maps.length;
 
   const layersLimitFromUsage =
-    userUsage?.layersLimit == null
-      ? null
-      : typeof userUsage.layersLimit === "number"
-      ? userUsage.layersLimit
-      : Number(userUsage.layersLimit);
-
+    userUsage?.layersLimit == null ? null : typeof userUsage.layersLimit === "number" ? userUsage.layersLimit : Number(userUsage.layersLimit);
   const layersUsedFromUsage = typeof userUsage?.layersUsed === "number" ? userUsage.layersUsed : 0;
 
   const membersLimitFromUsage =
-    userUsage?.membersLimit == null
-      ? null
-      : typeof userUsage.membersLimit === "number"
-      ? userUsage.membersLimit
-      : Number(userUsage.membersLimit);
-
-  const membersUsedFromUsage =
-    typeof userUsage?.membersUsed === "number" ? userUsage.membersUsed : 0;
+    userUsage?.membersLimit == null ? null : typeof userUsage.membersLimit === "number" ? userUsage.membersLimit : Number(userUsage.membersLimit);
+  const membersUsedFromUsage = typeof userUsage?.membersUsed === "number" ? userUsage.membersUsed : 0;
 
   async function onCheckQuotaClick() {
     if (!orgId) return;
@@ -229,8 +200,7 @@ export default function Page() {
       if (res.isAllowed) {
         window.alert("Bạn còn đủ hạn mức để tạo thêm 1 bản đồ.");
       } else {
-        const msg = res.message ?? "Không đủ hạn mức.";
-        window.alert(msg);
+        window.alert(res.message ?? "Không đủ hạn mức.");
       }
     } catch (e) {
       const msg =
@@ -242,32 +212,30 @@ export default function Page() {
   }
 
   return (
-    <div className="space-y-8 p-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Sử dụng</h1>
-        {orgId && (
-          <select
-            className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-1 text-sm text-neutral-200"
-            value={orgId}
-            onChange={(e) => {
-              const v = e.target.value;
-              setOrgId(v);
-              localStorage.setItem("cmosm:selectedOrgId", v);
-            }}
-          >
-            {orgs.map((o) => (
-              <option key={o.orgId} value={o.orgId}>
-                {o.orgName}
-              </option>
-            ))}
-          </select>
-        )}
+    <div className="space-y-6 p-6">
+      <h1 className="text-xl font-semibold">Usage</h1>
+
+      <div className="mb-1 flex items-center gap-3">
+        <label className="text-sm text-zinc-600 dark:text-zinc-400">Organization</label>
+        <select
+          className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          value={orgId ?? ""}
+          onChange={(e) => {
+            const v = e.target.value || null;
+            setOrgId(v);
+            if (v) localStorage.setItem("cmosm:selectedOrgId", v);
+          }}
+        >
+          {orgs.map((o) => (
+            <option key={o.orgId} value={o.orgId}>
+              {o.orgName}
+            </option>
+          ))}
+        </select>
       </div>
 
       {!orgId && (
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-neutral-300">
-          Chưa chọn tổ chức.
-        </div>
+        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-neutral-300">Chưa chọn tổ chức.</div>
       )}
 
       {orgId && (
@@ -275,71 +243,56 @@ export default function Page() {
           <section className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-medium text-neutral-100">Tổng quan hạn mức</h2>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={onCheckQuotaClick}
-                  className="rounded-md bg-neutral-800 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700"
-                >
-                  Kiểm tra hạn mức (Bản đồ +1)
-                </button>
-              </div>
+              <button
+                onClick={onCheckQuotaClick}
+                className="rounded-md bg-neutral-800 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700"
+              >
+                Kiểm tra hạn mức (Bản đồ +1)
+              </button>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-lg border border-neutral-800 p-3">
                 <div className="text-xs text-neutral-400">Bản đồ</div>
                 <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
-                  <div
-                    className="h-full bg-neutral-500"
-                    style={{ width: `${percent(mapsUsedFromUsage, mapsLimitFromUsage)}%` }}
-                  />
+                  <div className="h-full bg-neutral-500" style={{ width: `${percent(mapsUsedFromUsage, mapsLimitFromUsage)}%` }} />
                 </div>
                 <div className="mt-1 text-sm text-neutral-300">
                   {formatNumber(mapsUsedFromUsage)} / {capText(mapsLimitFromUsage)}
                 </div>
               </div>
+
               <div className="rounded-lg border border-neutral-800 p-3">
                 <div className="text-xs text-neutral-400">Lớp dữ liệu</div>
                 <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
-                  <div
-                    className="h-full bg-neutral-500"
-                    style={{ width: `${percent(layersUsedFromUsage, layersLimitFromUsage)}%` }}
-                  />
+                  <div className="h-full bg-neutral-500" style={{ width: `${percent(layersUsedFromUsage, layersLimitFromUsage)}%` }} />
                 </div>
                 <div className="mt-1 text-sm text-neutral-300">
                   {formatNumber(layersUsedFromUsage)} / {capText(layersLimitFromUsage)}
                 </div>
               </div>
+
               <div className="rounded-lg border border-neutral-800 p-3">
                 <div className="text-xs text-neutral-400">Thành viên</div>
                 <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
-                  <div
-                    className="h-full bg-neutral-500"
-                    style={{ width: `${percent(membersUsedFromUsage, membersLimitFromUsage)}%` }}
-                  />
+                  <div className="h-full bg-neutral-500" style={{ width: `${percent(membersUsedFromUsage, membersLimitFromUsage)}%` }} />
                 </div>
                 <div className="mt-1 text-sm text-neutral-300">
                   {formatNumber(membersUsedFromUsage)} / {capText(membersLimitFromUsage)}
                 </div>
               </div>
+
               <div className="rounded-lg border border-neutral-800 p-3">
                 <div className="text-xs text-neutral-400">Lưu trữ</div>
                 <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
                   <div
                     className="h-full bg-neutral-500"
-                    style={{
-                      width: `${percent(
-                        usageBars.hostingUsedMb,
-                        usageBars.hostingCapMb == null ? 0 : usageBars.hostingCapMb
-                      )}%`,
-                    }}
+                    style={{ width: `${percent(usageBars.hostingUsedMb, usageBars.hostingCapMb == null ? 0 : usageBars.hostingCapMb)}%` }}
                   />
                 </div>
                 <div className="mt-1 text-sm text-neutral-300">
                   {capText(usageBars.hostingUsedMb, "MB")} / {capText(usageBars.hostingCapMb, "MB")}
                 </div>
-                {userUsage?.period && (
-                  <div className="mt-1 text-xs text-neutral-500">Chu kỳ: {userUsage.period}</div>
-                )}
+                {userUsage?.period && <div className="mt-1 text-xs text-neutral-500">Chu kỳ: {userUsage.period}</div>}
                 {userUsage?.lastReset && (
                   <div className="text-xs text-neutral-500">Làm mới lần cuối: {formatDateTime(userUsage.lastReset)}</div>
                 )}
@@ -350,16 +303,11 @@ export default function Page() {
           <section className="rounded-xl border border-neutral-800 bg-neutral-900">
             <div className="flex items-center justify-between px-4 pt-4">
               <h2 className="text-base font-medium text-neutral-100">Xử lý dữ liệu</h2>
-              <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500">
-                Nâng cấp
-              </button>
+              <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500">Nâng cấp</button>
             </div>
             <div className="px-4 pb-3">
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
-                <div
-                  className="h-full bg-neutral-500"
-                  style={{ width: `${percent(usageBars.processingUsedMb, usageBars.processingCapMb)}%` }}
-                />
+                <div className="h-full bg-neutral-500" style={{ width: `${percent(usageBars.processingUsedMb, usageBars.processingCapMb)}%` }} />
               </div>
               <div className="mt-2 text-sm text-neutral-300">
                 {capText(usageBars.processingUsedMb, "MB")} trong {capText(usageBars.processingCapMb ?? 0, "MB")}
@@ -382,7 +330,9 @@ export default function Page() {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={8}>Không có dữ liệu</td>
+                    <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={8}>
+                      Không có dữ liệu
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -392,16 +342,11 @@ export default function Page() {
           <section className="rounded-xl border border-neutral-800 bg-neutral-900">
             <div className="flex items-center justify-between px-4 pt-4">
               <h2 className="text-base font-medium text-neutral-100">Lưu trữ dữ liệu</h2>
-              <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500">
-                Nâng cấp
-              </button>
+              <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500">Nâng cấp</button>
             </div>
             <div className="px-4 pb-3">
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
-                <div
-                  className="h-full bg-neutral-500"
-                  style={{ width: `${percent(usageBars.hostingUsedMb, usageBars.hostingCapMb)}%` }}
-                />
+                <div className="h-full bg-neutral-500" style={{ width: `${percent(usageBars.hostingUsedMb, usageBars.hostingCapMb)}%` }} />
               </div>
               <div className="mt-2 text-sm text-neutral-300">
                 {capText(usageBars.hostingUsedMb, "MB")} trong {capText(usageBars.hostingCapMb ?? 0, "MB")}
@@ -423,7 +368,9 @@ export default function Page() {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={7}>Không có dữ liệu</td>
+                    <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={7}>
+                      Không có dữ liệu
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -457,12 +404,16 @@ export default function Page() {
                 <tbody>
                   {loading && (
                     <tr>
-                      <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={3}>Đang tải…</td>
+                      <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={3}>
+                        Đang tải…
+                      </td>
                     </tr>
                   )}
                   {!loading && maps.length === 0 && (
                     <tr>
-                      <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={3}>Không có dữ liệu</td>
+                      <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={3}>
+                        Không có dữ liệu
+                      </td>
                     </tr>
                   )}
                   {!loading &&
