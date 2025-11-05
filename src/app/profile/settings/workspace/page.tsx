@@ -34,7 +34,7 @@ export default function WorkspacePage() {
   const [selectedWsId, setSelectedWsId] = useState<string | null>(null);
   const [wsDetail, setWsDetail] = useState<Workspace | null>(null);
   const [maps, setMaps] = useState<MapDto[]>([]);
-  const [detailBusy, setDetailBusy] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [nameInput, setNameInput] = useState("");
   const [descInput, setDescInput] = useState("");
   const [toast, setToast] = useState<string | null>(null);
@@ -47,11 +47,13 @@ export default function WorkspacePage() {
         const list = res.organizations ?? [];
         if (!alive) return;
         setOrgs(list);
-        const saved = typeof window !== "undefined" ? localStorage.getItem("cmosm:selectedOrgId") : null;
+        if (list.length > 0) setToast(null);
+        const saved = typeof window !== "undefined" ? localStorage.getItem("imos:selectedOrgId") : null;
         if (saved && list.some(o => o.orgId === saved)) setSelectedOrgId(saved);
         else if (list.length) setSelectedOrgId(list[0].orgId);
       } catch {
-        setToast("Không tải được danh sách tổ chức");
+        setOrgs([]);
+        setToast("Không thể tải danh sách tổ chức");
       }
     })();
     return () => {
@@ -89,12 +91,12 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     if (!selectedOrgId) return;
-    if (typeof window !== "undefined") localStorage.setItem("cmosm:selectedOrgId", selectedOrgId);
+    if (typeof window !== "undefined") localStorage.setItem("imos:selectedOrgId", selectedOrgId);
     void loadWorkspaces(selectedOrgId);
   }, [selectedOrgId, loadWorkspaces]);
 
   const loadDetail = useCallback(async (wsId: string) => {
-    setDetailBusy(true);
+    setBusy(true);
     try {
       const d = await getWorkspaceById(wsId);
       const m = await getWorkspaceMaps(wsId);
@@ -106,7 +108,7 @@ export default function WorkspacePage() {
       setWsDetail(null);
       setToast(safeMessage(e));
     } finally {
-      setDetailBusy(false);
+      setBusy(false);
     }
   }, []);
 
@@ -117,13 +119,13 @@ export default function WorkspacePage() {
 
   const onCreateWorkspace = async () => {
     if (!canManage || !selectedOrgId) return;
-    const title = prompt("Tên workspace mới");
+    const title = prompt("Nhập tên không gian làm việc mới:");
     if (!title) return;
     try {
       const req: CreateWorkspaceRequest = { orgId: selectedOrgId, workspaceName: title };
       await createWorkspace(req);
       await loadWorkspaces(selectedOrgId);
-      setToast("Tạo workspace thành công");
+      setToast("Tạo không gian làm việc thành công");
     } catch (e) {
       setToast(safeMessage(e));
     }
@@ -131,9 +133,12 @@ export default function WorkspacePage() {
 
   const onSaveBasics = async () => {
     if (!canManage || !wsDetail) return;
-    setDetailBusy(true);
+    setBusy(true);
     try {
-      await updateWorkspace(wsDetail.workspaceId, { workspaceName: nameInput.trim() || "Untitled", description: descInput });
+      await updateWorkspace(wsDetail.workspaceId, {
+        workspaceName: nameInput.trim() || "Không tên",
+        description: descInput,
+      });
       const d = await getWorkspaceById(wsDetail.workspaceId);
       setWsDetail(d);
       setWorkspaces(prev => prev.map(w => (w.workspaceId === d.workspaceId ? d : w)));
@@ -141,23 +146,23 @@ export default function WorkspacePage() {
     } catch (e) {
       setToast(safeMessage(e));
     } finally {
-      setDetailBusy(false);
+      setBusy(false);
     }
   };
 
   const onDeleteWorkspace = async () => {
     if (!canManage || !wsDetail || !selectedOrgId) return;
-    if (!confirm(`Xoá workspace "${wsDetail.workspaceName}"?`)) return;
-    setDetailBusy(true);
+    if (!confirm(`Xóa không gian làm việc "${wsDetail.workspaceName}"?`)) return;
+    setBusy(true);
     try {
       await deleteWorkspace(wsDetail.workspaceId);
       await loadWorkspaces(selectedOrgId);
       setWsDetail(null);
-      setToast("Đã xoá workspace");
+      setToast("Đã xóa không gian làm việc");
     } catch (e) {
       setToast(safeMessage(e));
     } finally {
-      setDetailBusy(false);
+      setBusy(false);
     }
   };
 
@@ -166,12 +171,14 @@ export default function WorkspacePage() {
       <div className="mx-auto max-w-[1200px] space-y-6">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-2xl font-semibold tracking-tight">Workspace</h2>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">Quản lý dự án, tên, mô tả và các thiết lập mặc định.</p>
+            <h2 className="text-2xl font-semibold tracking-tight">Không gian làm việc</h2>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Quản lý tên, mô tả và các dự án thuộc tổ chức của bạn.
+            </p>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">Organization</span>
+              <span className="text-sm text-zinc-600 dark:text-zinc-400">Tổ chức</span>
               <select
                 className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
                 value={selectedOrgId ?? ""}
@@ -188,9 +195,8 @@ export default function WorkspacePage() {
               onClick={onCreateWorkspace}
               disabled={!canManage || !selectedOrgId}
               className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60"
-              title={canManage ? "Create workspace" : "Only Owner/Admin"}
             >
-              + New workspace
+              + Thêm không gian
             </button>
           </div>
         </div>
@@ -202,14 +208,15 @@ export default function WorkspacePage() {
         )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
+          {/* Danh sách workspace */}
           <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-950 dark:ring-white/10">
             <div className="border-b border-zinc-200 px-4 py-3 text-sm font-medium text-zinc-700 dark:border-white/10 dark:text-zinc-200">
-              Workspaces
+              Danh sách không gian
             </div>
             <div className="max-h-[620px] overflow-y-auto">
               {wsLoading && <div className="px-4 py-4 text-sm text-zinc-600 dark:text-zinc-400">Đang tải…</div>}
               {!wsLoading && workspaces.length === 0 && (
-                <div className="px-4 py-4 text-sm text-zinc-600 dark:text-zinc-400">Chưa có workspace</div>
+                <div className="px-4 py-4 text-sm text-zinc-600 dark:text-zinc-400">Chưa có không gian</div>
               )}
               {!wsLoading &&
                 workspaces.map((w) => {
@@ -225,7 +232,7 @@ export default function WorkspacePage() {
                       <div className="flex items-center justify-between">
                         <div className="line-clamp-1 font-medium text-zinc-900 dark:text-zinc-50">{w.workspaceName}</div>
                         <span className="rounded-full px-2 py-0.5 text-[10px] text-zinc-600 ring-1 ring-zinc-200 dark:text-zinc-300 dark:ring-white/10">
-                          {w.isPersonal ? "Personal" : w.orgName || "—"}
+                          {w.isPersonal ? "Cá nhân" : w.orgName || "—"}
                         </span>
                       </div>
                       {w.description && (
@@ -237,41 +244,44 @@ export default function WorkspacePage() {
             </div>
           </div>
 
+          {/* Chi tiết workspace */}
           <div className="space-y-6">
             <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-950 dark:ring-white/10">
               <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium text-zinc-700 dark:border-white/10 dark:text-zinc-200">
-                Basics
+                Thông tin cơ bản
               </div>
               {!wsDetail && (
-                <div className="px-5 py-5 text-sm text-zinc-600 dark:text-zinc-400">Chọn một workspace để xem chi tiết</div>
+                <div className="px-5 py-5 text-sm text-zinc-600 dark:text-zinc-400">
+                  Chọn một không gian để xem chi tiết
+                </div>
               )}
               {wsDetail && (
                 <div className="p-5 space-y-4">
                   <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
                     <div>
-                      <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">Workspace name</label>
+                      <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">Tên không gian</label>
                       <input
                         value={nameInput}
                         onChange={(e) => setNameInput(e.target.value)}
-                        disabled={!canManage || detailBusy}
+                        disabled={!canManage || busy}
                         className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-60 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-                        placeholder="Untitled"
+                        placeholder="Không tên"
                       />
                     </div>
                     <button
                       onClick={onSaveBasics}
-                      disabled={!canManage || detailBusy}
+                      disabled={!canManage || busy}
                       className="h-10 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60"
                     >
-                      {detailBusy ? "Saving…" : "Save changes"}
+                      {busy ? "Đang lưu…" : "Lưu thay đổi"}
                     </button>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">Description</label>
+                    <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">Mô tả</label>
                     <textarea
                       value={descInput}
                       onChange={(e) => setDescInput(e.target.value)}
-                      disabled={!canManage || detailBusy}
+                      disabled={!canManage || busy}
                       rows={3}
                       className="w-full resize-y rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-60 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
                       placeholder="Mô tả ngắn"
@@ -284,37 +294,51 @@ export default function WorkspacePage() {
               )}
             </div>
 
+            {/* Danh sách bản đồ */}
             <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-950 dark:ring-white/10">
               <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium text-zinc-700 dark:border-white/10 dark:text-zinc-200">
-                Maps in workspace
+                Danh sách bản đồ
               </div>
-              {!wsDetail && <div className="px-5 py-5 text-sm text-zinc-600 dark:text-zinc-400">Chọn workspace để xem bản đồ</div>}
+              {!wsDetail && (
+                <div className="px-5 py-5 text-sm text-zinc-600 dark:text-zinc-400">Chọn không gian để xem bản đồ</div>
+              )}
               {wsDetail && (
                 <div className="p-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {maps.length === 0 && <div className="text-sm text-zinc-500 dark:text-zinc-400">Chưa có bản đồ</div>}
-                  {maps.map(m => (
+                  {maps.length === 0 && (
+                    <div className="text-sm text-zinc-500 dark:text-zinc-400">Chưa có bản đồ</div>
+                  )}
+                  {maps.map((m) => (
                     <div key={m.mapId} className="rounded-xl border border-zinc-200 dark:border-white/10 p-3">
-                      <div className="truncate text-sm font-medium">{(m as unknown as { name?: string; mapName?: string }).name ?? (m as unknown as { name?: string; mapName?: string }).mapName ?? m.mapId}</div>
-                      <div className="text-xs text-zinc-500">{m.updatedAt ? formatDateTime(m.updatedAt) : ""}</div>
+                      <div className="truncate text-sm font-medium">
+                        {"name" in m ? (m as { name: string }).name : (m as { mapName: string }).mapName}
+                      </div>
+                      <div className="text-xs text-zinc-500">
+                        {m.updatedAt ? formatDateTime(m.updatedAt) : ""}
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
 
+            {/* Danger zone */}
             <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-950 dark:ring-white/10">
               <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium text-zinc-700 dark:border-white/10 dark:text-zinc-200">
-                Danger zone
+                Khu vực nguy hiểm
               </div>
               <div className="p-5">
                 <button
                   onClick={onDeleteWorkspace}
-                  disabled={!canManage || !wsDetail || detailBusy}
+                  disabled={!canManage || !wsDetail || busy}
                   className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 disabled:opacity-60"
                 >
-                  Delete workspace
+                  Xóa không gian
                 </button>
-                {!canManage && <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">Chỉ Owner/Admin có thể xoá.</div>}
+                {!canManage && (
+                  <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                    Chỉ chủ sở hữu hoặc quản trị viên mới có thể xóa.
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -274,10 +274,10 @@ export default function MembersPage() {
   return (
     <div className="p-4">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-xl font-semibold">Members</h2>
+        <h2 className="text-xl font-semibold">Thành viên</h2>
         <div className="flex items-center gap-2">
-          <StatPill text={`${members.length} members out of 25`} />
-          <StatPill text={`${editorsCount} editors out of 3`} />
+          <StatPill text={`${members.length} thành viên trong số 25`} />
+          <StatPill text={`${editorsCount} người chỉnh sửa trong số 3`} />
           <button
             className="ml-2 rounded-lg bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-500
              disabled:opacity-60 disabled:cursor-not-allowed"
@@ -285,7 +285,7 @@ export default function MembersPage() {
             disabled={inviteBusy || !isOwner}
             title={isOwner ? "Invite members" : "Only owner can invite members"}
           >
-            + Invite members
+            + Mời thành viên
           </button>
 
         </div>
@@ -314,7 +314,6 @@ export default function MembersPage() {
         )}
       </div>
 
-      {/* warnings / errors */}
       {members.some((m) => !isGuid(m.userId)) && (
         <div className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800 ring-1 ring-amber-200
                         dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-400/40">
@@ -334,7 +333,7 @@ export default function MembersPage() {
         <div className="mb-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm
                         dark:border-white/10 dark:bg-zinc-900/95">
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Invite members</div>
+            <div className="text-sm font-medium text-zinc-800 dark:text-zinc-200">Mời thành viên</div>
             <button className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white" onClick={() => setInviteOpen(false)} aria-label="Close invite">
               ✕
             </button>
@@ -389,25 +388,25 @@ export default function MembersPage() {
         <table className="min-w-full bg-white dark:bg-zinc-950">
           <thead>
             <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
-              <th className="px-3 py-2 text-sm font-medium">Person</th>
-              <th className="px-3 py-2 text-sm font-medium">Last viewed a map</th>
-              <th className="px-3 py-2 text-sm font-medium">Permissions</th>
-              <th className="px-3 py-2 text-sm font-medium">License</th>
-              <th className="w-[280px] px-3 py-2 text-sm font-medium">Actions</th>
+              <th className="px-3 py-2 text-sm font-medium">Thành viên</th>
+              <th className="px-3 py-2 text-sm font-medium">Lần cuối cùng xem bản đồ</th>
+              <th className="px-3 py-2 text-sm font-medium">Quyền</th>
+              <th className="px-3 py-2 text-sm font-medium">Vai trò</th>
+              <th className="w-[280px] px-3 py-2 text-sm font-medium">Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
                 <td colSpan={5} className="px-3 py-6 text-center text-sm text-zinc-600 dark:text-zinc-400">
-                  Loading members…
+                  Đang tải thành viên…
                 </td>
               </tr>
             )}
             {!loading && members.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-3 py-6 text-center text-sm text-zinc-600 dark:text-zinc-400">
-                  No members found.
+                  Không tìm thấy thành viên nào.
                 </td>
               </tr>
             )}
@@ -487,7 +486,7 @@ export default function MembersPage() {
                       disabled:opacity-50 disabled:cursor-not-allowed
                       dark:border-sky-400/40 dark:text-sky-300 dark:bg-transparent dark:hover:bg-sky-500/10`}
                         >
-                          Transfer ownership
+                          Chuyển quyền sở hữu
                         </button>
 
                         <button
@@ -499,7 +498,7 @@ export default function MembersPage() {
                       dark:bg-red-500/85 dark:hover:bg-red-500`}
                           title={isOwner ? "Remove member" : "Only owner can remove members"}
                         >
-                          Remove
+                          Xóa
                         </button>
                       </div>
                     </td>

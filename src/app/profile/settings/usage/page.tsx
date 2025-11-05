@@ -213,10 +213,10 @@ export default function UsagePage() {
 
   return (
     <div className="space-y-6 p-6">
-      <h1 className="text-xl font-semibold">Usage</h1>
+      <h1 className="text-xl font-semibold">Sử dụng</h1>
 
       <div className="mb-1 flex items-center gap-3">
-        <label className="text-sm text-zinc-600 dark:text-zinc-400">Organization</label>
+        <label className="text-sm text-zinc-600 dark:text-zinc-400">Tổ chức</label>
         <select
           className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
           value={orgId ?? ""}
