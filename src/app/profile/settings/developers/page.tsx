@@ -86,7 +86,7 @@ export default function DevelopersPage() {
       const wRaw = localStorage.getItem(WHS_KEY);
       if (tRaw) setTokens(JSON.parse(tRaw) as ApiToken[]);
       if (wRaw) setWebhooks(JSON.parse(wRaw) as Webhook[]);
-    } catch {}
+    } catch { }
   }, []);
 
   useEffect(() => {
@@ -202,12 +202,13 @@ export default function DevelopersPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-t border-zinc-200 bg-zinc-50 text-left text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
-                  <th className="px-4 py-2 font-medium">Name</th>
-                  <th className="px-4 py-2 font-medium">Scope</th>
-                  <th className="px-4 py-2 font-medium">Token</th>
-                  <th className="px-4 py-2 font-medium">Created</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
-                  <th className="px-4 py-2 font-medium">Actions</th>
+                  <th className="px-4 py-2 font-medium">Tên</th>
+                  <th className="px-4 py-2 font-medium">Phạm vi</th>
+                  <th className="px-4 py-2 font-medium">Mã truy cập (Token)</th>
+                  <th className="px-4 py-2 font-medium">Ngày tạo</th>
+                  <th className="px-4 py-2 font-medium">Trạng thái</th>
+                  <th className="px-4 py-2 font-medium">Thao tác</th>
+
                 </tr>
               </thead>
               <tbody>
@@ -228,11 +229,11 @@ export default function DevelopersPage() {
                           className={cls(
                             "rounded-md px-2 py-0.5 text-xs ring-1",
                             t.scope === "admin" &&
-                              "bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-400/30",
+                            "bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-400/30",
                             t.scope === "write" &&
-                              "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-400/30",
+                            "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-400/30",
                             t.scope === "read" &&
-                              "bg-zinc-100 text-zinc-700 ring-zinc-200 dark:bg-white/5 dark:text-zinc-200 dark:ring-white/10"
+                            "bg-zinc-100 text-zinc-700 ring-zinc-200 dark:bg-white/5 dark:text-zinc-200 dark:ring-white/10"
                           )}
                         >
                           {t.scope}
@@ -291,7 +292,7 @@ export default function DevelopersPage() {
 
         <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-950">
           <div className="px-4 py-3">
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Quick start</h2>
+            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">Bắt đầu nhanh</h2>
             <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
               Gọi API bằng cURL và xác minh chữ ký webhook.
             </p>
@@ -299,7 +300,7 @@ export default function DevelopersPage() {
           <div className="px-4 pb-4">
             <div className="rounded-lg bg-zinc-900/95 p-3 text-xs text-zinc-100 ring-1 ring-white/10">
               <pre className="whitespace-pre-wrap leading-relaxed">
-{`# Replace with your token
+                {`# Replace with your token
 export IMOS_TOKEN=cmk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 curl -H "Authorization: Bearer $IMOS_TOKEN" \\
      https://api.imos.app/v1/me`}
@@ -307,7 +308,7 @@ curl -H "Authorization: Bearer $IMOS_TOKEN" \\
             </div>
             <div className="mt-3 rounded-lg bg-zinc-900/95 p-3 text-xs text-zinc-100 ring-1 ring-white/10">
               <pre className="whitespace-pre-wrap leading-relaxed">
-{`// Verify webhook (Node/TypeScript)
+                {`// Verify webhook (Node/TypeScript)
 import crypto from "crypto";
 function verify(body: string, signature: string, secret: string) {
   const h = crypto.createHmac("sha256", secret).update(body).digest("hex");
@@ -337,12 +338,13 @@ function verify(body: string, signature: string, secret: string) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-t border-zinc-200 bg-zinc-50 text-left text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">URL</th>
-                <th className="px-4 py-2 font-medium">Events</th>
-                <th className="px-4 py-2 font-medium">Secret</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-                <th className="px-4 py-2 font-medium">Actions</th>
+                <th className="px-4 py-2 font-medium">Tên</th>
+                <th className="px-4 py-2 font-medium">Đường dẫn (URL)</th>
+                <th className="px-4 py-2 font-medium">Sự kiện</th>
+                <th className="px-4 py-2 font-medium">Mã bí mật</th>
+                <th className="px-4 py-2 font-medium">Trạng thái</th>
+                <th className="px-4 py-2 font-medium">Thao tác</th>
+
               </tr>
             </thead>
             <tbody>
@@ -418,7 +420,7 @@ function verify(body: string, signature: string, secret: string) {
         <div className="px-4 pb-4">
           <div className="mt-3 rounded-lg bg-zinc-900/95 p-3 text-xs text-zinc-100 ring-1 ring-white/10">
             <pre className="whitespace-pre-wrap leading-relaxed">
-{`POST ${"<your-webhook-url>"}
+              {`POST ${"<your-webhook-url>"}
 Headers:
   Content-Type: application/json
   X-IMOS-Event: map.created
