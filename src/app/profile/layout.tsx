@@ -318,10 +318,10 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Tổ chức</div>
 
                 <NavItem
-                  href="/profile/create-org"
+                  href="/register/organization"
                   label="Tạo tổ chức"
                   icon={PlusCircle}
-                  active={pathname === "/profile/create-org"}
+                  active={pathname === "/register/organization"}
                 />
 
                 {orgs === null && (
@@ -448,10 +448,10 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                         <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Tổ chức</div>
 
                         <NavItem
-                          href="/profile/create-org"
+                          href="/register/organization"
                           label="Tạo tổ chức"
                           icon={PlusCircle}
-                          active={pathname === "/profile/create-org"}
+                          active={pathname === "/register/organization"}
                         />
 
                         {(orgs ?? []).slice(0, 5).map((o) => (
