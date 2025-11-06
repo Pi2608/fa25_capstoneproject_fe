@@ -1,5 +1,6 @@
 "use client";
 
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
@@ -32,10 +33,12 @@ import {
   Menu,
 } from "lucide-react";
 
+
 export type MyMembership = {
   planId: number;
   status: "active" | "expired" | "pending" | string;
 };
+
 
 function NavItem({
   href,
@@ -54,6 +57,7 @@ function NavItem({
     ? "relative bg-emerald-500/10 text-emerald-900 ring-1 ring-emerald-500/35 before:absolute before:left-0 before:top-1 before:bottom-1 before:w-1 before:rounded before:bg-emerald-500 dark:bg-emerald-500/15 dark:text-emerald-50"
     : "hover:bg-muted/60 dark:hover:bg-white/10";
 
+
   return (
     <Link href={href} aria-current={active ? "page" : undefined}>
       <Button variant="ghost" className={`w-full justify-between px-3 py-2 h-9 transition-colors ${activeCls}`}>
@@ -67,6 +71,7 @@ function NavItem({
   );
 }
 
+
 function ThemeToggle() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -77,14 +82,18 @@ function ThemeToggle() {
     );
   }
 
+
   const current = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
   const isDark = current === "dark";
+
 
   const base =
     "inline-flex items-center gap-2 h-8 px-3 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60";
 
+
   const lightCls = "bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50 shadow-sm";
   const darkCls = "bg-zinc-800/80 text-zinc-50 border border-white/10 hover:bg-zinc-700/80 shadow-sm";
+
 
   return (
     <button
@@ -99,20 +108,34 @@ function ThemeToggle() {
   );
 }
 
+
 export default function ProfileLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname() || "";
   const { isLoggedIn } = useAuthStatus();
   const { resolvedTheme, theme } = useTheme();
   const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
-  const isDark = currentTheme === "dark";
+
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+
+  const mainClass = !mounted
+    ? "min-h-screen text-zinc-900 bg-gradient-to-b from-emerald-100 via-white to-emerald-50"
+    : currentTheme === "dark"
+      ? "min-h-screen text-zinc-100 bg-gradient-to-b from-[#0b0f0e] via-emerald-900/10 to-[#0b0f0e]"
+      : "min-h-screen text-zinc-900 bg-gradient-to-b from-emerald-100 via-white to-emerald-50";
+
 
   const isFullScreenMap = useMemo(
     () => /\/profile\/organizations\/[^/]+\/maps\/new\/?$/.test(pathname),
     [pathname]
   );
 
+
   const plansRef = useRef<Plan[] | null>(null);
   const timerRef = useRef<number | null>(null);
+
 
   const [planLabel, setPlanLabel] = useState<string | null>(null);
   const [planStatus, setPlanStatus] = useState<string | null>(null);
@@ -120,8 +143,10 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
   const [orgsErr, setOrgsErr] = useState<string | null>(null);
   const [unread, setUnread] = useState<number>(0);
 
+
   useEffect(() => {
     let alive = true;
+
 
     const loadPlans = async () => {
       if (!isLoggedIn) {
@@ -143,6 +168,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       }
     };
 
+
     const loadOrgs = async (plansData?: Plan[] | null) => {
       if (!isLoggedIn) {
         setOrgs(null);
@@ -152,6 +178,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       try {
         const res = await getMyOrganizations();
         if (!alive) return;
+
 
         let items: MyOrganizationDto[] = [];
         if (
@@ -164,8 +191,10 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
           items = res as MyOrganizationDto[];
         }
 
+
         setOrgs(items);
         setOrgsErr(null);
+
 
         if (items.length > 0) {
           try {
@@ -193,6 +222,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       }
     };
 
+
     const loadUnread = async () => {
       if (!isLoggedIn) {
         setUnread(0);
@@ -208,8 +238,10 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       }
     };
 
+
     loadPlans().then((ps) => loadOrgs(ps));
     loadUnread();
+
 
     const onAuthChanged = () => {
       loadPlans().then((ps) => loadOrgs(ps));
@@ -218,14 +250,17 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
     const onOrgsChanged = () => loadOrgs(plansRef.current);
     const onNotifChanged = () => loadUnread();
 
+
     if (typeof window !== "undefined") {
       window.addEventListener("auth-changed", onAuthChanged);
       window.addEventListener("orgs-changed", onOrgsChanged as EventListener);
       window.addEventListener("notifications-changed", onNotifChanged as EventListener);
 
+
       if (timerRef.current) clearInterval(timerRef.current);
       timerRef.current = window.setInterval(loadUnread, 30000);
     }
+
 
     return () => {
       alive = false;
@@ -241,6 +276,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
     };
   }, [isLoggedIn]);
 
+
   const commonNav = [
     { href: "/", label: "Trang chủ", icon: Home },
     { href: "/profile/information", label: "Thông tin cá nhân", icon: User },
@@ -250,6 +286,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
     { href: "/profile/notifications", label: "Thông báo", icon: Bell },
     { href: "/profile/settings", label: "Cài đặt", icon: Settings },
   ];
+
 
   if (isFullScreenMap) {
     return (
@@ -270,21 +307,20 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
     );
   }
 
+
+
+
   return (
     <main
-      key={currentTheme}
-      className={
-        isDark
-          ? "min-h-screen text-zinc-100 bg-gradient-to-b from-[#0b0f0e] via-emerald-900/10 to-[#0b0f0e]"
-          : "min-h-screen text-zinc-900 bg-gradient-to-b from-emerald-50 via-white to-emerald-50"
-      }
+      suppressHydrationWarning
+      key={mounted ? currentTheme : "initial"}
+      className={mainClass}
     >
+
+
       <div className="flex min-h-screen">
-        {/* SIDEBAR DESKTOP */}
         <aside className="hidden md:flex md:flex-col w-72 fixed left-0 top-0 h-screen z-20 border-r bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          {/* quan trọng: min-h-0 + overflow-hidden để vùng cuộn hoạt động đúng */}
           <div className="flex-1 min-h-0 overflow-hidden p-4 flex flex-col gap-4">
-            {/* Header logo + theme */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-md bg-emerald-500 shadow" />
@@ -293,7 +329,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
               <ThemeToggle />
             </div>
 
-            {/* Khu vực cuộn (nav + org + help) */}
+
             <ScrollArea className="flex-1 min-h-0">
               <div className="px-1 space-y-1">
                 {commonNav.map((n) => (
@@ -314,8 +350,10 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 ))}
               </div>
 
+
               <div className="px-1 mt-5">
                 <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Tổ chức</div>
+
 
                 <NavItem
                   href="/register/organization"
@@ -324,6 +362,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                   active={pathname === "/register/organization"}
                 />
 
+
                 {orgs === null && (
                   <div className="space-y-2 py-2">
                     <div className="h-8 rounded-md bg-muted animate-pulse" />
@@ -331,15 +370,18 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                   </div>
                 )}
 
+
                 {orgsErr && (
                   <div className="px-3 py-2 text-xs rounded-md border bg-destructive/10 text-destructive">{orgsErr}</div>
                 )}
+
 
                 {orgs && !orgsErr && orgs.length === 0 && (
                   <div className="px-3 py-2 text-xs rounded-md border bg-muted/30 text-muted-foreground">
                     Chưa có tổ chức nào. Hãy tạo tổ chức đầu tiên!
                   </div>
                 )}
+
 
                 {(orgs ?? []).slice(0, 5).map((o) => (
                   <NavItem
@@ -351,6 +393,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                   />
                 ))}
 
+
                 {(orgs ?? []).length > 5 && (
                   <NavItem
                     href="/organizations"
@@ -360,14 +403,15 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                   />
                 )}
 
+
                 <NavItem href="/profile/help" label="Trợ giúp" icon={HelpCircle} active={pathname === "/profile/help"} />
 
-                {/* đệm để không bị dính sát đáy khi cuộn */}
+
                 <div className="h-3" />
               </div>
             </ScrollArea>
 
-            {/* Khu vực cố định (luôn còn chỗ vì bên trên đã min-h-0) */}
+
             <Separator className="my-2" />
             <div className="space-y-3">
               <div className="rounded-xl border p-3">
@@ -388,9 +432,11 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 </div>
               </div>
 
+
               <Link href="/profile/select-plan">
                 <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white">Chọn gói</Button>
               </Link>
+
 
               <Link href="/login">
                 <Button variant="destructive" className="w-full">
@@ -402,7 +448,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        {/* HEADER MOBILE */}
+
         <header className="md:hidden w-full sticky top-0 z-30 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -413,7 +459,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                   </Button>
                 </SheetTrigger>
 
-                {/* quan trọng: biến nội dung sheet thành cột full-height + ScrollArea flex-1 min-h-0 */}
+
                 <SheetContent side="left" className="w-72 p-0">
                   <div className="h-full flex flex-col">
                     <div className="p-4 flex items-center justify-between border-b">
@@ -423,6 +469,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                       </div>
                       <ThemeToggle />
                     </div>
+
 
                     <ScrollArea className="flex-1 min-h-0 p-3">
                       <div className="px-1 space-y-1">
@@ -444,8 +491,10 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                         ))}
                       </div>
 
+
                       <div className="px-1 mt-5">
                         <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">Tổ chức</div>
+
 
                         <NavItem
                           href="/register/organization"
@@ -453,6 +502,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                           icon={PlusCircle}
                           active={pathname === "/register/organization"}
                         />
+
 
                         {(orgs ?? []).slice(0, 5).map((o) => (
                           <NavItem
@@ -464,6 +514,7 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                           />
                         ))}
 
+
                         <NavItem href="/profile/help" label="Trợ giúp" icon={HelpCircle} active={pathname === "/profile/help"} />
                         <div className="h-3" />
                       </div>
@@ -472,14 +523,17 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 </SheetContent>
               </Sheet>
 
+
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-md bg-emerald-500 shadow" />
                 <span className="text-lg font-semibold">IMOS</span>
               </div>
             </div>
 
+
             <div className="flex items-center gap-2">
               <ThemeToggle />
+
 
               <TooltipProvider>
                 <Tooltip>
@@ -499,12 +553,14 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
                 </Tooltip>
               </TooltipProvider>
 
+
               <Link href="/profile/select-plan">
                 <Button className="font-semibold">Chọn gói</Button>
               </Link>
             </div>
           </div>
         </header>
+
 
         {/* CONTENT */}
         <section className="flex-1 overflow-auto px-4 sm:px-8 lg:px-10 py-8 md:ml-72">
@@ -514,3 +570,6 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
     </main>
   );
 }
+
+
+

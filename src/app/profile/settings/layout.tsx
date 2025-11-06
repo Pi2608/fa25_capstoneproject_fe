@@ -4,27 +4,28 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
-const TABS = [
-  { href: "/profile/settings/members", label: "Members" },
-  { href: "/profile/settings/usage", label: "Usage" },
-  { href: "/profile/settings/billing", label: "Billing" },
-  { href: "/profile/settings/developers", label: "Developers" },
+const DANH_SACH_TAB = [
+  { href: "/profile/settings/members", label: "Thành viên" },
+  { href: "/profile/settings/usage", label: "Sử dụng" },
+  { href: "/profile/settings/plans", label: "Gói" },
+  { href: "/profile/settings/billing", label: "Thanh toán" },
+  { href: "/profile/settings/developers", label: "Nhà phát triển" },
   { href: "/profile/settings/workspace", label: "Workspace" },
 ];
 
-export default function SettingsLayout({ children }: { children: React.ReactNode }) {
+export default function BoCucCaiDat({ children }: { children: ReactNode }) {
   const pathname = usePathname() || "";
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const laDangChon = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <div className="mx-auto max-w-6xl">
       <div className="flex items-center gap-6 border-b border-zinc-200 dark:border-white/10">
-        {TABS.map((t) => {
-          const active = isActive(t.href);
+        {DANH_SACH_TAB.map((tab) => {
+          const active = laDangChon(tab.href);
           return (
             <Link
-              key={t.href}
-              href={t.href}
+              key={tab.href}
+              href={tab.href}
               aria-current={active ? "page" : undefined}
               className="group relative -mb-px px-1 pb-3 text-sm"
             >
@@ -35,9 +36,8 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                     : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white"
                 }
               >
-                {t.label}
+                {tab.label}
               </span>
-
               <span
                 aria-hidden
                 className={
