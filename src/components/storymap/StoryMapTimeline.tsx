@@ -8,6 +8,7 @@ import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
 import TimelineHeader from "@/components/storymap/TimelineHeader";
 import SegmentList from "@/components/storymap/SegmentList";
 import TimelineDialogs from "@/components/storymap/TimelineDialogs";
+import TimelineTransitionsDialog from "@/components/storymap/dialogs/TimelineTransitionsDialog";
 import { Segment, getCurrentCameraState } from "@/lib/api-storymap";
 
 type Props = {
@@ -19,6 +20,7 @@ type Props = {
 export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }: Props) {
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
   const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
+  const [showTransitionsDialog, setShowTransitionsDialog] = useState(false);
 
   // Segment data management
   const {
@@ -36,6 +38,7 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
 
   // Playback and map rendering
   const playback = useSegmentPlayback({
+    mapId,
     segments,
     currentMap,
     currentSegmentLayers,
@@ -109,7 +112,7 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
   };
 
   return (
-    <div className="h-full flex flex-col bg-zinc-900 border-r border-zinc-800">
+    <div className="h-full flex flex-col bg-zinc-900 border-r border-zinc-800 flex-none w-[550px]">
       <TimelineHeader
         segments={segments}
         currentSegmentLayers={currentSegmentLayers}
@@ -119,6 +122,7 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
         onStopPreview={playback.handleStopPreview}
         onClearMap={playback.handleClearMap}
         onCreateSegment={handlers.openCreateSegmentDialog}
+        onOpenTransitions={() => setShowTransitionsDialog(true)}
       />
 
       <SegmentList
@@ -167,6 +171,42 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
         onCloseConfirmDeleteZone={() => handlers.setConfirmDeleteZone(null)}
         onConfirmDeleteZone={handlers.handleDeleteZone}
       />
+
+      {showTransitionsDialog && (
+        <TimelineTransitionsDialog
+          mapId={mapId}
+          segments={segments as any}
+          onClose={() => setShowTransitionsDialog(false)}
+        />
+      )}
+
+      {/* User Action Continue Button Overlay */}
+      {playback.waitingForUserAction && playback.currentTransition && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-zinc-800 border border-zinc-700 rounded-lg p-8 shadow-2xl max-w-md mx-4">
+            {playback.currentTransition.showOverlay && playback.currentTransition.overlayContent && (
+              <div className="mb-6 text-zinc-300 text-center">
+                <div className="text-lg font-medium mb-2">
+                  {playback.currentTransition.transitionName || "Transition"}
+                </div>
+                <div className="text-sm whitespace-pre-wrap">
+                  {playback.currentTransition.overlayContent}
+                </div>
+              </div>
+            )}
+            
+            <button
+              onClick={playback.handleContinueAfterUserAction}
+              className="w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+              {playback.currentTransition.triggerButtonText || "Continue"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
-import { Segment } from "@/lib/api-storymap";
+import { Segment, TimelineTransition } from "@/lib/api-storymap";
+import { getTimelineTransitions } from "@/lib/api-storymap";
 
 type UseSegmentPlaybackProps = {
+  mapId: string;
   segments: Segment[];
   currentMap: any;
   currentSegmentLayers: any[];
@@ -11,6 +13,7 @@ type UseSegmentPlaybackProps = {
 };
 
 export function useSegmentPlayback({
+  mapId,
   segments,
   currentMap,
   currentSegmentLayers,
@@ -20,9 +23,39 @@ export function useSegmentPlayback({
 }: UseSegmentPlaybackProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPlayIndex, setCurrentPlayIndex] = useState(0);
+  const [transitions, setTransitions] = useState<TimelineTransition[]>([]);
+  const [waitingForUserAction, setWaitingForUserAction] = useState(false);
+  const [currentTransition, setCurrentTransition] = useState<TimelineTransition | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await getTimelineTransitions(mapId);
+        console.log("🎬 Loaded timeline transitions:", data);
+        if (!cancelled) setTransitions(data || []);
+      } catch (e) {
+        console.warn("Failed to load timeline transitions:", e);
+        if (!cancelled) setTransitions([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mapId]);
+
+  type TransitionOptions = {
+    transitionType?: "Jump" | "Ease" | "Linear";
+    durationMs?: number;
+    cameraAnimationType?: "Jump" | "Ease" | "Fly";
+    cameraAnimationDurationMs?: number;
+  };
+
+  const findTransition = useCallback((fromId?: string | null, toId?: string | null) => {
+    if (!fromId || !toId) return undefined as TimelineTransition | undefined;
+    return transitions.find(t => t.fromSegmentId === fromId && t.toSegmentId === toId);
+  }, [transitions]);
 
   // ==================== VIEW SEGMENT ON MAP ====================
-  const handleViewSegment = useCallback(async (segment: Segment) => {
+  const handleViewSegment = useCallback(async (segment: Segment, opts?: TransitionOptions) => {
     if (!currentMap) {
       console.warn("⚠️ No map instance available");
       return;
@@ -30,20 +63,11 @@ export function useSegmentPlayback({
 
     try {
       const L = (await import("leaflet")).default;
-
-      // Clear previous layers
-      currentSegmentLayers.forEach(layer => {
-        try {
-          currentMap.removeLayer(layer);
-        } catch (e) {
-          console.warn("Failed to remove layer:", e);
-        }
-      });
+      const oldLayers = [...currentSegmentLayers];
       
       const newLayers: any[] = [];
       const allBounds: any[] = [];
       
-      setCurrentSegmentLayers(newLayers);
 
       // ==================== RENDER ZONES ====================
       if (segment.zones && segment.zones.length > 0) {
@@ -87,6 +111,11 @@ export function useSegmentPlayback({
             });
 
             geoJsonLayer.addTo(currentMap);
+            if (opts?.transitionType && opts.transitionType !== 'Jump') {
+              try {
+                geoJsonLayer.setStyle({ opacity: 0, fillOpacity: 0 });
+              } catch {}
+            }
             newLayers.push(geoJsonLayer);
 
             const layerBounds = geoJsonLayer.getBounds();
@@ -124,6 +153,9 @@ export function useSegmentPlayback({
                   }),
                 });
                 labelMarker.addTo(currentMap);
+                if (opts?.transitionType && opts.transitionType !== 'Jump') {
+                  try { (labelMarker as any).setOpacity?.(0); } catch {}
+                }
                 newLayers.push(labelMarker);
               } catch (labelError) {
                 console.error(`Failed to add label for zone ${zone.zoneId}:`, labelError);
@@ -197,6 +229,9 @@ export function useSegmentPlayback({
             }
 
             marker.addTo(currentMap);
+            if (opts?.transitionType && opts.transitionType !== 'Jump') {
+              try { marker.setOpacity?.(0); } catch {}
+            }
             newLayers.push(marker);
             
             allBounds.push(L.latLngBounds([latLng, latLng]));
@@ -230,39 +265,43 @@ export function useSegmentPlayback({
         const currentZoom = currentMap.getZoom();
         const targetZoom = parsedCamera.zoom || 10;
         const targetCenter = parsedCamera.center;
-        
-        // Zoom transition effect
-        if (Math.abs(currentZoom - targetZoom) > 1 || currentSegmentLayers.length > 0) {
-          const midZoom = Math.min(currentZoom, targetZoom) - 2;
-          
-          currentMap.flyTo(
-            [targetCenter[1], targetCenter[0]],
-            midZoom,
-            {
-              duration: 0.8,
-              animate: true,
-            }
-          );
-          
-          setTimeout(() => {
-            currentMap.flyTo(
-              [targetCenter[1], targetCenter[0]],
-              targetZoom,
-              {
-                duration: 1.2,
-                animate: true,
-              }
-            );
-          }, 800);
+
+        const camType = opts?.cameraAnimationType || 'Fly';
+        const camDurationSec = (opts?.cameraAnimationDurationMs ?? 1500) / 1000;
+
+        console.log(`📹 Camera animation: type=${camType}, duration=${camDurationSec}s, zoom ${currentZoom}→${targetZoom}`);
+
+        if (camType === 'Jump') {
+          // Immediate jump without animation
+          console.log("⚡ Jump: immediate setView");
+          currentMap.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
+        } else if (camType === 'Ease') {
+          // Smooth pan and zoom separately for an eased feel
+          console.log("🌊 Ease: panTo then setZoom");
+          try {
+            currentMap.panTo([targetCenter[1], targetCenter[0]], { animate: true, duration: camDurationSec * 0.6 });
+            setTimeout(() => {
+              try {
+                currentMap.setZoom(targetZoom, { animate: true });
+              } catch {}
+            }, camDurationSec * 600);
+          } catch {
+            currentMap.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: true });
+          }
         } else {
-          currentMap.flyTo(
-            [targetCenter[1], targetCenter[0]],
-            targetZoom,
-            {
-              duration: 1.5,
-              animate: true,
-            }
-          );
+          // Fly (default)
+          // Only use two-phase if NO transition options (manual view) AND significant zoom change
+          const needsTwoPhase = !opts && Math.abs(currentZoom - targetZoom) > 1 && oldLayers.length > 0;
+          console.log(`✈️ Fly: ${needsTwoPhase ? 'two-phase (zoom out then in)' : 'direct flyTo'}`);
+          if (needsTwoPhase) {
+            const midZoom = Math.min(currentZoom, targetZoom) - 2;
+            currentMap.flyTo([targetCenter[1], targetCenter[0]], midZoom, { duration: Math.max(0.2, camDurationSec * 0.4), animate: true });
+            setTimeout(() => {
+              currentMap.flyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: Math.max(0.2, camDurationSec * 0.6), animate: true });
+            }, Math.max(200, camDurationSec * 400));
+          } else {
+            currentMap.flyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: camDurationSec, animate: true });
+          }
         }
       } else if (allBounds.length > 0) {
         // Auto-fit bounds if no camera state
@@ -271,11 +310,13 @@ export function useSegmentPlayback({
           for (let i = 1; i < allBounds.length; i++) {
             combinedBounds.extend(allBounds[i]);
           }
-          
+          const camType = opts?.cameraAnimationType || 'Fly';
+          const camDurationSec = (opts?.cameraAnimationDurationMs ?? 1500) / 1000;
+          const animate = camType !== 'Jump';
           currentMap.fitBounds(combinedBounds, {
             padding: [80, 80],
-            animate: true,
-            duration: 1.5,
+            animate,
+            duration: animate ? camDurationSec : undefined,
             maxZoom: 15,
           });
           console.log(`📦 Auto-fitted bounds to show ${allBounds.length} elements (no camera state)`);
@@ -286,8 +327,52 @@ export function useSegmentPlayback({
         console.warn("⚠️ Empty segment: no camera state and no zones/locations");
       }
 
-      if (newLayers.length > 0) {
-        setCurrentSegmentLayers(newLayers);
+      // ==================== LAYER CROSS-FADE ====================
+      const doFade = opts?.transitionType && opts.transitionType !== 'Jump';
+      const totalMs = opts?.durationMs ?? 800;
+      console.log(`🎭 Layer transition: type=${opts?.transitionType || 'default'}, fade=${doFade}, duration=${totalMs}ms, old=${oldLayers.length}, new=${newLayers.length}`);
+      
+      if (!doFade) {
+        // Clear old immediately and keep new as-is
+        console.log("⚡ Jump transition: removing old layers immediately");
+        oldLayers.forEach(layer => {
+          try { currentMap.removeLayer(layer); } catch {}
+        });
+        if (newLayers.length > 0) setCurrentSegmentLayers(newLayers);
+      } else {
+        console.log(`🌈 Cross-fade transition: ${opts?.transitionType} over ${totalMs}ms`);
+        const start = performance.now();
+        const easing = (t: number) => {
+          if (opts?.transitionType === 'Linear') return t;
+          // EaseInOutQuad
+          return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+        };
+
+        const setOpacitySafe = (layer: any, value: number) => {
+          try { layer.setOpacity?.(value); } catch {}
+          try { layer.setStyle?.({ opacity: value, fillOpacity: value }); } catch {}
+        };
+
+        const step = () => {
+          const now = performance.now();
+          const tRaw = Math.min(1, (now - start) / Math.max(1, totalMs));
+          const t = Math.max(0, Math.min(1, easing(tRaw)));
+          oldLayers.forEach(l => setOpacitySafe(l, 1 - t));
+          newLayers.forEach(l => setOpacitySafe(l, t));
+          if (tRaw < 1) {
+            requestAnimationFrame(step);
+          } else {
+            // Cleanup old layers
+            oldLayers.forEach(layer => {
+              try { currentMap.removeLayer(layer); } catch {}
+            });
+            if (newLayers.length > 0) setCurrentSegmentLayers(newLayers);
+          }
+        };
+        // Ensure initial state
+        oldLayers.forEach(l => setOpacitySafe(l, 1));
+        newLayers.forEach(l => setOpacitySafe(l, 0));
+        requestAnimationFrame(step);
       }
     } catch (error) {
       console.error("❌ Failed to view segment on map:", error);
@@ -308,9 +393,48 @@ export function useSegmentPlayback({
       }
 
       const segment = segments[currentPlayIndex];
+      const prevSegment = currentPlayIndex > 0 ? segments[currentPlayIndex - 1] : undefined;
+      const t = findTransition(prevSegment?.segmentId ?? null, segment.segmentId);
+      
+      console.log(`🔄 Segment ${currentPlayIndex}: ${prevSegment?.segmentId || 'START'} → ${segment.segmentId}`);
+      console.log(`📌 Found transition:`, t);
+      
+      // Normalize case from backend (linear/ease/jump → Linear/Ease/Jump)
+      const normalizeTransitionType = (str: string): "Jump" | "Ease" | "Linear" => {
+        const lower = str.toLowerCase();
+        if (lower === 'jump') return 'Jump';
+        if (lower === 'ease') return 'Ease';
+        return 'Linear';
+      };
+      
+      const normalizeCameraType = (str: string): "Jump" | "Ease" | "Fly" => {
+        const lower = str.toLowerCase();
+        if (lower === 'jump') return 'Jump';
+        if (lower === 'ease') return 'Ease';
+        return 'Fly';
+      };
+      
+      const options: TransitionOptions | undefined = t ? {
+        transitionType: normalizeTransitionType(t.transitionType),
+        durationMs: t.durationMs,
+        cameraAnimationType: t.animateCamera ? normalizeCameraType(t.cameraAnimationType) : 'Jump',
+        cameraAnimationDurationMs: t.animateCamera ? t.cameraAnimationDurationMs : undefined,
+      } : undefined;
+      
+      console.log(`⚙️ Applying transition options:`, options);
+      
       setActiveSegmentId(segment.segmentId);
-      await handleViewSegment(segment);
+      await handleViewSegment(segment, options);
       onSegmentSelect?.(segment);
+      
+      // Check if this transition requires user action
+      if (t && t.requireUserAction) {
+        console.log(`⏸️ Waiting for user action: "${t.triggerButtonText}"`);
+        setCurrentTransition(t);
+        setWaitingForUserAction(true);
+        setIsPlaying(false); // Pause playback
+        return; // Don't schedule next segment
+      }
       
       const duration = segment.durationMs || 5000;
       timeoutId = setTimeout(() => {
@@ -338,6 +462,8 @@ export function useSegmentPlayback({
   const handleStopPreview = () => {
     setIsPlaying(false);
     setCurrentPlayIndex(0);
+    setWaitingForUserAction(false);
+    setCurrentTransition(null);
   };
 
   const handleClearMap = () => {
@@ -357,12 +483,23 @@ export function useSegmentPlayback({
     console.log("✅ Map cleared");
   };
 
+  const handleContinueAfterUserAction = () => {
+    console.log("▶️ User clicked continue, resuming playback");
+    setWaitingForUserAction(false);
+    setCurrentTransition(null);
+    setCurrentPlayIndex(prev => prev + 1); // Move to next segment
+    setIsPlaying(true); // Resume playback
+  };
+
   return {
     isPlaying,
     currentPlayIndex,
+    waitingForUserAction,
+    currentTransition,
     handleViewSegment,
     handlePlayPreview,
     handleStopPreview,
     handleClearMap,
+    handleContinueAfterUserAction,
   };
 }

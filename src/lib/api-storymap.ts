@@ -474,14 +474,14 @@ export async function deleteLocation(
 // ================== TIMELINE TRANSITION APIs ==================
 
 export async function getTimelineTransitions(mapId: string): Promise<TimelineTransition[]> {
-  return await getJson<TimelineTransition[]>(`/timeline-transitions/${mapId}`);
+  return await getJson<TimelineTransition[]>(`/storymaps/${mapId}/timeline-transitions`);
 }
 
 export async function createTimelineTransition(
   mapId: string,
   data: CreateTransitionRequest
 ): Promise<TimelineTransition> {
-  return await postJson<CreateTransitionRequest, TimelineTransition>(`/timeline-transitions/${mapId}`, data);
+  return await postJson<CreateTransitionRequest, TimelineTransition>(`/storymaps/${mapId}/timeline-transitions`, data);
 }
 
 export async function generateTransition(
@@ -490,13 +490,13 @@ export async function generateTransition(
   toSegmentId: string
 ): Promise<TimelineTransition> {
   return await postJson<{ fromSegmentId: string; toSegmentId: string }, TimelineTransition>(
-    `/timeline-transitions/${mapId}/generate`,
+    `/storymaps/${mapId}/timeline-transitions/generate`,
     { fromSegmentId, toSegmentId }
   );
 }
 
 export async function deleteTimelineTransition(mapId: string, transitionId: string): Promise<void> {
-  await delJson<void>(`/timeline-transitions/${mapId}/${transitionId}`);
+  await delJson<void>(`/storymaps/${mapId}/timeline-transitions/${transitionId}`);
 }
 
 // ================== ANIMATED LAYER APIs ==================
