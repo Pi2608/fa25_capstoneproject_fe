@@ -213,14 +213,14 @@ export default function SortableSegmentItem({
                 )}
               </div>
               {segment.locations.map((loc) => (
-                <div key={loc.locationId} className="flex items-center justify-between bg-zinc-900 rounded p-2 mb-1">
+                <div key={loc.poiId || loc.locationId} className="flex items-center justify-between bg-zinc-900 rounded p-2 mb-1">
                   <span className="text-sm text-white">
                     {loc.iconType || '📍'} {loc.title}
                     {!loc.isVisible && <span className="text-xs text-zinc-500 ml-2">(Hidden)</span>}
                   </span>
                   {onDeleteLocation && (
                     <button
-                      onClick={() => onDeleteLocation(loc.locationId)}
+                      onClick={() => onDeleteLocation(loc.poiId || loc.locationId!)}
                       className="text-xs text-red-400 hover:text-red-300"
                     >
                       Remove

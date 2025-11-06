@@ -1,21 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent} from "@dnd-kit/core";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy} from "@dnd-kit/sortable";
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import SegmentDialog from "@/components/storymap/dialogs/SegmentDialog";
 import SelectZoneDialog from "@/components/storymap/dialogs/SelectZoneDialog";
@@ -23,24 +10,12 @@ import SelectLayerDialog from "@/components/storymap/dialogs/SelectLayerDialog";
 import CreateLocationDialog from "@/components/storymap/dialogs/CreateLocationDialog";
 import SortableSegmentItem from "@/components/storymap/items/SortableSegmentItem";
 import { useSegments } from "@/hooks/useSegments";
-import { 
-  Segment, 
-  SegmentZone,
-  CreateSegmentRequest,
-  CreateSegmentZoneRequest,
-  getCurrentCameraState,
-  AttachLayerRequest,
-  attachLayerToSegment,
-  detachLayerFromSegment,
-  CreateLocationRequest,
-  createLocation,
-  deleteLocation,
-} from "@/lib/api-storymap";
+import {  Segment,  SegmentZone, CreateSegmentRequest, CreateSegmentZoneRequest, getCurrentCameraState, AttachLayerRequest, attachLayerToSegment, detachLayerFromSegment, CreateLocationRequest, createLocation, deleteLocation, createSegmentZone, deleteSegmentZone} from "@/lib/api-storymap";
 import { TimelineSegment } from "@/types/storymap";
 
 type Props = {
   mapId: string;
-  currentMap?: any; // Mapbox map instance
+  currentMap?: any;
   onSegmentSelect?: (segment: Segment) => void;
 };
 
@@ -50,6 +25,8 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
   
   // Track current segment layers for cleanup
   const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentPlayIndex, setCurrentPlayIndex] = useState(0);
   
   // Dialogs
   const [showSegmentDialog, setShowSegmentDialog] = useState(false);
@@ -61,13 +38,11 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
   const [confirmDelete, setConfirmDelete] = useState<Segment | null>(null);
   const [confirmDeleteZone, setConfirmDeleteZone] = useState<SegmentZone | null>(null);
 
-  // Drag & drop
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  // Use custom hook for segments management
   const {
     segments,
     loading,
@@ -75,19 +50,26 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
     addSegment,
     editSegment,
     removeSegment,
-    addZoneToSegment,
-    removeZoneFromSegment,
     reorder,
     toggleExpanded,
     updateCameraState,
+    updateSegmentsState,
   } = useSegments(mapId);
 
   useEffect(() => {
-    loadSegments();
-  }, [loadSegments]);
-
-
-  // Handlers
+    let isMounted = true;
+    const loadData = async () => {
+      if (isMounted) {
+        await loadSegments();
+      }
+    };
+    
+    loadData();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   const handleCreateSegment = async (data: CreateSegmentRequest) => {
     try {
       await addSegment(data);
@@ -120,8 +102,29 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
 
   const handleAddZone = async (data: CreateSegmentZoneRequest) => {
     try {
-      await addZoneToSegment(data);
+      const newZone = await createSegmentZone(mapId, data.segmentId!, data);
       setShowZoneDialog(false);
+      
+      updateSegmentsState(segs => segs.map(seg => {
+        if (seg.segmentId === data.segmentId) {
+          return {
+            ...seg,
+            zones: [...seg.zones, newZone]
+          };
+        }
+        return seg;
+      }));
+      
+      if (activeSegmentId === data.segmentId) {
+        const updatedSegment = segments.find(s => s.segmentId === data.segmentId);
+        if (updatedSegment) {
+          const updated = {
+            ...updatedSegment,
+            zones: [...updatedSegment.zones, newZone]
+          };
+          await handleViewSegment(updated);
+        }
+      }
     } catch (error) {
       console.error("Failed to add zone:", error);
     }
@@ -130,7 +133,29 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
   const handleDeleteZone = async () => {
     if (!confirmDeleteZone) return;
     try {
-      await removeZoneFromSegment(confirmDeleteZone.segmentId, confirmDeleteZone.zoneId);
+      await deleteSegmentZone(mapId, confirmDeleteZone.segmentId, confirmDeleteZone.segmentZoneId);
+      
+      updateSegmentsState(segs => segs.map(seg => {
+        if (seg.segmentId === confirmDeleteZone.segmentId) {
+          return {
+            ...seg,
+            zones: seg.zones.filter(z => z.segmentZoneId !== confirmDeleteZone.segmentZoneId)
+          };
+        }
+        return seg;
+      }));
+      
+      if (activeSegmentId === confirmDeleteZone.segmentId) {
+        const updatedSegment = segments.find(s => s.segmentId === confirmDeleteZone.segmentId);
+        if (updatedSegment) {
+          const updated = {
+            ...updatedSegment,
+            zones: updatedSegment.zones.filter(z => z.segmentZoneId !== confirmDeleteZone.segmentZoneId)
+          };
+          await handleViewSegment(updated);
+        }
+      }
+      
       setConfirmDeleteZone(null);
     } catch (error) {
       console.error("Failed to delete zone:", error);
@@ -139,9 +164,29 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
 
   const handleAddLayer = async (data: AttachLayerRequest) => {
     try {
-      await attachLayerToSegment(mapId, targetSegmentId, data);
+      const newLayer = await attachLayerToSegment(mapId, targetSegmentId, data);
       setShowLayerDialog(false);
-      await loadSegments(); // Reload to show new layer
+      
+      updateSegmentsState(segs => segs.map(seg => {
+        if (seg.segmentId === targetSegmentId) {
+          return {
+            ...seg,
+            layers: [...seg.layers, newLayer]
+          };
+        }
+        return seg;
+      }));
+      
+      if (activeSegmentId === targetSegmentId) {
+        const updatedSegment = segments.find(s => s.segmentId === targetSegmentId);
+        if (updatedSegment) {
+          const updated = {
+            ...updatedSegment,
+            layers: [...updatedSegment.layers, newLayer]
+          };
+          await handleViewSegment(updated);
+        }
+      }
     } catch (error) {
       console.error("Failed to add layer:", error);
       throw error;
@@ -149,8 +194,6 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
   };
 
   const handleDeleteLayer = async (segmentLayerId: string) => {
-    // TODO: You might want to add confirmation dialog
-    // For now, find the segment and layer to delete
     const segment = segments.find(s => s.layers.some(l => l.segmentLayerId === segmentLayerId));
     if (!segment) return;
     
@@ -159,7 +202,24 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
 
     try {
       await detachLayerFromSegment(mapId, segment.segmentId, layer.layerId);
-      await loadSegments(); // Reload to remove layer
+      
+      updateSegmentsState(segs => segs.map(seg => {
+        if (seg.segmentId === segment.segmentId) {
+          return {
+            ...seg,
+            layers: seg.layers.filter(l => l.segmentLayerId !== segmentLayerId)
+          };
+        }
+        return seg;
+      }));
+      
+      if (activeSegmentId === segment.segmentId) {
+        const updatedSegment = {
+          ...segment,
+          layers: segment.layers.filter(l => l.segmentLayerId !== segmentLayerId)
+        };
+        await handleViewSegment(updatedSegment);
+      }
     } catch (error) {
       console.error("Failed to delete layer:", error);
     }
@@ -167,9 +227,29 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
 
   const handleAddLocation = async (data: CreateLocationRequest) => {
     try {
-      await createLocation(mapId, targetSegmentId, data);
+      const newLocation = await createLocation(mapId, targetSegmentId, data);
       setShowLocationDialog(false);
-      await loadSegments(); // Reload to show new location
+      
+      updateSegmentsState(segs => segs.map(seg => {
+        if (seg.segmentId === targetSegmentId) {
+          return {
+            ...seg,
+            locations: [...seg.locations, newLocation]
+          };
+        }
+        return seg;
+      }));
+      
+      if (activeSegmentId === targetSegmentId) {
+        const updatedSegment = segments.find(s => s.segmentId === targetSegmentId);
+        if (updatedSegment) {
+          const updated = {
+            ...updatedSegment,
+            locations: [...updatedSegment.locations, newLocation]
+          };
+          await handleViewSegment(updated);
+        }
+      }
     } catch (error) {
       console.error("Failed to add location:", error);
       throw error;
@@ -177,13 +257,29 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
   };
 
   const handleDeleteLocation = async (locationId: string) => {
-    // Find the segment containing this location
-    const segment = segments.find(s => s.locations.some(l => l.locationId === locationId));
+    const segment = segments.find(s => s.locations.some(l => (l.poiId || l.locationId) === locationId));
     if (!segment) return;
 
     try {
       await deleteLocation(mapId, segment.segmentId, locationId);
-      await loadSegments(); // Reload to remove location
+      
+      updateSegmentsState(segs => segs.map(seg => {
+        if (seg.segmentId === segment.segmentId) {
+          return {
+            ...seg,
+            locations: seg.locations.filter(l => (l.poiId || l.locationId) !== locationId)
+          };
+        }
+        return seg;
+      }));
+      
+      if (activeSegmentId === segment.segmentId) {
+        const updatedSegment = {
+          ...segment,
+          locations: segment.locations.filter(l => (l.poiId || l.locationId) !== locationId)
+        };
+        await handleViewSegment(updatedSegment);
+      }
     } catch (error) {
       console.error("Failed to delete location:", error);
     }
@@ -210,7 +306,6 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
       return;
     }
     
-    // Validate map instance
     if (typeof currentMap.getCenter !== 'function' || typeof currentMap.getZoom !== 'function') {
       console.error("❌ Invalid map instance - missing required methods");
       return;
@@ -233,11 +328,8 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
     }
 
     try {
-      // Import Leaflet dynamically
       const L = (await import("leaflet")).default;
 
-      // ===== CLEAR ALL PREVIOUS SEGMENT LAYERS =====
-      console.log(`🧹 Clearing ${currentSegmentLayers.length} previous layers...`);
       currentSegmentLayers.forEach(layer => {
         try {
           currentMap.removeLayer(layer);
@@ -246,32 +338,18 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
         }
       });
       
-      // Reset layer tracking
       const newLayers: any[] = [];
+      
+      const allBounds: any[] = [];
+      
+      setCurrentSegmentLayers(newLayers);
 
-      // 1. Fly to segment camera position if available
-      if (segment.cameraState) {
-        const camera = segment.cameraState;
-        // Leaflet uses [lat, lng] format
-        currentMap.flyTo(
-          [camera.center[1], camera.center[0]], // [lat, lng]
-          camera.zoom,
-          {
-            duration: 1.5,
-            animate: true,
-          }
-        );
-      }
-
-      // 2. Render zones
       if (segment.zones && segment.zones.length > 0) {
-        const allBounds: any[] = [];
 
         for (const segmentZone of segment.zones) {
           const zone = segmentZone.zone;
           if (!zone) continue;
 
-          // Validate geometry exists and is not empty
           if (!zone.geometry || zone.geometry.trim() === '') {
             console.warn(`⚠️ Zone ${zone.zoneId} has no geometry`);
             continue;
@@ -282,18 +360,13 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
             try {
               geoJsonData = JSON.parse(zone.geometry);
             } catch (parseError) {
-              console.error(`❌ Failed to parse geometry for zone ${zone.zoneId}:`, parseError);
-              console.error("Geometry length:", zone.geometry?.length);
-              console.error("Geometry preview:", zone.geometry?.substring(0, 200));
               continue;
             }
 
-            // Create GeoJSON layer with Leaflet
             const geoJsonLayer = L.geoJSON(geoJsonData, {
               style: () => {
                 const style: any = {};
                 
-                // Fill zone styling
                 if (segmentZone.fillZone) {
                   style.fillColor = segmentZone.fillColor || '#FFD700';
                   style.fillOpacity = segmentZone.fillOpacity || 0.3;
@@ -301,7 +374,6 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
                   style.fillOpacity = 0;
                 }
 
-                // Boundary styling
                 if (segmentZone.highlightBoundary) {
                   style.color = segmentZone.boundaryColor || '#FFD700';
                   style.weight = segmentZone.boundaryWidth || 2;
@@ -313,28 +385,22 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
               },
             });
 
-            // Add layer to map and track it
             geoJsonLayer.addTo(currentMap);
             newLayers.push(geoJsonLayer);
 
-            // Collect bounds for fitBounds
             const layerBounds = geoJsonLayer.getBounds();
             if (layerBounds.isValid()) {
               allBounds.push(layerBounds);
             }
 
-            // Add label if enabled
             if (segmentZone.showLabel) {
               try {
                 let labelPosition;
                 
-                // Try to get centroid from zone data
                 if (zone.centroid) {
                   const centroid = JSON.parse(zone.centroid);
-                  // GeoJSON Point format: [lng, lat]
                   labelPosition = [centroid.coordinates[1], centroid.coordinates[0]];
                 } else {
-                  // Fallback: use layer center
                   const center = layerBounds.getCenter();
                   labelPosition = [center.lat, center.lng];
                 }
@@ -367,42 +433,228 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
             console.error(`❌ Failed to render zone ${zone.zoneId}:`, error);
           }
         }
-
-        // Fit bounds to show all zones
-        if (allBounds.length > 0) {
+      }
+      if (segment.locations && segment.locations.length > 0) {
+        
+        for (const location of segment.locations) {
           try {
-            // Create a bounds that encompasses all zone bounds
-            const combinedBounds = allBounds[0];
-            for (let i = 1; i < allBounds.length; i++) {
-              combinedBounds.extend(allBounds[i]);
+            if (location.isVisible === false) {
+              continue;
             }
-            
-            currentMap.fitBounds(combinedBounds, {
-              padding: [50, 50],
-              animate: true,
-              duration: 1.5,
+
+            if (!location.markerGeometry) {
+              console.warn(`⚠️ Location ${location.poiId || location.locationId} has no geometry`);
+              continue;
+            }
+
+            let geoJsonData;
+            try {
+              geoJsonData = JSON.parse(location.markerGeometry);
+            } catch (parseError) {
+              console.error(`❌ Failed to parse geometry for location ${location.poiId || location.locationId}:`, parseError);
+              continue;
+            }
+
+            const coords = geoJsonData.coordinates;
+            const latLng: [number, number] = [coords[1], coords[0]];
+
+            const iconHtml = `<div style="
+              font-size: ${location.iconSize || 32}px;
+              text-align: center;
+              filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+              color: ${location.iconColor || '#FF0000'};
+            ">${location.iconType || '📍'}</div>`;
+
+            const marker = L.marker(latLng, {
+              icon: L.divIcon({
+                className: 'location-marker',
+                html: iconHtml,
+                iconSize: [location.iconSize || 32, location.iconSize || 32],
+                iconAnchor: [(location.iconSize || 32) / 2, location.iconSize || 32],
+              }),
+              zIndexOffset: location.zIndex || 100,
             });
-            console.log("📦 Fitted bounds to show all zones");
+
+            if (location.showTooltip && location.tooltipContent) {
+              marker.bindTooltip(location.tooltipContent, {
+                permanent: false,
+                direction: 'top',
+                className: 'location-tooltip',
+                opacity: 0.95,
+              });
+            }
+
+            if (location.openPopupOnClick && location.popupContent) {
+              const popupHtml = `
+                <div style="min-width: 200px;">
+                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${location.title}</h3>
+                  ${location.subtitle ? `<p style="margin: 0 0 8px 0; font-size: 12px; color: #888;">${location.subtitle}</p>` : ''}
+                  <p style="margin: 0; font-size: 14px;">${location.popupContent}</p>
+                </div>
+              `;
+              marker.bindPopup(popupHtml);
+            }
+
+            marker.addTo(currentMap);
+            newLayers.push(marker);
+            
+            allBounds.push(L.latLngBounds([latLng, latLng]));
+
           } catch (error) {
-            console.error("❌ Failed to fit bounds:", error);
+            console.error(`❌ Failed to render location ${location.poiId || location.locationId}:`, error);
           }
         }
+
+        console.log(`✅ Rendered ${segment.locations.length} locations`);
       }
 
-      // 3. TODO: Render layers when implemented
-      // if (segment.layers && segment.layers.length > 0) { ... }
+      if (segment.cameraState) {
+        let parsedCamera;
+        if (typeof segment.cameraState === 'string') {
+          try {
+            parsedCamera = JSON.parse(segment.cameraState);
+          } catch (e) {
+            console.error("❌ Failed to parse camera state:", e);
+            return;
+          }
+        } else {
+          parsedCamera = segment.cameraState;
+        }
+        
+        if (!parsedCamera || !parsedCamera.center || !Array.isArray(parsedCamera.center) || parsedCamera.center.length < 2) {
+          console.error("❌ Invalid camera state structure:", parsedCamera);
+          return;
+        }
+        
+        const currentZoom = currentMap.getZoom();
+        const targetZoom = parsedCamera.zoom || 10;
+        const targetCenter = parsedCamera.center;
+        
+        if (Math.abs(currentZoom - targetZoom) > 1 || currentSegmentLayers.length > 0) {
+          const midZoom = Math.min(currentZoom, targetZoom) - 2;
+          
+          currentMap.flyTo(
+            [targetCenter[1], targetCenter[0]],
+            midZoom,
+            {
+              duration: 0.8,
+              animate: true,
+            }
+          );
+          
+          setTimeout(() => {
+            currentMap.flyTo(
+              [targetCenter[1], targetCenter[0]],
+              targetZoom,
+              {
+                duration: 1.2,
+                animate: true,
+              }
+            );
+          }, 800);
+        } else {
+          currentMap.flyTo(
+            [targetCenter[1], targetCenter[0]],
+            targetZoom,
+            {
+              duration: 1.5,
+              animate: true,
+            }
+          );
+        }
+        
+      } else if (allBounds.length > 0) {
+        try {
+          const combinedBounds = allBounds[0];
+          for (let i = 1; i < allBounds.length; i++) {
+            combinedBounds.extend(allBounds[i]);
+          }
+          
+          currentMap.fitBounds(combinedBounds, {
+            padding: [80, 80],
+            animate: true,
+            duration: 1.5,
+            maxZoom: 15,
+          });
+          console.log(`📦 Auto-fitted bounds to show ${allBounds.length} elements (no camera state)`);
+        } catch (error) {
+          console.error("❌ Failed to fit bounds:", error);
+        }
+      } else {
+        console.warn("⚠️ Empty segment: no camera state and no zones/locations");
+      }
 
-      // 4. TODO: Render locations/POIs when implemented
-      // if (segment.locations && segment.locations.length > 0) { ... }
-
-      // ===== SAVE NEW LAYERS FOR FUTURE CLEANUP =====
-      setCurrentSegmentLayers(newLayers);
-      console.log(`✅ Viewing segment: ${segment.name} (${newLayers.length} layers)`);
-      
+      if (newLayers.length > 0) {
+        setCurrentSegmentLayers(newLayers);
+      }      
     } catch (error) {
       console.error("❌ Failed to view segment on map:", error);
     }
   }, [currentMap, currentSegmentLayers, setCurrentSegmentLayers]);
+
+  // Auto-play effect - play through segments
+  useEffect(() => {
+    if (!isPlaying || segments.length === 0) return;
+
+    let timeoutId: NodeJS.Timeout;
+
+    const playNextSegment = async () => {
+      if (currentPlayIndex >= segments.length) {
+        setIsPlaying(false);
+        setCurrentPlayIndex(0);
+        return;
+      }
+
+      const segment = segments[currentPlayIndex];
+      setActiveSegmentId(segment.segmentId);
+      await handleViewSegment(segment);
+      onSegmentSelect?.(segment);
+      
+      const duration = segment.durationMs || 5000;
+      timeoutId = setTimeout(() => {
+        setCurrentPlayIndex(prev => prev + 1);
+      }, duration);
+    };
+
+    playNextSegment();
+    
+    // Cleanup timeout on unmount or when dependencies change
+    return () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, currentPlayIndex, segments.length]); // Remove handleViewSegment from deps!
+
+  const handlePlayPreview = () => {
+    if (segments.length === 0) return;
+    
+    setCurrentPlayIndex(0);
+    setIsPlaying(true);
+  };
+
+  const handleStopPreview = () => {
+    setIsPlaying(false);
+    setCurrentPlayIndex(0);
+  };
+
+  const handleClearMap = () => {
+    if (!currentMap) return;
+    
+    console.log(`🧹 Clearing ${currentSegmentLayers.length} layers from map...`);
+    currentSegmentLayers.forEach(layer => {
+      try {
+        currentMap.removeLayer(layer);
+      } catch (e) {
+        console.warn("Failed to remove layer:", e);
+      }
+    });
+    
+    setCurrentSegmentLayers([]);
+    setActiveSegmentId(null);
+    console.log("✅ Map cleared");
+  };
 
   return (
     <div className="h-full flex flex-col bg-zinc-900 border-r border-zinc-800">
@@ -410,16 +662,58 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
       <div className="p-4 border-b border-zinc-800">
         <div className="flex items-center justify-between mb-2">
           <h2 className="text-lg font-semibold text-white">Timeline</h2>
-          <button
-            onClick={() => {
-              setEditingSegment(undefined);
-              setShowSegmentDialog(true);
-            }}
-            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-sm"
-          >
-            + Segment
-          </button>
+          <div className="flex gap-2">
+            {!isPlaying ? (
+              <button
+                onClick={handlePlayPreview}
+                disabled={segments.length === 0}
+                className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Play preview of all segments"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                </svg>
+                Play Preview
+              </button>
+            ) : (
+              <button
+                onClick={handleStopPreview}
+                className="px-3 py-1 bg-red-600 hover:bg-red-500 text-white rounded text-sm flex items-center gap-1"
+                title="Stop preview"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
+                </svg>
+                Stop
+              </button>
+            )}
+            <button
+              onClick={handleClearMap}
+              disabled={currentSegmentLayers.length === 0}
+              className="px-3 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-sm flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Clear all layers from map"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              Clear
+            </button>
+            <button
+              onClick={() => {
+                setEditingSegment(undefined);
+                setShowSegmentDialog(true);
+              }}
+              className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-sm"
+            >
+              + Segment
+            </button>
+          </div>
         </div>
+        {isPlaying && (
+          <div className="mt-2 text-sm text-zinc-400">
+            Playing segment {currentPlayIndex + 1} of {segments.length}
+          </div>
+        )}
       </div>
 
       {/* Segment list */}

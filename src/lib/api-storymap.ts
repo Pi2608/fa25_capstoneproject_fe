@@ -22,8 +22,9 @@ export type Segment = {
   autoAdvance: boolean;
   durationMs: number;
   requireUserAction: boolean;
-  createdAt: string;
-  updatedAt?: string;
+  zones: SegmentZone[]; // Backend already includes these
+  layers: SegmentLayer[]; // Backend already includes these
+  locations: Location[]; // Backend already includes these (PoiDto)
 };
 
 export type CreateSegmentRequest = {
@@ -155,37 +156,44 @@ export type AttachLayerRequest = {
 
 // Location (POI markers)
 export type Location = {
-  locationId: string;
-  segmentId: string;
+  poiId: string; // Backend uses PoiId
+  locationId?: string; // Alias for backward compatibility
+  mapId: string;
+  segmentId?: string;
+  zoneId?: string;
   title: string;
   subtitle?: string;
-  description?: string;
-  locationType: "POI" | "Marker" | "Annotation";
-  markerGeometry: string; // GeoJSON Point
+  locationType: "PointOfInterest" | "Line" | "Polygon" | "TextOnly" | "MediaSpot" | "Custom";
+  markerGeometry?: string; // GeoJSON Point
+  storyContent?: string;
+  mediaResources?: string;
+  displayOrder: number;
+  highlightOnEnter: boolean;
+  showTooltip: boolean;
+  tooltipContent?: string;
+  effectType?: string;
+  openSlideOnClick: boolean;
+  slideContent?: string;
+  linkedPoiId?: string;
+  playAudioOnClick: boolean;
+  audioUrl?: string;
+  externalUrl?: string;
+  associatedLayerId?: string;
+  animationPresetId?: string;
+  animationOverrides?: string;
+  isVisible: boolean;
+  zIndex: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+  // Legacy/computed fields for UI
   iconType?: string;
   iconUrl?: string;
   iconColor?: string;
   iconSize?: number;
-  displayOrder: number;
-  showTooltip: boolean;
-  tooltipContent?: string;
-  openPopupOnClick: boolean;
+  openPopupOnClick?: boolean;
   popupContent?: string;
-  mediaUrls?: string;
-  playAudioOnClick: boolean;
-  audioUrl?: string;
-  entryDelayMs?: number;
-  entryDurationMs?: number;
-  exitDelayMs?: number;
-  exitDurationMs?: number;
-  entryEffect?: string;
-  exitEffect?: string;
-  linkedSegmentId?: string;
-  linkedLocationId?: string;
-  externalUrl?: string;
-  isVisible: boolean;
-  zIndex: number;
-  createdAt: string;
+  description?: string;
 };
 
 // TimelineTransition (Camera animation between segments)
@@ -368,14 +376,14 @@ export async function createSegmentZone(
 export async function updateSegmentZone(
   mapId: string,
   segmentId: string,
-  zoneId: string,
+  segmentZoneId: string,
   data: UpdateSegmentZoneRequest
 ): Promise<SegmentZone> {
-  return await putJson<UpdateSegmentZoneRequest, SegmentZone>(`/storymaps/${mapId}/segments/${segmentId}/zones/${zoneId}`, data);
+  return await putJson<UpdateSegmentZoneRequest, SegmentZone>(`/storymaps/${mapId}/segments/${segmentId}/zones/${segmentZoneId}`, data);
 }
 
-export async function deleteSegmentZone(mapId: string, segmentId: string, zoneId: string): Promise<void> {
-  await delJson<void>(`/storymaps/${mapId}/segments/${segmentId}/zones/${zoneId}`);
+export async function deleteSegmentZone(mapId: string, segmentId: string, segmentZoneId: string): Promise<void> {
+  await delJson<void>(`/storymaps/${mapId}/segments/${segmentId}/zones/${segmentZoneId}`);
 }
 
 // ================== SEGMENT LAYER APIs ==================
@@ -408,13 +416,14 @@ export type CreateLocationRequest = {
   title: string;
   subtitle?: string;
   description?: string;
-  locationType: "POI" | "Marker" | "Annotation";
+  locationType: "PointOfInterest" | "Line" | "Polygon" | "TextOnly" | "MediaSpot" | "Custom";
   markerGeometry: string; // GeoJSON Point
   iconType?: string;
   iconUrl?: string;
   iconColor?: string;
   iconSize?: number;
-  displayOrder?: number;
+  displayOrder: number;
+  highlightOnEnter?: boolean;
   showTooltip?: boolean;
   tooltipContent?: string;
   openPopupOnClick?: boolean;

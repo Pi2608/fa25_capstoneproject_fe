@@ -14,13 +14,14 @@ export type CreateLocationRequest = {
   title: string;
   subtitle?: string;
   description?: string;
-  locationType: "POI" | "Marker" | "Annotation";
+  locationType: "PointOfInterest" | "Line" | "Polygon" | "TextOnly" | "MediaSpot" | "Custom";
   markerGeometry: string; // GeoJSON Point
   iconType?: string;
   iconUrl?: string;
   iconColor?: string;
   iconSize?: number;
-  displayOrder?: number;
+  displayOrder: number;
+  highlightOnEnter?: boolean;
   showTooltip?: boolean;
   tooltipContent?: string;
   openPopupOnClick?: boolean;
@@ -43,7 +44,7 @@ export default function CreateLocationDialog({
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [description, setDescription] = useState("");
-  const [locationType, setLocationType] = useState<"POI" | "Marker" | "Annotation">("POI");
+  const [locationType, setLocationType] = useState<"PointOfInterest" | "Line" | "Polygon" | "TextOnly" | "MediaSpot" | "Custom">("PointOfInterest");
   const [iconType, setIconType] = useState("📍");
   const [iconColor, setIconColor] = useState("#FF0000");
   const [iconSize, setIconSize] = useState(32);
@@ -133,6 +134,7 @@ export default function CreateLocationDialog({
         iconColor,
         iconSize,
         displayOrder,
+        highlightOnEnter: false,
         showTooltip,
         tooltipContent: tooltipContent || title,
         openPopupOnClick,
@@ -260,19 +262,24 @@ export default function CreateLocationDialog({
                 <label className="block text-sm font-medium text-zinc-300 mb-2">
                   Location Type
                 </label>
-                <div className="flex gap-2">
-                  {(["POI", "Marker", "Annotation"] as const).map((type) => (
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    { value: "PointOfInterest", label: "POI" },
+                    { value: "MediaSpot", label: "Media" },
+                    { value: "TextOnly", label: "Text" },
+                    { value: "Custom", label: "Custom" }
+                  ] as const).map((type) => (
                     <button
-                      key={type}
+                      key={type.value}
                       type="button"
-                      onClick={() => setLocationType(type)}
-                      className={`flex-1 px-3 py-2 rounded text-sm ${
-                        locationType === type
+                      onClick={() => setLocationType(type.value)}
+                      className={`px-3 py-2 rounded text-sm ${
+                        locationType === type.value
                           ? "bg-emerald-600 text-white"
                           : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
                       }`}
                     >
-                      {type}
+                      {type.label}
                     </button>
                   ))}
                 </div>
@@ -328,16 +335,106 @@ export default function CreateLocationDialog({
                     checked={showTooltip}
                     onChange={(e) => setShowTooltip(e.target.checked)}
                   />
-                  <span className="text-sm font-medium text-zinc-300">Show Tooltip</span>
+                  <span className="text-sm font-medium text-zinc-300">Show Tooltip (Rich HTML)</span>
                 </label>
                 {showTooltip && (
-                  <input
-                    type="text"
-                    value={tooltipContent}
-                    onChange={(e) => setTooltipContent(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-white"
-                    placeholder="Tooltip text (defaults to title)"
-                  />
+                  <div className="space-y-2">
+                    {/* Rich Text Editor */}
+                    <div className="border border-zinc-700 rounded overflow-hidden">
+                      {/* Toolbar */}
+                      <div className="bg-zinc-800 border-b border-zinc-700 p-2 flex gap-1 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => document.execCommand('bold')}
+                          className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs"
+                          title="Bold (Ctrl+B)"
+                        >
+                          <strong>B</strong>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => document.execCommand('italic')}
+                          className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs"
+                          title="Italic (Ctrl+I)"
+                        >
+                          <em>I</em>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => document.execCommand('underline')}
+                          className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs"
+                          title="Underline (Ctrl+U)"
+                        >
+                          <u>U</u>
+                        </button>
+                        <div className="w-px bg-zinc-600 mx-1"></div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = prompt('Enter URL:');
+                            if (url) document.execCommand('createLink', false, url);
+                          }}
+                          className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs"
+                          title="Insert Link"
+                        >
+                          🔗
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/*';
+                            input.onchange = (e: any) => {
+                              const file = e.target.files[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  document.execCommand('insertImage', false, event.target?.result as string);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            };
+                            input.click();
+                          }}
+                          className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs"
+                          title="Insert Image"
+                        >
+                          🖼️
+                        </button>
+                      </div>
+                      {/* Editor */}
+                      <div
+                        contentEditable
+                        onInput={(e) => setTooltipContent(e.currentTarget.innerHTML)}
+                        onPaste={(e) => {
+                          // Handle image paste
+                          const items = e.clipboardData.items;
+                          for (let i = 0; i < items.length; i++) {
+                            if (items[i].type.indexOf('image') !== -1) {
+                              e.preventDefault();
+                              const blob = items[i].getAsFile();
+                              if (blob) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  const img = `<img src="${event.target?.result}" style="max-width: 100%; height: auto;" />`;
+                                  document.execCommand('insertHTML', false, img);
+                                };
+                                reader.readAsDataURL(blob);
+                              }
+                              break;
+                            }
+                          }
+                        }}
+                        dangerouslySetInnerHTML={{ __html: tooltipContent }}
+                        className="w-full min-h-[100px] px-3 py-2 bg-zinc-900 text-white text-sm outline-none"
+                        style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}
+                      />
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      💡 You can paste images directly (Ctrl+V) or use the 🖼️ button
+                    </p>
+                  </div>
                 )}
               </div>
 
@@ -349,16 +446,114 @@ export default function CreateLocationDialog({
                     checked={openPopupOnClick}
                     onChange={(e) => setOpenPopupOnClick(e.target.checked)}
                   />
-                  <span className="text-sm font-medium text-zinc-300">Open Popup on Click</span>
+                  <span className="text-sm font-medium text-zinc-300">Open Popup on Click (Rich HTML)</span>
                 </label>
                 {openPopupOnClick && (
-                  <textarea
-                    value={popupContent}
-                    onChange={(e) => setPopupContent(e.target.value)}
-                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-white"
-                    rows={2}
-                    placeholder="Popup content (defaults to description)"
-                  />
+                  <div className="space-y-2">
+                    {/* Rich Text Editor */}
+                    <div className="border border-zinc-700 rounded overflow-hidden">
+                      {/* Toolbar */}
+                      <div className="bg-zinc-800 border-b border-zinc-700 p-2 flex gap-1 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => document.execCommand('bold')}
+                          className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs"
+                          title="Bold (Ctrl+B)"
+                        >
+                          <strong>B</strong>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => document.execCommand('italic')}
+                          className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs"
+                          title="Italic (Ctrl+I)"
+                        >
+                          <em>I</em>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => document.execCommand('underline')}
+                          className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs"
+                          title="Underline (Ctrl+U)"
+                        >
+                          <u>U</u>
+                        </button>
+                        <div className="w-px bg-zinc-600 mx-1"></div>
+                        <button
+                          type="button"
+                          onClick={() => document.execCommand('insertUnorderedList')}
+                          className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs"
+                          title="Bullet List"
+                        >
+                          • List
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = prompt('Enter URL:');
+                            if (url) document.execCommand('createLink', false, url);
+                          }}
+                          className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs"
+                          title="Insert Link"
+                        >
+                          🔗
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/*';
+                            input.onchange = (e: any) => {
+                              const file = e.target.files[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  document.execCommand('insertImage', false, event.target?.result as string);
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            };
+                            input.click();
+                          }}
+                          className="px-2 py-1 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs"
+                          title="Insert Image"
+                        >
+                          🖼️
+                        </button>
+                      </div>
+                      {/* Editor */}
+                      <div
+                        contentEditable
+                        onInput={(e) => setPopupContent(e.currentTarget.innerHTML)}
+                        onPaste={(e) => {
+                          // Handle image paste
+                          const items = e.clipboardData.items;
+                          for (let i = 0; i < items.length; i++) {
+                            if (items[i].type.indexOf('image') !== -1) {
+                              e.preventDefault();
+                              const blob = items[i].getAsFile();
+                              if (blob) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  const img = `<img src="${event.target?.result}" style="max-width: 100%; height: auto;" />`;
+                                  document.execCommand('insertHTML', false, img);
+                                };
+                                reader.readAsDataURL(blob);
+                              }
+                              break;
+                            }
+                          }
+                        }}
+                        dangerouslySetInnerHTML={{ __html: popupContent }}
+                        className="w-full min-h-[120px] px-3 py-2 bg-zinc-900 text-white text-sm outline-none"
+                        style={{ wordWrap: 'break-word', overflowWrap: 'break-word' }}
+                      />
+                    </div>
+                    <p className="text-xs text-zinc-500">
+                      💡 You can paste images directly (Ctrl+V) or use the 🖼️ button
+                    </p>
+                  </div>
                 )}
               </div>
 
