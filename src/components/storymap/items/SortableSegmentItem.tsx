@@ -14,6 +14,10 @@ interface SortableSegmentItemProps {
   onDelete: (segment: Segment) => void;
   onAddZone: (segmentId: string) => void;
   onDeleteZone: (zone: SegmentZone) => void;
+  onAddLayer?: (segmentId: string) => void; // Add layer to segment
+  onDeleteLayer?: (segmentLayerId: string) => void; // Remove layer from segment
+  onAddLocation?: (segmentId: string) => void; // Add location/POI to segment
+  onDeleteLocation?: (locationId: string) => void; // Delete location from segment
   onCaptureCamera?: (segment: Segment) => void; // Quick capture camera
   onViewOnMap?: (segment: TimelineSegment) => void; // View segment on map
 }
@@ -27,6 +31,10 @@ export default function SortableSegmentItem({
   onDelete,
   onAddZone,
   onDeleteZone,
+  onAddLayer,
+  onDeleteLayer,
+  onAddLocation,
+  onDeleteLocation,
   onCaptureCamera,
   onViewOnMap,
 }: SortableSegmentItemProps) {
@@ -162,20 +170,62 @@ export default function SortableSegmentItem({
 
             {/* Layers */}
             <div>
-              <span className="text-sm text-zinc-400">Layers ({segment.layers.length})</span>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-zinc-400">Layers ({segment.layers.length})</span>
+                {onAddLayer && (
+                  <button
+                    onClick={() => onAddLayer(segment.segmentId)}
+                    className="text-xs px-2 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded"
+                  >
+                    + Add
+                  </button>
+                )}
+              </div>
               {segment.layers.map((layer) => (
-                <div key={layer.segmentLayerId} className="bg-zinc-900 rounded p-2 mb-1">
-                  <span className="text-sm text-white">Layer {layer.layerId}</span>
+                <div key={layer.segmentLayerId} className="flex items-center justify-between bg-zinc-900 rounded p-2 mb-1">
+                  <span className="text-sm text-white">
+                    Layer {layer.layerId}
+                    {!layer.isVisible && <span className="text-xs text-zinc-500 ml-2">(Hidden)</span>}
+                  </span>
+                  {onDeleteLayer && (
+                    <button
+                      onClick={() => onDeleteLayer(layer.segmentLayerId)}
+                      className="text-xs text-red-400 hover:text-red-300"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
 
             {/* Locations */}
             <div>
-              <span className="text-sm text-zinc-400">Locations ({segment.locations.length})</span>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-zinc-400">Locations ({segment.locations.length})</span>
+                {onAddLocation && (
+                  <button
+                    onClick={() => onAddLocation(segment.segmentId)}
+                    className="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded"
+                  >
+                    + Add
+                  </button>
+                )}
+              </div>
               {segment.locations.map((loc) => (
-                <div key={loc.locationId} className="bg-zinc-900 rounded p-2 mb-1">
-                  <span className="text-sm text-white">{loc.title}</span>
+                <div key={loc.poiId || loc.locationId} className="flex items-center justify-between bg-zinc-900 rounded p-2 mb-1">
+                  <span className="text-sm text-white">
+                    {loc.iconType || '📍'} {loc.title}
+                    {!loc.isVisible && <span className="text-xs text-zinc-500 ml-2">(Hidden)</span>}
+                  </span>
+                  {onDeleteLocation && (
+                    <button
+                      onClick={() => onDeleteLocation(loc.poiId || loc.locationId!)}
+                      className="text-xs text-red-400 hover:text-red-300"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </div>
               ))}
             </div>

@@ -1672,7 +1672,7 @@ export default function EditMapPage() {
       {detail && showPoiPanel && <MapPoiPanel mapId={detail.id} isOpen={showPoiPanel} />}
       
       {showSegmentPanel && detail && (
-        <div className="fixed right-0 top-16 bottom-0 w-[420px] z-[1000]">
+        <div className="fixed right-30 top-16 bottom-0 w-[420px] z-[1000]">
           <StoryMapTimeline
             mapId={detail.id}
             currentMap={mapRef.current}

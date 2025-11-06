@@ -1,13 +1,11 @@
 import { Segment, SegmentZone, SegmentLayer, Location } from "@/lib/api-storymap";
 
 /**
- * Extended segment type with related data for timeline display
+ * Extended segment type with UI state for timeline display
+ * Note: Segment already includes zones, layers, locations from backend
  */
 export type TimelineSegment = Segment & {
-  zones: SegmentZone[];
-  layers: SegmentLayer[];
-  locations: Location[];
-  expanded: boolean;
+  expanded: boolean; // UI state for expand/collapse
 };
 
 /**

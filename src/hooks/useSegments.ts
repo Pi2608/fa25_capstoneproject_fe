@@ -1,64 +1,42 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
     getSegments,
-    getSegmentZones,
-    getSegmentLayers,
-    getSegmentLocations,
     createSegment,
     updateSegment,
     deleteSegment,
-    createSegmentZone,
-    deleteSegmentZone,
     reorderSegments,
     CreateSegmentRequest,
-    CreateSegmentZoneRequest,
     CameraState,
     stringifyCameraState,
 } from "@/lib/api-storymap";
 import { TimelineSegment } from "@/types/storymap";
 
-/**
- * Custom hook to manage story map segments
- */
 export function useSegments(mapId: string) {
     const [segments, setSegments] = useState<TimelineSegment[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<Error | null>(null);
+    
+    const loadingRef = useRef(false);
 
-    /**
-     * Load all segments with their related data
-     */
-    const loadSegments = useCallback(async () => {
+
+    const loadSegments = useCallback(async () => {  
+        loadingRef.current = true;
         setLoading(true);
         setError(null);
 
         try {
             const segs = await getSegments(mapId);
 
-            // Safety check: ensure segs is an array
             if (!Array.isArray(segs)) {
                 console.warn("getSegments returned non-array:", segs);
                 setSegments([]);
                 return;
             }
 
-            // Enrich segments with zones, layers, and locations
-            const enriched = await Promise.all(
-                segs.map(async (seg) => {
-                    const [zones, layers, locations] = await Promise.all([
-                        getSegmentZones(mapId, seg.segmentId),
-                        getSegmentLayers(mapId, seg.segmentId),
-                        getSegmentLocations(mapId, seg.segmentId),
-                    ]);
-                    return {
-                        ...seg,
-                        zones,
-                        layers,
-                        locations,
-                        expanded: false,
-                    };
-                })
-            );
+            const enriched = segs.map((seg) => ({
+                ...seg,
+                expanded: false,
+            }));
 
             setSegments(enriched);
         } catch (err) {
@@ -66,6 +44,7 @@ export function useSegments(mapId: string) {
             setError(err as Error);
         } finally {
             setLoading(false);
+            loadingRef.current = false;
         }
     }, [mapId]);
 
@@ -104,32 +83,6 @@ export function useSegments(mapId: string) {
             await loadSegments();
         } catch (err) {
             console.error("Failed to delete segment:", err);
-            throw err;
-        }
-    };
-
-    /**
-     * Add a zone to a segment
-     */
-    const addZoneToSegment = async (data: CreateSegmentZoneRequest) => {
-        try {
-            await createSegmentZone(mapId, data.segmentId!, data);
-            await loadSegments();
-        } catch (err) {
-            console.error("Failed to add zone:", err);
-            throw err;
-        }
-    };
-
-    /**
-     * Remove a zone from a segment
-     */
-    const removeZoneFromSegment = async (segmentId: string, zoneId: string) => {
-        try {
-            await deleteSegmentZone(mapId, segmentId, zoneId);
-            await loadSegments();
-        } catch (err) {
-            console.error("Failed to delete zone:", err);
             throw err;
         }
     };
@@ -183,6 +136,13 @@ export function useSegments(mapId: string) {
         }
     };
 
+    /**
+     * Update segments state directly (for optimistic updates)
+     */
+    const updateSegmentsState = (updater: (segments: TimelineSegment[]) => TimelineSegment[]) => {
+        setSegments(updater);
+    };
+
     return {
         segments,
         loading,
@@ -191,10 +151,9 @@ export function useSegments(mapId: string) {
         addSegment,
         editSegment,
         removeSegment,
-        addZoneToSegment,
-        removeZoneFromSegment,
         reorder,
         toggleExpanded,
         updateCameraState,
+        updateSegmentsState,
     };
 }

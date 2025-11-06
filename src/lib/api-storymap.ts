@@ -22,8 +22,9 @@ export type Segment = {
   autoAdvance: boolean;
   durationMs: number;
   requireUserAction: boolean;
-  createdAt: string;
-  updatedAt?: string;
+  zones: SegmentZone[]; // Backend already includes these
+  layers: SegmentLayer[]; // Backend already includes these
+  locations: Location[]; // Backend already includes these (PoiDto)
 };
 
 export type CreateSegmentRequest = {
@@ -155,37 +156,44 @@ export type AttachLayerRequest = {
 
 // Location (POI markers)
 export type Location = {
-  locationId: string;
-  segmentId: string;
+  poiId: string; // Backend uses PoiId
+  locationId?: string; // Alias for backward compatibility
+  mapId: string;
+  segmentId?: string;
+  zoneId?: string;
   title: string;
   subtitle?: string;
-  description?: string;
-  locationType: "POI" | "Marker" | "Annotation";
-  markerGeometry: string; // GeoJSON Point
+  locationType: "PointOfInterest" | "Line" | "Polygon" | "TextOnly" | "MediaSpot" | "Custom";
+  markerGeometry?: string; // GeoJSON Point
+  storyContent?: string;
+  mediaResources?: string;
+  displayOrder: number;
+  highlightOnEnter: boolean;
+  showTooltip: boolean;
+  tooltipContent?: string;
+  effectType?: string;
+  openSlideOnClick: boolean;
+  slideContent?: string;
+  linkedPoiId?: string;
+  playAudioOnClick: boolean;
+  audioUrl?: string;
+  externalUrl?: string;
+  associatedLayerId?: string;
+  animationPresetId?: string;
+  animationOverrides?: string;
+  isVisible: boolean;
+  zIndex: number;
+  createdBy: string;
+  createdAt: string;
+  updatedAt?: string;
+  // Legacy/computed fields for UI
   iconType?: string;
   iconUrl?: string;
   iconColor?: string;
   iconSize?: number;
-  displayOrder: number;
-  showTooltip: boolean;
-  tooltipContent?: string;
-  openPopupOnClick: boolean;
+  openPopupOnClick?: boolean;
   popupContent?: string;
-  mediaUrls?: string;
-  playAudioOnClick: boolean;
-  audioUrl?: string;
-  entryDelayMs?: number;
-  entryDurationMs?: number;
-  exitDelayMs?: number;
-  exitDurationMs?: number;
-  entryEffect?: string;
-  exitEffect?: string;
-  linkedSegmentId?: string;
-  linkedLocationId?: string;
-  externalUrl?: string;
-  isVisible: boolean;
-  zIndex: number;
-  createdAt: string;
+  description?: string;
 };
 
 // TimelineTransition (Camera animation between segments)
@@ -368,14 +376,14 @@ export async function createSegmentZone(
 export async function updateSegmentZone(
   mapId: string,
   segmentId: string,
-  zoneId: string,
+  segmentZoneId: string,
   data: UpdateSegmentZoneRequest
 ): Promise<SegmentZone> {
-  return await putJson<UpdateSegmentZoneRequest, SegmentZone>(`/storymaps/${mapId}/segments/${segmentId}/zones/${zoneId}`, data);
+  return await putJson<UpdateSegmentZoneRequest, SegmentZone>(`/storymaps/${mapId}/segments/${segmentId}/zones/${segmentZoneId}`, data);
 }
 
-export async function deleteSegmentZone(mapId: string, segmentId: string, zoneId: string): Promise<void> {
-  await delJson<void>(`/storymaps/${mapId}/segments/${segmentId}/zones/${zoneId}`);
+export async function deleteSegmentZone(mapId: string, segmentId: string, segmentZoneId: string): Promise<void> {
+  await delJson<void>(`/storymaps/${mapId}/segments/${segmentId}/zones/${segmentZoneId}`);
 }
 
 // ================== SEGMENT LAYER APIs ==================
@@ -403,22 +411,77 @@ export async function detachLayerFromSegment(
 
 // ================== LOCATION (POI) APIs ==================
 
+export type CreateLocationRequest = {
+  segmentId?: string;
+  title: string;
+  subtitle?: string;
+  description?: string;
+  locationType: "PointOfInterest" | "Line" | "Polygon" | "TextOnly" | "MediaSpot" | "Custom";
+  markerGeometry: string; // GeoJSON Point
+  iconType?: string;
+  iconUrl?: string;
+  iconColor?: string;
+  iconSize?: number;
+  displayOrder: number;
+  highlightOnEnter?: boolean;
+  showTooltip?: boolean;
+  tooltipContent?: string;
+  openPopupOnClick?: boolean;
+  popupContent?: string;
+  mediaUrls?: string;
+  playAudioOnClick?: boolean;
+  audioUrl?: string;
+  linkedSegmentId?: string;
+  linkedLocationId?: string;
+  externalUrl?: string;
+  isVisible?: boolean;
+  zIndex?: number;
+};
+
 export async function getSegmentLocations(mapId: string, segmentId: string): Promise<Location[]> {
   const response = await getJson<Location[]>(`/storymaps/${mapId}/segments/${segmentId}/locations`);
   return response || [];
 }
 
+export async function createLocation(
+  mapId: string,
+  segmentId: string,
+  data: CreateLocationRequest
+): Promise<Location> {
+  return await postJson<CreateLocationRequest, Location>(`/storymaps/${mapId}/segments/${segmentId}/locations`, data);
+}
+
+export async function updateLocation(
+  mapId: string,
+  segmentId: string,
+  locationId: string,
+  data: Partial<CreateLocationRequest>
+): Promise<Location> {
+  return await putJson<Partial<CreateLocationRequest>, Location>(
+    `/storymaps/${mapId}/segments/${segmentId}/locations/${locationId}`,
+    data
+  );
+}
+
+export async function deleteLocation(
+  mapId: string,
+  segmentId: string,
+  locationId: string
+): Promise<void> {
+  await delJson<void>(`/storymaps/${mapId}/segments/${segmentId}/locations/${locationId}`);
+}
+
 // ================== TIMELINE TRANSITION APIs ==================
 
 export async function getTimelineTransitions(mapId: string): Promise<TimelineTransition[]> {
-  return await getJson<TimelineTransition[]>(`/timeline-transitions/${mapId}`);
+  return await getJson<TimelineTransition[]>(`/storymaps/${mapId}/timeline-transitions`);
 }
 
 export async function createTimelineTransition(
   mapId: string,
   data: CreateTransitionRequest
 ): Promise<TimelineTransition> {
-  return await postJson<CreateTransitionRequest, TimelineTransition>(`/timeline-transitions/${mapId}`, data);
+  return await postJson<CreateTransitionRequest, TimelineTransition>(`/storymaps/${mapId}/timeline-transitions`, data);
 }
 
 export async function generateTransition(
@@ -427,13 +490,13 @@ export async function generateTransition(
   toSegmentId: string
 ): Promise<TimelineTransition> {
   return await postJson<{ fromSegmentId: string; toSegmentId: string }, TimelineTransition>(
-    `/timeline-transitions/${mapId}/generate`,
+    `/storymaps/${mapId}/timeline-transitions/generate`,
     { fromSegmentId, toSegmentId }
   );
 }
 
 export async function deleteTimelineTransition(mapId: string, transitionId: string): Promise<void> {
-  await delJson<void>(`/timeline-transitions/${mapId}/${transitionId}`);
+  await delJson<void>(`/storymaps/${mapId}/timeline-transitions/${transitionId}`);
 }
 
 // ================== ANIMATED LAYER APIs ==================
