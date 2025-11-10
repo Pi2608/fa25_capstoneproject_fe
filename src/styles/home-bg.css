@@ -1,40 +1,142 @@
-.bg-scene{position:fixed;inset:0;z-index:-30;background:#0b0f0f;}
-.dark .bg-scene{
+.bg-scene {
+  position: fixed;
+  inset: 0;
+  z-index: -30;
+  background: #0b0f0f;
+}
+
+.dark .bg-scene {
   background:
-    radial-gradient(1200px 600px at 70% -10%, rgba(16,185,129,.22), transparent 60%),
-    radial-gradient(900px 480px at 0% 25%, rgba(59,130,246,.16), transparent 60%),
-    radial-gradient(700px 420px at 100% 60%, rgba(34,197,94,.12), transparent 60%),
+    radial-gradient(1200px 600px at 70% -10%, rgba(16, 185, 129, .22), transparent 60%),
+    radial-gradient(900px 480px at 0% 25%, rgba(59, 130, 246, .16), transparent 60%),
+    radial-gradient(700px 420px at 100% 60%, rgba(34, 197, 94, .12), transparent 60%),
     #0b0f0f;
 }
-html:not(.dark) .bg-scene{
+
+html:not(.dark) .bg-scene {
   background:
-    radial-gradient(1200px 600px at 70% -10%, rgba(16,185,129,.20), transparent 60%),
-    radial-gradient(900px 480px at 0% 25%, rgba(59,130,246,.10), transparent 60%),
-    linear-gradient(to bottom,#f8fafc,#f1f5f9 40%,#eef4f2 100%);
+    radial-gradient(1200px 600px at 70% -10%, rgba(16, 185, 129, .20), transparent 60%),
+    radial-gradient(900px 480px at 0% 25%, rgba(59, 130, 246, .10), transparent 60%),
+    linear-gradient(to bottom, #f8fafc, #f1f5f9 40%, #eef4f2 100%);
 }
 
-.mesh-blob{
-  position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);
-  width:76vmax;height:76vmax;border-radius:50%;
-  filter:blur(90px);opacity:.38;z-index:-20;pointer-events:none;
-  mix-blend-mode:screen;
+.mesh-blob {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 76vmax;
+  height: 76vmax;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: .38;
+  z-index: -20;
+  pointer-events: none;
+  mix-blend-mode: screen;
 }
-.blob-a{background:radial-gradient(circle at 35% 35%, rgba(16,185,129,.65), transparent 60%);animation:driftA 22s linear infinite;}
-.blob-b{background:radial-gradient(circle at 70% 65%, rgba(59,130,246,.55), transparent 55%);animation:driftB 28s linear infinite reverse;}
-.blob-c{background:radial-gradient(circle at 50% 50%, rgba(34,197,94,.45), transparent 60%);animation:driftC 26s ease-in-out infinite;}
 
-.vignette{position:fixed;inset:0;z-index:-10;pointer-events:none;box-shadow:inset 0 0 240px rgba(0,0,0,.6);}
-html:not(.dark) .vignette{box-shadow:inset 0 0 180px rgba(0,0,0,.10);}
+.blob-a {
+  background: radial-gradient(circle at 35% 35%, rgba(16, 185, 129, .65), transparent 60%);
+  animation: driftA 22s linear infinite;
+}
 
-.marquee{animation:marquee 24s linear infinite;}
-.marquee:hover{animation-play-state:paused;}
+.blob-b {
+  background: radial-gradient(circle at 70% 65%, rgba(59, 130, 246, .55), transparent 55%);
+  animation: driftB 28s linear infinite reverse;
+}
 
-@keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-@keyframes driftA{0%{transform:translate(-55%,-40%) scale(1)}33%{transform:translate(-30%,-30%) scale(1.06)}66%{transform:translate(-45%,-5%) scale(.94)}100%{transform:translate(-55%,-40%) scale(1)}}
-@keyframes driftB{0%{transform:translate(15%,-15%) scale(1)}33%{transform:translate(27%,10%) scale(1.08)}66%{transform:translate(-5%,25%) scale(.92)}100%{transform:translate(15%,-15%) scale(1)}}
-@keyframes driftC{0%{transform:translate(-10%,25%) scale(1)}50%{transform:translate(22%,18%) scale(1.06)}100%{transform:translate(-10%,25%) scale(1)}}
+.blob-c {
+  background: radial-gradient(circle at 50% 50%, rgba(34, 197, 94, .45), transparent 60%);
+  animation: driftC 26s ease-in-out infinite;
+}
 
-@media (prefers-reduced-motion:reduce){
-  .mesh-blob{animation:none!important}
-  .marquee{animation:none!important;transform:none!important}
+.vignette {
+  position: fixed;
+  inset: 0;
+  z-index: -10;
+  pointer-events: none;
+  box-shadow: inset 0 0 240px rgba(0, 0, 0, .6);
+}
+
+html:not(.dark) .vignette {
+  box-shadow: inset 0 0 180px rgba(0, 0, 0, .10);
+}
+
+.marquee {
+  animation: marquee 24s linear infinite;
+}
+
+.marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0)
+  }
+
+  100% {
+    transform: translateX(-50%)
+  }
+}
+
+@keyframes driftA {
+  0% {
+    transform: translate(-55%, -40%) scale(1)
+  }
+
+  33% {
+    transform: translate(-30%, -30%) scale(1.06)
+  }
+
+  66% {
+    transform: translate(-45%, -5%) scale(.94)
+  }
+
+  100% {
+    transform: translate(-55%, -40%) scale(1)
+  }
+}
+
+@keyframes driftB {
+  0% {
+    transform: translate(15%, -15%) scale(1)
+  }
+
+  33% {
+    transform: translate(27%, 10%) scale(1.08)
+  }
+
+  66% {
+    transform: translate(-5%, 25%) scale(.92)
+  }
+
+  100% {
+    transform: translate(15%, -15%) scale(1)
+  }
+}
+
+@keyframes driftC {
+  0% {
+    transform: translate(-10%, 25%) scale(1)
+  }
+
+  50% {
+    transform: translate(22%, 18%) scale(1.06)
+  }
+
+  100% {
+    transform: translate(-10%, 25%) scale(1)
+  }
+}
+
+@media (prefers-reduced-motion:reduce) {
+  .mesh-blob {
+    animation: none !important
+  }
+
+  .marquee {
+    animation: none !important;
+    transform: none !important
+  }
 }

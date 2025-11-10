@@ -7,14 +7,24 @@ import Image from "next/image";
 import { useAuth } from "@/contexts/AuthContext";
 import { Workspace } from "@/types/workspace";
 import { getOrganizationMaps } from "@/lib/api-maps";
-import { deleteOrganization, getOrganizationById, getOrganizationMembers, GetOrganizationMembersResDto, inviteMember, InviteMemberOrganizationReqDto, OrganizationDetailDto, removeMember, updateMemberRole } from "@/lib/api-organizations";
+import {
+  deleteOrganization,
+  getOrganizationById,
+  getOrganizationMembers,
+  GetOrganizationMembersResDto,
+  inviteMember,
+  InviteMemberOrganizationReqDto,
+  OrganizationDetailDto,
+  removeMember,
+  updateMemberRole,
+  bulkCreateStudents,
+  type BulkCreateStudentsRes,
+} from "@/lib/api-organizations";
 import { CurrentMembershipDto, getMyMembership } from "@/lib/api-membership";
 import { getProjectsByOrganization } from "@/lib/api-workspaces";
-import { bulkCreateStudents, type BulkCreateStudentsRes } from "@/lib/api-organizations";
 import ManageWorkspaces from "@/components/ManageWorkspaces";
 
 type MapRow = Awaited<ReturnType<typeof getOrganizationMaps>>[number];
-
 
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
@@ -28,6 +38,97 @@ function safeMessage(err: unknown): string {
   return "Yêu cầu thất bại";
 }
 
+type ApiErr = {
+  status?: number;
+  type?: string;
+  title?: string;
+  detail?: string;
+  message?: string;
+};
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null;
+}
+function pickStr(o: Record<string, unknown>, k: string): string | undefined {
+  const v = o[k];
+  return typeof v === "string" ? v : undefined;
+}
+function pickNum(o: Record<string, unknown>, k: string): number | undefined {
+  const v = o[k];
+  return typeof v === "number" ? v : undefined;
+}
+
+function parseApiError(err: unknown): ApiErr {
+  if (isRecord(err)) {
+    return {
+      status: pickNum(err, "status"),
+      type: pickStr(err, "type"),
+      title: pickStr(err, "title"),
+      detail: pickStr(err, "detail"),
+      message: pickStr(err, "message"),
+    };
+  }
+  if (typeof err === "string") {
+    try {
+      const parsed = JSON.parse(err);
+      if (isRecord(parsed)) {
+        return {
+          status: pickNum(parsed, "status"),
+          type: pickStr(parsed, "type"),
+          title: pickStr(parsed, "title"),
+          detail: pickStr(parsed, "detail"),
+          message: pickStr(parsed, "message"),
+        };
+      }
+    } catch {
+      return { message: err };
+    }
+  }
+  if (err instanceof Error) return { message: err.message };
+  return {};
+}
+
+function userMessage(err: unknown): string {
+  const e = parseApiError(err);
+  const code = String(e.type || e.title || "").toLowerCase();
+  const text = String(e.detail || e.message || "").toLowerCase();
+  const status = e.status ?? 0;
+
+  const quotaHit =
+    code.includes("userquotaexceeded") ||
+    code.includes("organization.userquotaexceeded") ||
+    text.includes("maximum user limit") ||
+    text.includes("max user") ||
+    text.includes("quota") ||
+    text.includes("limit") && text.includes("user");
+
+  if (quotaHit) {
+    return "Tổ chức đã đạt giới hạn thành viên của gói hiện tại. Hãy nâng cấp gói hoặc xoá bớt thành viên để tiếp tục mời.";
+  }
+
+  if (status === 409 || code.includes("conflict") || text.includes("already") && text.includes("member")) {
+    return "Email này đã được mời hoặc đã là thành viên của tổ chức.";
+  }
+  if (status === 403 || code.includes("forbidden")) {
+    return "Bạn không có quyền thực hiện thao tác này. Hãy liên hệ Owner/Admin.";
+  }
+  if (status === 404) {
+    return "Không tìm thấy tổ chức hoặc lời mời. Vui lòng tải lại trang.";
+  }
+  if (status === 400) {
+    return "Dữ liệu không hợp lệ. Vui lòng kiểm tra email và thử lại.";
+  }
+  if (status === 429) {
+    return "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
+  }
+  if (status >= 500) {
+    return "Máy chủ đang gặp sự cố. Vui lòng thử lại sau.";
+  }
+
+  if (e.detail && !/stack|trace|exception/i.test(e.detail)) return e.detail;
+  if (e.message && !/stack|trace|exception/i.test(e.message)) return e.message;
+  return "Không thể thực hiện yêu cầu. Vui lòng thử lại.";
+}
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "lastViewed" | "name" | "author";
@@ -60,7 +161,6 @@ function asMemberArray(x: unknown): MemberLike[] {
 export default function OrgDetailPage() {
   const p = useParams<{ orgId: string }>();
   const orgId = p?.orgId ?? "";
-
   const router = useRouter();
 
   const [org, setOrg] = useState<OrganizationDetailDto | null>(null);
@@ -153,13 +253,16 @@ export default function OrgDetailPage() {
   const onChangeRole = useCallback(
     async (memberId?: string | null, currentRole?: string | null, newRole?: string) => {
       if (!memberId || !newRole || newRole === currentRole) return;
-      if (!isOwner) { setInviteMsg("Bạn không có quyền đổi quyền. Hãy hỏi Owner/Admin."); return; }
+      if (!isOwner) {
+        setInviteMsg("Bạn không có quyền đổi vai trò. Hãy liên hệ Owner/Admin.");
+        return;
+      }
 
       try {
         setRoleBusyId(memberId);
         await updateMemberRole({ orgId, memberId, newRole });
         await refreshMembers();
-        setInviteMsg("Đã cập nhật quyền thành viên.");
+        setInviteMsg("Đã cập nhật vai trò thành viên.");
       } catch (e) {
         setInviteMsg(safeMessage(e));
       } finally {
@@ -171,8 +274,14 @@ export default function OrgDetailPage() {
 
   const askRemoveMember = useCallback(
     (memberId?: string | null, label?: string | null) => {
-      if (!memberId) { setInviteMsg("Không xác định được thành viên để xoá."); return; }
-      if (!isOwner) { setInviteMsg("Bạn không có quyền xoá thành viên. Hãy hỏi Owner/Admin."); return; }
+      if (!memberId) {
+        setInviteMsg("Không xác định được thành viên để xoá.");
+        return;
+      }
+      if (!isOwner) {
+        setInviteMsg("Bạn không có quyền xoá thành viên. Hãy liên hệ Owner/Admin.");
+        return;
+      }
       setRemoveDialog({ open: true, memberId, label });
     },
     [isOwner]
@@ -224,25 +333,22 @@ export default function OrgDetailPage() {
     };
   }, [orgId]);
 
-  // Load membership data
   useEffect(() => {
     let alive = true;
     async function loadMembership() {
       if (!orgId) return;
-
       try {
         setLoadingMembership(true);
         const membershipData = await getMyMembership(orgId);
         if (!alive) return;
         setMembership(membershipData);
-      } catch (error) {
+      } catch {
         if (!alive) return;
         setMembership(null);
       } finally {
         if (alive) setLoadingMembership(false);
       }
     }
-
     void loadMembership();
     return () => {
       alive = false;
@@ -278,7 +384,7 @@ export default function OrgDetailPage() {
       setInviteInput("");
       await refreshMembers();
     } catch (e) {
-      setInviteMsg(safeMessage(e));
+      setInviteMsg(userMessage(e));
     } finally {
       setInviteBusy(false);
     }
@@ -287,7 +393,7 @@ export default function OrgDetailPage() {
   const onDeleteOrg = useCallback(async () => {
     if (!org) return;
     if (!isOwner) {
-      setDeleteErr("Bạn không có quyền xóa tổ chức.");
+      setDeleteErr("Bạn không có quyền xoá workspace.");
       return;
     }
     setDeleteBusy(true);
@@ -306,10 +412,22 @@ export default function OrgDetailPage() {
   }, [org, router, isOwner]);
 
   const onImportStudents = useCallback(async () => {
-    if (!isAdminOrOwner) { setImportMsg("Chỉ Owner mới được dùng chức năng này."); return; }
-    if (!planAllows) { setImportMsg("Tính năng yêu cầu gói có planId = 2 hoặc 3."); return; }
-    if (!excelFile) { setImportMsg("Hãy chọn file Excel (.xlsx)."); return; }
-    if (!domain.trim()) { setImportMsg("Hãy nhập domain (ví dụ: se1739.edu)."); return; }
+    if (!isAdminOrOwner) {
+      setImportMsg("Chỉ Owner/Admin được dùng chức năng này.");
+      return;
+    }
+    if (!planAllows) {
+      setImportMsg("Tính năng yêu cầu gói có planId = 2 hoặc 3.");
+      return;
+    }
+    if (!excelFile) {
+      setImportMsg("Hãy chọn file Excel (.xlsx).");
+      return;
+    }
+    if (!domain.trim()) {
+      setImportMsg("Hãy nhập domain (ví dụ: se1739.edu).");
+      return;
+    }
 
     try {
       setImportBusy(true);
@@ -332,9 +450,9 @@ export default function OrgDetailPage() {
     if (!importResult) return;
     const rows = [
       ["email", "fullName", "password", "class"],
-      ...importResult.createdAccounts.map(a => [a.email, a.fullName, a.password, a.class]),
+      ...importResult.createdAccounts.map((a) => [a.email, a.fullName, a.password, a.class]),
     ];
-    const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const csv = rows.map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -349,10 +467,10 @@ export default function OrgDetailPage() {
   const copyCreatedList = async () => {
     if (!importResult) return;
     const text = importResult.createdAccounts
-      .map(a => `${a.email}\t${a.password}\t${a.fullName}\t${a.class}`)
+      .map((a) => `${a.email}\t${a.password}\t${a.fullName}\t${a.class}`)
       .join("\n");
     await navigator.clipboard.writeText(text);
-    setImportMsg("Đã copy danh sách tài khoản vào clipboard.");
+    setImportMsg("Đã sao chép danh sách tài khoản vào clipboard.");
   };
 
   const onRemoveMember = useCallback(
@@ -362,11 +480,11 @@ export default function OrgDetailPage() {
         return;
       }
       if (!isOwner) {
-        setInviteMsg("Bạn không có quyền xoá thành viên. Hãy hỏi Owner/Admin.");
+        setInviteMsg("Bạn không có quyền xoá thành viên. Hãy liên hệ Owner/Admin.");
         return;
       }
 
-      if (!confirm("Remove this member from the project?")) return;
+      if (!confirm("Xoá thành viên này khỏi workspace?")) return;
 
       try {
         setRemoveBusyId(memberId);
@@ -386,7 +504,9 @@ export default function OrgDetailPage() {
   const requireOwner = useCallback(
     (action: () => void) => {
       if (!isOwner) {
-        setPermMsg("You have limited access in this workspace. To manage workspace settings, ask your admin for full access.");
+        setPermMsg(
+          "Bạn đang có quyền hạn chế trong workspace này. Để quản lý cài đặt workspace, hãy liên hệ quản trị viên để được cấp quyền đầy đủ."
+        );
         return;
       }
       setPermMsg(null);
@@ -427,7 +547,7 @@ export default function OrgDetailPage() {
         <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           {permMsg}{" "}
           <button onClick={() => setPermMsg(null)} className="ml-2 rounded bg-amber-500/20 px-2 py-[2px] text-amber-100">
-            Dismiss
+            Đóng
           </button>
         </div>
       )}
@@ -442,47 +562,56 @@ export default function OrgDetailPage() {
 
         <div className="flex items-center gap-2 relative">
           <div className="relative">
-            <button onClick={() => setViewOpen((v) => !v)} className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm">
-              View ▾
+            <button
+              onClick={() => setViewOpen((v) => !v)}
+              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+            >
+              Hiển thị ▾
             </button>
             {viewOpen && (
-              <div className="absolute right-0 mt-2 w-64 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl p-2" onMouseLeave={() => setViewOpen(false)}>
-                <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Show items as</div>
+              <div
+                className="absolute right-0 mt-2 w-64 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl p-2"
+                onMouseLeave={() => setViewOpen(false)}
+              >
+                <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Kiểu hiển thị</div>
                 {(["grid", "list"] as ViewMode[]).map((m) => (
                   <button
                     key={m}
-                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${viewMode === m ? "text-emerald-300" : "text-zinc-200"}`}
+                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${viewMode === m ? "text-emerald-300" : "text-zinc-200"
+                      }`}
                     onClick={() => setViewMode(m)}
                   >
-                    {m === "grid" ? "Grid" : "List"}
+                    {m === "grid" ? "Lưới" : "Danh sách"}
                   </button>
                 ))}
-                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Sort by</div>
+                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Sắp xếp theo</div>
                 {(
                   [
-                    ["recentlyModified", "Recently modified"],
-                    ["dateCreated", "Date created"],
-                    ["lastViewed", "Last viewed"],
-                    ["name", "Name"],
-                    ["author", "Author"],
+                    ["recentlyModified", "Chỉnh sửa gần đây"],
+                    ["dateCreated", "Ngày tạo"],
+                    ["lastViewed", "Xem gần đây"],
+                    ["name", "Tên"],
+                    ["author", "Tác giả"],
                   ] as const
                 ).map(([k, label]) => (
                   <button
                     key={k}
-                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${sortKey === k ? "text-emerald-300" : "text-zinc-200"}`}
+                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${sortKey === k ? "text-emerald-300" : "text-zinc-200"
+                      }`}
                     onClick={() => setSortKey(k)}
                   >
                     {label}
                   </button>
                 ))}
-                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Order</div>
+                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Thứ tự</div>
                 {(["desc", "asc"] as SortOrder[]).map((o) => (
                   <button
                     key={o}
-                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${sortOrder === o ? "text-emerald-300" : "text-zinc-200"}`}
+                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${sortOrder === o ? "text-emerald-300" : "text-zinc-200"
+                      }`}
                     onClick={() => setSortOrder(o)}
                   >
-                    {o === "desc" ? "Descending" : "Ascending"}
+                    {o === "desc" ? "Giảm dần" : "Tăng dần"}
                   </button>
                 ))}
               </div>
@@ -490,41 +619,32 @@ export default function OrgDetailPage() {
           </div>
 
           <button
-            onClick={() => (isOwner ? setShareOpen(true) : setPermMsg("Chỉ Owner mới dùng Share"))}
+            onClick={() => (isOwner ? setShareOpen(true) : setPermMsg("Chỉ Owner mới dùng Chia sẻ"))}
             disabled={!isOwner}
             aria-disabled={!isOwner}
             className={`px-3 py-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 text-sm
               ${!isOwner ? "opacity-50 cursor-not-allowed text-emerald-300/60" : "text-emerald-300 hover:bg-emerald-500/20"}`}
           >
-            Share
+            Chia sẻ
           </button>
-
-          {/* <button
-            onClick={() => router.push(`/profile/workspaces`)}
-            className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10"
-            title="Manage workspaces"
-          >
-            Workspaces
-          </button> */}
 
           {isOwner ? (
             <button
               onClick={handleWorkspaceSettings}
               className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10"
-              title="Workspace settings"
+              title="Cài đặt workspace"
             >
-              Settings
+              Cài đặt
             </button>
           ) : (
             <button
               type="button"
               disabled
               aria-disabled
-              title="Owner only"
-              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm
-               opacity-60 cursor-not-allowed"
+              title="Chỉ Owner"
+              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm opacity-60 cursor-not-allowed"
             >
-              Settings
+              Cài đặt
             </button>
           )}
 
@@ -534,20 +654,24 @@ export default function OrgDetailPage() {
               className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
               aria-haspopup="menu"
               aria-expanded={moreOpen}
-              title="More"
+              title="Thêm"
             >
               ⋯
             </button>
             {moreOpen && (
-              <div role="menu" className="absolute right-0 mt-2 w-60 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl overflow-hidden" onMouseLeave={() => setMoreOpen(false)}>
+              <div
+                role="menu"
+                className="absolute right-0 mt-2 w-60 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl overflow-hidden"
+                onMouseLeave={() => setMoreOpen(false)}
+              >
                 <button onClick={copyWorkspaceUrl} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
-                  Copy workspace URL
+                  Sao chép URL workspace
                 </button>
                 <button onClick={copyWorkspaceId} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
-                  Copy workspace ID for API
+                  Sao chép ID workspace (API)
                 </button>
                 <button onClick={handleWorkspaceAnalytics} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
-                  View Analytics
+                  Xem phân tích
                 </button>
 
                 {isOwner && (
@@ -559,7 +683,7 @@ export default function OrgDetailPage() {
                     className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-red-300"
                     role="menuitem"
                   >
-                    Delete workspace…
+                    Xoá workspace…
                   </button>
                 )}
               </div>
@@ -571,7 +695,7 @@ export default function OrgDetailPage() {
       {/* Workspaces Section */}
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Workspaces</h2>
+          <h2 className="text-lg font-semibold">Workspace</h2>
           <div className="flex items-center gap-2">
             <ManageWorkspaces orgId={orgId} canManage={isAdminOrOwner} />
 
@@ -581,35 +705,21 @@ export default function OrgDetailPage() {
                   onClick={() => setImportOpen(true)}
                   disabled={disabledImport}
                   aria-disabled={disabledImport}
-                  className={`px-3 py-2 rounded-lg text-sm transition
-          ${disabledImport
-                      ? "border border-white/10 bg-white/5 text-zinc-300 opacity-70 cursor-not-allowed"
-                      : "border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
+                  className={`px-3 py-2 rounded-lg text-sm transition ${disabledImport
+                    ? "border border-white/10 bg-white/5 text-zinc-300 opacity-70 cursor-not-allowed"
+                    : "border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
                     }`}
                 >
-                  Import Students (.xlsx)
+                  Nhập danh sách sinh viên (.xlsx)
                 </button>
 
                 {disabledImport && (
                   <span
                     role="tooltip"
-                    className="
-        pointer-events-none absolute left-1/2 -translate-x-1/2
-        -bottom-2 translate-y-full opacity-0
-        group-hover:opacity-100 group-hover:translate-y-[calc(100%+6px)]
-        transition-all duration-150 ease-out z-50
-        whitespace-nowrap rounded-md border border-white/10
-        bg-zinc-900/95 px-3 py-1.5 text-xs text-zinc-100 shadow-lg
-      "
+                    className="pointer-events-none absolute left-1/2 -translate-x-1/2 -bottom-2 translate-y-full opacity-0 group-hover:opacity-100 group-hover:translate-y-[calc(100%+6px)] transition-all duration-150 ease-out z-50 whitespace-nowrap rounded-md border border-white/10 bg-zinc-900/95 px-3 py-1.5 text-xs text-zinc-100 shadow-lg"
                   >
                     {tooltipText}
-                    <span
-                      className="
-          absolute -top-1 left-1/2 -translate-x-1/2
-          w-2 h-2 rotate-45
-          bg-zinc-900/95 border-l border-t border-white/10
-        "
-                    />
+                    <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 bg-zinc-900/95 border-l border-t border-white/10" />
                   </span>
                 )}
               </span>
@@ -619,7 +729,7 @@ export default function OrgDetailPage() {
 
         {workspaces.length === 0 && (
           <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
-            <p className="text-zinc-400 mb-4">No workspaces yet. Create your first workspace to organize your projects.</p>
+            <p className="text-zinc-400 mb-4">Chưa có workspace nào. Tạo workspace đầu tiên để tổ chức dự án.</p>
             <button
               onClick={() => router.push(`/profile/workspaces`)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
@@ -627,7 +737,7 @@ export default function OrgDetailPage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Create Workspace
+              Tạo workspace
             </button>
           </div>
         )}
@@ -647,26 +757,21 @@ export default function OrgDetailPage() {
                 </div>
                 <div className="min-w-0">
                   <div className="truncate font-semibold">{workspace.workspaceName}</div>
-                  <div className="text-xs text-zinc-400 truncate">
-                    {workspace.description ?? "No description"}
-                  </div>
+                  <div className="text-xs text-zinc-400 truncate">{workspace.description ?? "Không có mô tả"}</div>
                 </div>
               </div>
             ))}
             {workspaces.length > 4 && (
-              <div
-                className="group rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4 cursor-pointer"
-                onClick={() => router.push(`/profile/workspaces`)}
-              >
+              <div className="group rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4 cursor-pointer" onClick={() => router.push(`/profile/workspaces`)}>
                 <div className="h-24 w-full rounded-lg bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/5 mb-3 grid place-items-center text-zinc-400 text-xs">
                   <div className="text-center">
                     <div className="text-lg font-bold">+{workspaces.length - 4}</div>
-                    <div className="text-xs">more</div>
+                    <div className="text-xs">thêm</div>
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <div className="truncate font-semibold">View All Workspaces</div>
-                  <div className="text-xs text-zinc-400">See all {workspaces.length} workspaces</div>
+                  <div className="truncate font-semibold">Xem tất cả workspace</div>
+                  <div className="text-xs text-zinc-400">Xem toàn bộ {workspaces.length} workspace</div>
                 </div>
               </div>
             )}
@@ -677,25 +782,25 @@ export default function OrgDetailPage() {
       {/* Workspace Overview */}
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Workspace Overview</h2>
+          <h2 className="text-lg font-semibold">Tổng quan workspace</h2>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
             <div className="text-2xl font-bold text-emerald-300">{workspaces.length}</div>
-            <div className="text-sm text-zinc-400">Workspaces</div>
+            <div className="text-sm text-zinc-400">Workspace</div>
           </div>
           <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
             <div className="text-2xl font-bold text-emerald-300">{memberRows.length}</div>
-            <div className="text-sm text-zinc-400">Members</div>
+            <div className="text-sm text-zinc-400">Thành viên</div>
           </div>
           <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
             <div className="text-2xl font-bold text-emerald-300">{membership?.planName || "Basic"}</div>
-            <div className="text-sm text-zinc-400">Plan</div>
+            <div className="text-sm text-zinc-400">Gói</div>
           </div>
           <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
             <div className="text-2xl font-bold text-emerald-300">—</div>
-            <div className="text-sm text-zinc-400">Actions</div>
+            <div className="text-sm text-zinc-400">Hành động</div>
           </div>
         </div>
       </section>
@@ -703,19 +808,19 @@ export default function OrgDetailPage() {
       {shareOpen && isOwner && (
         <div className="absolute top-12 right-0 w-[28rem] rounded-xl border border-white/10 bg-zinc-900/95 shadow-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-sm font-medium text-zinc-200">Share workspace</div>
-            <button className="text-zinc-500 hover:text-white" onClick={() => setShareOpen(false)} aria-label="Close share">
+            <div className="text-sm font-medium text-zinc-200">Chia sẻ workspace</div>
+            <button className="text-zinc-500 hover:text-white" onClick={() => setShareOpen(false)} aria-label="Đóng chia sẻ">
               ✕
             </button>
           </div>
           <div className="mb-3">
-            <label className="block text-xs text-zinc-400 mb-1">Emails</label>
+            <label className="block text-xs text-zinc-400 mb-1">Email</label>
             <div className="flex gap-2">
               <input
                 type="text"
                 value={inviteInput}
                 onChange={(e) => setInviteInput(e.target.value)}
-                placeholder="Add collaborators (you can paste multiple emails)"
+                placeholder="Thêm cộng tác viên"
                 className="flex-1 rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !inviteBusy) void onInvite();
@@ -727,7 +832,7 @@ export default function OrgDetailPage() {
                 disabled={inviteBusy}
                 className="px-3 py-2 rounded-md bg-emerald-500 text-zinc-900 font-semibold text-sm hover:bg-emerald-400 disabled:opacity-60"
               >
-                {inviteBusy ? "Inviting..." : "Invite"}
+                {inviteBusy ? "Đang mời..." : "Mời"}
               </button>
             </div>
             {inviteMsg && <div className="mt-2 text-xs text-zinc-300">{inviteMsg}</div>}
@@ -750,7 +855,7 @@ export default function OrgDetailPage() {
                       type="button"
                       onClick={() => setExpandedMemberId(expanded ? null : key)}
                       className="ml-3 shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
-                      title="Role / Remove"
+                      title="Vai trò / Xoá"
                     >
                       {roleLabel} <span aria-hidden>▾</span>
                     </button>
@@ -759,7 +864,7 @@ export default function OrgDetailPage() {
                   {expanded && (
                     <div className="mb-2 rounded-md border border-white/10 bg-zinc-900/70 p-2">
                       <div className="flex items-center gap-2">
-                        <label className="text-xs text-zinc-400">Role</label>
+                        <label className="text-xs text-zinc-400">Vai trò</label>
                         <select
                           className="flex-1 rounded-md bg-zinc-800 border border-white/10 px-2 py-1 text-xs text-zinc-100"
                           value={roleLabel}
@@ -767,7 +872,9 @@ export default function OrgDetailPage() {
                           onChange={(e) => onChangeRole(m.memberId ?? null, roleLabel, e.target.value)}
                         >
                           {ROLE_OPTIONS.map((r) => (
-                            <option key={r} value={r}>{r}</option>
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
                           ))}
                         </select>
 
@@ -776,9 +883,9 @@ export default function OrgDetailPage() {
                           onClick={() => askRemoveMember(m.memberId ?? null, m.fullName || m.email || "Người dùng")}
                           disabled={removeBusyId === m.memberId}
                           className="shrink-0 text-xs px-2 py-1 rounded border border-red-500/30 text-red-300 hover:bg-red-500/10 disabled:opacity-60"
-                          title="Remove member"
+                          title="Xoá thành viên"
                         >
-                          {removeBusyId === m.memberId ? "Removing…" : "Remove"}
+                          {removeBusyId === m.memberId ? "Đang xoá…" : "Xoá"}
                         </button>
                       </div>
                     </div>
@@ -787,19 +894,17 @@ export default function OrgDetailPage() {
               );
             })}
 
-            {memberRows.length === 0 && (
-              <div className="py-6 text-center text-zinc-400">No members yet</div>
-            )}
+            {memberRows.length === 0 && <div className="py-6 text-center text-zinc-400">Chưa có thành viên</div>}
           </div>
           <div className="mt-3 flex items-center justify-between text-xs text-zinc-400">
-            <span>Only invited users see this workspace</span>
+            <span>Chỉ người được mời mới xem được workspace này</span>
             <button
               className="text-emerald-300 hover:underline"
               onClick={() => {
                 if (typeof window !== "undefined") void navigator.clipboard.writeText(window.location.href);
               }}
             >
-              Copy link
+              Sao chép liên kết
             </button>
           </div>
         </div>
@@ -814,10 +919,7 @@ export default function OrgDetailPage() {
               Hành động này sẽ gỡ quyền truy cập của họ vào tất cả dự án trong workspace.
             </p>
             <div className="mt-5 flex justify-end gap-2">
-              <button
-                className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
-                onClick={() => setRemoveDialog({ open: false })}
-              >
+              <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm" onClick={() => setRemoveDialog({ open: false })}>
                 Huỷ
               </button>
               <button
@@ -833,35 +935,25 @@ export default function OrgDetailPage() {
       )}
 
       {importOpen && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-black/60"
-          role="dialog"
-          aria-modal="true"
-        >
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60" role="dialog" aria-modal="true">
           <div className="w-[40rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-white">Import Students (.xlsx)</h2>
-              <button
-                onClick={() => setImportOpen(false)}
-                className="text-zinc-400 hover:text-white"
-                aria-label="Close"
-              >
+              <h2 className="text-lg font-semibold text-white">Nhập danh sách sinh viên (.xlsx)</h2>
+              <button onClick={() => setImportOpen(false)} className="text-zinc-400 hover:text-white" aria-label="Đóng">
                 ✕
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs text-zinc-400 mb-1">Excel file (.xlsx)</label>
+                <label className="block text-xs text-zinc-400 mb-1">File Excel (.xlsx)</label>
                 <input
                   type="file"
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   onChange={(e) => setExcelFile(e.target.files?.[0] ?? null)}
                   className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100 file:mr-3 file:rounded file:border-0 file:bg-emerald-600 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-zinc-900 hover:file:bg-emerald-500"
                 />
-                {excelFile && (
-                  <div className="mt-1 text-xs text-zinc-400">Selected: {excelFile.name}</div>
-                )}
+                {excelFile && <div className="mt-1 text-xs text-zinc-400">Đã chọn: {excelFile.name}</div>}
               </div>
 
               <div>
@@ -875,33 +967,21 @@ export default function OrgDetailPage() {
                 />
               </div>
 
-              {importMsg && (
-                <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200">
-                  {importMsg}
-                </div>
-              )}
+              {importMsg && <div className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-200">{importMsg}</div>}
             </div>
 
-            {/* Kết quả import + nút tải/copy — chỉ hiện khi importResult có dữ liệu */}
             {importResult && importResult.createdAccounts.length > 0 && (
               <div className="mt-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-zinc-200">
-                    <b>{importResult.totalCreated}</b> tài khoản mới,
-                    bỏ qua <b>{importResult.totalSkipped}</b>.
+                    <b>{importResult.totalCreated}</b> tài khoản mới, bỏ qua <b>{importResult.totalSkipped}</b>.
                   </div>
                   <div className="flex gap-2">
-                    <button
-                      onClick={copyCreatedList}
-                      className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
-                    >
-                      Copy
+                    <button onClick={copyCreatedList} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm">
+                      Sao chép
                     </button>
-                    <button
-                      onClick={downloadCreatedCsv}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
-                    >
-                      Download CSV
+                    <button onClick={downloadCreatedCsv} className="px-3 py-1.5 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400">
+                      Tải CSV
                     </button>
                   </div>
                 </div>
@@ -917,7 +997,7 @@ export default function OrgDetailPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {importResult.createdAccounts.map(acc => (
+                      {importResult.createdAccounts.map((acc) => (
                         <tr key={acc.userId} className="border-t border-white/5">
                           <td className="px-3 py-2 text-zinc-100">{acc.email}</td>
                           <td className="px-3 py-2 text-zinc-100">{acc.fullName}</td>
@@ -932,11 +1012,7 @@ export default function OrgDetailPage() {
             )}
 
             <div className="mt-5 flex justify-end gap-2">
-              <button
-                className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
-                onClick={() => setImportOpen(false)}
-                disabled={importBusy}
-              >
+              <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm" onClick={() => setImportOpen(false)} disabled={importBusy}>
                 Huỷ
               </button>
               <button
@@ -954,9 +1030,9 @@ export default function OrgDetailPage() {
       {isOwner && deleteOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
-            <h2 className="text-lg font-semibold text-white">Delete workspace</h2>
+            <h2 className="text-lg font-semibold text-white">Xoá workspace</h2>
             <p className="text-sm text-zinc-300 mt-2">
-              Bạn sắp xóa workspace <span className="font-semibold">{title}</span>. Hành động này không thể hoàn tác. Nhập{" "}
+              Bạn sắp xoá workspace <span className="font-semibold">{title}</span>. Hành động này không thể hoàn tác. Nhập{" "}
               <span className="font-mono">{title}</span> để xác nhận.
             </p>
             <input
@@ -976,14 +1052,14 @@ export default function OrgDetailPage() {
                   setDeleteConfirm("");
                 }}
               >
-                Hủy
+                Huỷ
               </button>
               <button
                 disabled={deleteBusy || deleteConfirm !== title}
                 className="px-3 py-2 rounded-lg bg-red-500 text-zinc-900 text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
                 onClick={() => void onDeleteOrg()}
               >
-                {deleteBusy ? "Đang xóa..." : "Xóa workspace"}
+                {deleteBusy ? "Đang xoá..." : "Xoá workspace"}
               </button>
             </div>
           </div>

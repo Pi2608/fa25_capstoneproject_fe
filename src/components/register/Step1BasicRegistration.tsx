@@ -1,7 +1,9 @@
+// src/components/register/Step1BasicRegistration.tsx
 "use client";
 
 import { useMemo } from "react";
 import { RegisterStepProps } from "@/types/register";
+import { useI18n } from "@/i18n/I18nProvider";
 
 export default function Step1BasicRegistration({
   formData,
@@ -11,6 +13,8 @@ export default function Step1BasicRegistration({
   onSetErrors,
   onSubmit
 }: RegisterStepProps) {
+  const { t } = useI18n();
+
   const passScore = useMemo<number>(() => {
     let s = 0;
     if (formData.password.length >= 8) s++;
@@ -21,28 +25,35 @@ export default function Step1BasicRegistration({
     return Math.min(s, 4);
   }, [formData.password]);
 
-  const scoreLabel = ["Very weak", "Weak", "Fair", "Strong", "Very strong"][passScore];
+  const scoreLabel =
+    [
+      t("register", "passVeryWeak"),
+      t("register", "passWeak"),
+      t("register", "passFair"),
+      t("register", "passStrong"),
+      t("register", "passVeryStrong"),
+    ][passScore] ?? "";
 
   return (
     <form onSubmit={onSubmit} className="space-y-6" noValidate>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Full name *
+            {t("register", "fullNameLabel")} *
           </label>
           <input
             className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-colors ${
-              errors.name 
-                ? "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20" 
+              errors.name
+                ? "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20"
                 : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
             }`}
             type="text"
             value={formData.name}
-            onChange={(e) => { 
-              onUpdate({ name: e.target.value }); 
-              if (errors.name) onSetErrors({ name: undefined }); 
+            onChange={(e) => {
+              onUpdate({ name: e.target.value });
+              if (errors.name) onSetErrors({ name: undefined });
             }}
-            placeholder="John Doe"
+            placeholder={t("register", "fullNamePlaceholder")}
             aria-invalid={!!errors.name}
             autoComplete="name"
           />
@@ -51,21 +62,21 @@ export default function Step1BasicRegistration({
 
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Email *
+            {t("auth", "emailLabel")} *
           </label>
           <input
             className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-colors ${
-              errors.email 
-                ? "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20" 
+              errors.email
+                ? "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20"
                 : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
             }`}
             type="email"
             value={formData.email}
-            onChange={(e) => { 
-              onUpdate({ email: e.target.value }); 
-              if (errors.email) onSetErrors({ email: undefined }); 
+            onChange={(e) => {
+              onUpdate({ email: e.target.value });
+              if (errors.email) onSetErrors({ email: undefined });
             }}
-            placeholder="you@example.com"
+            placeholder={t("auth", "emailPlaceholder")}
             aria-invalid={!!errors.email}
             autoComplete="email"
           />
@@ -75,21 +86,21 @@ export default function Step1BasicRegistration({
 
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Phone (optional)
+          {t("register", "phoneLabel")}
         </label>
         <input
           className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-colors ${
-            errors.phone 
-              ? "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20" 
+            errors.phone
+              ? "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20"
               : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
           }`}
           type="tel"
           value={formData.phone}
-          onChange={(e) => { 
-            onUpdate({ phone: e.target.value.replace(/[^\d]/g, "") }); 
-            if (errors.phone) onSetErrors({ phone: undefined }); 
+          onChange={(e) => {
+            onUpdate({ phone: e.target.value.replace(/[^\d]/g, "") });
+            if (errors.phone) onSetErrors({ phone: undefined });
           }}
-          placeholder="0912345678"
+          placeholder={t("register", "phonePlaceholder")}
           aria-invalid={!!errors.phone}
           autoComplete="tel"
           inputMode="tel"
@@ -98,25 +109,24 @@ export default function Step1BasicRegistration({
         {errors.phone && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errors.phone}</p>}
       </div>
 
-
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Password
+          {t("auth", "passwordLabel")}
         </label>
         <div className="relative">
           <input
             className={`w-full px-4 py-3 pr-12 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-colors ${
-              errors.password 
-                ? "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20" 
+              errors.password
+                ? "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20"
                 : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
             }`}
             type={formData.showPass ? "text" : "password"}
             value={formData.password}
-            onChange={(e) => { 
-              onUpdate({ password: e.target.value }); 
-              if (errors.password) onSetErrors({ password: undefined }); 
+            onChange={(e) => {
+              onUpdate({ password: e.target.value });
+              if (errors.password) onSetErrors({ password: undefined });
             }}
-            placeholder="At least 8 characters"
+            placeholder={t("auth", "passwordPlaceholder")}
             aria-invalid={!!errors.password}
             autoComplete="new-password"
           />
@@ -124,9 +134,9 @@ export default function Step1BasicRegistration({
             type="button"
             className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
             onClick={() => onUpdate({ showPass: !formData.showPass })}
-            aria-label={formData.showPass ? "Hide password" : "Show password"}
+            aria-label={formData.showPass ? t("register", "hidePassword") : t("register", "showPassword")}
           >
-            {formData.showPass ? "Hide" : "Show"}
+            {formData.showPass ? t("register", "hidePassword") : t("register", "showPassword")}
           </button>
         </div>
         <div className="flex items-center gap-2 mt-2" aria-hidden="true">
@@ -141,21 +151,21 @@ export default function Step1BasicRegistration({
 
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Confirm password
+          {t("register", "confirmPasswordLabel")}
         </label>
         <input
           className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-colors ${
-            errors.confirm 
-              ? "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20" 
+            errors.confirm
+              ? "border-red-300 bg-red-50 dark:border-red-600 dark:bg-red-900/20"
               : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800"
           }`}
           type="password"
           value={formData.confirm}
-          onChange={(e) => { 
-            onUpdate({ confirm: e.target.value }); 
-            if (errors.confirm) onSetErrors({ confirm: undefined }); 
+          onChange={(e) => {
+            onUpdate({ confirm: e.target.value });
+            if (errors.confirm) onSetErrors({ confirm: undefined });
           }}
-          placeholder="Re-enter your password"
+          placeholder={t("register", "confirmPasswordPlaceholder")}
           aria-invalid={!!errors.confirm}
           autoComplete="new-password"
         />
@@ -166,24 +176,38 @@ export default function Step1BasicRegistration({
         <input
           type="checkbox"
           checked={formData.agree}
-          onChange={(e) => { 
-            onUpdate({ agree: e.target.checked }); 
-            if (errors.agree) onSetErrors({ agree: undefined }); 
+          onChange={(e) => {
+            onUpdate({ agree: e.target.checked });
+            if (errors.agree) onSetErrors({ agree: undefined });
           }}
           className="mt-1 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
         />
         <span className="text-sm text-gray-600 dark:text-gray-300">
-          I agree to the <a className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400" href="/terms">Terms</a> and <a className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400" href="/privacy">Privacy Policy</a>.
+          {t("register", "agreePrefix")}{" "}
+          <a className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400" href="/terms">
+            {t("footer", "terms")}
+          </a>{" "}
+          {t("register", "and")}{" "}
+          <a className="text-emerald-600 hover:text-emerald-500 dark:text-emerald-400" href="/privacy">
+            {t("footer", "privacy")}
+          </a>.
         </span>
       </div>
       {errors.agree && <p className="text-sm text-red-600 dark:text-red-400">{errors.agree}</p>}
 
-      <button 
+      <button
         className="w-full bg-emerald-500 text-white py-3 px-4 rounded-lg font-medium hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        type="submit" 
-        disabled={loading || !formData.name || !formData.email || !formData.password || !formData.confirm || !formData.agree}
+        type="submit"
+        disabled={
+          loading ||
+          !formData.name ||
+          !formData.email ||
+          !formData.password ||
+          !formData.confirm ||
+          !formData.agree
+        }
       >
-        {loading ? "Sending…" : "Create account"}
+        {loading ? t("register", "creating") : t("register", "createAccount")}
       </button>
     </form>
   );

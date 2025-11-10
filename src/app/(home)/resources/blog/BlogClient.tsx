@@ -47,23 +47,23 @@ type Post = {
 };
 
 const POSTS: Post[] = [
-  { slug: "story-maps-hello", title: "Hello, Story Maps: turn lessons into easy narratives", excerpt: "A few segments, a couple of photos, and your places come together as a story learners can follow.", date: "2025-09-01", readMins: 4, category: "Product", tags: ["Story Maps", "Templates"], featured: true },
-  { slug: "style-geojson-better", title: "Make your GeoJSON shine with simple styling", excerpt: "Color, stroke, order. Tiny tweaks, big readability gains.", date: "2025-08-21", readMins: 6, category: "Tutorial", tags: ["Layers", "Styling"] },
-  { slug: "district-03-templates", title: "Story: District 03 cut prep time with shared templates", excerpt: "A lightweight library helped new teachers get going on day one.", date: "2025-08-10", readMins: 5, category: "Stories", tags: ["Organizations", "Templates"] },
-  { slug: "dashboards-101", title: "Dashboards 101: just the signals you need", excerpt: "A few KPIs and spatial filters are enough to get everyone on the same page.", date: "2025-07-30", readMins: 7, category: "Education", tags: ["Dashboards", "Analytics"] },
-  { slug: "export-embed-fast", title: "Export & Embed: share maps anywhere in seconds", excerpt: "Handout-ready PDF/PNG and simple embeds for your site or LMS.", date: "2025-07-12", readMins: 3, category: "Product", tags: ["Export", "Embed"] },
-  { slug: "enterprise-sso-scim", title: "Enterprise basics: SSO (SAML/OAuth) and SCIM provisioning", excerpt: "Sign in once, manage users centrally, and keep access in sync as teams change.", date: "2025-09-12", readMins: 6, category: "Business", tags: ["SSO", "SCIM", "Security"] },
-  { slug: "data-governance-audit-logs", title: "Data governance for teams: audit logs, access reviews, retention", excerpt: "See who did what, review sharing regularly, and keep data around just as long as you need.", date: "2025-08-28", readMins: 6, category: "Business", tags: ["Compliance", "Security"] },
-  { slug: "scale-performance-tiles", title: "Performance at scale: serving millions of features smoothly", excerpt: "Vector tiling, smart simplification, and caching that keeps large maps snappy.", date: "2025-08-05", readMins: 7, category: "Business", tags: ["Performance", "Scaling"] },
-  { slug: "case-urban-planning-firm", title: "Case study: an urban planning firm sped up proposals by 40%", excerpt: "Reusable layers, branded exports, and quick dashboards made reviews faster for clients.", date: "2025-07-25", readMins: 5, category: "Business", tags: ["Case Study", "ROI"] },
+  { slug: "story-maps-hello", title: "Hello, Story Maps: biến bài học thành câu chuyện dễ theo dõi", excerpt: "Vài phân đoạn, vài bức ảnh, và địa điểm của bạn kết nối thành câu chuyện người học có thể theo.", date: "2025-09-01", readMins: 4, category: "Product", tags: ["Story Maps", "Templates"], featured: true },
+  { slug: "style-geojson-better", title: "Khiến GeoJSON của bạn nổi bật với tạo kiểu đơn giản", excerpt: "Màu, nét, thứ tự. Chỉnh nhỏ, đọc dễ hơn nhiều.", date: "2025-08-21", readMins: 6, category: "Tutorial", tags: ["Layers", "Styling"] },
+  { slug: "district-03-templates", title: "Câu chuyện: Quận 03 rút ngắn thời gian chuẩn bị bằng thư viện mẫu chung", excerpt: "Thư viện gọn nhẹ giúp giáo viên mới bắt đầu ngay từ ngày đầu.", date: "2025-08-10", readMins: 5, category: "Stories", tags: ["Organizations", "Templates"] },
+  { slug: "dashboards-101", title: "Dashboards 101: chỉ giữ những chỉ số bạn cần", excerpt: "Vài KPI và bộ lọc không gian là đủ để mọi người cùng một nhịp.", date: "2025-07-30", readMins: 7, category: "Education", tags: ["Dashboards", "Analytics"] },
+  { slug: "export-embed-fast", title: "Xuất & Nhúng: chia sẻ bản đồ ở mọi nơi trong vài giây", excerpt: "PDF/PNG sẵn sàng in và nhúng đơn giản cho website/LMS.", date: "2025-07-12", readMins: 3, category: "Product", tags: ["Export", "Embed"] },
+  { slug: "enterprise-sso-scim", title: "Cơ bản Enterprise: SSO (SAML/OAuth) và cấp phát SCIM", excerpt: "Đăng nhập một lần, quản lý người dùng tập trung, đồng bộ truy cập khi đội ngũ thay đổi.", date: "2025-09-12", readMins: 6, category: "Business", tags: ["SSO", "SCIM", "Security"] },
+  { slug: "data-governance-audit-logs", title: "Quản trị dữ liệu cho đội nhóm: nhật ký, rà soát chia sẻ, lưu trữ", excerpt: "Biết ai làm gì, rà soát quyền thường kỳ và giữ dữ liệu đủ lâu bạn cần.", date: "2025-08-28", readMins: 6, category: "Business", tags: ["Compliance", "Security"] },
+  { slug: "scale-performance-tiles", title: "Hiệu năng ở quy mô lớn: phục vụ hàng triệu đối tượng mượt mà", excerpt: "Vector tiling, đơn giản hóa thông minh và cache để bản đồ lớn vẫn nhanh.", date: "2025-08-05", readMins: 7, category: "Business", tags: ["Performance", "Scaling"] },
+  { slug: "case-urban-planning-firm", title: "Case study: công ty quy hoạch tăng tốc đề xuất 40%", excerpt: "Lớp dùng lại, xuất đúng thương hiệu và dashboard nhanh giúp duyệt nhanh hơn.", date: "2025-07-25", readMins: 5, category: "Business", tags: ["Case Study", "ROI"] },
 ];
 
 const CATEGORY_LABELS: Record<Post["category"], string> = {
-  Product: "Product",
-  Tutorial: "Tutorial",
-  Stories: "Stories",
-  Education: "Education",
-  Business: "Business",
+  Product: "Sản phẩm",
+  Tutorial: "Hướng dẫn",
+  Stories: "Câu chuyện",
+  Education: "Giáo dục",
+  Business: "Kinh doanh",
 };
 
 const fmtDate = (iso: string) =>
@@ -75,6 +75,15 @@ type CategoryFilter = typeof CATEGORY_FILTERS[number];
 function isCategoryFilter(v: string): v is CategoryFilter {
   return (CATEGORY_FILTERS as readonly string[]).includes(v);
 }
+
+const FILTER_LABELS: Record<CategoryFilter, string> = {
+  All: "Tất cả",
+  Product: "Sản phẩm",
+  Tutorial: "Hướng dẫn",
+  Stories: "Câu chuyện",
+  Education: "Giáo dục",
+  Business: "Kinh doanh",
+};
 
 export default function BlogClient({
   searchParams,
@@ -93,7 +102,8 @@ export default function BlogClient({
 
     const ctx = gsap.context(() => {
       gsap.set([".bh-title", ".bh-sub", ".bh-cta"], { autoAlpha: 0, y: 18 });
-      gsap.timeline()
+      gsap
+        .timeline()
         .to(".bh-title", { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.9, ease: "power2.out" })
         .to(".bh-sub", { autoAlpha: 1, y: 0, ...baseIn }, "<0.08")
         .to(".bh-cta", { autoAlpha: 1, y: 0, ...baseIn }, "<0.08");
@@ -143,12 +153,12 @@ export default function BlogClient({
     <main className="mx-auto max-w-7xl px-6 py-12 text-zinc-100">
       <section className="blog-hero relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
         <div className="relative z-10">
-          <p className="bh-sub text-sm tracking-wide text-emerald-300/90">Resources / Blog</p>
-          <h1 className="bh-title mt-2 text-3xl font-semibold sm:text-4xl">Friendly updates and real-world mapping stories</h1>
-          <p className="bh-sub mt-3 max-w-2xl text-zinc-300">Short reads with practical tips, product news, and examples from classrooms and companies alike.</p>
+          <p className="bh-sub text-sm tracking-wide text-emerald-300/90">Tài nguyên / Blog</p>
+          <h1 className="bh-title mt-2 text-3xl font-semibold sm:text-4xl">Cập nhật thân thiện và câu chuyện lập bản đồ thực tế</h1>
+          <p className="bh-sub mt-3 max-w-2xl text-zinc-300">Bài ngắn gọn với mẹo hữu ích, tin sản phẩm và ví dụ từ lớp học lẫn doanh nghiệp.</p>
           <div className="mt-6">
             <Link href="#latest" className="bh-cta inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400">
-              Start reading <ArrowRightIcon className="h-4 w-4" />
+              Bắt đầu đọc <ArrowRightIcon className="h-4 w-4" />
             </Link>
           </div>
         </div>
@@ -157,19 +167,21 @@ export default function BlogClient({
       </section>
 
       <section className="mt-8 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-4 ring-1 ring-emerald-500/10">
-        <div className="section-title text-sm font-medium">Topics</div>
+        <div className="section-title text-sm font-medium">Chủ đề</div>
         <div className="mt-3 flex flex-wrap gap-2">
-          {(CATEGORY_FILTERS).map((c) => {
+          {CATEGORY_FILTERS.map((c) => {
             const href = c === "All" ? "/resources/blog" : `/resources/blog?cat=${c}`;
             const active = c === activeCat;
             return (
               <Link
                 key={c}
                 href={href}
-                className={`topic-chip opacity-0 translate-y-[10px] rounded-full px-3 py-1.5 text-xs font-medium transition ${active ? "bg-emerald-500 text-zinc-950" : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/70"}`}
+                className={`topic-chip opacity-0 translate-y-[10px] rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                  active ? "bg-emerald-500 text-zinc-950" : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/70"
+                }`}
                 aria-current={active ? "page" : undefined}
               >
-                {c}
+                {FILTER_LABELS[c]}
               </Link>
             );
           })}
@@ -195,36 +207,36 @@ export default function BlogClient({
               </span>
               <span className="inline-flex items-center gap-1">
                 <ClockIcon className="h-4 w-4 text-emerald-300" />
-                {featured.readMins} min read
+                {featured.readMins} phút đọc
               </span>
             </div>
             <div className="mt-4">
               <Link href={`/resources/blog/${featured.slug}`} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">
-                Read article
+                Đọc bài
               </Link>
             </div>
           </article>
 
           <aside className="subscribe-card rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
-            <h3 className="text-lg font-semibold">Subscribe for updates</h3>
-            <p className="mt-1 text-sm text-zinc-300">A short monthly note: useful tips, product highlights, and stories from teams.</p>
+            <h3 className="text-lg font-semibold">Đăng ký nhận cập nhật</h3>
+            <p className="mt-1 text-sm text-zinc-300">Bản tin ngắn hàng tháng: mẹo hay, điểm nhấn sản phẩm và câu chuyện từ các đội nhóm.</p>
             <form className="mt-4 space-y-3" action="/resources/blog/subscribe" method="post">
               <input
                 name="email"
                 type="email"
                 required
-                placeholder="you@company.com"
+                placeholder="ban@congty.com"
                 className="w-full rounded-xl bg-zinc-900/70 ring-1 ring-white/10 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:ring-emerald-400/50"
               />
-              <button className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">Subscribe</button>
+              <button className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">Đăng ký</button>
             </form>
-            <p className="mt-2 text-xs text-zinc-500">No spam. Unsubscribe anytime.</p>
+            <p className="mt-2 text-xs text-zinc-500">Không spam. Có thể hủy bất cứ lúc nào.</p>
           </aside>
         </section>
       )}
 
       <section id="latest" className="mt-10">
-        <h2 className="section-title text-xl font-semibold opacity-0 translate-y-[12px]">Latest posts</h2>
+        <h2 className="section-title text-xl font-semibold opacity-0 translate-y-[12px]">Bài viết mới</h2>
         <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {others.map((p) => (
             <article key={p.slug} className="post-card opacity-0 translate-y-[16px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-5">
@@ -244,12 +256,12 @@ export default function BlogClient({
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <ClockIcon className="h-4 w-4 text-emerald-300" />
-                  {p.readMins} min read
+                  {p.readMins} phút đọc
                 </span>
               </div>
               <div className="mt-3">
                 <Link href={`/resources/blog/${p.slug}`} className="inline-flex items-center gap-2 text-sm font-medium text-emerald-300 underline-offset-4 hover:underline">
-                  Read more <ArrowRightIcon className="h-4 w-4" />
+                  Đọc thêm <ArrowRightIcon className="h-4 w-4" />
                 </Link>
               </div>
             </article>
@@ -260,15 +272,15 @@ export default function BlogClient({
       <section className="cta-banner mt-12 overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent p-6 ring-1 ring-emerald-500/10">
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <h3 className="text-xl font-semibold">Want us to cover a topic?</h3>
-            <p className="mt-1 text-zinc-300">Tell us what would help your class or company.</p>
+            <h3 className="text-xl font-semibold">Bạn muốn chúng tôi viết về chủ đề nào?</h3>
+            <p className="mt-1 text-zinc-300">Hãy cho biết điều gì hữu ích cho lớp học hoặc công ty của bạn.</p>
           </div>
           <div className="flex gap-3">
             <Link href="/resources/blog/request" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400">
-              Request an article
+              Yêu cầu bài viết
             </Link>
             <Link href="/resources" className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70">
-              See more resources
+              Xem thêm tài nguyên
             </Link>
           </div>
         </div>

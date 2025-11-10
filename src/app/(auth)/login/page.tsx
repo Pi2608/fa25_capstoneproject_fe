@@ -9,10 +9,12 @@ import SubmitButton from "@/components/ui/SubmitButton";
 import AuthLinks from "@/components/auth/AuthLinks";
 import { AuthFormErrors } from "@/types/auth";
 import { login, getMe } from "@/lib/api-auth";
+import { useI18n } from "@/i18n/I18nProvider";
 
 export default function LoginClientSimple() {
   const router = useRouter();
   const { showToast } = useToast();
+  const { t } = useI18n();
 
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
@@ -22,12 +24,12 @@ export default function LoginClientSimple() {
 
   const validate = useCallback(() => {
     const newErrors: AuthFormErrors = {};
-    if (!email) newErrors.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) newErrors.email = "Invalid email format";
-    if (!password) newErrors.password = "Password is required";
+    if (!email) newErrors.email = t("auth", "errEmailRequired");
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) newErrors.email = t("auth", "errEmailFormat");
+    if (!password) newErrors.password = t("auth", "errPasswordRequired");
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
-  }, [email, password]);
+  }, [email, password, t]);
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,25 +43,25 @@ export default function LoginClientSimple() {
         const role = (me.role || "").toLowerCase();
 
         if (role === "admin") {
-          showToast("success", "Welcome, Admin! Redirecting to dashboard...");
+          showToast("success", t("auth", "toastWelcomeAdmin"));
           setTimeout(() => router.push("/dashboard"), 800);
           return;
         }
-        const isFirstLogin = !me.lastLogin ||
-          me.lastLogin.startsWith("0001-01-01");
+
+        const isFirstLogin = !me.lastLogin || me.lastLogin.startsWith("0001-01-01");
         if (isFirstLogin) {
-          showToast("success", "Login successful! Let's set up your account...");
+          showToast("success", t("auth", "toastLoginSetup"));
           setTimeout(() => router.push("/login/account-type"), 800);
         } else {
-          showToast("success", "Login successful! Redirecting...");
+          showToast("success", t("auth", "toastLoginOk"));
           setTimeout(() => router.push("/"), 800);
         }
       } catch {
-        showToast("success", "Login successful! Redirecting...");
+        showToast("success", t("auth", "toastLoginOk"));
         setTimeout(() => router.push("/"), 800);
       }
     } catch {
-      showToast("error", "Invalid email or password");
+      showToast("error", t("auth", "toastLoginFail"));
     } finally {
       setLoading(false);
     }
@@ -67,8 +69,8 @@ export default function LoginClientSimple() {
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <h1 className="text-3xl md:text-4xl font-bold mb-2">Welcome back</h1>
-      <p className="text-gray-600 dark:text-gray-300 mb-8">Sign in to your account</p>
+      <h1 className="text-3xl md:text-4xl font-bold mb-2">{t("auth", "welcomeBack")}</h1>
+      <p className="text-gray-600 dark:text-gray-300 mb-8">{t("auth", "loginToAccount")}</p>
 
       <form onSubmit={onSubmit} className="space-y-6" noValidate>
         <InputField
@@ -78,8 +80,8 @@ export default function LoginClientSimple() {
             setEmail(value);
             if (errors.email) setErrors((p) => ({ ...p, email: undefined }));
           }}
-          placeholder="you@example.com"
-          label="Email"
+          placeholder={t("auth", "emailPlaceholder")}
+          label={t("auth", "emailLabel")}
           required
         />
         {errors.email && <p className="text-sm text-red-600 dark:text-red-400">{errors.email}</p>}
@@ -90,21 +92,21 @@ export default function LoginClientSimple() {
             setPassword(value);
             if (errors.password) setErrors((p) => ({ ...p, password: undefined }));
           }}
-          placeholder="••••••••"
-          label="Password"
+          placeholder={t("auth", "passwordPlaceholder")}
+          label={t("auth", "passwordLabel")}
           required
         />
         {errors.password && <p className="text-sm text-red-600 dark:text-red-400">{errors.password}</p>}
 
         <SubmitButton loading={loading} disabled={!email || !password || loading}>
-          Sign in
+          {t("auth", "submit")}
         </SubmitButton>
       </form>
 
       <AuthLinks
         links={[
-          { href: "/forgot-password", text: "Forgot your password?" },
-          { href: "/register", text: "Create an account" },
+          { href: "/forgot-password", text: t("auth", "forgotPassword") },
+          { href: "/register", text: t("auth", "createAccount") },
         ]}
         className="space-y-2"
       />

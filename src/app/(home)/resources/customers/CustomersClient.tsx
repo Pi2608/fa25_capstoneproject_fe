@@ -28,7 +28,8 @@ export default function CustomersClient() {
 
     const ctx = gsap.context(() => {
       gsap.set([".c-hero-eyebrow", ".c-hero-title", ".c-hero-sub", ".c-hero-cta"], { autoAlpha: 0, y: 18 });
-      gsap.timeline()
+      gsap
+        .timeline()
         .to(".c-hero-eyebrow", { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.6, ease: "power2.out" })
         .to(".c-hero-title", { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.8, ease: "power2.out" }, "<0.06")
         .to(".c-hero-sub", { autoAlpha: 1, y: 0, ...baseIn }, "<0.06")
@@ -99,26 +100,25 @@ export default function CustomersClient() {
     <main className="mx-auto max-w-7xl px-6 py-12 text-zinc-100">
       <section className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
         <div className="relative z-10">
-          <p className="c-hero-eyebrow opacity-0 translate-y-[18px] text-sm tracking-wide text-emerald-300/90">Resources / Customers</p>
+          <p className="c-hero-eyebrow opacity-0 translate-y-[18px] text-sm tracking-wide text-emerald-300/90">Tài nguyên / Khách hàng</p>
           <h1 className="c-hero-title opacity-0 translate-y-[18px] mt-2 text-3xl font-semibold sm:text-4xl">
-            Stories from teams using <span className="text-emerald-300">IMOS</span>
+            Câu chuyện từ các đội nhóm đang dùng <span className="text-emerald-300">IMOS</span>
           </h1>
           <p className="c-hero-sub opacity-0 translate-y-[18px] mt-3 max-w-2xl text-zinc-300">
-            Built for educators and organizations. See how schools create interactive lesson maps, story
-            maps, and classroom projects aligned to curriculum.
+            Xây cho giáo dục và tổ chức. Xem cách trường học tạo bản đồ bài giảng tương tác, story map và dự án lớp học bám sát chương trình.
           </p>
           <div className="c-hero-cta opacity-0 translate-y-[18px] mt-6 flex flex-wrap gap-3">
             <Link
               href="/templates"
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
             >
-              Explore templates <ArrowRightIcon className="h-4 w-4" />
+              Khám phá mẫu <ArrowRightIcon className="h-4 w-4" />
             </Link>
             <Link
               href="/contact"
               className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
             >
-              Talk to us
+              Liên hệ với chúng tôi
             </Link>
           </div>
         </div>
@@ -127,7 +127,7 @@ export default function CustomersClient() {
       </section>
 
       <section className="mt-10">
-        <p className="text-xs uppercase tracking-widest text-zinc-400">Trusted by education teams</p>
+        <p className="text-xs uppercase tracking-widest text-zinc-400">Được tin dùng bởi các đội giáo dục</p>
         <div className="mt-4 grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-6">
           {["EduGIS Lab", "Hanoi District 03", "FPT High School", "GeoLearn", "Thủ Đức Campus", "Open Study Maps"].map(
             (name) => (
@@ -143,7 +143,7 @@ export default function CustomersClient() {
       </section>
 
       <section className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[{ value: "45%", label: "faster lesson prep" }, { value: "10k+", label: "students engaged" }, { value: "30+", label: "maps per class" }, { value: "99.9%", label: "platform uptime" }].map(
+        {[{ value: "45%", label: "chuẩn bị bài nhanh hơn" }, { value: "10k+", label: "học sinh tương tác" }, { value: "30+", label: "bản đồ mỗi lớp" }, { value: "99,9%", label: "thời gian sẵn sàng hệ thống" }].map(
           (s) => (
             <div key={s.label} className="c-stat opacity-0 translate-y-[12px] rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-5 ring-1 ring-emerald-500/10">
               <div className="text-2xl font-semibold text-emerald-300">{s.value}</div>
@@ -159,18 +159,18 @@ export default function CustomersClient() {
             <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
               Case study
             </span>
-            <span className="text-xs text-zinc-400">History & Geography</span>
+            <span className="text-xs text-zinc-400">Lịch sử & Địa lý</span>
           </div>
-          <h2 className="mt-3 text-2xl font-semibold leading-snug">Greenfield High School: From static maps to interactive <em>Story Maps</em></h2>
+          <h2 className="mt-3 text-2xl font-semibold leading-snug">Greenfield High School: Từ bản đồ tĩnh đến <em>Story Maps</em> tương tác</h2>
           <p className="mt-2 max-w-2xl text-zinc-300">
-            Teachers transformed lessons by linking Locations and Zones to historical events, embedding media, and sequencing Segments into a narrative students could explore.
+            Giáo viên biến bài học sinh động bằng cách liên kết Địa điểm và Vùng với sự kiện lịch sử, nhúng media và sắp xếp Phân đoạn thành câu chuyện học sinh có thể khám phá.
           </p>
           <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {[
-              "Curriculum-aligned templates for quick starts",
-              "Zones & Tags to highlight regions and themes",
-              "Story Map Segments with images and videos",
-              "Export to PDF/PNG for handouts",
+              "Mẫu bám chương trình học để bắt đầu nhanh",
+              "Vùng & Thẻ để làm nổi bật khu vực và chủ đề",
+              "Phân đoạn Story Map kèm hình ảnh và video",
+              "Xuất ra PDF/PNG cho tài liệu phát tay",
             ].map((item) => (
               <li key={item} className="flex items-start gap-3 text-sm text-zinc-300">
                 <CheckIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-300" />
@@ -180,10 +180,10 @@ export default function CustomersClient() {
           </ul>
           <div className="mt-5 flex items-center gap-3">
             <Link href="/resources/customers/greenfield-high" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400">
-              Read the story <ArrowRightIcon className="h-4 w-4" />
+              Đọc câu chuyện <ArrowRightIcon className="h-4 w-4" />
             </Link>
             <Link href="/resources" className="text-sm text-emerald-300/90 underline-offset-4 hover:underline">
-              Browse all resources
+              Xem tất cả tài nguyên
             </Link>
           </div>
         </article>
@@ -191,13 +191,13 @@ export default function CustomersClient() {
         <aside className="c-quote opacity-0 translate-y-[20px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6 shadow-lg">
           <figure>
             <blockquote className="text-lg leading-relaxed text-zinc-200">
-              IMOS made our geography units come alive. Students explored places, timelines, and cause–effect through interactive maps instead of static slides.”
+              “IMOS khiến các chuyên đề địa lý sống động. Học sinh khám phá địa điểm, mốc thời gian và quan hệ nhân–quả qua bản đồ tương tác thay vì slide tĩnh.”
             </blockquote>
             <figcaption className="mt-4 flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400/30 to-emerald-200/20" />
               <div>
-                <div className="text-sm font-medium text-zinc-100">Ms. Nguyen Thanh</div>
-                <div className="text-xs text-zinc-400">Head of Social Studies, Greenfield High</div>
+                <div className="text-sm font-medium text-zinc-100">Cô Nguyễn Thanh</div>
+                <div className="text-xs text-zinc-400">Trưởng bộ môn KHXH, Greenfield High</div>
               </div>
             </figcaption>
           </figure>
@@ -207,18 +207,18 @@ export default function CustomersClient() {
       <section className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2">
         {[
           {
-            title: "District 03 School Network: Shared templates for teachers",
+            title: "Mạng lưới Trường Quận 03: Mẫu chia sẻ cho giáo viên",
             summary:
-              "Organization owners curated shared Story Map templates aligned to local standards, so new teachers could start in minutes.",
+              "Chủ tổ chức tuyển chọn các mẫu Story Map bám chuẩn địa phương, giúp giáo viên mới bắt tay vào dạy chỉ trong vài phút.",
             href: "/resources/customers/district-03",
-            points: ["Org roles: Owner → Admin → Member", "Invite educators, manage permissions", "Usage quotas visible per plan"],
+            points: ["Vai trò tổ chức: Owner → Admin → Member", "Mời giáo viên, quản lý quyền", "Theo dõi hạn mức sử dụng theo gói"],
           },
           {
-            title: "GeoLearn Campus: From fieldwork to classroom projects",
+            title: "GeoLearn Campus: Từ thực địa đến dự án lớp học",
             summary:
-              "Students imported GeoJSON from field surveys, styled layers, and embedded maps into reports with shareable widgets.",
+              "Học sinh nhập GeoJSON từ khảo sát, tạo kiểu lớp và nhúng bản đồ vào báo cáo bằng widget có thể chia sẻ.",
             href: "/resources/customers/geolearn-campus",
-            points: ["Upload GeoJSON / KML for lessons", "Layer styling & order control", "Embed maps in LMS pages"],
+            points: ["Tải GeoJSON / KML cho bài học", "Tùy biến kiểu lớp & thứ tự", "Nhúng bản đồ vào trang LMS"],
           },
         ].map((c) => (
           <article key={c.title} className="c-card opacity-0 translate-y-[14px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
@@ -233,20 +233,20 @@ export default function CustomersClient() {
               ))}
             </ul>
             <Link href={c.href} className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-emerald-300 underline-offset-4 hover:underline">
-              Read more <ArrowRightIcon className="h-4 w-4" />
+              Đọc thêm <ArrowRightIcon className="h-4 w-4" />
             </Link>
           </article>
         ))}
       </section>
 
       <section className="c-why mt-12 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-6 ring-1 ring-emerald-500/10">
-        <h2 className="c-why-title opacity-0 translate-y-[12px] text-xl font-semibold">Why education teams choose us</h2>
+        <h2 className="c-why-title opacity-0 translate-y-[12px] text-xl font-semibold">Vì sao đội giáo dục chọn chúng tôi</h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            { h: "Story Maps", p: "Sequence events into Segments with notes and media so lessons read like a narrative." },
-            { h: "Classroom templates", p: "Curriculum-aligned starts for geography & history units." },
-            { h: "Easy exports", p: "PDF/PNG for handouts; GeoJSON/KML when you need the data." },
-            { h: "Collaborate", p: "Invite teachers, set roles, and share across organizations." },
+            { h: "Story Maps", p: "Chuỗi sự kiện thành Phân đoạn kèm ghi chú và media để bài học như một câu chuyện." },
+            { h: "Mẫu lớp học", p: "Khởi đầu bám chương trình cho các chuyên đề địa lý & lịch sử." },
+            { h: "Xuất dễ dàng", p: "PDF/PNG cho tài liệu; GeoJSON/KML khi cần dữ liệu." },
+            { h: "Cộng tác", p: "Mời giáo viên, gán vai trò và chia sẻ trong toàn tổ chức." },
           ].map((f) => (
             <div key={f.h} className="c-why-item opacity-0 translate-y-[10px] rounded-xl border border-zinc-700/60 bg-zinc-900/50 p-5">
               <div className="flex items-center gap-2 text-emerald-300">
@@ -262,28 +262,28 @@ export default function CustomersClient() {
       <section className="c-cta mt-12 opacity-0 translate-y-[16px] overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent p-6 ring-1 ring-emerald-500/10">
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <h3 className="text-xl font-semibold">Ready to create your first lesson map?</h3>
-            <p className="mt-1 text-zinc-300">Start from a template or build from scratch in minutes.</p>
+            <h3 className="text-xl font-semibold">Sẵn sàng tạo bản đồ cho bài học đầu tiên?</h3>
+            <p className="mt-1 text-zinc-300">Bắt đầu từ mẫu hoặc tự xây từ con số 0 chỉ trong vài phút.</p>
           </div>
           <div className="flex gap-3">
             <Link href="/new-map" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400">
-              New map <ArrowRightIcon className="h-4 w-4" />
+              Tạo bản đồ mới <ArrowRightIcon className="h-4 w-4" />
             </Link>
             <Link href="/pricing" className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70">
-              View plans
+              Xem gói
             </Link>
           </div>
         </div>
       </section>
 
       <section className="c-footer-note mt-10 opacity-0 translate-y-[10px] text-center text-sm text-zinc-400">
-        Have questions? Visit our{" "}
+        Có câu hỏi? Hãy xem{" "}
         <Link href="/resources/faq" className="text-emerald-300 underline-offset-4 hover:underline">
-          Knowledge Base
+          Kho kiến thức
         </Link>{" "}
-        or{" "}
+        hoặc{" "}
         <Link href="/support" className="text-emerald-300 underline-offset-4 hover:underline">
-          open a support ticket
+          mở phiếu hỗ trợ
         </Link>
         .
       </section>
