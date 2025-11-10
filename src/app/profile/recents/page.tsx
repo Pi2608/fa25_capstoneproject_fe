@@ -1,18 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
-import {
-  createMap,
-  createMapFromTemplate,
-  deleteMap,
-  getMyMaps,
-  MapDto,
-  updateMap,
-  UpdateMapRequest,
-} from "@/lib/api-maps";
+import { createMap, createMapFromTemplate, deleteMap, getMyMaps, MapDto, updateMap, UpdateMapRequest } from "@/lib/api-maps";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name";
@@ -38,12 +30,12 @@ type Sample = {
 const SAMPLES: Sample[] = [
   {
     key: "reservoir-precip",
-    title: "Ví dụ: Mực nước hồ chứa & Lượng mưa",
+    title: "Example: Reservoir Levels & Precipitation",
     author: "Yen Nhi Dang",
-    lastViewed: "Xem gần nhất 3 tháng trước",
-    blurb: "Kết hợp lớp mực nước hồ chứa với lượng mưa tích luỹ.",
+    lastViewed: "Last viewed 3 months ago",
+    blurb: "Combine reservoir level overlays with accumulated precipitation.",
     preset: {
-      name: "Mực nước hồ chứa & Lượng mưa",
+      name: "Reservoir Levels & Precip",
       baseMapProvider: "OSM",
       initialLatitude: 15.95,
       initialLongitude: 107.8,
@@ -52,12 +44,12 @@ const SAMPLES: Sample[] = [
   },
   {
     key: "sandy-inundation",
-    title: "Ví dụ: Vùng ngập do bão Sandy",
+    title: "Example: Hurricane Sandy Inundation Zone",
     author: "Yen Nhi Dang",
-    lastViewed: "Xem gần nhất 3 tháng trước",
-    blurb: "Vùng nước dâng lịch sử để minh hoạ rủi ro nhanh.",
+    lastViewed: "Last viewed 3 months ago",
+    blurb: "Historic storm surge zones for quick risk illustration.",
     preset: {
-      name: "Vùng ngập bão Sandy",
+      name: "Sandy Inundation Zone",
       baseMapProvider: "OSM",
       initialLatitude: 40.71,
       initialLongitude: -74.0,
@@ -66,12 +58,12 @@ const SAMPLES: Sample[] = [
   },
   {
     key: "bike-collisions",
-    title: "Ví dụ: Va chạm xe đạp – Toronto",
+    title: "Example: City of Toronto Bike Collisions",
     author: "Yen Nhi Dang",
-    lastViewed: "Xem gần nhất 3 tháng trước",
-    blurb: "Tập điểm phục vụ phân tích an toàn va chạm xe đạp.",
+    lastViewed: "Last viewed 3 months ago",
+    blurb: "Point dataset for bicycle collision safety analysis.",
     preset: {
-      name: "Va chạm xe đạp Toronto",
+      name: "Toronto Bike Collisions",
       baseMapProvider: "OSM",
       initialLatitude: 43.65,
       initialLongitude: -79.38,
@@ -80,12 +72,12 @@ const SAMPLES: Sample[] = [
   },
   {
     key: "sales-territories",
-    title: "Ví dụ: Lãnh thổ bán hàng",
+    title: "Example: Sales Territories",
     author: "Yen Nhi Dang",
-    lastViewed: "Xem gần nhất 3 tháng trước",
-    blurb: "Ranh giới lãnh thổ và phân vùng khu vực.",
+    lastViewed: "Last viewed 3 months ago",
+    blurb: "Territory boundaries and regional assignments.",
     preset: {
-      name: "Lãnh thổ bán hàng",
+      name: "Sales Territories",
       baseMapProvider: "OSM",
       initialLatitude: 39.5,
       initialLongitude: -98.35,
@@ -94,12 +86,12 @@ const SAMPLES: Sample[] = [
   },
   {
     key: "getting-started",
-    title: "Bắt đầu với Felt",
+    title: "Getting started with Felt",
     author: "Yen Nhi Dang",
-    lastViewed: "Xem gần nhất 3 tháng trước",
-    blurb: "Mẫu khởi động với lớp điểm và vùng cơ bản.",
+    lastViewed: "Last viewed 3 months ago",
+    blurb: "Onboarding sample with basic point and area layers.",
     preset: {
-      name: "Bắt đầu",
+      name: "Getting Started",
       baseMapProvider: "OSM",
       initialLatitude: 21.03,
       initialLongitude: 105.85,
@@ -179,30 +171,11 @@ export default function RecentsPage() {
 
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const viewBtnRef = useRef<HTMLButtonElement | null>(null);
-  const viewMenuRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (!viewOpen) return;
-    function onDown(e: MouseEvent) {
-      const t = e.target as Node;
-      if (viewMenuRef.current?.contains(t)) return;
-      if (viewBtnRef.current?.contains(t)) return;
-      setViewOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setViewOpen(false);
-    }
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [viewOpen]);
-
+  // Đóng menu khi click ra ngoài/ESC
   useEffect(() => {
     function onDown(e: MouseEvent) {
+      // Nếu click vào bất kỳ element không phải menu hiện tại => đóng
       const target = e.target as HTMLElement | null;
       if (!target) return;
       const container = target.closest("[data-menu-container]");
@@ -228,7 +201,7 @@ export default function RecentsPage() {
       const res = await getMyMaps();
       setMaps(res);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Không thể tải danh sách bản đồ.");
+      setErr(e instanceof Error ? e.message : "Failed to load your maps.");
     } finally {
       setLoading(false);
     }
@@ -246,20 +219,18 @@ export default function RecentsPage() {
     const lngDiff = 360 / Math.pow(2, zoom);
     const defaultBounds = JSON.stringify({
       type: "Polygon",
-      coordinates: [
-        [
-          [center.lng - lngDiff / 2, center.lat - latDiff / 2],
-          [center.lng + lngDiff / 2, center.lat - latDiff / 2],
-          [center.lng + lngDiff / 2, center.lat + latDiff / 2],
-          [center.lng - lngDiff / 2, center.lat + latDiff / 2],
-          [center.lng - lngDiff / 2, center.lat - latDiff / 2],
-        ],
-      ],
+      coordinates: [[
+        [center.lng - lngDiff / 2, center.lat - latDiff / 2],
+        [center.lng + lngDiff / 2, center.lat - latDiff / 2],
+        [center.lng + lngDiff / 2, center.lat + latDiff / 2],
+        [center.lng - lngDiff / 2, center.lat + latDiff / 2],
+        [center.lng - lngDiff / 2, center.lat - latDiff / 2],
+      ]],
     });
     const viewState = JSON.stringify({ center: [center.lat, center.lng], zoom });
 
     const created = await createMap({
-      name: "Bản đồ chưa đặt tên",
+      name: "Untitled Map",
       description: "",
       isPublic: false,
       defaultBounds,
@@ -268,7 +239,7 @@ export default function RecentsPage() {
       workspaceId: null,
     });
 
-    router.push(`/maps/${created.mapId}?created=1&name=${encodeURIComponent("Bản đồ chưa đặt tên")}`);
+    router.push(`/maps/${created.mapId}?created=1&name=${encodeURIComponent("Untitled Map")}`);
   }, [router]);
 
   const sortedMaps = useMemo(() => {
@@ -277,6 +248,7 @@ export default function RecentsPage() {
       if (sortKey === "name") {
         return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
       }
+      // Use updatedAt for recentlyModified, createdAt for dateCreated
       const aTime = new Date(
         sortKey === "recentlyModified" ? (a.updatedAt ?? a.createdAt ?? 0) : (a.createdAt ?? 0)
       ).getTime();
@@ -296,7 +268,7 @@ export default function RecentsPage() {
       if (s.templateId) {
         const r = await createMapFromTemplate({
           templateId: s.templateId,
-          customName: (s.title ?? s.preset?.name ?? "Bản đồ mới từ mẫu").trim(),
+          customName: (s.title ?? s.preset?.name ?? "Bản đồ mới từ template").trim(),
           workspaceId: null,
         });
         router.push(`/maps/${r.mapId}`);
@@ -314,7 +286,7 @@ export default function RecentsPage() {
         router.push("/maps/new");
       }
     } catch {
-      setActionErr("Không thể tạo bản đồ từ mẫu này.");
+      setActionErr("Could not create a map from this template.");
     } finally {
       setBusyKey(null);
     }
@@ -373,7 +345,7 @@ export default function RecentsPage() {
     } catch (e) {
       setEdit((s) => ({
         ...s,
-        error: e instanceof Error ? e.message : "Lưu thay đổi thất bại.",
+        error: e instanceof Error ? e.message : "Failed to save changes.",
         saving: false,
       }));
     }
@@ -381,113 +353,98 @@ export default function RecentsPage() {
 
   const handleDeleteMap = async (mapId: string) => {
     setMenuOpenId(null);
-    const ok = confirm("Xoá bản đồ này?");
+    const ok = confirm("Delete this map?");
     if (!ok) return;
     setDeletingId(mapId);
     try {
       await deleteMap(mapId);
       setMaps((ms) => ms.filter((m) => m.id !== mapId));
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Xoá bản đồ thất bại.");
+      alert(e instanceof Error ? e.message : "Failed to delete map.");
     } finally {
       setDeletingId(null);
     }
   };
 
-  if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">Đang tải…</div>;
+  if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">Loading…</div>;
   if (err) return <div className="max-w-3xl px-4 text-red-400">{err}</div>;
 
   return (
     <div className="min-w-0 relative px-4">
       <div className="flex items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl sm:text-3xl font-semibold">Gần đây</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold">Recents</h1>
         <div className="flex items-center gap-2 relative">
-          <div className="relative z-50">
+          <div className="relative">
             <button
-              ref={viewBtnRef}
               onClick={() => setViewOpen((v) => !v)}
               className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
-              aria-haspopup="menu"
-              aria-expanded={viewOpen}
             >
-              Hiển thị ▾
+              View ▾
             </button>
-
             {viewOpen && (
               <div
-                ref={viewMenuRef}
-                role="menu"
-                className="absolute right-0 mt-2 w-64 rounded-lg border border-white/10 bg-zinc-900/95 shadow-2xl p-2 z-50 pointer-events-auto"
+                className="absolute right-0 mt-2 w-64 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl p-2"
+                onMouseLeave={() => setViewOpen(false)}
               >
-                <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">
-                  HIỂN THỊ MỤC THEO DẠNG
-                </div>
+                <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Show items as</div>
                 {(["grid", "list"] as ViewMode[]).map((m) => (
                   <button
                     key={m}
-                    role="menuitem"
                     className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${viewMode === m ? "text-emerald-300" : "text-zinc-200"}`}
-                    onClick={() => { setViewMode(m); setViewOpen(false); }}
+                    onClick={() => setViewMode(m)}
                   >
-                    {m === "grid" ? "Lưới" : "Danh sách"}
+                    {m === "grid" ? "Grid" : "List"}
                   </button>
                 ))}
-
-                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">
-                  SẮP XẾP THEO
-                </div>
-                {([
-                  ["recentlyModified", "Chỉnh sửa gần đây"],
-                  ["dateCreated", "Ngày tạo"],
-                  ["name", "Tên"],
-                ] as readonly [SortKey, string][]).map(([k, label]) => (
+                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Sort by</div>
+                {(
+                  [
+                    ["recentlyModified", "Recently modified"],
+                    ["dateCreated", "Date created"],
+                    ["name", "Name"],
+                  ] as readonly [SortKey, string][]
+                ).map(([k, label]) => (
                   <button
                     key={k}
-                    role="menuitem"
                     className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${sortKey === k ? "text-emerald-300" : "text-zinc-200"}`}
-                    onClick={() => { setSortKey(k); setViewOpen(false); }}
+                    onClick={() => setSortKey(k)}
                   >
                     {label}
                   </button>
                 ))}
-
-                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">
-                  THỨ TỰ
-                </div>
+                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Order</div>
                 {(["desc", "asc"] as const).map((o) => (
                   <button
                     key={o}
-                    role="menuitem"
                     className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${sortOrder === o ? "text-emerald-300" : "text-zinc-200"}`}
-                    onClick={() => { setSortOrder(o); setViewOpen(false); }}
+                    onClick={() => setSortOrder(o)}
                   >
-                    {o === "desc" ? "Giảm dần" : "Tăng dần"}
+                    {o === "desc" ? "Descending" : "Ascending"}
                   </button>
                 ))}
               </div>
             )}
           </div>
-
           <button
             onClick={clickNewMap}
             className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
           >
-            Tạo bản đồ
+            New map
           </button>
         </div>
       </div>
 
       <section className="mb-8">
-        <h2 className="mb-3 text-lg font-semibold">Bản đồ của bạn</h2>
+        <h2 className="mb-3 text-lg font-semibold">Your maps</h2>
 
         {sortedMaps.length === 0 && (
           <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
-            <p className="text-zinc-400 mb-4">Bạn chưa có bản đồ nào.</p>
+            <p className="text-zinc-400 mb-4">You have no maps yet.</p>
             <button
               onClick={clickNewMap}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
             >
-              Tạo bản đồ mới
+              Create a map
             </button>
           </div>
         )}
@@ -500,10 +457,11 @@ export default function RecentsPage() {
                 className="group relative rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4"
                 title={m.name}
               >
+                {/* Nút ⋯ cố định góc phải */}
                 <div className="absolute right-2 top-2 z-10" data-menu-container>
                   <button
-                    aria-label="Thao tác khác"
-                    title="Thao tác khác"
+                    aria-label="More actions"
+                    title="More actions"
                     className="h-8 w-8 grid place-items-center rounded-md hover:bg-white/10 border border-white/10 text-lg leading-none"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -525,19 +483,20 @@ export default function RecentsPage() {
                           handleDeleteMap(m.id);
                         }}
                       >
-                        {deletingId === m.id ? "Đang xoá..." : "Xoá bản đồ"}
+                        {deletingId === m.id ? "Deleting..." : "Delete map"}
                       </button>
                     </div>
                   )}
                 </div>
 
+                {/* Header trái: Edit details */}
                 <div className="flex items-start justify-between -mt-1 mb-2 pr-10">
                   <div className="flex items-center gap-2">
                     <button
                       className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
                       onClick={() => openEdit(m)}
                     >
-                      Sửa chi tiết
+                      Edit details
                     </button>
                   </div>
                 </div>
@@ -551,7 +510,7 @@ export default function RecentsPage() {
 
                 <div className="flex items-center justify-between">
                   <div className="min-w-0">
-                    <div className="truncate font-semibold">{m.name || "Chưa đặt tên"}</div>
+                    <div className="truncate font-semibold">{m.name || "Untitled"}</div>
                     <div className="text-xs text-zinc-400">
                       {m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}
                     </div>
@@ -560,7 +519,7 @@ export default function RecentsPage() {
                     className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
                     onClick={() => router.push(`/maps/${m.id}`)}
                   >
-                    Mở
+                    Open
                   </button>
                 </div>
               </li>
@@ -573,8 +532,8 @@ export default function RecentsPage() {
             <table className="w-full text-sm">
               <thead className="bg-white/5 text-zinc-300">
                 <tr>
-                  <th className="text-left px-3 py-2">Tên</th>
-                  <th className="text-left px-3 py-2">Ngày tạo</th>
+                  <th className="text-left px-3 py-2">Name</th>
+                  <th className="text-left px-3 py-2">Created</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -586,7 +545,7 @@ export default function RecentsPage() {
                         className="text-emerald-300 hover:underline"
                         onClick={() => router.push(`/maps/${m.id}`)}
                       >
-                        {m.name || "Chưa đặt tên"}
+                        {m.name || "Untitled"}
                       </button>
                     </td>
                     <td className="px-3 py-2 text-zinc-400">
@@ -598,11 +557,11 @@ export default function RecentsPage() {
                           className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
                           onClick={() => openEdit(m)}
                         >
-                          Sửa chi tiết
+                          Edit details
                         </button>
                         <button
                           className="text-xl leading-none px-2 py-1 rounded hover:bg-white/5"
-                          title="Thao tác khác"
+                          title="More actions"
                           onClick={(e) => {
                             e.stopPropagation();
                             setMenuOpenId((id) => (id === m.id ? null : m.id));
@@ -620,7 +579,7 @@ export default function RecentsPage() {
                               disabled={deletingId === m.id}
                               onClick={() => handleDeleteMap(m.id)}
                             >
-                              {deletingId === m.id ? "Đang xoá..." : "Xoá bản đồ"}
+                              {deletingId === m.id ? "Deleting..." : "Delete map"}
                             </button>
                           </div>
                         )}
@@ -628,7 +587,7 @@ export default function RecentsPage() {
                           className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
                           onClick={() => router.push(`/maps/${m.id}`)}
                         >
-                          Mở
+                          Open
                         </button>
                       </div>
                     </td>
@@ -641,7 +600,7 @@ export default function RecentsPage() {
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-3 text-lg font-semibold">Ví dụ</h2>
+        <h2 className="mb-3 text-lg font-semibold">Examples</h2>
         {actionErr && (
           <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-200">
             {actionErr}
@@ -663,7 +622,7 @@ export default function RecentsPage() {
                   disabled={busyKey === s.key}
                   className="px-3 py-1.5 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
                 >
-                  {busyKey === s.key ? "Đang tạo…" : "Dùng mẫu này"}
+                  {busyKey === s.key ? "Creating…" : "Use this template"}
                 </button>
               </div>
             </li>
@@ -675,10 +634,8 @@ export default function RecentsPage() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
           <div className="w-full max-w-lg rounded-xl border border-white/10 bg-zinc-900 p-4">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold">Sửa chi tiết bản đồ</h3>
-              <button className="text-zinc-300 hover:text-white" onClick={closeEdit}>
-                ✕
-              </button>
+              <h3 className="text-lg font-semibold">Edit map details</h3>
+              <button className="text-zinc-300 hover:text-white" onClick={closeEdit}>✕</button>
             </div>
 
             {edit.error && (
@@ -689,7 +646,7 @@ export default function RecentsPage() {
 
             <div className="space-y-3">
               <label className="block">
-                <span className="text-sm text-zinc-300">Tên bản đồ</span>
+                <span className="text-sm text-zinc-300">Map name</span>
                 <input
                   className="mt-1 w-full rounded-md border border-white/10 bg-zinc-800 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/50"
                   value={edit.name}
@@ -699,7 +656,7 @@ export default function RecentsPage() {
               </label>
 
               <label className="block">
-                <span className="text-sm text-zinc-300">Mô tả</span>
+                <span className="text-sm text-zinc-300">Description</span>
                 <textarea
                   className="mt-1 w-full rounded-md border border-white/10 bg-zinc-800 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/50"
                   rows={3}
@@ -710,21 +667,19 @@ export default function RecentsPage() {
               </label>
 
               <div>
-                <div className="text-sm text-zinc-300 mb-1">Ảnh xem trước</div>
+                <div className="text-sm text-zinc-300 mb-1">Preview image</div>
                 <div className="flex items-start gap-3">
                   <div className="h-24 w-40 rounded-md border border-white/10 overflow-hidden bg-zinc-800">
                     {edit.previewLocal ? (
                       <img src={edit.previewLocal} alt="preview" className="h-full w-full object-cover" />
                     ) : (
-                      <div className="h-full w-full grid place-items-center text-xs text-zinc-500">
-                        Chưa có ảnh
-                      </div>
+                      <div className="h-full w-full grid place-items-center text-xs text-zinc-500">No preview</div>
                     )}
                   </div>
                   <div className="flex flex-col gap-2">
                     <label className="inline-block">
                       <span className="px-3 py-1.5 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer text-sm">
-                        Chọn tệp
+                        Choose file
                       </span>
                       <input
                         type="file"
@@ -745,7 +700,7 @@ export default function RecentsPage() {
                       className="text-xs text-zinc-400 hover:text-zinc-200 text-left"
                       onClick={() => setEdit((s) => ({ ...s, previewLocal: null, previewFile: null }))}
                     >
-                      Gỡ ảnh
+                      Remove image
                     </button>
                   </div>
                 </div>
@@ -759,14 +714,14 @@ export default function RecentsPage() {
                 onClick={closeEdit}
                 disabled={edit.saving}
               >
-                Hủy
+                Cancel
               </button>
               <button
                 className="px-3 py-1.5 rounded-md bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400 disabled:opacity-70"
                 onClick={saveEdit}
                 disabled={edit.saving}
               >
-                {edit.saving ? "Đang lưu…" : "Lưu thay đổi"}
+                {edit.saving ? "Saving…" : "Save changes"}
               </button>
             </div>
           </div>

@@ -9,42 +9,42 @@ import {
   markNotificationAsRead,
   NotificationItem,
 } from "@/lib/api-user";
+import { useI18n } from "@/i18n/I18nProvider";
 
 // ====== Helpers ======
-function fmtTime(iso?: string) {
+function fmtTime(iso: string | undefined, locale: string) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleString("vi-VN", {
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  try {
+    return d.toLocaleString(locale === "en" ? "en-US" : "vi-VN", {
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch {
+    return d.toISOString();
+  }
 }
 
-function viTypeLabel(type?: string) {
+function typeLabel(type: string | undefined, tr: (k: string) => string) {
   if (!type) return undefined;
   const t = type.toLowerCase();
-  if (t.includes("transaction_completed")) return "Hoàn tất giao dịch";
-  if (t.includes("payment") && t.includes("success")) return "Thanh toán thành công";
-  if (t.includes("subscription") && (t.includes("processed") || t.includes("active"))) return "Kích hoạt gói";
-  return type; // giữ nguyên nếu không biết
+  if (t.includes("transaction_completed")) return tr("type_transaction_completed");
+  if (t.includes("payment") && t.includes("success")) return tr("type_payment_success");
+  if (t.includes("subscription") && (t.includes("processed") || t.includes("active"))) return tr("type_subscription_active");
+  return undefined;
 }
 
-// Dịch nội dung tiếng Anh → tiếng Việt theo mẫu phổ biến
 function translateMessageToVi(item: NotificationItem): string {
   const msg = (item.message ?? "").trim();
-
-  // Ưu tiên dựa trên type
   const type = (item.type ?? "").toLowerCase();
 
-  // 1) Hoàn tất thanh toán gói: "Payment of $0.10 for Pro plan completed successfully"
   {
-    const r =
-      /payment of\s*\$?\s*([\d.,]+)\s*for\s*(.+?)\s*plan\s*completed\s*successfully/i.exec(msg);
+    const r = /payment of\s*\$?\s*([\d.,]+)\s*for\s*(.+?)\s*plan\s*completed\s*successfully/i.exec(msg);
     if (r) {
       const amount = r[1];
       const plan = r[2].trim();
@@ -52,13 +52,8 @@ function translateMessageToVi(item: NotificationItem): string {
     }
   }
 
-  // 2) Xử lý thanh toán + kích hoạt membership:
-  // "Your payment of $0.10 for Plan Subscription has been processed successfully. Your membership is now active."
   {
-    const r =
-      /your payment of\s*\$?\s*([\d.,]+)\s*for\s*(.+?)\s*subscription\s*has been processed successfully\.?\s*your membership is now active\.?/i.exec(
-        msg
-      );
+    const r = /your payment of\s*\$?\s*([\d.,]+)\s*for\s*(.+?)\s*subscription\s*has been processed successfully\.?\s*your membership is now active\.?/i.exec(msg);
     if (r) {
       const amount = r[1];
       const plan = r[2].trim();
@@ -66,9 +61,7 @@ function translateMessageToVi(item: NotificationItem): string {
     }
   }
 
-  // 3) Nếu có type gợi ý
   if (type.includes("transaction_completed")) {
-    // Cố gắng bắt số tiền & gói nếu có
     const money = /\$[\d.,]+/.exec(msg)?.[0] ?? "";
     const plan = /\b(Pro|Basic|Enterprise|Starter|Plan)\b/i.exec(msg)?.[0] ?? "";
     if (money || plan) {
@@ -81,7 +74,6 @@ function translateMessageToVi(item: NotificationItem): string {
     return "Đăng ký gói của bạn đã được xử lý và kích hoạt.";
   }
 
-  // 4) Fallback: dịch cụm từ thường gặp
   if (msg) {
     let vi = msg;
     vi = vi.replace(/Your payment/gi, "Thanh toán của bạn");
@@ -94,17 +86,22 @@ function translateMessageToVi(item: NotificationItem): string {
     vi = vi.replace(/plan/gi, "gói");
     vi = vi.replace(/membership/gi, "tư cách thành viên");
 
-    // Nếu sau khi thay vẫn còn nguyên tiếng Anh nhiều, cứ trả lại bản gốc để tránh hiểu sai
     const englishWords = (vi.match(/[A-Za-z]{4,}/g) || []).length;
-    if (englishWords > 6) return msg; // giữ nguyên nếu không chắc
+    if (englishWords > 6) return msg;
     return vi;
   }
 
   return "—";
 }
 
-// ====== Page ======
+function translateMessage(item: NotificationItem, lang: "vi" | "en") {
+  return lang === "vi" ? translateMessageToVi(item) : (item.message || "—");
+}
+
 export default function NotificationsPage() {
+  const { t, lang } = useI18n();
+  const tr = (k: string) => t("notifications", k);
+
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -130,14 +127,12 @@ export default function NotificationsPage() {
           res.totalPages ??
           Math.max(
             1,
-            Math.ceil(
-              (res.totalItems ?? (res.notifications?.length ?? 0)) / (res.pageSize ?? s)
-            )
+            Math.ceil((res.totalItems ?? (res.notifications?.length ?? 0)) / (res.pageSize ?? s))
           ),
       });
       setError(null);
     } catch {
-      setError("Không thể tải thông báo.");
+      setError(tr("error_load"));
     } finally {
       setLoading(false);
     }
@@ -180,11 +175,13 @@ export default function NotificationsPage() {
     } catch {}
   }
 
+  const locale = lang === "en" ? "en" : "vi";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold">Thông báo</h1>
+          <h1 className="text-xl font-semibold">{tr("title")}</h1>
           <span
             className={[
               "inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium",
@@ -192,12 +189,12 @@ export default function NotificationsPage() {
                 ? "bg-emerald-500/15 text-emerald-300 border border-emerald-400/30"
                 : "bg-white/5 text-zinc-300 border border-white/10",
             ].join(" ")}
-            aria-label="Số thông báo chưa đọc"
-            title="Số thông báo chưa đọc"
+            aria-label={tr("unread_aria")}
+            title={tr("unread_title")}
           >
             {unreadCount}
           </span>
-          <p className="text-sm text-zinc-400 ml-1">Quản lý thông báo của bạn</p>
+          <p className="text-sm text-zinc-400 ml-1">{tr("subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -211,7 +208,7 @@ export default function NotificationsPage() {
           >
             {[10, 20, 50].map((n) => (
               <option key={n} value={n}>
-                {n}/trang
+                {n}/{tr("per_page_unit")}
               </option>
             ))}
           </select>
@@ -219,7 +216,7 @@ export default function NotificationsPage() {
             onClick={() => load(page, pageSize)}
             className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10"
           >
-            Làm mới
+            {tr("refresh")}
           </button>
           <button
             onClick={onMarkAll}
@@ -231,7 +228,7 @@ export default function NotificationsPage() {
                 : "bg-emerald-600 text-zinc-950 hover:bg-emerald-500",
             ].join(" ")}
           >
-            Đánh dấu tất cả đã đọc
+            {tr("mark_all_read")}
           </button>
         </div>
       </div>
@@ -244,9 +241,9 @@ export default function NotificationsPage() {
 
       <div className="rounded-xl border border-white/10 bg-zinc-900/60">
         <div className="grid grid-cols-12 px-4 py-3 text-left text-xs uppercase tracking-wider text-zinc-400">
-          <div className="col-span-5">Tiêu đề</div>
-          <div className="col-span-5">Nội dung</div>
-          <div className="col-span-2">Thời gian</div>
+          <div className="col-span-5">{tr("table_title")}</div>
+          <div className="col-span-5">{tr("table_message")}</div>
+          <div className="col-span-2">{tr("table_time")}</div>
         </div>
         <div className="divide-y divide-white/10">
           {loading && (
@@ -261,7 +258,7 @@ export default function NotificationsPage() {
           )}
 
           {!loading && data.notifications.length === 0 && (
-            <div className="px-4 py-6 text-sm text-zinc-300">Chưa có thông báo.</div>
+            <div className="px-4 py-6 text-sm text-zinc-300">{tr("empty")}</div>
           )}
 
           {!loading &&
@@ -277,7 +274,7 @@ export default function NotificationsPage() {
                   </button>
                 );
 
-              const typeLabel = viTypeLabel(n.type);
+              const label = typeLabel(n.type, tr);
 
               return (
                 <div
@@ -290,15 +287,13 @@ export default function NotificationsPage() {
                   <div className="col-span-5 pr-4">
                     {wrap(
                       <div className="flex items-center gap-2">
-                        {!n.isRead && (
-                          <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />
-                        )}
+                        {!n.isRead && <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />}
                         <span className="font-medium text-zinc-100">
-                          {n.title || "Thông báo"}
+                          {n.title || tr("fallback_title")}
                         </span>
-                        {typeLabel && (
+                        {label && (
                           <span className="ml-1 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-zinc-300">
-                            {typeLabel}
+                            {label}
                           </span>
                         )}
                       </div>
@@ -307,7 +302,7 @@ export default function NotificationsPage() {
 
                   <div className="col-span-5 pr-4">
                     <div className="text-sm text-zinc-300">
-                      {translateMessageToVi(n)}
+                      {translateMessage(n, lang === "en" ? "en" : "vi")}
                     </div>
                     {n.linkUrl && (
                       <Link
@@ -315,19 +310,19 @@ export default function NotificationsPage() {
                         className="mt-1 inline-flex text-xs text-emerald-300 hover:underline"
                         onClick={() => onMarkRead(n)}
                       >
-                        Mở liên kết
+                        {tr("open_link")}
                       </Link>
                     )}
                   </div>
 
                   <div className="col-span-2">
-                    <div className="text-xs text-zinc-400">{fmtTime(n.createdAt)}</div>
+                    <div className="text-xs text-zinc-400">{fmtTime(n.createdAt, lang)}</div>
                     {!n.isRead && (
                       <button
                         onClick={() => onMarkRead(n)}
                         className="mt-2 rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-200 hover:bg-white/10"
                       >
-                        Đánh dấu đã đọc
+                        {tr("mark_read")}
                       </button>
                     )}
                   </div>
@@ -340,8 +335,7 @@ export default function NotificationsPage() {
       {data.totalPages && data.totalPages > 1 && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-zinc-400">
-            Trang {data.page} / {data.totalPages} •{" "}
-            {data.totalItems?.toLocaleString("vi-VN")} thông báo
+            {tr("page")} {data.page} / {data.totalPages} • {data.totalItems?.toLocaleString(lang === "en" ? "en-US" : "vi-VN")} {tr("total_suffix")}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -354,7 +348,7 @@ export default function NotificationsPage() {
                   : "bg-white/5 text-zinc-200 hover:bg-white/10 border border-white/10",
               ].join(" ")}
             >
-              Trước
+              {tr("prev")}
             </button>
             <button
               disabled={data.page >= (data.totalPages ?? 1) || loading}
@@ -366,7 +360,7 @@ export default function NotificationsPage() {
                   : "bg-white/5 text-zinc-200 hover:bg-white/10 border border-white/10",
               ].join(" ")}
             >
-              Sau
+              {tr("next")}
             </button>
           </div>
         </div>
