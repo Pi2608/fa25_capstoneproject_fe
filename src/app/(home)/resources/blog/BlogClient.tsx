@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useLayoutEffect } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useI18n } from "@/i18n/I18nProvider";
+
 gsap.registerPlugin(ScrollTrigger);
 
 function CalendarIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -35,61 +37,80 @@ function TagPill({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** === Types & data keys (i18n) === */
+type Category = "Product" | "Tutorial" | "Stories" | "Education" | "Business";
+type CategoryFilter = "All" | Category;
+type TagKey =
+  | "StoryMaps" | "Templates" | "Layers" | "Styling" | "Organizations"
+  | "Dashboards" | "Analytics" | "Export" | "Embed" | "SSO" | "SCIM"
+  | "Security" | "Compliance" | "Performance" | "Scaling" | "CaseStudy" | "ROI";
+
 type Post = {
   slug: string;
-  title: string;
-  excerpt: string;
+  titleKey: string;
+  excerptKey: string;
   date: string;
   readMins: number;
-  category: "Product" | "Tutorial" | "Stories" | "Education" | "Business";
-  tags: string[];
+  category: Category;
+  tags: TagKey[];
   featured?: boolean;
 };
 
 const POSTS: Post[] = [
-  { slug: "story-maps-hello", title: "Hello, Story Maps: biến bài học thành câu chuyện dễ theo dõi", excerpt: "Vài phân đoạn, vài bức ảnh, và địa điểm của bạn kết nối thành câu chuyện người học có thể theo.", date: "2025-09-01", readMins: 4, category: "Product", tags: ["Story Maps", "Templates"], featured: true },
-  { slug: "style-geojson-better", title: "Khiến GeoJSON của bạn nổi bật với tạo kiểu đơn giản", excerpt: "Màu, nét, thứ tự. Chỉnh nhỏ, đọc dễ hơn nhiều.", date: "2025-08-21", readMins: 6, category: "Tutorial", tags: ["Layers", "Styling"] },
-  { slug: "district-03-templates", title: "Câu chuyện: Quận 03 rút ngắn thời gian chuẩn bị bằng thư viện mẫu chung", excerpt: "Thư viện gọn nhẹ giúp giáo viên mới bắt đầu ngay từ ngày đầu.", date: "2025-08-10", readMins: 5, category: "Stories", tags: ["Organizations", "Templates"] },
-  { slug: "dashboards-101", title: "Dashboards 101: chỉ giữ những chỉ số bạn cần", excerpt: "Vài KPI và bộ lọc không gian là đủ để mọi người cùng một nhịp.", date: "2025-07-30", readMins: 7, category: "Education", tags: ["Dashboards", "Analytics"] },
-  { slug: "export-embed-fast", title: "Xuất & Nhúng: chia sẻ bản đồ ở mọi nơi trong vài giây", excerpt: "PDF/PNG sẵn sàng in và nhúng đơn giản cho website/LMS.", date: "2025-07-12", readMins: 3, category: "Product", tags: ["Export", "Embed"] },
-  { slug: "enterprise-sso-scim", title: "Cơ bản Enterprise: SSO (SAML/OAuth) và cấp phát SCIM", excerpt: "Đăng nhập một lần, quản lý người dùng tập trung, đồng bộ truy cập khi đội ngũ thay đổi.", date: "2025-09-12", readMins: 6, category: "Business", tags: ["SSO", "SCIM", "Security"] },
-  { slug: "data-governance-audit-logs", title: "Quản trị dữ liệu cho đội nhóm: nhật ký, rà soát chia sẻ, lưu trữ", excerpt: "Biết ai làm gì, rà soát quyền thường kỳ và giữ dữ liệu đủ lâu bạn cần.", date: "2025-08-28", readMins: 6, category: "Business", tags: ["Compliance", "Security"] },
-  { slug: "scale-performance-tiles", title: "Hiệu năng ở quy mô lớn: phục vụ hàng triệu đối tượng mượt mà", excerpt: "Vector tiling, đơn giản hóa thông minh và cache để bản đồ lớn vẫn nhanh.", date: "2025-08-05", readMins: 7, category: "Business", tags: ["Performance", "Scaling"] },
-  { slug: "case-urban-planning-firm", title: "Case study: công ty quy hoạch tăng tốc đề xuất 40%", excerpt: "Lớp dùng lại, xuất đúng thương hiệu và dashboard nhanh giúp duyệt nhanh hơn.", date: "2025-07-25", readMins: 5, category: "Business", tags: ["Case Study", "ROI"] },
+  { slug: "story-maps-hello", titleKey: "p_story_maps_hello_title", excerptKey: "p_story_maps_hello_excerpt", date: "2025-09-01", readMins: 4, category: "Product", tags: ["StoryMaps","Templates"], featured: true },
+  { slug: "style-geojson-better", titleKey: "p_style_geojson_better_title", excerptKey: "p_style_geojson_better_excerpt", date: "2025-08-21", readMins: 6, category: "Tutorial", tags: ["Layers","Styling"] },
+  { slug: "district-03-templates", titleKey: "p_district_03_templates_title", excerptKey: "p_district_03_templates_excerpt", date: "2025-08-10", readMins: 5, category: "Stories", tags: ["Organizations","Templates"] },
+  { slug: "dashboards-101", titleKey: "p_dashboards_101_title", excerptKey: "p_dashboards_101_excerpt", date: "2025-07-30", readMins: 7, category: "Education", tags: ["Dashboards","Analytics"] },
+  { slug: "export-embed-fast", titleKey: "p_export_embed_fast_title", excerptKey: "p_export_embed_fast_excerpt", date: "2025-07-12", readMins: 3, category: "Product", tags: ["Export","Embed"] },
+  { slug: "enterprise-sso-scim", titleKey: "p_enterprise_sso_scim_title", excerptKey: "p_enterprise_sso_scim_excerpt", date: "2025-09-12", readMins: 6, category: "Business", tags: ["SSO","SCIM","Security"] },
+  { slug: "data-governance-audit-logs", titleKey: "p_data_governance_title", excerptKey: "p_data_governance_excerpt", date: "2025-08-28", readMins: 6, category: "Business", tags: ["Compliance","Security"] },
+  { slug: "scale-performance-tiles", titleKey: "p_scale_performance_title", excerptKey: "p_scale_performance_excerpt", date: "2025-08-05", readMins: 7, category: "Business", tags: ["Performance","Scaling"] },
+  { slug: "case-urban-planning-firm", titleKey: "p_case_urban_planning_title", excerptKey: "p_case_urban_planning_excerpt", date: "2025-07-25", readMins: 5, category: "Business", tags: ["CaseStudy","ROI"] },
 ];
 
-const CATEGORY_LABELS: Record<Post["category"], string> = {
-  Product: "Sản phẩm",
-  Tutorial: "Hướng dẫn",
-  Stories: "Câu chuyện",
-  Education: "Giáo dục",
-  Business: "Kinh doanh",
-};
+/** Helpers */
+const CATEGORY_FILTERS: CategoryFilter[] = ["All","Product","Tutorial","Stories","Education","Business"];
+const isCategoryFilter = (v: string): v is CategoryFilter => (CATEGORY_FILTERS as readonly string[]).includes(v);
 
 const fmtDate = (iso: string) =>
-  new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" }).format(new Date(iso));
 
-type SearchParams = { [k: string]: string | string[] | undefined };
-const CATEGORY_FILTERS = ["All", "Product", "Tutorial", "Stories", "Education", "Business"] as const;
-type CategoryFilter = typeof CATEGORY_FILTERS[number];
-function isCategoryFilter(v: string): v is CategoryFilter {
-  return (CATEGORY_FILTERS as readonly string[]).includes(v);
-}
+export default function BlogClient({ searchParams }: { searchParams?: Record<string, string | string[] | undefined> }) {
+  const { t } = useI18n();
+  const tr = (k: string) => t("blog", k);
 
-const FILTER_LABELS: Record<CategoryFilter, string> = {
-  All: "Tất cả",
-  Product: "Sản phẩm",
-  Tutorial: "Hướng dẫn",
-  Stories: "Câu chuyện",
-  Education: "Giáo dục",
-  Business: "Kinh doanh",
-};
+  // label maps
+  const CAT_LABEL = (c: Category): string => tr({
+    Product: "cat_product",
+    Tutorial: "cat_tutorial",
+    Stories: "cat_stories",
+    Education: "cat_education",
+    Business: "cat_business",
+  }[c]);
 
-export default function BlogClient({
-  searchParams,
-}: {
-  searchParams?: SearchParams;
-}) {
+  const CAT_FILTER_LABEL = (c: CategoryFilter): string =>
+    c === "All" ? tr("filter_all") : CAT_LABEL(c);
+
+  const TAG_LABEL = (k: TagKey): string => tr({
+    StoryMaps: "tag_story_maps",
+    Templates: "tag_templates",
+    Layers: "tag_layers",
+    Styling: "tag_styling",
+    Organizations: "tag_organizations",
+    Dashboards: "tag_dashboards",
+    Analytics: "tag_analytics",
+    Export: "tag_export",
+    Embed: "tag_embed",
+    SSO: "tag_sso",
+    SCIM: "tag_scim",
+    Security: "tag_security",
+    Compliance: "tag_compliance",
+    Performance: "tag_performance",
+    Scaling: "tag_scaling",
+    CaseStudy: "tag_case_study",
+    ROI: "tag_roi",
+  }[k]);
+
   const catParamRaw = (searchParams?.cat as string) || "All";
   const activeCat: CategoryFilter = isCategoryFilter(catParamRaw) ? catParamRaw : "All";
   const list = activeCat === "All" ? POSTS : POSTS.filter((p) => p.category === activeCat);
@@ -102,8 +123,7 @@ export default function BlogClient({
 
     const ctx = gsap.context(() => {
       gsap.set([".bh-title", ".bh-sub", ".bh-cta"], { autoAlpha: 0, y: 18 });
-      gsap
-        .timeline()
+      gsap.timeline()
         .to(".bh-title", { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.9, ease: "power2.out" })
         .to(".bh-sub", { autoAlpha: 1, y: 0, ...baseIn }, "<0.08")
         .to(".bh-cta", { autoAlpha: 1, y: 0, ...baseIn }, "<0.08");
@@ -151,14 +171,15 @@ export default function BlogClient({
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-12 text-zinc-100">
+      {/* HERO */}
       <section className="blog-hero relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
         <div className="relative z-10">
-          <p className="bh-sub text-sm tracking-wide text-emerald-300/90">Tài nguyên / Blog</p>
-          <h1 className="bh-title mt-2 text-3xl font-semibold sm:text-4xl">Cập nhật thân thiện và câu chuyện lập bản đồ thực tế</h1>
-          <p className="bh-sub mt-3 max-w-2xl text-zinc-300">Bài ngắn gọn với mẹo hữu ích, tin sản phẩm và ví dụ từ lớp học lẫn doanh nghiệp.</p>
+          <p className="bh-sub text-sm tracking-wide text-emerald-300/90">{tr("breadcrumb")}</p>
+          <h1 className="bh-title mt-2 text-3xl font-semibold sm:text-4xl">{tr("hero_title")}</h1>
+          <p className="bh-sub mt-3 max-w-2xl text-zinc-300">{tr("hero_sub")}</p>
           <div className="mt-6">
             <Link href="#latest" className="bh-cta inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400">
-              Bắt đầu đọc <ArrowRightIcon className="h-4 w-4" />
+              {tr("hero_cta")} <ArrowRightIcon className="h-4 w-4" />
             </Link>
           </div>
         </div>
@@ -166,8 +187,9 @@ export default function BlogClient({
         <div className="pointer-events-none absolute -right-20 bottom-0 h-60 w-60 rounded-full bg-emerald-400/10 blur-3xl" />
       </section>
 
+      {/* TOPICS */}
       <section className="mt-8 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-4 ring-1 ring-emerald-500/10">
-        <div className="section-title text-sm font-medium">Chủ đề</div>
+        <div className="section-title text-sm font-medium">{tr("topics")}</div>
         <div className="mt-3 flex flex-wrap gap-2">
           {CATEGORY_FILTERS.map((c) => {
             const href = c === "All" ? "/resources/blog" : `/resources/blog?cat=${c}`;
@@ -181,25 +203,26 @@ export default function BlogClient({
                 }`}
                 aria-current={active ? "page" : undefined}
               >
-                {FILTER_LABELS[c]}
+                {CAT_FILTER_LABEL(c)}
               </Link>
             );
           })}
         </div>
       </section>
 
+      {/* FEATURED + SUBSCRIBE */}
       {featured && (
         <section className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-3">
           <article className="featured-card col-span-2 rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
             <div className="aspect-[16/9] w-full rounded-xl bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent ring-1 ring-white/5" />
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
-              <TagPill>{CATEGORY_LABELS[featured.category]}</TagPill>
+              <TagPill>{CAT_LABEL(featured.category)}</TagPill>
               {featured.tags.map((t) => (
-                <TagPill key={t}>{t}</TagPill>
+                <TagPill key={t}>{TAG_LABEL(t)}</TagPill>
               ))}
             </div>
-            <h2 className="mt-2 text-2xl font-semibold leading-snug">{featured.title}</h2>
-            <p className="mt-2 text-zinc-300">{featured.excerpt}</p>
+            <h2 className="mt-2 text-2xl font-semibold leading-snug">{tr(featured.titleKey)}</h2>
+            <p className="mt-2 text-zinc-300">{tr(featured.excerptKey)}</p>
             <div className="mt-3 flex items-center gap-4 text-xs text-zinc-400">
               <span className="inline-flex items-center gap-1">
                 <CalendarIcon className="h-4 w-4 text-emerald-300" />
@@ -207,48 +230,51 @@ export default function BlogClient({
               </span>
               <span className="inline-flex items-center gap-1">
                 <ClockIcon className="h-4 w-4 text-emerald-300" />
-                {featured.readMins} phút đọc
+                {featured.readMins} {tr("minutes_read")}
               </span>
             </div>
             <div className="mt-4">
               <Link href={`/resources/blog/${featured.slug}`} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">
-                Đọc bài
+                {tr("read_post")}
               </Link>
             </div>
           </article>
 
           <aside className="subscribe-card rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
-            <h3 className="text-lg font-semibold">Đăng ký nhận cập nhật</h3>
-            <p className="mt-1 text-sm text-zinc-300">Bản tin ngắn hàng tháng: mẹo hay, điểm nhấn sản phẩm và câu chuyện từ các đội nhóm.</p>
+            <h3 className="text-lg font-semibold">{tr("subscribe_title")}</h3>
+            <p className="mt-1 text-sm text-zinc-300">{tr("subscribe_desc")}</p>
             <form className="mt-4 space-y-3" action="/resources/blog/subscribe" method="post">
               <input
                 name="email"
                 type="email"
                 required
-                placeholder="ban@congty.com"
+                placeholder={tr("subscribe_placeholder")}
                 className="w-full rounded-xl bg-zinc-900/70 ring-1 ring-white/10 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:ring-emerald-400/50"
               />
-              <button className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">Đăng ký</button>
+              <button className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">
+                {tr("subscribe_button")}
+              </button>
             </form>
-            <p className="mt-2 text-xs text-zinc-500">Không spam. Có thể hủy bất cứ lúc nào.</p>
+            <p className="mt-2 text-xs text-zinc-500">{tr("subscribe_note")}</p>
           </aside>
         </section>
       )}
 
+      {/* LATEST */}
       <section id="latest" className="mt-10">
-        <h2 className="section-title text-xl font-semibold opacity-0 translate-y-[12px]">Bài viết mới</h2>
+        <h2 className="section-title text-xl font-semibold opacity-0 translate-y-[12px]">{tr("latest_posts")}</h2>
         <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {others.map((p) => (
             <article key={p.slug} className="post-card opacity-0 translate-y-[16px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-5">
               <div className="aspect-[16/9] w-full rounded-xl bg-zinc-800/70 ring-1 ring-white/5" />
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                <TagPill>{CATEGORY_LABELS[p.category]}</TagPill>
+                <TagPill>{CAT_LABEL(p.category)}</TagPill>
                 {p.tags.map((t) => (
-                  <TagPill key={t}>{t}</TagPill>
+                  <TagPill key={t}>{TAG_LABEL(t)}</TagPill>
                 ))}
               </div>
-              <h3 className="mt-2 text-base font-semibold leading-snug">{p.title}</h3>
-              <p className="mt-1 text-sm text-zinc-300">{p.excerpt}</p>
+              <h3 className="mt-2 text-base font-semibold leading-snug">{tr(p.titleKey)}</h3>
+              <p className="mt-1 text-sm text-zinc-300">{tr(p.excerptKey)}</p>
               <div className="mt-2 flex items-center gap-4 text-xs text-zinc-400">
                 <span className="inline-flex items-center gap-1">
                   <CalendarIcon className="h-4 w-4 text-emerald-300" />
@@ -256,12 +282,12 @@ export default function BlogClient({
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <ClockIcon className="h-4 w-4 text-emerald-300" />
-                  {p.readMins} phút đọc
+                  {p.readMins} {tr("minutes_read")}
                 </span>
               </div>
               <div className="mt-3">
                 <Link href={`/resources/blog/${p.slug}`} className="inline-flex items-center gap-2 text-sm font-medium text-emerald-300 underline-offset-4 hover:underline">
-                  Đọc thêm <ArrowRightIcon className="h-4 w-4" />
+                  {tr("read_more")} <ArrowRightIcon className="h-4 w-4" />
                 </Link>
               </div>
             </article>
@@ -269,18 +295,19 @@ export default function BlogClient({
         </div>
       </section>
 
+      {/* CTA */}
       <section className="cta-banner mt-12 overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent p-6 ring-1 ring-emerald-500/10">
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <h3 className="text-xl font-semibold">Bạn muốn chúng tôi viết về chủ đề nào?</h3>
-            <p className="mt-1 text-zinc-300">Hãy cho biết điều gì hữu ích cho lớp học hoặc công ty của bạn.</p>
+            <h3 className="text-xl font-semibold">{tr("cta_title")}</h3>
+            <p className="mt-1 text-zinc-300">{tr("cta_desc")}</p>
           </div>
           <div className="flex gap-3">
             <Link href="/resources/blog/request" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400">
-              Yêu cầu bài viết
+              {tr("cta_request")}
             </Link>
             <Link href="/resources" className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70">
-              Xem thêm tài nguyên
+              {tr("cta_more_resources")}
             </Link>
           </div>
         </div>

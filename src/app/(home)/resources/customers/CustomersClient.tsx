@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useLayoutEffect } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useI18n } from "@/i18n/I18nProvider";
+
 gsap.registerPlugin(ScrollTrigger);
 
 function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -21,13 +23,55 @@ function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
+type Stat = { value: string; labelKey: string };
+type MiniCase = { titleKey: string; summaryKey: string; href: string; pointsKeys: string[] };
+
 export default function CustomersClient() {
+  const { t } = useI18n();
+  const tr = (k: string) => t("customers", k);
+
+  const LOGOS: string[] = [
+    "EduGIS Lab",
+    "Hanoi District 03",
+    "FPT High School",
+    "GeoLearn",
+    "Thủ Đức Campus",
+    "Open Study Maps",
+  ];
+
+  const STATS: Stat[] = [
+    { value: "45%", labelKey: "stat_faster_prep" },
+    { value: "10k+", labelKey: "stat_interactive_students" },
+    { value: "30+", labelKey: "stat_maps_per_class" },
+    { value: "99.9%", labelKey: "stat_uptime" },
+  ];
+
+  const MINI_CASES: MiniCase[] = [
+    {
+      titleKey: "mini_district_title",
+      summaryKey: "mini_district_summary",
+      href: "/resources/customers/district-03",
+      pointsKeys: ["mini_district_p1", "mini_district_p2", "mini_district_p3"],
+    },
+    {
+      titleKey: "mini_geolearn_title",
+      summaryKey: "mini_geolearn_summary",
+      href: "/resources/customers/geolearn-campus",
+      pointsKeys: ["mini_geolearn_p1", "mini_geolearn_p2", "mini_geolearn_p3"],
+    },
+  ];
+
   useLayoutEffect(() => {
-    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const reduce =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const baseIn = { ease: "power2.out", duration: reduce ? 0 : 0.7 } as const;
 
     const ctx = gsap.context(() => {
-      gsap.set([".c-hero-eyebrow", ".c-hero-title", ".c-hero-sub", ".c-hero-cta"], { autoAlpha: 0, y: 18 });
+      gsap.set([".c-hero-eyebrow", ".c-hero-title", ".c-hero-sub", ".c-hero-cta"], {
+        autoAlpha: 0,
+        y: 18,
+      });
       gsap
         .timeline()
         .to(".c-hero-eyebrow", { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.6, ease: "power2.out" })
@@ -100,25 +144,27 @@ export default function CustomersClient() {
     <main className="mx-auto max-w-7xl px-6 py-12 text-zinc-100">
       <section className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
         <div className="relative z-10">
-          <p className="c-hero-eyebrow opacity-0 translate-y-[18px] text-sm tracking-wide text-emerald-300/90">Tài nguyên / Khách hàng</p>
+          <p className="c-hero-eyebrow opacity-0 translate-y-[18px] text-sm tracking-wide text-emerald-300/90">
+            {tr("breadcrumb")}
+          </p>
           <h1 className="c-hero-title opacity-0 translate-y-[18px] mt-2 text-3xl font-semibold sm:text-4xl">
-            Câu chuyện từ các đội nhóm đang dùng <span className="text-emerald-300">IMOS</span>
+            {tr("hero_title_prefix")} <span className="text-emerald-300">IMOS</span>
           </h1>
           <p className="c-hero-sub opacity-0 translate-y-[18px] mt-3 max-w-2xl text-zinc-300">
-            Xây cho giáo dục và tổ chức. Xem cách trường học tạo bản đồ bài giảng tương tác, story map và dự án lớp học bám sát chương trình.
+            {tr("hero_sub")}
           </p>
           <div className="c-hero-cta opacity-0 translate-y-[18px] mt-6 flex flex-wrap gap-3">
             <Link
               href="/templates"
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
             >
-              Khám phá mẫu <ArrowRightIcon className="h-4 w-4" />
+              {tr("hero_cta_templates")} <ArrowRightIcon className="h-4 w-4" />
             </Link>
             <Link
               href="/contact"
               className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
             >
-              Liên hệ với chúng tôi
+              {tr("hero_cta_contact")}
             </Link>
           </div>
         </div>
@@ -127,51 +173,43 @@ export default function CustomersClient() {
       </section>
 
       <section className="mt-10">
-        <p className="text-xs uppercase tracking-widest text-zinc-400">Được tin dùng bởi các đội giáo dục</p>
+        <p className="text-xs uppercase tracking-widest text-zinc-400">{tr("trusted_by")}</p>
         <div className="mt-4 grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-6">
-          {["EduGIS Lab", "Hanoi District 03", "FPT High School", "GeoLearn", "Thủ Đức Campus", "Open Study Maps"].map(
-            (name) => (
-              <div
-                key={name}
-                className="c-logo opacity-0 translate-y-[10px] flex h-14 items-center justify-center rounded-xl border border-zinc-700/50 bg-zinc-900/40 px-3 text-sm text-zinc-300"
-              >
-                {name}
-              </div>
-            ),
-          )}
+          {LOGOS.map((name) => (
+            <div
+              key={name}
+              className="c-logo opacity-0 translate-y-[10px] flex h-14 items-center justify-center rounded-xl border border-zinc-700/50 bg-zinc-900/40 px-3 text-sm text-zinc-300"
+            >
+              {name}
+            </div>
+          ))}
         </div>
       </section>
 
       <section className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {[{ value: "45%", label: "chuẩn bị bài nhanh hơn" }, { value: "10k+", label: "học sinh tương tác" }, { value: "30+", label: "bản đồ mỗi lớp" }, { value: "99,9%", label: "thời gian sẵn sàng hệ thống" }].map(
-          (s) => (
-            <div key={s.label} className="c-stat opacity-0 translate-y-[12px] rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-5 ring-1 ring-emerald-500/10">
-              <div className="text-2xl font-semibold text-emerald-300">{s.value}</div>
-              <div className="mt-1 text-sm text-zinc-400">{s.label}</div>
-            </div>
-          ),
-        )}
+        {STATS.map((s) => (
+          <div
+            key={s.labelKey}
+            className="c-stat opacity-0 translate-y-[12px] rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-5 ring-1 ring-emerald-500/10"
+          >
+            <div className="text-2xl font-semibold text-emerald-300">{s.value}</div>
+            <div className="mt-1 text-sm text-zinc-400">{tr(s.labelKey)}</div>
+          </div>
+        ))}
       </section>
 
       <section className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <article className="c-case col-span-2 opacity-0 translate-y-[20px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6 shadow-lg">
           <div className="flex items-center justify-between gap-4">
             <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
-              Case study
+              {tr("case_badge")}
             </span>
-            <span className="text-xs text-zinc-400">Lịch sử & Địa lý</span>
+            <span className="text-xs text-zinc-400">{tr("case_subject")}</span>
           </div>
-          <h2 className="mt-3 text-2xl font-semibold leading-snug">Greenfield High School: Từ bản đồ tĩnh đến <em>Story Maps</em> tương tác</h2>
-          <p className="mt-2 max-w-2xl text-zinc-300">
-            Giáo viên biến bài học sinh động bằng cách liên kết Địa điểm và Vùng với sự kiện lịch sử, nhúng media và sắp xếp Phân đoạn thành câu chuyện học sinh có thể khám phá.
-          </p>
+          <h2 className="mt-3 text-2xl font-semibold leading-snug">{tr("case_gh_title")}</h2>
+          <p className="mt-2 max-w-2xl text-zinc-300">{tr("case_gh_desc")}</p>
           <ul className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {[
-              "Mẫu bám chương trình học để bắt đầu nhanh",
-              "Vùng & Thẻ để làm nổi bật khu vực và chủ đề",
-              "Phân đoạn Story Map kèm hình ảnh và video",
-              "Xuất ra PDF/PNG cho tài liệu phát tay",
-            ].map((item) => (
+            {[tr("case_gh_p1"), tr("case_gh_p2"), tr("case_gh_p3"), tr("case_gh_p4")].map((item) => (
               <li key={item} className="flex items-start gap-3 text-sm text-zinc-300">
                 <CheckIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-300" />
                 <span>{item}</span>
@@ -179,25 +217,26 @@ export default function CustomersClient() {
             ))}
           </ul>
           <div className="mt-5 flex items-center gap-3">
-            <Link href="/resources/customers/greenfield-high" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400">
-              Đọc câu chuyện <ArrowRightIcon className="h-4 w-4" />
+            <Link
+              href="/resources/customers/greenfield-high"
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400"
+            >
+              {tr("read_story")} <ArrowRightIcon className="h-4 w-4" />
             </Link>
             <Link href="/resources" className="text-sm text-emerald-300/90 underline-offset-4 hover:underline">
-              Xem tất cả tài nguyên
+              {tr("view_all_resources")}
             </Link>
           </div>
         </article>
 
         <aside className="c-quote opacity-0 translate-y-[20px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6 shadow-lg">
           <figure>
-            <blockquote className="text-lg leading-relaxed text-zinc-200">
-              “IMOS khiến các chuyên đề địa lý sống động. Học sinh khám phá địa điểm, mốc thời gian và quan hệ nhân–quả qua bản đồ tương tác thay vì slide tĩnh.”
-            </blockquote>
+            <blockquote className="text-lg leading-relaxed text-zinc-200">“{tr("quote_text")}”</blockquote>
             <figcaption className="mt-4 flex items-center gap-3">
               <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-400/30 to-emerald-200/20" />
               <div>
-                <div className="text-sm font-medium text-zinc-100">Cô Nguyễn Thanh</div>
-                <div className="text-xs text-zinc-400">Trưởng bộ môn KHXH, Greenfield High</div>
+                <div className="text-sm font-medium text-zinc-100">{tr("quote_author")}</div>
+                <div className="text-xs text-zinc-400">{tr("quote_role")}</div>
               </div>
             </figcaption>
           </figure>
@@ -205,55 +244,42 @@ export default function CustomersClient() {
       </section>
 
       <section className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2">
-        {[
-          {
-            title: "Mạng lưới Trường Quận 03: Mẫu chia sẻ cho giáo viên",
-            summary:
-              "Chủ tổ chức tuyển chọn các mẫu Story Map bám chuẩn địa phương, giúp giáo viên mới bắt tay vào dạy chỉ trong vài phút.",
-            href: "/resources/customers/district-03",
-            points: ["Vai trò tổ chức: Owner → Admin → Member", "Mời giáo viên, quản lý quyền", "Theo dõi hạn mức sử dụng theo gói"],
-          },
-          {
-            title: "GeoLearn Campus: Từ thực địa đến dự án lớp học",
-            summary:
-              "Học sinh nhập GeoJSON từ khảo sát, tạo kiểu lớp và nhúng bản đồ vào báo cáo bằng widget có thể chia sẻ.",
-            href: "/resources/customers/geolearn-campus",
-            points: ["Tải GeoJSON / KML cho bài học", "Tùy biến kiểu lớp & thứ tự", "Nhúng bản đồ vào trang LMS"],
-          },
-        ].map((c) => (
-          <article key={c.title} className="c-card opacity-0 translate-y-[14px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
-            <h3 className="text-xl font-semibold leading-snug">{c.title}</h3>
-            <p className="mt-2 text-zinc-300">{c.summary}</p>
+        {MINI_CASES.map((c) => (
+          <article key={c.titleKey} className="c-card opacity-0 translate-y-[14px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
+            <h3 className="text-xl font-semibold leading-snug">{tr(c.titleKey)}</h3>
+            <p className="mt-2 text-zinc-300">{tr(c.summaryKey)}</p>
             <ul className="mt-4 space-y-2">
-              {c.points.map((p) => (
-                <li key={p} className="flex items-start gap-3 text-sm text-zinc-300">
+              {c.pointsKeys.map((k) => (
+                <li key={k} className="flex items-start gap-3 text-sm text-zinc-300">
                   <CheckIcon className="mt-0.5 h-5 w-5 flex-shrink-0 text-emerald-300" />
-                  <span>{p}</span>
+                  <span>{tr(k)}</span>
                 </li>
               ))}
             </ul>
-            <Link href={c.href} className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-emerald-300 underline-offset-4 hover:underline">
-              Đọc thêm <ArrowRightIcon className="h-4 w-4" />
+            <Link
+              href={c.href}
+              className="mt-4 inline-flex items-center gap-2 text-sm font-medium text-emerald-300 underline-offset-4 hover:underline"
+            >
+              {tr("read_more")} <ArrowRightIcon className="h-4 w-4" />
             </Link>
           </article>
         ))}
       </section>
 
       <section className="c-why mt-12 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-6 ring-1 ring-emerald-500/10">
-        <h2 className="c-why-title opacity-0 translate-y-[12px] text-xl font-semibold">Vì sao đội giáo dục chọn chúng tôi</h2>
+        <h2 className="c-why-title opacity-0 translate-y-[12px] text-xl font-semibold">
+          {tr("why_title")}
+        </h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { h: "Story Maps", p: "Chuỗi sự kiện thành Phân đoạn kèm ghi chú và media để bài học như một câu chuyện." },
-            { h: "Mẫu lớp học", p: "Khởi đầu bám chương trình cho các chuyên đề địa lý & lịch sử." },
-            { h: "Xuất dễ dàng", p: "PDF/PNG cho tài liệu; GeoJSON/KML khi cần dữ liệu." },
-            { h: "Cộng tác", p: "Mời giáo viên, gán vai trò và chia sẻ trong toàn tổ chức." },
-          ].map((f) => (
-            <div key={f.h} className="c-why-item opacity-0 translate-y-[10px] rounded-xl border border-zinc-700/60 bg-zinc-900/50 p-5">
+          {[tr("why_f1_h"), tr("why_f2_h"), tr("why_f3_h"), tr("why_f4_h")].map((h, i) => (
+            <div key={h} className="c-why-item opacity-0 translate-y-[10px] rounded-xl border border-zinc-700/60 bg-zinc-900/50 p-5">
               <div className="flex items-center gap-2 text-emerald-300">
                 <CheckIcon className="h-5 w-5" />
-                <span className="text-sm font-semibold">{f.h}</span>
+                <span className="text-sm font-semibold">{h}</span>
               </div>
-              <p className="mt-2 text-sm text-zinc-300">{f.p}</p>
+              <p className="mt-2 text-sm text-zinc-300">
+                {tr(["why_f1_p", "why_f2_p", "why_f3_p", "why_f4_p"][i])}
+              </p>
             </div>
           ))}
         </div>
@@ -262,28 +288,34 @@ export default function CustomersClient() {
       <section className="c-cta mt-12 opacity-0 translate-y-[16px] overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent p-6 ring-1 ring-emerald-500/10">
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <h3 className="text-xl font-semibold">Sẵn sàng tạo bản đồ cho bài học đầu tiên?</h3>
-            <p className="mt-1 text-zinc-300">Bắt đầu từ mẫu hoặc tự xây từ con số 0 chỉ trong vài phút.</p>
+            <h3 className="text-xl font-semibold">{tr("cta_title")}</h3>
+            <p className="mt-1 text-zinc-300">{tr("cta_desc")}</p>
           </div>
           <div className="flex gap-3">
-            <Link href="/new-map" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400">
-              Tạo bản đồ mới <ArrowRightIcon className="h-4 w-4" />
+            <Link
+              href="/new-map"
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400"
+            >
+              {tr("cta_new_map")} <ArrowRightIcon className="h-4 w-4" />
             </Link>
-            <Link href="/pricing" className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70">
-              Xem gói
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70"
+            >
+              {tr("cta_pricing")}
             </Link>
           </div>
         </div>
       </section>
 
       <section className="c-footer-note mt-10 opacity-0 translate-y-[10px] text-center text-sm text-zinc-400">
-        Có câu hỏi? Hãy xem{" "}
+        {tr("footer_q")}{" "}
         <Link href="/resources/faq" className="text-emerald-300 underline-offset-4 hover:underline">
-          Kho kiến thức
+          {tr("footer_kb")}
         </Link>{" "}
-        hoặc{" "}
+        {tr("footer_or")}{" "}
         <Link href="/support" className="text-emerald-300 underline-offset-4 hover:underline">
-          mở phiếu hỗ trợ
+          {tr("footer_ticket")}
         </Link>
         .
       </section>

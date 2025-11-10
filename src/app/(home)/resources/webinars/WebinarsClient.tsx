@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useLayoutEffect } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useI18n } from "@/i18n/I18nProvider";
 gsap.registerPlugin(ScrollTrigger);
 
 function CalendarIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -39,7 +40,7 @@ type Upcoming = {
   title: string;
   date: string;
   time: string;
-  duration: string;
+  duration: string; // giữ dạng chuỗi để đơn giản (vd: "60 min" / "60 phút")
   level: "Beginner" | "Intermediate" | "Advanced";
   tags: string[];
   href: string;
@@ -115,6 +116,22 @@ const ON_DEMAND: OnDemand[] = [
 ];
 
 export default function WebinarsClient() {
+  const { t } = useI18n();
+  const tr = (k: string) => t("webinars", k);
+
+  const levelLabel = (lvl: Upcoming["level"]) => {
+    switch (lvl) {
+      case "Beginner":
+        return tr("level_beginner");
+      case "Intermediate":
+        return tr("level_intermediate");
+      case "Advanced":
+        return tr("level_advanced");
+      default:
+        return lvl;
+    }
+  };
+
   useLayoutEffect(() => {
     const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const baseIn = { ease: "power2.out", duration: reduce ? 0 : 0.7 } as const;
@@ -177,27 +194,26 @@ export default function WebinarsClient() {
       <section className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
         <div className="relative z-10">
           <p className="wb-hero-eyebrow opacity-0 translate-y-[18px] text-sm tracking-wide text-emerald-300/90">
-            Resources / Webinars
+            {tr("hero_eyebrow")}
           </p>
           <h1 className="wb-hero-title opacity-0 translate-y-[18px] mt-2 text-3xl font-semibold sm:text-4xl">
-            Live & On-Demand Webinars
+            {tr("hero_title")}
           </h1>
           <p className="wb-hero-sub opacity-0 translate-y-[18px] mt-3 max-w-2xl text-zinc-300">
-            Learn mapping workflows—from story maps and layer styling to dashboards and collaboration.
-            Join live for Q&amp;A or watch the recordings anytime.
+            {tr("hero_sub")}
           </p>
           <div className="wb-hero-cta opacity-0 translate-y-[18px] mt-6 flex flex-wrap gap-3">
             <Link
               href="#upcoming"
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400"
             >
-              See upcoming <CalendarIcon className="h-4 w-4" />
+              {tr("hero_cta_upcoming")} <CalendarIcon className="h-4 w-4" />
             </Link>
             <Link
               href="#on-demand"
               className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70"
             >
-              Watch on-demand <PlayIcon className="h-4 w-4" />
+              {tr("hero_cta_ondemand")} <PlayIcon className="h-4 w-4" />
             </Link>
           </div>
         </div>
@@ -208,15 +224,15 @@ export default function WebinarsClient() {
       <section className="wb-subscribe mt-8 opacity-0 translate-y-[16px] overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/12 via-emerald-400/10 to-transparent p-5 ring-1 ring-emerald-500/10">
         <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <div>
-            <h3 className="text-lg font-semibold">Get reminders & calendar invites</h3>
-            <p className="mt-1 text-sm text-zinc-300">No spam—just upcoming sessions and recordings.</p>
+            <h3 className="text-lg font-semibold">{tr("sub_title")}</h3>
+            <p className="mt-1 text-sm text-zinc-300">{tr("sub_sub")}</p>
           </div>
           <div className="flex gap-3">
             <Link href="/resources/webinars/subscribe" className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">
-              Subscribe
+              {tr("sub_btn_subscribe")}
             </Link>
             <Link href="/resources/webinars/ics" className="rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70">
-              Add to calendar (.ics)
+              {tr("sub_btn_ics")}
             </Link>
           </div>
         </div>
@@ -224,9 +240,9 @@ export default function WebinarsClient() {
 
       <section id="upcoming" className="mt-10">
         <div className="flex items-end justify-between gap-4">
-          <h2 className="text-xl font-semibold">Upcoming webinars</h2>
+          <h2 className="text-xl font-semibold">{tr("upcoming_title")}</h2>
           <Link href="/resources/webinars/archive" className="text-sm text-emerald-300/90 underline-offset-4 hover:underline">
-            View past webinars
+            {tr("upcoming_view_past")}
           </Link>
         </div>
 
@@ -242,7 +258,7 @@ export default function WebinarsClient() {
               </div>
               <h3 className="mt-2 text-lg font-semibold">{w.title}</h3>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                <Tag>{w.level}</Tag>
+                <Tag>{levelLabel(w.level)}</Tag>
                 <Tag>{w.duration}</Tag>
                 {w.tags.map((t) => (
                   <Tag key={t}>{t}</Tag>
@@ -250,7 +266,7 @@ export default function WebinarsClient() {
               </div>
               <div className="mt-4">
                 <Link href={w.href} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">
-                  Register now
+                  {tr("upcoming_register")}
                 </Link>
               </div>
             </article>
@@ -259,8 +275,8 @@ export default function WebinarsClient() {
       </section>
 
       <section id="on-demand" className="mt-12">
-        <h2 className="text-xl font-semibold">On-demand library</h2>
-        <p className="mt-1 text-sm text-zinc-400">Watch recordings anytime.</p>
+        <h2 className="text-xl font-semibold">{tr("ondemand_title")}</h2>
+        <p className="mt-1 text-sm text-zinc-400">{tr("ondemand_sub")}</p>
 
         <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {ON_DEMAND.map((v) => (
@@ -268,14 +284,14 @@ export default function WebinarsClient() {
               <div className="aspect-[16/9] w-full rounded-xl bg-zinc-800/80 ring-1 ring-white/5" />
               <h3 className="mt-3 text-base font-semibold leading-snug">{v.title}</h3>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                <Tag>{v.level}</Tag>
+                <Tag>{levelLabel(v.level)}</Tag>
                 <Tag>{v.duration}</Tag>
                 {v.tags.map((t) => (
                   <Tag key={t}>{t}</Tag>
                 ))}
               </div>
               <Link href={v.href} className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-emerald-300 underline-offset-4 hover:underline">
-                Watch now <PlayIcon className="h-4 w-4" />
+                {tr("ondemand_watch")} <PlayIcon className="h-4 w-4" />
               </Link>
             </article>
           ))}
@@ -283,7 +299,7 @@ export default function WebinarsClient() {
       </section>
 
       <section className="mt-12 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-6 ring-1 ring-emerald-500/10">
-        <h2 className="text-xl font-semibold">Speakers</h2>
+        <h2 className="text-xl font-semibold">{tr("speakers_title")}</h2>
         <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {[
             { name: "Lan Pham", role: "Education Lead", bio: "Story Maps and curriculum design." },
@@ -303,13 +319,13 @@ export default function WebinarsClient() {
       </section>
 
       <section className="mt-10">
-        <h2 className="text-xl font-semibold">FAQ</h2>
+        <h2 className="text-xl font-semibold">{tr("faq_title")}</h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
           {[
-            ["How do I register?", "Open any upcoming webinar and click “Register now”. You’ll receive a confirmation email and a calendar invite."],
-            ["Will recordings be available?", "Yes. All sessions are recorded and added to the on-demand library within 24–48 hours."],
-            ["Is it free?", "Most webinars are free. Some advanced trainings may require a paid plan or seat."],
-            ["Timezones?", "Times are shown in your local timezone when you open the registration page."],
+            [tr("faq_q1"), tr("faq_a1")],
+            [tr("faq_q2"), tr("faq_a2")],
+            [tr("faq_q3"), tr("faq_a3")],
+            [tr("faq_q4"), tr("faq_a4")],
           ].map(([q, a]) => (
             <div key={q} className="wb-faq opacity-0 translate-y-[10px] rounded-xl border border-zinc-700/60 bg-zinc-900/60 p-5">
               <div className="font-medium">{q}</div>
@@ -322,15 +338,15 @@ export default function WebinarsClient() {
       <section className="wb-final-cta mt-12 opacity-0 translate-y-[16px] overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent p-6 ring-1 ring-emerald-500/10">
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <h3 className="text-xl font-semibold">Want a specific topic?</h3>
-            <p className="mt-1 text-zinc-300">Propose a webinar and we’ll schedule it.</p>
+            <h3 className="text-xl font-semibold">{tr("final_title")}</h3>
+            <p className="mt-1 text-zinc-300">{tr("final_sub")}</p>
           </div>
           <div className="flex gap-3">
             <Link href="/resources/webinars/request" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400">
-              Request a webinar
+              {tr("final_btn_request")}
             </Link>
             <Link href="/resources" className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70">
-              Browse all resources
+              {tr("final_btn_browse")}
             </Link>
           </div>
         </div>
