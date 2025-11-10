@@ -1,8 +1,9 @@
 "use client";
 
-import { getMyMembershipStatus, getPlans, Plan } from "@/lib/api-membership";
+import { getMyMembershipStatus, getPlans, type Plan } from "@/lib/api-membership";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useI18n } from "@/i18n/I18nProvider";
 
 function safeMessage(err: unknown) {
   if (err instanceof Error) return err.message;
@@ -14,6 +15,9 @@ function safeMessage(err: unknown) {
 }
 
 export default function MembershipPage() {
+  const { t } = useI18n();
+  const tr = (k: string) => t("membership", k);
+
   const [plans, setPlans] = useState<Plan[]>([]);
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -38,6 +42,7 @@ export default function MembershipPage() {
             return;
           }
         } catch {
+          // ignore, fallback to free plan below
         }
 
         const free = ps.find((p) => p.priceMonthly === 0) || null;
@@ -55,13 +60,25 @@ export default function MembershipPage() {
     };
   }, []);
 
+  const statusLabel = (s: string | null): string | null => {
+    if (!s) return null;
+    const k = s.toLowerCase();
+    const map: Record<string, string> = {
+      active: tr("status_active"),
+      trialing: tr("status_trialing"),
+      past_due: tr("status_past_due"),
+      canceled: tr("status_canceled"),
+      expired: tr("status_expired"),
+      inactive: tr("status_inactive"),
+    };
+    return map[k] ?? s;
+  };
+
   return (
     <main className="text-zinc-100">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Thành viên</h1>
-        <p className="text-zinc-400 mt-1">
-          Quản lý trạng thái gói và quyền lợi của bạn. Muốn đổi gói? Nhấn <strong>Chọn gói</strong>.
-        </p>
+        <h1 className="text-2xl font-semibold">{tr("title")}</h1>
+        <p className="text-zinc-400 mt-1">{tr("subtitle")}</p>
       </div>
 
       {err && (
@@ -73,17 +90,17 @@ export default function MembershipPage() {
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-5 backdrop-blur-sm">
           <div className="flex items-center justify-between">
-            <div className="text-lg font-semibold">Gói hiện tại</div>
+            <div className="text-lg font-semibold">{tr("current_plan_title")}</div>
             {!loading && currentPlan && (
               <span className="rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 text-xs font-semibold">
-                {status === "active" ? "Đang dùng" : status}
+                {statusLabel(status)}
               </span>
             )}
           </div>
 
           <div className="mt-3">
             {loading ? (
-              <div className="text-sm text-zinc-400">Đang tải…</div>
+              <div className="text-sm text-zinc-400">{tr("loading")}</div>
             ) : currentPlan ? (
               <>
                 <div className="text-xl font-semibold">{currentPlan.planName}</div>
@@ -92,62 +109,37 @@ export default function MembershipPage() {
                   <span className="text-2xl font-bold text-emerald-400">
                     {currentPlan.priceMonthly === 0
                       ? "$0.00"
-                      : `$${currentPlan.priceMonthly.toFixed(2)}`}
+                      : `$${currentPlan.priceMonthly!.toFixed(2)}`}
                   </span>
-                  <span className="text-sm md:text-base text-zinc-400">/tháng</span>
+                  <span className="text-sm md:text-base text-zinc-400">{tr("per_month")}</span>
                 </div>
               </>
             ) : (
-              <div className="text-sm text-zinc-400">Không có gói nào.</div>
+              <div className="text-sm text-zinc-400">{tr("no_plan")}</div>
             )}
           </div>
 
-          {/* <div className="mt-4">
-            <Link
-              href="/profile/select-plan"
-              className="inline-flex items-center rounded-xl bg-emerald-500/90 hover:bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition"
-            >
-              Chọn gói
-            </Link>
-          </div> */}
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-5 backdrop-blur-sm">
-          <div className="text-lg font-semibold">Quyền lợi nổi bật</div>
+          <div className="text-lg font-semibold">{tr("benefits_title")}</div>
           <ul className="mt-2 space-y-2 text-sm text-zinc-300">
-            <li>• Tải dữ liệu raster, vector, bảng tính…</li>
-            <li>• Lọc & phân tích không gian</li>
-            <li>• Dashboard, biểu đồ & xuất bản đồ</li>
-            <li>• Chia sẻ & cộng tác theo thời gian thực</li>
+            <li>• {tr("benefit_1")}</li>
+            <li>• {tr("benefit_2")}</li>
+            <li>• {tr("benefit_3")}</li>
+            <li>• {tr("benefit_4")}</li>
           </ul>
           <div className="mt-4">
             <Link
               href="/profile/select-plan"
               className="inline-flex items-center rounded-xl border border-emerald-400/40 px-4 py-2 text-sm font-medium text-emerald-300 hover:text-emerald-200 transition"
             >
-              Xem các gói
+              {tr("cta_view_plans")}
             </Link>
           </div>
         </div>
       </div>
 
-      {/* <div className="mt-8 rounded-2xl border border-white/10 bg-zinc-900/50 p-5 backdrop-blur-sm">
-        <div className="text-lg font-semibold">Thao tác nhanh</div>
-        <div className="mt-3 flex flex-wrap gap-3">
-          <Link
-            href="/profile/select-plan"
-            className="rounded-xl bg-emerald-500/90 hover:bg-emerald-400 px-4 py-2 text-sm font-semibold text-zinc-950 transition"
-          >
-            Chọn gói
-          </Link>
-          <Link
-            href="/profile/help"
-            className="rounded-xl border border-white/10 px-4 py-2 text-sm font-medium text-zinc-300 hover:text-white transition"
-          >
-            Trợ giúp
-          </Link>
-        </div>
-      </div> */}
     </main>
   );
 }

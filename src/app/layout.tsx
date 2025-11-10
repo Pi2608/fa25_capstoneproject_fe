@@ -30,13 +30,14 @@ export const viewport: Viewport = {
   ],
 };
 
-function getInitialLang(): Lang {
-  const raw = cookies().get("lang")?.value;
+async function getInitialLang(): Promise<Lang> {
+  const store = await cookies(); 
+  const raw = store.get("lang")?.value;
   return raw === "en" || raw === "vi" ? (raw as Lang) : "vi";
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const lang = getInitialLang();
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const lang = await getInitialLang(); 
 
   return (
     <html lang={lang} className={manrope.variable} suppressHydrationWarning>

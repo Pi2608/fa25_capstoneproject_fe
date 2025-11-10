@@ -9,6 +9,7 @@ import {
   rejectInvite,
   RejectInviteOrganizationReqDto,
 } from "@/lib/api-organizations";
+import { useI18n } from "@/i18n/I18nProvider";
 
 function fmtDate(iso?: string) {
   if (!iso) return "—";
@@ -38,6 +39,9 @@ function toApiError(err: unknown): ApiLikeError {
 }
 
 export default function MyInvitationsPage() {
+  const { t } = useI18n();
+  const tr = (k: string) => t("invites", k);
+
   const [data, setData] = useState<GetInvitationsResDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -51,7 +55,7 @@ export default function MyInvitationsPage() {
       setData(res);
       setErr(null);
     } catch {
-      setErr("Không tải được danh sách lời mời.");
+      setErr(tr("load_failed"));
     } finally {
       setLoading(false);
     }
@@ -75,17 +79,17 @@ export default function MyInvitationsPage() {
     try {
       const body: AcceptInviteOrganizationReqDto = { invitationId };
       await acceptInvite(body);
-      setToast("Đã chấp nhận lời mời.");
+      setToast(tr("toast_accept_ok"));
       await load();
       if (typeof window !== "undefined") window.dispatchEvent(new Event("invitations-changed"));
     } catch (e: unknown) {
       const errObj = toApiError(e);
       if ((errObj.status ?? 0) === 409) {
-        setToast("Lời mời này đã được chấp nhận trước đó.");
+        setToast(tr("toast_already_accepted"));
         await load();
         if (typeof window !== "undefined") window.dispatchEvent(new Event("invitations-changed"));
       } else {
-        alert(errObj.detail ?? errObj.message ?? "Chấp nhận lời mời thất bại.");
+        alert(errObj.detail ?? errObj.message ?? tr("accept_failed"));
       }
     } finally {
       setBusyId(null);
@@ -97,12 +101,12 @@ export default function MyInvitationsPage() {
     try {
       const body: RejectInviteOrganizationReqDto = { invitationId };
       await rejectInvite(body);
-      setToast("Đã từ chối lời mời.");
+      setToast(tr("toast_reject_ok"));
       await load();
       if (typeof window !== "undefined") window.dispatchEvent(new Event("invitations-changed"));
     } catch (e: unknown) {
       const errObj = toApiError(e);
-      alert(errObj.detail ?? errObj.message ?? "Từ chối lời mời thất bại.");
+      alert(errObj.detail ?? errObj.message ?? tr("reject_failed"));
     } finally {
       setBusyId(null);
     }
@@ -112,7 +116,7 @@ export default function MyInvitationsPage() {
     <div className="max-w-4xl space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl sm:text-3xl font-semibold flex items-center gap-2">
-          Lời mời tham gia tổ chức
+          {tr("title")}
           <span
             className={[
               "inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium",
@@ -120,8 +124,8 @@ export default function MyInvitationsPage() {
                 ? "bg-emerald-500/15 text-emerald-300 border border-emerald-400/30"
                 : "bg-white/5 text-zinc-300 border border-white/10",
             ].join(" ")}
-            aria-label="Số lời mời chưa phản hồi"
-            title="Số lời mời chưa phản hồi"
+            aria-label={tr("badge_aria")}
+            title={tr("badge_aria")}
           >
             {pendingCount}
           </span>
@@ -137,7 +141,7 @@ export default function MyInvitationsPage() {
               : "border border-white/10 bg-white/5 text-zinc-200 hover:bg-white/10",
           ].join(" ")}
         >
-          Làm mới
+          {tr("refresh")}
         </button>
       </div>
 
@@ -163,7 +167,7 @@ export default function MyInvitationsPage() {
 
       {!loading && !err && pending.length === 0 && (
         <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-zinc-300">
-          Bạn không có lời mời đang chờ.
+          {tr("empty_pending")}
         </div>
       )}
 
@@ -176,13 +180,13 @@ export default function MyInvitationsPage() {
             >
               <div>
                 <div className="text-base font-semibold text-white">
-                  {inv.orgName ?? "—"}
+                  {inv.orgName ?? tr("org_missing")}
                 </div>
                 <div className="text-sm text-zinc-400">
-                  Mời bởi: <span className="text-zinc-300">{inv.inviterEmail ?? "—"}</span> • Vai trò:{" "}
-                  <span className="text-emerald-300">{inv.memberType ?? "Member"}</span>
+                  {tr("invited_by")} <span className="text-zinc-300">{inv.inviterEmail ?? "—"}</span> • {tr("role")}{" "}
+                  <span className="text-emerald-300">{inv.memberType ?? tr("role_member_default")}</span>
                 </div>
-                <div className="text-xs text-zinc-500">Mời lúc: {fmtDate(inv.invitedAt)}</div>
+                <div className="text-xs text-zinc-500">{tr("invited_at")}: {fmtDate(inv.invitedAt)}</div>
               </div>
 
               <div className="flex items-center gap-2">
@@ -191,14 +195,14 @@ export default function MyInvitationsPage() {
                   onClick={() => onAccept(inv.invitationId)}
                   className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
                 >
-                  {busyId === inv.invitationId ? "Đang xử lý..." : "Chấp nhận"}
+                  {busyId === inv.invitationId ? tr("processing") : tr("btn_accept")}
                 </button>
                 <button
                   disabled={busyId === inv.invitationId}
                   onClick={() => onReject(inv.invitationId)}
                   className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10 disabled:opacity-60"
                 >
-                  Từ chối
+                  {tr("btn_reject")}
                 </button>
               </div>
             </div>
@@ -210,7 +214,7 @@ export default function MyInvitationsPage() {
         !err &&
         invitations.some((i) => i.isAccepted) && (
           <div className="pt-2">
-            <div className="text-sm text-zinc-400 mb-2">Đã xử lý</div>
+            <div className="text-sm text-zinc-400 mb-2">{tr("processed_header")}</div>
             <div className="space-y-2">
               {invitations
                 .filter((i) => i.isAccepted)
@@ -220,12 +224,12 @@ export default function MyInvitationsPage() {
                     className="rounded-md border border-white/10 bg-white/5 px-3 py-2 text-sm text-zinc-300 flex items-center justify-between"
                   >
                     <div>
-                      <span className="font-medium text-white">{inv.orgName}</span> • Vai trò:{" "}
-                      <span className="text-emerald-300">{inv.memberType ?? "Member"}</span> • Chấp nhận lúc:{" "}
+                      <span className="font-medium text-white">{inv.orgName}</span> • {tr("role")}{" "}
+                      <span className="text-emerald-300">{inv.memberType ?? tr("role_member_default")}</span> • {tr("accepted_at")}:{" "}
                       {fmtDate(inv.acceptedAt ?? undefined)}
                     </div>
                     <span className="rounded bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 px-2 py-0.5 text-xs">
-                      Đã chấp nhận
+                      {tr("badge_accepted")}
                     </span>
                   </div>
                 ))}
