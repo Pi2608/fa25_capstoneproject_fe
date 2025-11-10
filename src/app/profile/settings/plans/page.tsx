@@ -25,7 +25,24 @@ function thongBaoLoi(err: unknown): string {
         const m = (err as { message?: unknown }).message;
         if (typeof m === "string") return m;
     }
+    if (typeof err === "string") {
+        try {
+            const j = JSON.parse(err) as { detail?: string; title?: string };
+            if (typeof j.detail === "string" && j.detail.length) return j.detail;
+            if (typeof j.title === "string" && j.title.length) return j.title;
+        } catch { }
+    }
     return "Đã xảy ra lỗi. Vui lòng thử lại.";
+}
+function la404(err: unknown): boolean {
+    if (typeof err === "object" && err && "status" in err) {
+        const s = (err as { status?: unknown }).status;
+        return s === 404 || s === "404";
+    }
+    if (typeof err === "string") {
+        return err.includes('"status":404') || err.includes('"status": 404');
+    }
+    return false;
 }
 function dinhDangTien(n?: number | null) {
     if (n == null) return "—";
@@ -82,6 +99,17 @@ function ChonToChuc({
     );
 }
 
+function layVaiTro(orgs: MyOrganizationDto[], orgId: string): string {
+    const o = orgs.find(x => (x as { orgId?: string }).orgId === orgId);
+    if (!o) return "";
+    const r = o as unknown as Record<string, unknown>;
+    if (typeof r.role === "string") return r.role;
+    if (typeof r.yourRole === "string") return r.yourRole;
+    if (typeof r.license === "string") return r.license;
+    if (r.isOwner === true) return "Owner";
+    return "";
+}
+
 export default function TrangGoiThanhVien() {
     const [me, setMe] = useState<Me | null>(null);
     const [orgs, setOrgs] = useState<MyOrganizationDto[]>([]);
@@ -106,15 +134,35 @@ export default function TrangGoiThanhVien() {
             .finally(() => setDangLoadTrang(false));
     }, []);
 
+    const vaiTro = useMemo(() => layVaiTro(orgs, orgId), [orgs, orgId]);
+    const laOwner = vaiTro.toLowerCase() === "owner";
+
     useEffect(() => {
         if (!orgId) { setMembership(null); return; }
         setDangLoadMem(true);
         setBanner(null);
         getMyMembership(orgId)
             .then((m) => setMembership(m))
-            .catch((e) => setBanner({ type: "error", text: thongBaoLoi(e) }))
+            .catch((e) => {
+                if (la404(e)) {
+                    setMembership(null);
+                    if (!laOwner) {
+                        setBanner({
+                            type: "info",
+                            text: "Bạn không phải Owner của tổ chức này nên không thể xem thông tin gói hiện tại. Bạn vẫn có thể xem danh sách gói bên dưới.",
+                        });
+                    } else {
+                        setBanner({
+                            type: "info",
+                            text: "Chưa có gói cho tổ chức này. Hãy chọn một gói bên dưới.",
+                        });
+                    }
+                } else {
+                    setBanner({ type: "error", text: thongBaoLoi(e) });
+                }
+            })
             .finally(() => setDangLoadMem(false));
-    }, [orgId]);
+    }, [orgId, laOwner]);
 
     const planHienTaiId = membership?.planId;
     const planHienTaiTen = membership?.planName ?? "—";
@@ -123,18 +171,40 @@ export default function TrangGoiThanhVien() {
         [plans]
     );
 
-    async function nhanGiaHan() {
-        if (!planHienTaiId) return;
+    async function handleRenew() {
+        if (!membership || !planHienTaiId || !orgId) return;
         setDangXuLy(true); setBanner(null);
         try {
-            await createOrRenewMembership({ planId: planHienTaiId });
+            const payload = {
+                membershipId: membership.membershipId,
+                orgId,
+                planId: planHienTaiId,
+                autoRenew: membership.autoRenew ?? false,
+            } as {
+                membershipId?: string;
+                orgId?: string;
+                planId?: number;
+                autoRenew?: boolean;
+            };
+            await createOrRenewMembership({
+                membershipId: membership.membershipId,
+                orgId,
+                planId: membership.planId,
+                autoRenew: membership.autoRenew ?? false,
+            });
+
             setBanner({ type: "success", text: "Gia hạn gói thành công." });
             const m = await getMyMembership(orgId);
             setMembership(m);
-        } catch (e) { setBanner({ type: "error", text: thongBaoLoi(e) }); }
-        finally { setDangXuLy(false); }
+        } catch (e) {
+            if (la404(e)) {
+                setBanner({ type: "info", text: "Không tìm thấy gói để gia hạn. Vui lòng chọn gói bên dưới để đăng ký mới." });
+            } else {
+                setBanner({ type: "error", text: thongBaoLoi(e) });
+            }
+        } finally { setDangXuLy(false); }
     }
-    async function nhanChon(planId: number) {
+    async function handleSelect(planId: number) {
         if (!me || !orgId) return;
         setDangXuLy(true); setBanner(null);
         try {
@@ -145,7 +215,7 @@ export default function TrangGoiThanhVien() {
         } catch (e) { setBanner({ type: "error", text: thongBaoLoi(e) }); }
         finally { setDangXuLy(false); }
     }
-    async function nhanNangCap(planId: number) {
+    async function handleUpgrade(planId: number) {
         if (!me || !orgId || !membership) return;
         setDangXuLy(true); setBanner(null);
         try {
@@ -208,7 +278,9 @@ export default function TrangGoiThanhVien() {
                                 {dangLoadMem ? (
                                     <div className="text-sm text-zinc-600 dark:text-zinc-400">Đang tải gói…</div>
                                 ) : !membership ? (
-                                    <div className="text-sm text-zinc-600 dark:text-zinc-400">Chưa có gói cho tổ chức này.</div>
+                                    <div className="text-sm text-zinc-600 dark:text-zinc-400">
+                                        {laOwner ? "Chưa có gói cho tổ chức này. Hãy chọn một gói bên dưới." : "Bạn không phải Owner nên không xem được gói hiện tại. Vui lòng liên hệ Owner nếu cần thay đổi gói."}
+                                    </div>
                                 ) : (
                                     <div className="mt-1 grid grid-cols-1 gap-1 text-sm text-zinc-700 dark:text-zinc-300">
                                         <div>
@@ -233,8 +305,8 @@ export default function TrangGoiThanhVien() {
                             <div className="flex gap-2">
                                 <button
                                     className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-                                    onClick={nhanGiaHan}
-                                    disabled={!planHienTaiId || dangXuLy}
+                                    onClick={handleRenew}
+                                    disabled={!membership || !planHienTaiId || dangXuLy}
                                 >
                                     {dangXuLy ? "Đang xử lý…" : "Gia hạn"}
                                 </button>
@@ -281,14 +353,14 @@ export default function TrangGoiThanhVien() {
                                             <div className="mt-4 grid grid-cols-2 gap-2">
                                                 <button
                                                     className="rounded-md bg-emerald-600 px-3 py-2 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-                                                    onClick={() => nhanChon(p.planId)}
+                                                    onClick={() => handleSelect(p.planId)}
                                                     disabled={!orgId || dangXuLy}
                                                 >
                                                     Chọn gói
                                                 </button>
                                                 <button
                                                     className="rounded-md bg-sky-600 px-3 py-2 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-50"
-                                                    onClick={() => nhanNangCap(p.planId)}
+                                                    onClick={() => handleUpgrade(p.planId)}
                                                     disabled={!orgId || !planHienTaiId || dangXuLy}
                                                 >
                                                     Nâng cấp

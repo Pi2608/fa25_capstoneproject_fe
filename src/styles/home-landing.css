@@ -1,0 +1,219 @@
+:root {
+    --mx: 50vw;
+    --my: 50vh;
+}
+
+.home-landing .bg-scene {
+    position: fixed;
+    inset: 0;
+    z-index: -30;
+    background: #070b0b;
+}
+
+.home-landing .gridlines {
+    position: fixed;
+    inset: 0;
+    z-index: -28;
+    pointer-events: none;
+    opacity: .35;
+    background:
+        repeating-linear-gradient(to right, rgba(255, 255, 255, .04) 0, rgba(255, 255, 255, .04) 1px, transparent 1px, transparent 100px),
+        repeating-linear-gradient(to bottom, rgba(255, 255, 255, .04) 0, rgba(255, 255, 255, .04) 1px, transparent 1px, transparent 100px);
+    animation: home-gridMove 30s linear infinite;
+}
+
+@keyframes home-gridMove {
+    0% {
+        background-position: 0 0, 0 0;
+    }
+
+    100% {
+        background-position: 1000px 0, 0 1000px;
+    }
+}
+
+.home-landing .beam {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    width: 120vmax;
+    height: 120vmax;
+    z-index: -27;
+    transform: translate(-50%, -50%);
+    filter: blur(70px);
+    opacity: .45;
+    pointer-events: none;
+}
+
+.home-landing .beam-a {
+    background: conic-gradient(from 0deg, rgba(16, 185, 129, 0) 0deg, rgba(16, 185, 129, .14) 30deg, rgba(16, 185, 129, 0) 65deg);
+    animation: home-spinA 42s linear infinite;
+}
+
+.home-landing .beam-b {
+    background: conic-gradient(from 90deg, rgba(59, 130, 246, 0) 0deg, rgba(59, 130, 246, .12) 28deg, rgba(59, 130, 246, 0) 62deg);
+    animation: home-spinB 56s linear infinite reverse;
+}
+
+@keyframes home-spinA {
+    to {
+        transform: translate(-50%, -50%) rotate(360deg);
+    }
+}
+
+@keyframes home-spinB {
+    to {
+        transform: translate(-50%, -50%) rotate(-360deg);
+    }
+}
+
+.home-landing .mesh-blob {
+    position: fixed;
+    left: 50%;
+    top: 35%;
+    transform: translate(-50%, -50%);
+    width: 70vmax;
+    height: 70vmax;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: .35;
+    z-index: -20;
+    pointer-events: none;
+}
+
+.home-landing .blob-a {
+    background: radial-gradient(circle at 30% 40%, rgba(16, 185, 129, .55), transparent 60%);
+    animation: home-driftA 22s linear infinite;
+}
+
+.home-landing .blob-b {
+    background: radial-gradient(circle at 70% 60%, rgba(59, 130, 246, .45), transparent 55%);
+    animation: home-driftB 28s linear infinite reverse;
+}
+
+.home-landing .blob-c {
+    background: radial-gradient(circle at 50% 50%, rgba(34, 197, 94, .35), transparent 60%);
+    animation: home-driftC 26s ease-in-out infinite;
+}
+
+.home-landing .cursor-light {
+    position: fixed;
+    inset: 0;
+    z-index: -15;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    background: radial-gradient(600px 600px at var(--mx) var(--my), rgba(16, 185, 129, .25), transparent 60%);
+}
+
+.home-landing .vignette {
+    position: fixed;
+    inset: 0;
+    z-index: -10;
+    box-shadow: inset 0 0 220px rgba(0, 0, 0, .55);
+    pointer-events: none;
+}
+
+.home-landing .noise {
+    position: fixed;
+    inset: 0;
+    z-index: -5;
+    pointer-events: none;
+    opacity: .25;
+    mix-blend-mode: overlay;
+    background-image: radial-gradient(rgba(255, 255, 255, .03) 1px, transparent 1px);
+    background-size: 3px 3px;
+    animation: home-noiseShift 1.6s steps(2, end) infinite;
+}
+
+@keyframes home-noiseShift {
+    0% {
+        transform: translate(0, 0);
+    }
+
+    100% {
+        transform: translate(3px, -3px);
+    }
+}
+
+.home-landing .marquee {
+    animation: home-marquee 24s linear infinite;
+}
+
+.home-landing .marquee:hover {
+    animation-play-state: paused;
+}
+
+@keyframes home-marquee {
+    0% {
+        transform: translateX(0);
+    }
+
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+@keyframes home-driftA {
+    0% {
+        transform: translate(-60%, -40%) scale(1);
+    }
+
+    33% {
+        transform: translate(-30%, -30%) scale(1.05);
+    }
+
+    66% {
+        transform: translate(-45%, -5%) scale(.95);
+    }
+
+    100% {
+        transform: translate(-60%, -40%) scale(1);
+    }
+}
+
+@keyframes home-driftB {
+    0% {
+        transform: translate(10%, -10%) scale(1);
+    }
+
+    33% {
+        transform: translate(25%, 10%) scale(1.08);
+    }
+
+    66% {
+        transform: translate(-5%, 25%) scale(.92);
+    }
+
+    100% {
+        transform: translate(10%, -10%) scale(1);
+    }
+}
+
+@keyframes home-driftC {
+    0% {
+        transform: translate(-10%, 30%) scale(1);
+    }
+
+    50% {
+        transform: translate(20%, 20%) scale(1.06);
+    }
+
+    100% {
+        transform: translate(-10%, 30%) scale(1);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+    .home-landing .gridlines,
+    .home-landing .beam,
+    .home-landing .mesh-blob,
+    .home-landing .noise {
+        animation: none;
+    }
+
+    .home-landing .beam,
+    .home-landing .cursor-light {
+        opacity: .18;
+    }
+}

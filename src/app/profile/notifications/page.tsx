@@ -2,15 +2,108 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { getUserNotifications, GetUserNotificationsResponse, markAllNotificationsAsRead, markNotificationAsRead, NotificationItem } from "@/lib/api-user";
+import {
+  getUserNotifications,
+  GetUserNotificationsResponse,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+  NotificationItem,
+} from "@/lib/api-user";
 
-
+// ====== Helpers ======
 function fmtTime(iso?: string) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleString();
+  return d.toLocaleString("vi-VN", {
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 }
 
+function viTypeLabel(type?: string) {
+  if (!type) return undefined;
+  const t = type.toLowerCase();
+  if (t.includes("transaction_completed")) return "Hoàn tất giao dịch";
+  if (t.includes("payment") && t.includes("success")) return "Thanh toán thành công";
+  if (t.includes("subscription") && (t.includes("processed") || t.includes("active"))) return "Kích hoạt gói";
+  return type; // giữ nguyên nếu không biết
+}
+
+// Dịch nội dung tiếng Anh → tiếng Việt theo mẫu phổ biến
+function translateMessageToVi(item: NotificationItem): string {
+  const msg = (item.message ?? "").trim();
+
+  // Ưu tiên dựa trên type
+  const type = (item.type ?? "").toLowerCase();
+
+  // 1) Hoàn tất thanh toán gói: "Payment of $0.10 for Pro plan completed successfully"
+  {
+    const r =
+      /payment of\s*\$?\s*([\d.,]+)\s*for\s*(.+?)\s*plan\s*completed\s*successfully/i.exec(msg);
+    if (r) {
+      const amount = r[1];
+      const plan = r[2].trim();
+      return `Thanh toán $${amount} cho gói ${plan} đã hoàn tất.`;
+    }
+  }
+
+  // 2) Xử lý thanh toán + kích hoạt membership:
+  // "Your payment of $0.10 for Plan Subscription has been processed successfully. Your membership is now active."
+  {
+    const r =
+      /your payment of\s*\$?\s*([\d.,]+)\s*for\s*(.+?)\s*subscription\s*has been processed successfully\.?\s*your membership is now active\.?/i.exec(
+        msg
+      );
+    if (r) {
+      const amount = r[1];
+      const plan = r[2].trim();
+      return `Thanh toán $${amount} cho đăng ký gói ${plan} đã được xử lý thành công. Tư cách thành viên của bạn đã được kích hoạt.`;
+    }
+  }
+
+  // 3) Nếu có type gợi ý
+  if (type.includes("transaction_completed")) {
+    // Cố gắng bắt số tiền & gói nếu có
+    const money = /\$[\d.,]+/.exec(msg)?.[0] ?? "";
+    const plan = /\b(Pro|Basic|Enterprise|Starter|Plan)\b/i.exec(msg)?.[0] ?? "";
+    if (money || plan) {
+      return `Thanh toán ${money ? money + " " : ""}${plan ? "cho gói " + plan + " " : ""}đã hoàn tất.`;
+    }
+    return "Giao dịch của bạn đã hoàn tất.";
+  }
+
+  if (type.includes("subscription") && (type.includes("processed") || type.includes("active"))) {
+    return "Đăng ký gói của bạn đã được xử lý và kích hoạt.";
+  }
+
+  // 4) Fallback: dịch cụm từ thường gặp
+  if (msg) {
+    let vi = msg;
+    vi = vi.replace(/Your payment/gi, "Thanh toán của bạn");
+    vi = vi.replace(/has been processed successfully/gi, "đã được xử lý thành công");
+    vi = vi.replace(/is now active/gi, "hiện đã được kích hoạt");
+    vi = vi.replace(/Payment of/gi, "Thanh toán");
+    vi = vi.replace(/completed successfully/gi, "hoàn tất thành công");
+    vi = vi.replace(/for/gi, "cho");
+    vi = vi.replace(/plan subscription/gi, "đăng ký gói");
+    vi = vi.replace(/plan/gi, "gói");
+    vi = vi.replace(/membership/gi, "tư cách thành viên");
+
+    // Nếu sau khi thay vẫn còn nguyên tiếng Anh nhiều, cứ trả lại bản gốc để tránh hiểu sai
+    const englishWords = (vi.match(/[A-Za-z]{4,}/g) || []).length;
+    if (englishWords > 6) return msg; // giữ nguyên nếu không chắc
+    return vi;
+  }
+
+  return "—";
+}
+
+// ====== Page ======
 export default function NotificationsPage() {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -32,8 +125,15 @@ export default function NotificationsPage() {
         notifications: res.notifications ?? [],
         page: res.page ?? p,
         pageSize: res.pageSize ?? s,
-        totalItems: res.totalItems ?? res.notifications.length,
-        totalPages: res.totalPages ?? Math.max(1, Math.ceil((res.totalItems ?? res.notifications.length) / (res.pageSize ?? s))),
+        totalItems: res.totalItems ?? (res.notifications?.length ?? 0),
+        totalPages:
+          res.totalPages ??
+          Math.max(
+            1,
+            Math.ceil(
+              (res.totalItems ?? (res.notifications?.length ?? 0)) / (res.pageSize ?? s)
+            )
+          ),
       });
       setError(null);
     } catch {
@@ -83,9 +183,21 @@ export default function NotificationsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-2">
           <h1 className="text-xl font-semibold">Thông báo</h1>
-          <p className="text-sm text-zinc-400">Quản lý thông báo của bạn</p>
+          <span
+            className={[
+              "inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+              unreadCount > 0
+                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-400/30"
+                : "bg-white/5 text-zinc-300 border border-white/10",
+            ].join(" ")}
+            aria-label="Số thông báo chưa đọc"
+            title="Số thông báo chưa đọc"
+          >
+            {unreadCount}
+          </span>
+          <p className="text-sm text-zinc-400 ml-1">Quản lý thông báo của bạn</p>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -147,6 +259,7 @@ export default function NotificationsPage() {
               ))}
             </>
           )}
+
           {!loading && data.notifications.length === 0 && (
             <div className="px-4 py-6 text-sm text-zinc-300">Chưa có thông báo.</div>
           )}
@@ -159,13 +272,12 @@ export default function NotificationsPage() {
                     {children}
                   </Link>
                 ) : (
-                  <button
-                    onClick={() => onMarkRead(n)}
-                    className="w-full text-left"
-                  >
+                  <button onClick={() => onMarkRead(n)} className="w-full text-left">
                     {children}
                   </button>
                 );
+
+              const typeLabel = viTypeLabel(n.type);
 
               return (
                 <div
@@ -184,16 +296,19 @@ export default function NotificationsPage() {
                         <span className="font-medium text-zinc-100">
                           {n.title || "Thông báo"}
                         </span>
-                        {n.type && (
+                        {typeLabel && (
                           <span className="ml-1 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-zinc-300">
-                            {n.type}
+                            {typeLabel}
                           </span>
                         )}
                       </div>
                     )}
                   </div>
+
                   <div className="col-span-5 pr-4">
-                    <div className="text-sm text-zinc-300">{n.message || "—"}</div>
+                    <div className="text-sm text-zinc-300">
+                      {translateMessageToVi(n)}
+                    </div>
                     {n.linkUrl && (
                       <Link
                         href={n.linkUrl}
@@ -204,6 +319,7 @@ export default function NotificationsPage() {
                       </Link>
                     )}
                   </div>
+
                   <div className="col-span-2">
                     <div className="text-xs text-zinc-400">{fmtTime(n.createdAt)}</div>
                     {!n.isRead && (
@@ -224,7 +340,8 @@ export default function NotificationsPage() {
       {data.totalPages && data.totalPages > 1 && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-zinc-400">
-            Trang {data.page} / {data.totalPages} • {data.totalItems?.toLocaleString()} thông báo
+            Trang {data.page} / {data.totalPages} •{" "}
+            {data.totalItems?.toLocaleString("vi-VN")} thông báo
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -241,7 +358,7 @@ export default function NotificationsPage() {
             </button>
             <button
               disabled={data.page >= (data.totalPages ?? 1) || loading}
-              onClick={() => setPage((p) => Math.min((data.totalPages ?? 1), p + 1))}
+              onClick={() => setPage((p) => Math.min(data.totalPages ?? 1, p + 1))}
               className={[
                 "rounded-md px-3 py-1.5 text-sm",
                 data.page >= (data.totalPages ?? 1) || loading

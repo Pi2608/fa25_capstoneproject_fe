@@ -9,24 +9,24 @@ export const metadata: Metadata = {
 
 export default function ExportEmbedPage() {
   const features = [
-    { title: "High-res output", desc: "PNG/PDF up to 8K with DPI, transparent background, and vector text." },
-    { title: "Print presets", desc: "A-series sizes, margins/bleed, scale bars, grids, and legends." },
-    { title: "Batch & queue", desc: "Schedule export jobs, webhooks on completion, retry with backoff." },
-    { title: "Live embed", desc: "Responsive iframe or React component with theme, legend, and filters." },
-    { title: "Branding", desc: "Logo, title block, colors, and watermark per org or per export." },
-    { title: "Access control", desc: "Domain allowlist, signed URLs, SSO tokens, and view permissions." },
+    { titleKey: "fea_highres_t", descKey: "fea_highres_d" },
+    { titleKey: "fea_print_t", descKey: "fea_print_d" },
+    { titleKey: "fea_batch_t", descKey: "fea_batch_d" },
+    { titleKey: "fea_live_t", descKey: "fea_live_d" },
+    { titleKey: "fea_brand_t", descKey: "fea_brand_d" },
+    { titleKey: "fea_access_t", descKey: "fea_access_d" },
   ];
 
   const formats: [string, string][] = [
-    ["PNG", "Raster image for reports and slides. Supports HiDPI and transparency."],
-    ["PDF", "Vector printing with selectable text, CMYK-friendly colors, and layers legend."],
-    ["SVG", "Scalable vector for design tools; great for posters and infographics."],
+    ["fmt_png_t", "fmt_png_d"],
+    ["fmt_pdf_t", "fmt_pdf_d"],
+    ["fmt_svg_t", "fmt_svg_d"],
   ];
 
   const presets = [
-    { title: "Report A4", desc: "Portrait A4 with title, legend, scale bar, and footer.", ratio: "210×297 mm" },
-    { title: "Poster A2", desc: "Large format for exhibitions with grid and credits.", ratio: "420×594 mm" },
-    { title: "Social 16:9", desc: "Landscape 1920×1080 with safe areas and watermark.", ratio: "1920×1080" },
+    { titleKey: "pre_a4_t", descKey: "pre_a4_d", ratioKey: "pre_a4_r" },
+    { titleKey: "pre_a2_t", descKey: "pre_a2_d", ratioKey: "pre_a2_r" },
+    { titleKey: "pre_169_t", descKey: "pre_169_d", ratioKey: "pre_169_r" },
   ];
 
   const embedSnippets = {
@@ -47,16 +47,16 @@ export default function ExportEmbedPage() {
   };
 
   const controls: [string, string][] = [
-    ["Legend", "Dock left/right, collapsed by default, custom titles."],
-    ["Watermark", "Per-org or per-export watermark, opacity and position."],
-    ["Safe areas", "Guides for titles/logos; prevent overlap with important features."],
-    ["Localization", "Date/number formats, locale labels, and RTL support in PDFs."],
+    ["ctl_legend_t", "ctl_legend_d"],
+    ["ctl_watermark_t", "ctl_watermark_d"],
+    ["ctl_safe_t", "ctl_safe_d"],
+    ["ctl_l10n_t", "ctl_l10n_d"],
   ];
 
   const faqs: [string, string][] = [
-    ["Can I lock embeds to my domain?", "Yes. Add domains to the allowlist. Requests from other domains are blocked."],
-    ["Do PDFs keep vector quality?", "Yes. Symbols and labels remain vector where possible; rasters are tiled with overviews."],
-    ["How are export jobs delivered?", "Large jobs run in a queue. Poll the job endpoint or register a webhook to receive the file URL."],
+    ["faq_domain_q", "faq_domain_a"],
+    ["faq_pdf_q", "faq_pdf_a"],
+    ["faq_jobs_q", "faq_jobs_a"],
   ];
 
   return (

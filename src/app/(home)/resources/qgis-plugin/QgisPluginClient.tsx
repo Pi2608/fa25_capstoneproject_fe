@@ -97,17 +97,17 @@ export default function QgisPluginClient() {
     <main className="mx-auto max-w-7xl px-6 py-12 text-zinc-100">
       <section className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
         <div className="relative z-10">
-          <p className="qg-hero-eyebrow opacity-0 translate-y-[18px] text-sm tracking-wide text-emerald-300/90">Resources / QGIS Plugin</p>
-          <h1 className="qg-hero-title opacity-0 translate-y-[18px] mt-2 text-3xl font-semibold sm:text-4xl">QGIS Plugin</h1>
+          <p className="qg-hero-eyebrow opacity-0 translate-y-[18px] text-sm tracking-wide text-emerald-300/90">Tài nguyên / Plugin QGIS</p>
+          <h1 className="qg-hero-title opacity-0 translate-y-[18px] mt-2 text-3xl font-semibold sm:text-4xl">Plugin QGIS</h1>
           <p className="qg-hero-sub opacity-0 translate-y-[18px] mt-3 max-w-2xl text-zinc-300">
-            Sync your QGIS projects to the cloud, publish layers, keep styles in step, and share maps in minutes.
+            Đồng bộ dự án QGIS lên đám mây, xuất bản lớp dữ liệu, giữ phong cách đồng bộ và chia sẻ bản đồ trong vài phút.
           </p>
           <div className="qg-hero-cta opacity-0 translate-y-[18px] mt-6 flex flex-wrap gap-3">
             <Link href="/downloads/qgis-plugin/latest.zip" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">
-              Download .zip <DownloadIcon className="h-4 w-4" />
+              Tải .zip <DownloadIcon className="h-4 w-4" />
             </Link>
             <Link href="/resources/qgis-plugin/install" className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70">
-              Install via QGIS Plugin Manager
+              Cài qua Trình quản lý Plugin QGIS
             </Link>
           </div>
         </div>
@@ -119,63 +119,63 @@ export default function QgisPluginClient() {
         <div className="qg-info-card opacity-0 translate-y-[14px] rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-6 ring-1 ring-emerald-500/10">
           <div className="flex items-center gap-2 text-emerald-300">
             <PlugIcon className="h-5 w-5" />
-            <div className="text-sm font-semibold">Compatibility</div>
+            <div className="text-sm font-semibold">Tương thích</div>
           </div>
           <ul className="mt-3 space-y-2 text-sm text-zinc-300">
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> QGIS 3.x on Windows, macOS, Linux</li>
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Internet connection for sync & sign-in</li>
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> IMOS account</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> QGIS 3.x trên Windows, macOS, Linux</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Cần kết nối Internet để đồng bộ và đăng nhập</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Tài khoản IMOS</li>
           </ul>
         </div>
         <div className="qg-info-card opacity-0 translate-y-[14px] rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-6 ring-1 ring-emerald-500/10">
           <div className="flex items-center gap-2 text-emerald-300">
             <InfoIcon className="h-5 w-5" />
-            <div className="text-sm font-semibold">What it does</div>
+            <div className="text-sm font-semibold">Chức năng</div>
           </div>
           <ul className="mt-3 space-y-2 text-sm text-zinc-300">
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Push QGIS layers and styles to IMOS</li>
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Pull updates from the cloud into a local project</li>
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Keep symbology and layer order in sync</li>
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Publish web maps and share links or embeds</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Đẩy lớp dữ liệu và phong cách từ QGIS lên IMOS</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Kéo cập nhật từ đám mây về dự án cục bộ</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Giữ đồng bộ ký hiệu và thứ tự lớp</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Xuất bản bản đồ web, chia sẻ liên kết hoặc nhúng</li>
           </ul>
         </div>
         <div className="qg-info-card opacity-0 translate-y-[14px] rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-6 ring-1 ring-emerald-500/10">
           <div className="flex items-center gap-2 text-emerald-300">
             <InfoIcon className="h-5 w-5" />
-            <div className="text-sm font-semibold">Benefits</div>
+            <div className="text-sm font-semibold">Lợi ích</div>
           </div>
           <ul className="mt-3 space-y-2 text-sm text-zinc-300">
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> No manual exports or file juggling</li>
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Consistent styles across desktop and web</li>
-            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Faster handoffs to teammates and stakeholders</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Không còn xuất file thủ công, bớt rối rắm</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Phong cách nhất quán giữa desktop và web</li>
+            <li className="flex items-start gap-2"><CheckIcon className="mt-0.5 h-5 w-5 text-emerald-300" /> Bàn giao nhanh cho đồng đội và đối tác</li>
           </ul>
         </div>
       </section>
 
       <section className="qg-install mt-10 opacity-0 translate-y-[16px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
-        <h2 className="text-xl font-semibold">Install</h2>
+        <h2 className="text-xl font-semibold">Cài đặt</h2>
         <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-zinc-300">
-          <li>Open QGIS → Plugins → Manage and Install…</li>
-          <li>Select <span className="font-medium">Install from ZIP</span> and choose the downloaded file, or add the IMOS repository URL.</li>
-          <li>Search for <span className="font-medium">IMOS</span> and click <span className="font-medium">Install</span>.</li>
-          <li>Restart QGIS if prompted, then open the plugin from the Plugins menu or toolbar.</li>
+          <li>Mở QGIS → Plugins → Manage and Install…</li>
+          <li>Chọn <span className="font-medium">Install from ZIP</span> và trỏ đến file đã tải, hoặc thêm URL kho IMOS.</li>
+          <li>Tìm <span className="font-medium">IMOS</span> và bấm <span className="font-medium">Install</span>.</li>
+          <li>Khởi động lại QGIS nếu được yêu cầu, sau đó mở plugin từ menu/toolbar Plugins.</li>
         </ol>
         <div className="mt-4 flex flex-wrap gap-3 text-sm">
-          <code className="rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-zinc-300">Repository URL: /resources/qgis-plugin/repo.xml</code>
-          <Link href="/resources/qgis-plugin/install" className="rounded-lg border border-emerald-500/40 bg-zinc-900 px-3 py-1.5 font-medium text-emerald-300 hover:border-emerald-400/70">Full install guide</Link>
+          <code className="rounded-lg border border-white/10 bg-black/40 px-3 py-1.5 text-zinc-300">URL kho plugin: /resources/qgis-plugin/repo.xml</code>
+          <Link href="/resources/qgis-plugin/install" className="rounded-lg border border-emerald-500/40 bg-zinc-900 px-3 py-1.5 font-medium text-emerald-300 hover:border-emerald-400/70">Hướng dẫn cài đặt đầy đủ</Link>
         </div>
       </section>
 
       <section className="mt-10 rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
-        <h2 className="text-xl font-semibold">Quick start</h2>
+        <h2 className="text-xl font-semibold">Bắt đầu nhanh</h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
           {[
-            ["Sign in", "Use your IMOS account inside the plugin."],
-            ["Pick a project", "Create a new cloud project or select an existing one."],
-            ["Choose layers", "Select which layers and styles to include."],
-            ["Sync", "Push data and styles; pull updates when teammates publish."],
-            ["Publish", "Create a web map and get a shareable link or embed."],
-            ["Share", "Send to colleagues, students, or embed on your site/LMS."],
+            ["Đăng nhập", "Dùng tài khoản IMOS ngay trong plugin."],
+            ["Chọn dự án", "Tạo dự án đám mây mới hoặc chọn dự án sẵn có."],
+            ["Chọn lớp", "Chỉ định lớp và phong cách cần đồng bộ."],
+            ["Đồng bộ", "Đẩy dữ liệu và style; kéo khi đồng đội xuất bản."],
+            ["Xuất bản", "Tạo bản đồ web và nhận link chia sẻ/nhúng."],
+            ["Chia sẻ", "Gửi cho đồng nghiệp, học sinh hoặc nhúng lên web/LMS."],
           ].map(([h, p]) => (
             <div key={h} className="qg-quick-item opacity-0 translate-y-[12px] rounded-xl border border-zinc-700/60 bg-zinc-900/50 p-5">
               <div className="flex items-center gap-2 text-emerald-300">
@@ -189,7 +189,7 @@ export default function QgisPluginClient() {
       </section>
 
       <section className="mt-10">
-        <h2 className="text-xl font-semibold">Screenshots</h2>
+        <h2 className="text-xl font-semibold">Ảnh chụp màn hình</h2>
         <div className="mt-4 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6].map((n) => (
             <div key={n} className="qg-ss opacity-0 translate-y-[8px] scale-[0.98] aspect-[16/10] w-full rounded-xl bg-zinc-800/80 ring-1 ring-white/5" />
@@ -199,13 +199,13 @@ export default function QgisPluginClient() {
 
       <section className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
-          <h2 className="text-xl font-semibold">FAQ</h2>
+          <h2 className="text-xl font-semibold">Câu hỏi thường gặp</h2>
           <div className="mt-4 space-y-4 text-sm text-zinc-300">
             {[
-              ["Is the plugin free?", "Yes. Sync and publishing are included with your IMOS plan."],
-              ["Which QGIS versions are supported?", "QGIS 3.x on Windows, macOS, and Linux. Keep QGIS updated for best results."],
-              ["Does it upload my data or just styles?", "You can sync layers and styles. Choose exactly what you publish each time."],
-              ["Can I roll back changes?", "Use project history on the web to review versions and restore when needed."],
+              ["Plugin có miễn phí không?", "Có. Đồng bộ và xuất bản đi kèm theo gói IMOS của bạn."],
+              ["Hỗ trợ phiên bản QGIS nào?", "QGIS 3.x trên Windows, macOS, Linux. Nên cập nhật QGIS để có kết quả tốt nhất."],
+              ["Có tải dữ liệu hay chỉ tải phong cách?", "Bạn có thể đồng bộ cả lớp dữ liệu và phong cách. Chọn chính xác nội dung đăng mỗi lần."],
+              ["Có hoàn tác thay đổi được không?", "Dùng lịch sử dự án trên web để xem phiên bản và khôi phục khi cần."],
             ].map(([q, a]) => (
               <div key={q} className="qg-faq-item opacity-0 translate-y-[10px]">
                 <div className="font-medium">{q}</div>
@@ -216,12 +216,12 @@ export default function QgisPluginClient() {
         </div>
 
         <div className="rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
-          <h2 className="text-xl font-semibold">Release notes</h2>
+          <h2 className="text-xl font-semibold">Ghi chú phát hành</h2>
           <ul className="mt-3 space-y-3 text-sm text-zinc-300">
             {[
-              ["v1.2.0", "Improved style sync and large layer uploads."],
-              ["v1.1.0", "Added project picker and sign-in with SSO."],
-              ["v1.0.0", "Initial release with push/pull and publish."],
+              ["v1.2.0", "Cải thiện đồng bộ phong cách và tải lớp dữ liệu lớn."],
+              ["v1.1.0", "Thêm chọn dự án và đăng nhập SSO."],
+              ["v1.0.0", "Phát hành đầu tiên với đẩy/kéo và xuất bản."],
             ].map(([v, d]) => (
               <li key={v} className="qg-release-item opacity-0 translate-y-[10px]">
                 <div className="font-medium">{v}</div>
@@ -230,16 +230,16 @@ export default function QgisPluginClient() {
             ))}
           </ul>
           <Link href="/resources/qgis-plugin/changelog" className="mt-3 inline-block text-sm font-medium text-emerald-300 underline-offset-4 hover:underline">
-            Full changelog
+            Xem toàn bộ thay đổi
           </Link>
         </div>
 
         <div className="qg-cta opacity-0 translate-y-[16px] rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/12 via-emerald-400/10 to-transparent p-6 ring-1 ring-emerald-500/10">
-          <h2 className="text-xl font-semibold">Need help?</h2>
-          <p className="mt-2 text-sm text-zinc-300">Read the Developer Docs or open a support ticket and we’ll get you unstuck.</p>
+          <h2 className="text-xl font-semibold">Cần hỗ trợ?</h2>
+          <p className="mt-2 text-sm text-zinc-300">Đọc Tài liệu Nhà phát triển hoặc mở phiếu hỗ trợ, chúng tôi sẽ giúp bạn xử lý.</p>
           <div className="mt-4 flex gap-3">
-            <Link href="/resources/developer-docs" className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">Developer Docs</Link>
-            <Link href="/support" className="rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70">Contact Support</Link>
+            <Link href="/resources/developer-docs" className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">Tài liệu Nhà phát triển</Link>
+            <Link href="/support" className="rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70">Liên hệ Hỗ trợ</Link>
           </div>
         </div>
       </section>

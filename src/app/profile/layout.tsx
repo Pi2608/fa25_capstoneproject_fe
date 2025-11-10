@@ -103,7 +103,7 @@ function ThemeToggle() {
       className={`${base} ${isDark ? darkCls : lightCls}`}
     >
       {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-      <span>{isDark ? "Dark" : "Light"}</span>
+      <span>{isDark ? "Tối" : "Sáng"}</span>
     </button>
   );
 }

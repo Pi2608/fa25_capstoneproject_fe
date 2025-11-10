@@ -23,11 +23,11 @@ const SERVICES = [
     desc: "PostGIS, GeoServer, S3, Google Drive, WMS/WMTS/XYZ…",
     href: "/service/cloud-sources",
   },
-  {
-    title: "Dashboards",
-    desc: "Combine maps with charts, metrics, and filters.",
-    href: "/service/dashboards",
-  },
+  // {
+  //   title: "Dashboards",
+  //   desc: "Combine maps with charts, metrics, and filters.",
+  //   href: "/service/dashboards",
+  // },
   // {
   //   title: "Collaboration",
   //   desc: "Share, comment, versioning, and granular permissions.",

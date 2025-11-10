@@ -15,7 +15,7 @@ const PaymentMethodPopup: React.FC<PaymentMethodPopupProps> = ({
   onClose,
   onSelectMethod,
   planName = "Premium Plan",
-  planPrice = 29.99
+  planPrice = 0.1
 }) => {
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
 

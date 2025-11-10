@@ -158,25 +158,40 @@ function mentionsMissingBody(msg: string): boolean {
   return m.includes("implicit body inferred") || m.includes("no body was provided");
 }
 
-export async function createOrRenewMembership(payload: { planId: number }) {
-  const body = { plan_id: payload.planId };
+export function createOrRenewMembership(payload: {
+  membershipId?: string;
+  userId?: string;
+  orgId?: string;
+  planId?: number;
+  autoRenew?: boolean;
+}) {
+  const body: Record<string, unknown> = {};
 
-  try {
-    return await postJson<typeof body, MembershipResponse>(
-      "/membership/create-or-renew",
-      body
-    );
-  } catch (err) {
-    if (!isApiError(err)) throw err;
+  if (payload.membershipId) body.MembershipId = payload.membershipId;
+  if (payload.userId) body.UserId = payload.userId;
+  if (payload.orgId) body.OrgId = payload.orgId;
+  if (typeof payload.planId === "number") body.PlanId = payload.planId;
+  if (typeof payload.autoRenew === "boolean") body.AutoRenew = payload.autoRenew;
 
-    if (mentionsMissingBody(err.message)) {
-      const url = `/membership/create-or-renew?planId=${encodeURIComponent(payload.planId)}`;
-      return await apiFetch<MembershipResponse>(url, { method: "POST" });
-    }
+  return postJson<typeof body, MembershipResponse>("/membership/create-or-renew", body)
+    .catch(async (err) => {
+      if (!isApiError(err)) throw err;
 
-    throw err;
-  }
+      if (mentionsMissingBody(err.message)) {
+        const qs = new URLSearchParams();
+        if (payload.membershipId) qs.set("membershipId", payload.membershipId);
+        if (payload.userId) qs.set("userId", payload.userId);
+        if (payload.orgId) qs.set("orgId", payload.orgId);
+        if (typeof payload.planId === "number") qs.set("planId", String(payload.planId));
+        if (typeof payload.autoRenew === "boolean") qs.set("autoRenew", String(payload.autoRenew));
+
+        return apiFetch<MembershipResponse>(`/membership/create-or-renew?${qs.toString()}`, { method: "POST" });
+      }
+
+      throw err;
+    });
 }
+
 
 // ===== PAYMENT =====
 export type PaymentGateway = "vnPay" | "payOS" | "stripe" | "payPal";

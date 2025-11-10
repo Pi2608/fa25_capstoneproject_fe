@@ -115,16 +115,16 @@ export default function HelpCenterClient() {
           <nav className="hc-left sticky top-20 space-y-6">
             <div>
               <div className="hc-hero-eyebrow text-xs font-semibold tracking-wide text-zinc-400 mb-2 opacity-0 translate-y-[18px]">
-                GETTING STARTED
+                BẮT ĐẦU
               </div>
               <ul className="space-y-1">
                 {[
-                  ["#welcome", "Welcome"],
-                  ["#what-is", "What is IMOS?"],
-                  ["#create-map", "Create your first map"],
-                  ["#tour-interface", "Tour the interface"],
-                  ["#workspace", "Your workspace"],
-                  ["#shortcuts", "Keyboard shortcuts"],
+                  ["#welcome", "Chào mừng"],
+                  ["#what-is", "IMOS là gì?"],
+                  ["#create-map", "Tạo bản đồ đầu tiên"],
+                  ["#tour-interface", "Khám phá giao diện"],
+                  ["#workspace", "Khu làm việc của bạn"],
+                  ["#shortcuts", "Phím tắt"],
                 ].map(([href, label]) => (
                   <li key={href}>
                     <a
@@ -139,16 +139,16 @@ export default function HelpCenterClient() {
             </div>
 
             <div>
-              <div className="text-xs font-semibold tracking-wide text-zinc-400 mb-2">UPLOAD ANYTHING</div>
+              <div className="text-xs font-semibold tracking-wide text-zinc-400 mb-2">TẢI LÊN MỌI THỨ</div>
               <ul className="space-y-1">
                 {[
-                  ["#files", "Files"],
-                  ["#urls", "URLs"],
-                  ["#sheets", "Spreadsheets"],
-                  ["#raster", "Raster & imagery"],
-                  ["#cloud", "Cloud sources"],
-                  ["#sql", "SQL queries"],
-                  ["#refresh", "Refreshing data"],
+                  ["#files", "Tệp tin"],
+                  ["#urls", "URL"],
+                  ["#sheets", "Bảng tính"],
+                  ["#raster", "Raster & ảnh vệ tinh"],
+                  ["#cloud", "Nguồn đám mây"],
+                  ["#sql", "Truy vấn SQL"],
+                  ["#refresh", "Làm mới dữ liệu"],
                 ].map(([href, label]) => (
                   <li key={href}>
                     <a
@@ -174,7 +174,7 @@ export default function HelpCenterClient() {
                   setQuery(e.target.value);
                   setTouched(true);
                 }}
-                placeholder="Ask or search…   Ctrl + K"
+                placeholder="Hỏi hoặc tìm kiếm…   Ctrl + K"
                 className="w-full rounded-xl bg-zinc-900/70 ring-1 ring-white/10 px-4 py-3 pr-24 text-zinc-100 placeholder-zinc-500 outline-none focus:ring-emerald-400/50"
               />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-zinc-400">
@@ -206,7 +206,7 @@ export default function HelpCenterClient() {
                 <div className="h-16 animate-pulse rounded-xl bg-white/5 ring-1 ring-white/10" />
               )}
               {!loading && results.length === 0 && (
-                <p className="text-zinc-400">No results. Try a different keyword.</p>
+                <p className="text-zinc-400">Không có kết quả. Hãy thử từ khóa khác.</p>
               )}
               {results.map((item) => (
                 <details
@@ -237,15 +237,15 @@ export default function HelpCenterClient() {
           ) : (
             <article className="hc-article prose prose-invert max-w-none">
               <h1 id="welcome" className="scroll-mt-24 opacity-0 translate-y-[12px]">
-                Welcome
+                Chào mừng
               </h1>
-              <p>Find guides, best practices, and tips to get the most out of IMOS.</p>
+              <p>Tìm hướng dẫn, thực hành tốt và mẹo để khai thác IMOS hiệu quả.</p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 not-prose mt-6">
                 {[
-                  ["#what-is", "What is IMOS?", "Start here to learn the basics."],
-                  ["#create-map", "Create your first map", "Uploading data, styling layers, collaborating."],
-                  ["#tour-interface", "Tour the interface", "Key panels and tools you’ll use."],
+                  ["#what-is", "IMOS là gì?", "Bắt đầu tại đây để nắm các khái niệm cơ bản."],
+                  ["#create-map", "Tạo bản đồ đầu tiên", "Tải dữ liệu, tạo kiểu lớp, cộng tác."],
+                  ["#tour-interface", "Khám phá giao diện", "Những bảng và công cụ quan trọng."],
                 ].map(([href, title, desc]) => (
                   <a
                     key={href}
@@ -259,75 +259,75 @@ export default function HelpCenterClient() {
               </div>
 
               <h2 id="what-is" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                What is IMOS?
+                IMOS là gì?
               </h2>
-              <p>IMOS is a fast web mapping platform with flexible data connections and easy sharing.</p>
+              <p>IMOS là nền tảng web mapping nhanh, kết nối dữ liệu linh hoạt và chia sẻ dễ dàng.</p>
 
               <h2 id="create-map" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                Create your first map
+                Tạo bản đồ đầu tiên
               </h2>
               <ol>
-                <li>Choose a template or a blank page.</li>
-                <li>Upload GeoJSON/CSV/Shapefile or connect PostGIS.</li>
-                <li>Style layers, add legends, export/embed.</li>
+                <li>Chọn mẫu có sẵn hoặc trang trống.</li>
+                <li>Tải GeoJSON/CSV/Shapefile hoặc kết nối PostGIS.</li>
+                <li>Tạo kiểu lớp, thêm chú giải, xuất/nhúng.</li>
               </ol>
 
               <h2 id="tour-interface" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                Tour the interface
+                Khám phá giao diện
               </h2>
-              <p>Toolbar, layer panel, attribute table, and map viewport.</p>
+              <p>Thanh công cụ, bảng lớp, bảng thuộc tính và vùng bản đồ.</p>
 
               <h2 id="workspace" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                Your workspace
+                Khu làm việc của bạn
               </h2>
-              <p>Manage projects, members, and access permissions.</p>
+              <p>Quản lý dự án, thành viên và quyền truy cập.</p>
 
               <h2 id="shortcuts" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                Keyboard shortcuts
+                Phím tắt
               </h2>
               <ul>
                 <li>
-                  <kbd>Ctrl</kbd> + <kbd>K</kbd>: Open search
+                  <kbd>Ctrl</kbd> + <kbd>K</kbd>: Mở tìm kiếm
                 </li>
                 <li>
-                  <kbd>?</kbd>: Quick help
+                  <kbd>?</kbd>: Trợ giúp nhanh
                 </li>
               </ul>
 
               <h2 id="files" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                Files
+                Tệp tin
               </h2>
-              <p>Supports GeoJSON, CSV, Shapefile (zip), TIFF…</p>
+              <p>Hỗ trợ GeoJSON, CSV, Shapefile (zip), TIFF…</p>
 
               <h2 id="urls" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                URLs
+                URL
               </h2>
-              <p>Connect tile/services: XYZ, WMS, WMTS…</p>
+              <p>Kết nối dịch vụ gạch: XYZ, WMS, WMTS…</p>
 
               <h2 id="sheets" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                Spreadsheets
+                Bảng tính
               </h2>
-              <p>Connect Google Sheets to keep data in sync.</p>
+              <p>Kết nối Google Sheets để dữ liệu luôn đồng bộ.</p>
 
               <h2 id="raster" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                Raster & imagery
+                Raster & ảnh vệ tinh
               </h2>
-              <p>Display satellite imagery, DEM, hillshade.</p>
+              <p>Hiển thị ảnh vệ tinh, DEM, hillshade.</p>
 
               <h2 id="cloud" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                Cloud sources
+                Nguồn đám mây
               </h2>
               <p>PostGIS, GeoServer, S3, Google Drive…</p>
 
               <h2 id="sql" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                SQL queries
+                Truy vấn SQL
               </h2>
-              <p>Query PostGIS layers to filter/join your data.</p>
+              <p>Truy vấn lớp PostGIS để lọc/kết dữ liệu.</p>
 
               <h2 id="refresh" className="mt-10 scroll-mt-24 opacity-0 translate-y-[12px]">
-                Refreshing data
+                Làm mới dữ liệu
               </h2>
-              <p>Schedule periodic syncs for connected sources.</p>
+              <p>Lên lịch đồng bộ định kỳ cho nguồn kết nối.</p>
             </article>
           )}
         </section>
@@ -335,49 +335,49 @@ export default function HelpCenterClient() {
         <aside className="col-span-12 md:col-span-3 lg:col-span-3">
           <div className="sticky top-20 space-y-6">
             <div className="hc-right-card opacity-0 translate-y-[12px] rounded-xl ring-1 ring-white/10 bg-white/5 p-4">
-              <div className="text-sm font-semibold mb-2">Getting started</div>
+              <div className="text-sm font-semibold mb-2">Bắt đầu nhanh</div>
               <ul className="space-y-1 text-sm">
                 <li>
                   <a href="#what-is" className="text-emerald-400 hover:underline">
-                    Discover IMOS
+                    Tìm hiểu IMOS
                   </a>
                 </li>
                 <li>
                   <a href="#create-map" className="hover:underline">
-                    Create your first map
+                    Tạo bản đồ đầu tiên
                   </a>
                 </li>
                 <li>
                   <a href="#tour-interface" className="hover:underline">
-                    More resources
+                    Tài nguyên khác
                   </a>
                 </li>
               </ul>
             </div>
             <div className="hc-right-card opacity-0 translate-y-[12px] rounded-xl ring-1 ring-white/10 bg-white/5 p-4">
-              <div className="text-sm font-semibold mb-3">Was this helpful?</div>
+              <div className="text-sm font-semibold mb-3">Trang này hữu ích chứ?</div>
               <div className="flex gap-2">
-                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">🙂 Yes</button>
-                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">😐 Neutral</button>
-                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">🙁 No</button>
+                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">🙂 Có</button>
+                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">😐 Bình thường</button>
+                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">🙁 Không</button>
               </div>
             </div>
             <div className="hc-right-card opacity-0 translate-y-[12px] rounded-xl ring-1 ring-white/10 bg-white/5 p-4">
-              <div className="text-sm font-semibold mb-2">Quick links</div>
+              <div className="text-sm font-semibold mb-2">Liên kết nhanh</div>
               <ul className="space-y-1 text-sm">
                 <li>
                   <Link href="/resources/developer-docs" className="hover:underline">
-                    Developer Docs
+                    Tài liệu Nhà phát triển
                   </Link>
                 </li>
                 <li>
                   <Link href="/resources/map-gallery" className="hover:underline">
-                    Map Gallery
+                    Thư viện bản đồ
                   </Link>
                 </li>
                 <li>
                   <Link href="/pricing" className="hover:underline">
-                    Pricing
+                    Bảng giá
                   </Link>
                 </li>
               </ul>
