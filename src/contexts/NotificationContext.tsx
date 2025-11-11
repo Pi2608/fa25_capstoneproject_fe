@@ -64,15 +64,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
   const setupConnection = useCallback(async () => {
     const currentToken = token?.trim() || null;
 
-    console.log("[SignalR] setupConnection called", {
-      isLoggedIn,
-      hasToken: !!currentToken,
-      currentState: connectionRef.current?.state,
-      isConnecting: isConnectingRef.current,
-    });
-
     if (!isLoggedIn || !currentToken) {
-      console.log("[SignalR] No token or not logged in, cleaning up");
       await cleanupConnection();
       setUnreadCount(0);
       setLatestNotification(null);
@@ -81,60 +73,46 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
     // Check if already connecting
     if (isConnectingRef.current) {
-      console.log("[SignalR] Connection already in progress, skipping");
       return;
     }
 
     // Check if we need to cleanup existing connection
     const hasExistingConnection = connectionRef.current !== null && connectionRef.current !== undefined;
-    console.log("[SignalR] Has existing connection:", hasExistingConnection);
     
     if (hasExistingConnection) {
       const existingState = connectionRef.current!.state;
       const hasSameToken = tokenRef.current === currentToken;
-      
-      console.log("[SignalR] Existing connection details:", {
-        state: existingState,
-        hasSameToken,
-        currentTokenStored: !!tokenRef.current,
-      });
+    
       
       // If already connected with same token, skip
       if (hasSameToken && existingState === signalR.HubConnectionState.Connected) {
-        console.log("[SignalR] Already connected with same token, skipping setup");
         setIsConnected(true);
         return;
       }
       
       // If token changed or connection is in a bad state, cleanup
       if (!hasSameToken || existingState !== signalR.HubConnectionState.Disconnected) {
-        console.log("[SignalR] Cleaning up existing connection (token changed or not disconnected)");
         await cleanupConnection();
         // Wait for cleanup to complete
         await new Promise(resolve => setTimeout(resolve, 300));
       }
     } else {
-      console.log("[SignalR] No existing connection, will create new one");
     }
 
-    console.log("[SignalR] Setting up new connection");
     isConnectingRef.current = true;
     tokenRef.current = currentToken;
 
     try {
       const conn = createNotificationConnection(currentToken);
       if (!conn) {
-        console.error("[SignalR] Failed to create connection");
         isConnectingRef.current = false;
         tokenRef.current = null;
         return;
       }
 
-      console.log("[SignalR] Connection created successfully");
       connectionRef.current = conn;
 
       conn.on("NotificationReceived", (notification: NotificationItem) => {
-        console.log("[SignalR] Notification received:", notification);
         setLatestNotification(notification);
         notificationCallbacksRef.current.forEach((callback) => {
           try {
@@ -152,7 +130,6 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       });
 
       conn.on("UnreadCountUpdated", (count: number) => {
-        console.log("[SignalR] Unread count updated:", count);
         setUnreadCount(count);
         unreadCountCallbacksRef.current.forEach((callback) => {
           try {
@@ -171,28 +148,23 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
 
       // Handle connection state changes
       conn.onreconnecting(() => {
-        console.log("[SignalR] Reconnecting...");
         setIsConnected(false);
       });
 
       conn.onreconnected((connectionId) => {
-        console.log("[SignalR] Reconnected successfully, connectionId:", connectionId);
         setIsConnected(true);
         loadUnreadCount();
       });
 
       conn.onclose((error) => {
-        console.log("[SignalR] Connection closed", error ? `with error: ${error?.message || String(error)}` : "normally");
         setIsConnected(false);
         if (tokenRef.current !== currentToken) {
           connectionRef.current = null;
         }
       });
 
-      console.log("[SignalR] Starting connection...");
       const success = await startConnection(conn, currentToken);
       const currentState = conn.state;
-      console.log("[SignalR] Connection start result:", success, "State:", currentState);
       
       isConnectingRef.current = false;
       
@@ -201,22 +173,17 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
       setIsConnected(isActuallyConnected);
       
       if (isActuallyConnected) {
-        console.log("[SignalR] Connection established successfully, loading unread count...");
         await loadUnreadCount();
       } else {
-        console.error("[SignalR] Failed to establish connection, state:", currentState);
         // If start() returned success but state is not Connected, it might still be connecting
         // Wait a bit and check again
         if (success && currentState === signalR.HubConnectionState.Connecting) {
-          console.log("[SignalR] Connection is still connecting, waiting...");
           setTimeout(async () => {
             const delayedState = conn.state;
-            console.log("[SignalR] Delayed state check:", delayedState);
             if (delayedState === signalR.HubConnectionState.Connected) {
               setIsConnected(true);
               await loadUnreadCount();
             } else {
-              console.error("[SignalR] Connection failed after waiting, state:", delayedState);
               setIsConnected(false);
             }
           }, 2000);
@@ -226,12 +193,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
         }
       }
     } catch (error) {
-      console.error("[SignalR] Failed to setup SignalR connection:", error);
       if (error instanceof Error) {
-        console.error("[SignalR] Error details:", {
-          message: error.message,
-          stack: error.stack,
-        });
       }
       isConnectingRef.current = false;
       tokenRef.current = null;

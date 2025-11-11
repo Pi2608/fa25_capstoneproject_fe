@@ -22,12 +22,12 @@ import {
   type MapDetail,
   updateMap,
   type UpdateMapRequest,
-  type RawLayer,
   type UpdateMapFeatureRequest,
   uploadGeoJsonToMap,
   updateLayerData,
   MapStatus,     
-  updateMapFeature
+  updateMapFeature,
+  LayerDTO,
 } from "@/lib/api-maps";
 import { 
   type FeatureData,
@@ -60,7 +60,7 @@ import { CopyFeatureDialog } from "@/components/features";
 import MapPoiPanel from "@/components/poi/PoiPanel";
 
 import { useToast } from "@/contexts/ToastContext";
-import type { Feature as GeoJSONFeature } from "geojson";
+import type { FeatureCollection, Feature as GeoJSONFeature } from "geojson";
 
 
 
@@ -86,8 +86,8 @@ export default function EditMapPage() {
   const [showSegmentPanel, setShowSegmentPanel] = useState(false);
   const [showPoiPanel, setShowPoiPanel] = useState(false);
   const [features, setFeatures] = useState<FeatureData[]>([]);
-  const [selectedLayer, setSelectedLayer] = useState<FeatureData | RawLayer | null>(null);
-  const [layers, setLayers] = useState<RawLayer[]>([]);
+  const [selectedLayer, setSelectedLayer] = useState<FeatureData | LayerDTO | null>(null);
+  const [layers, setLayers] = useState<LayerDTO[]>([]);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({});
   const [featureVisibility, setFeatureVisibility] = useState<Record<string, boolean>>({})
   
@@ -362,8 +362,8 @@ export default function EditMapPage() {
         const m = await getMapDetail(mapId);
         if (!alive) return;
         setDetail(m);
-        setName(m.mapName ?? "");
-        setBaseKey(m.baseMapProvider === "Satellite" ? "sat" : m.baseMapProvider === "Dark" ? "dark" : "osm");
+        setName(m.name ?? "");
+        setBaseKey(m.baseLayer === "Satellite" ? "sat" : m.baseLayer === "Dark" ? "dark" : "osm");
         setMapStatus(m.status || "Draft");
       } catch (e) {
         if (!alive) return;
@@ -418,22 +418,39 @@ export default function EditMapPage() {
       const VN_ZOOM = 6;
 
       const createdFlag = sp?.get("created") === "1";
-      const rawLat = Number(detail.initialLatitude ?? 0);
-      const rawLng = Number(detail.initialLongitude ?? 0);
-      const rawZoom = Number(detail.initialZoom ?? 6);
-      const isZeroZero = Math.abs(rawLat) < 1e-6 && Math.abs(rawLng) < 1e-6;
-      const tooClose = rawZoom >= 14;
+      // Backend returns center as [lat, lng] in viewState
+      const viewState = detail.viewState;
+      const center = viewState?.center;
+      
+      // Extract lat/lng from center array: [lat, lng]
+      const rawLat = center && Array.isArray(center) && center.length >= 2 
+        ? Number(center[0]) 
+        : null;
+      const rawLng = center && Array.isArray(center) && center.length >= 2 
+        ? Number(center[1]) 
+        : null;
+      const rawZoom = viewState?.zoom ? Number(viewState.zoom) : null;
+      
+      // Check if we have valid coordinates (not null, not zero/zero)
+      const hasValidCoordinates = rawLat !== null && rawLng !== null && 
+        !(Math.abs(rawLat) < 1e-6 && Math.abs(rawLng) < 1e-6);
+      const hasValidZoom = rawZoom !== null && rawZoom >= 3 && rawZoom <= 20;
 
-      const useVN = createdFlag || isZeroZero || tooClose;
-      const initialCenter: LatLngTuple = useVN ? VN_CENTER : [rawLat, rawLng];
-      const initialZoom = useVN ? VN_ZOOM : Math.min(Math.max(rawZoom || VN_ZOOM, 3), 12);
+      // Use VN center only if map was just created, or if viewState is missing/invalid
+      const useVN = createdFlag || !hasValidCoordinates;
+      const initialCenter: LatLngTuple = useVN 
+        ? VN_CENTER 
+        : [rawLat!, rawLng!]; // Safe to use ! here because hasValidCoordinates ensures they're not null
+      const initialZoom = useVN || !hasValidZoom 
+        ? VN_ZOOM 
+        : Math.min(Math.max(rawZoom!, 3), 20);
 
       const map = L.map(el, { zoomControl: false, minZoom: 2, maxZoom: 20 }).setView(initialCenter, initialZoom) as MapWithPM;
       mapRef.current = map;
       if (!alive) return;
       setIsMapReady(true);
 
-      applyBaseLayer(detail.baseMapProvider === "Satellite" ? "sat" : detail.baseMapProvider === "Dark" ? "dark" : "osm");
+      applyBaseLayer(detail.baseLayer === "Satellite" ? "sat" : detail.baseLayer === "Dark" ? "dark" : "osm");
 
       const sketch = L.featureGroup().addTo(map as any);
       sketchRef.current = sketch;
@@ -814,11 +831,11 @@ export default function EditMapPage() {
       
       for (const layer of detail.layers) {
         if (!alive) break;
-        const isVisible = layer.isVisible ?? true;
+        const isVisible = layer.isPublic ?? true;
         initialLayerVisibility[layer.id] = isVisible;
         
         try {
-          const loaded = await loadLayerToMap(map as any, layer, dataLayerRefs);
+          const loaded = await loadLayerToMap(map as any, layer as LayerDTO, dataLayerRefs);
           if (loaded && !isVisible) {
             const leafletLayer = dataLayerRefs.current.get(layer.id);
             if (leafletLayer && map.hasLayer(leafletLayer)) {
@@ -826,7 +843,7 @@ export default function EditMapPage() {
             }
           }
         } catch (error) {
-          console.error(`Error loading layer ${layer.name}:`, error);
+          console.error(`Error loading layer ${layer.layerName}:`, error);
         }
         
       }
@@ -1117,9 +1134,9 @@ export default function EditMapPage() {
 
     const sourceLayerId = contextMenu.layerId;
     const sourceLayer = detail.layers.find(l => l.id === sourceLayerId);
-    const sourceLayerName = sourceLayer?.name || 'Unknown Layer';
+    const sourceLayerName = sourceLayer?.layerName || 'Unknown Layer';
 
-    const layerData = JSON.parse(sourceLayer?.layerData || '{}');
+    const layerData = sourceLayer?.layerData as FeatureCollection || {};
     const featureIndex = findFeatureIndex(layerData, contextMenu.feature);
 
     if (featureIndex === -1) {
@@ -1167,14 +1184,14 @@ export default function EditMapPage() {
     }
 
     try {
-      const layerData = JSON.parse(targetLayer.layerData);
+      const layerData = targetLayer.layerData as FeatureCollection;
       const featureIndex = findFeatureIndex(layerData, contextMenu.feature);
       if (featureIndex === -1) {
         showToast("error", "❌ Feature not found in layer");
         return;
       }
 
-      const updatedGeoJSON = removeFeatureFromGeoJSON(layerData, featureIndex);
+      const updatedGeoJSON = removeFeatureFromGeoJSON(layerData as FeatureCollection, featureIndex);
       const success = await updateLayerData(detail.id, layerId, updatedGeoJSON);
       if (success) {
         showToast("success", "✅ Zone deleted successfully!");
@@ -1242,7 +1259,7 @@ export default function EditMapPage() {
     );
   }, [detail?.id, features]);
 
-  const onSelectLayer = useCallback((layer: FeatureData | RawLayer) => {
+  const onSelectLayer = useCallback((layer: FeatureData | LayerDTO) => {
     setSelectedLayer(layer);
     setShowStylePanel(true);
   }, []);
@@ -1379,7 +1396,7 @@ export default function EditMapPage() {
     try {
       const body: UpdateMapRequest = {
         name: (name ?? "").trim() || "Untitled Map",
-        baseMapProvider: baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
+        baseLayer: baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
       };
       await updateMap(detail.id, body);
       showToast("success", "Đã lưu thông tin bản đồ.");

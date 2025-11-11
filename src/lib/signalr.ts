@@ -97,22 +97,16 @@ export async function startConnection(connection: signalR.HubConnection, token: 
 
     const initialState = connection.state;
     if (initialState !== signalR.HubConnectionState.Disconnected) {
-      console.warn(`[SignalR] Cannot start connection: state is ${initialState}`);
-      return false;
+       return false;
     }
 
     const currentToken = getToken();
     if (!currentToken || currentToken !== token) {
-      console.warn("[SignalR] Token mismatch or not available when starting connection", {
-        hasToken: !!currentToken,
-        tokensMatch: currentToken === token,
-      });
       return false;
     }
 
     if (!isTokenValid(currentToken)) {
-      console.error("[SignalR] Cannot start connection: token is invalid or expired");
-      return false;
+     return false;
     }
 
     try {

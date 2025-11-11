@@ -10,7 +10,7 @@ import type {
   IconOptions
 } from "leaflet";
 import type { Position } from "geojson";
-import { createMapFeature, CreateMapFeatureRequest, deleteMapFeature, getMapFeatures, MapDetail, MapFeatureResponse, RawLayer, updateMapFeature, UpdateMapFeatureRequest, addLayerToMap, updateMapLayer, removeLayerFromMap } from "@/lib/api-maps";
+import { createMapFeature, CreateMapFeatureRequest, deleteMapFeature, getMapFeatures, MapDetail, MapFeatureResponse, updateMapFeature, UpdateMapFeatureRequest, addLayerToMap, updateMapLayer, removeLayerFromMap, LayerDTO } from "@/lib/api-maps";
 
 
 // Icon interface for proper typing
@@ -61,15 +61,8 @@ export interface LayerInfo {
   isVisible: boolean;
 }
 
-interface ParsedLayer
-  extends Omit<
-    RawLayer,
-    "layerData" | "layerStyle" | "filterConfig" | "customStyle"
-  > {
-  layerData: Record<string, unknown>;
-  layerStyle: Record<string, unknown>;
-  customStyle?: Record<string, unknown>;
-  filterConfig?: Record<string, unknown>;
+interface ParsedLayer extends LayerDTO {
+  // No need to override types since backend now returns objects directly
 }
 
 interface ParsedMapData extends Omit<MapDetail, "layers"> {
@@ -530,10 +523,8 @@ export function layersToGeoJSON(layers: ExtendedLayer[]): {
 export function convertMapLayers(rawData: MapDetail): ParsedMapData {
   const parsedLayers: ParsedLayer[] = rawData.layers.map((layer) => ({
     ...layer,
-    layerData: safeParseJSON(layer.layerData) ?? {},
-    layerStyle: safeParseJSON(layer.layerStyle) ?? {},
-    filterConfig: safeParseJSON(layer.filterConfig) ?? {},
-    customStyle: safeParseJSON(layer.customStyle) ?? {},
+    layerData: layer.layerData ?? {},
+    layerStyle: layer.layerStyle ?? {},
   }));
 
   return { ...rawData, layers: parsedLayers };
@@ -1051,40 +1042,33 @@ export async function loadFeaturesToMap(
  */
 export async function loadLayerToMap(
   map: LMap,
-  layer: RawLayer,
+  layer: LayerDTO,
   dataLayerRefs: React.MutableRefObject<Map<string, Layer>>
 ): Promise<boolean> {
   if (!map || !layer) return false;
 
   try {
     const L = (await import("leaflet")).default;
-    const layerData = JSON.parse(layer.layerData || '{}');
-   
+    const layerData = layer.layerData || {};
+
     if (layerData.type === 'FeatureCollection' && layerData.features) {
       let layerStyle = {};
-      let customStyle = {};
-     
-      try {
-        if (layer.layerStyle) {
-          layerStyle = JSON.parse(layer.layerStyle);
-        }
-      } catch (error) {
-        console.warn("Failed to parse layer style:", error);
-      }
-     
-      try {
-        if (layer.customStyle) {
-          customStyle = JSON.parse(layer.customStyle);
-        }
-      } catch (error) {
-        console.warn("Failed to parse custom style:", error);
-      }
-     
-      // Merge layer style with custom style (custom style takes precedence)
-      const finalStyle = { ...layerStyle, ...customStyle };
 
-      const geoJsonLayer = L.geoJSON(layerData, {
-        style: Object.keys(finalStyle).length > 0 ? finalStyle : undefined,
+      // Parse layer style - handle both string and object formats
+      if (layer.layerStyle) {
+        if (typeof layer.layerStyle === 'string') {
+          try {
+            layerStyle = JSON.parse(layer.layerStyle);
+          } catch {
+            layerStyle = {};
+          }
+        } else {
+          layerStyle = layer.layerStyle;
+        }
+      }
+
+      const geoJsonLayer = L.geoJSON(layerData as GeoJSON.GeoJsonObject, {
+        style: Object.keys(layerStyle).length > 0 ? layerStyle : undefined,
         onEachFeature: (feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
           // Add popup if feature has properties
           if (feature.properties) {
@@ -1095,8 +1079,8 @@ export async function loadLayerToMap(
               leafletLayer.bindPopup(popupContent);
             }
           }
-          
-          // Store original style for hover/selection effects
+
+          // Store metadata on layer
           type LayerWithMeta = Layer & {
             _feature?: GeoJSON.Feature;
             _layerId?: string;
@@ -1106,12 +1090,12 @@ export async function loadLayerToMap(
           const meta = leafletLayer as LayerWithMeta;
           meta._feature = feature;
           meta._layerId = layer.id;
-          meta._layerName = layer.name;
+          meta._layerName = layer.layerName;
 
           // Add hover handlers
-          leafletLayer.on('mouseover', (e: LeafletMouseEvent) => {
+          leafletLayer.on('mouseover', () => {
             if (!('setStyle' in leafletLayer)) return;
-            
+
             // Store original style if not already stored
             if (!meta._originalStyle) {
               const currentOptions = (leafletLayer as any).options || {};
@@ -1124,40 +1108,40 @@ export async function loadLayerToMap(
                 dashArray: currentOptions.dashArray || ''
               };
             }
-            
+
             // Apply hover style
             (leafletLayer as any).setStyle({
               weight: 5,
               dashArray: '',
               fillOpacity: 0.6
             });
-            
+
             // Bring to front
             if ('bringToFront' in leafletLayer) {
               (leafletLayer as any).bringToFront();
             }
           });
 
-          leafletLayer.on('mouseout', (e: LeafletMouseEvent) => {
+          leafletLayer.on('mouseout', () => {
             if (!('setStyle' in leafletLayer) || !meta._originalStyle) return;
-            
+
             // Reset to original style
             (leafletLayer as any).setStyle(meta._originalStyle);
           });
 
-          // Add click handler for zone selection mode OR normal selection
+          // Add click handler for zone selection or normal selection
           leafletLayer.on('click', (e: LeafletMouseEvent) => {
             const isZoneSelectionEnabled = (window as any).__zoneSelectionMode || false;
-            
+
             if (isZoneSelectionEnabled) {
-              // Zone selection mode - handle in SegmentPanel
+              // Zone selection mode
               e.originalEvent.stopPropagation();
-              
+
               const evt = new CustomEvent("storymap:zoneSelectedFromLayer", {
                 detail: {
                   feature,
                   layerId: layer.id,
-                  layerName: layer.name
+                  layerName: layer.layerName
                 }
               });
               window.dispatchEvent(evt);
@@ -1167,7 +1151,7 @@ export async function loadLayerToMap(
                 detail: {
                   feature,
                   layerId: layer.id,
-                  layerName: layer.name,
+                  layerName: layer.layerName,
                   leafletLayer
                 }
               });
@@ -1184,7 +1168,7 @@ export async function loadLayerToMap(
               detail: {
                 feature,
                 layerId: layer.id,
-                layerName: layer.name,
+                layerName: layer.layerName,
                 x: original.clientX,
                 y: original.clientY,
                 leafletLayer,
@@ -1195,20 +1179,21 @@ export async function loadLayerToMap(
         },
       });
 
-      const dataLayerZIndex = 1000 + (layer.zIndex || 0);
+      const dataLayerZIndex = 1000 + (layer.featureCount || 0);
       if (hasSetZIndex(geoJsonLayer)) {
         geoJsonLayer.setZIndex(dataLayerZIndex);
       }
-      
+
       map.addLayer(geoJsonLayer);
       dataLayerRefs.current.set(layer.id, geoJsonLayer);
-      
+
       return true;
+    } else {
+      console.warn(`Layer ${layer.layerName} is not a valid GeoJSON FeatureCollection`);
+      return false;
     }
-    
-    return false;
   } catch (error) {
-    console.error(`Failed to load layer ${layer.name}:`, error);
+    console.error(`Failed to load layer ${layer.layerName}:`, error);
     return false;
   }
 }
@@ -1218,13 +1203,16 @@ export async function loadLayerToMap(
  */
 export async function renderDataLayers(
   map: LMap,
-  layers: RawLayer[],
+  layers: LayerDTO[],
   dataLayerRefs: React.MutableRefObject<Map<string, Layer>>
-): Promise<void> {
-  if (!layers || !map) return;
+): Promise<boolean> {
+  if (!layers || !map) {
+    return false;
+  }
 
   const L = (await import("leaflet")).default;
 
+  // Clear existing layers
   dataLayerRefs.current.forEach((layer) => {
     if (map.hasLayer(layer)) {
       map.removeLayer(layer);
@@ -1232,160 +1220,155 @@ export async function renderDataLayers(
   });
   dataLayerRefs.current.clear();
 
+  let allLayersRendered = true;
+
   for (const layer of layers) {
-    if (!layer.isVisible) continue;
-
     try {
-      const layerData = JSON.parse(layer.layerData || '{}');
-     
+      const layerData = layer.layerData || {};
+
       if (layerData.type === 'FeatureCollection' && layerData.features) {
-        // Parse layer style and custom style
-        let layerStyle = {};
-        let customStyle = {};
-       
         try {
-          if (layer.layerStyle) {
+          // Parse layer style
+          let layerStyle = {};
+          if (layer.layerStyle && typeof layer.layerStyle === 'string') {
             layerStyle = JSON.parse(layer.layerStyle);
+          } else if (layer.layerStyle) {
+            layerStyle = layer.layerStyle;
           }
-        } catch (error) {
-          console.warn("Failed to parse layer style:", error);
-        }
-       
-        try {
-          if (layer.customStyle) {
-            customStyle = JSON.parse(layer.customStyle);
-          }
-        } catch (error) {
-          console.warn("Failed to parse custom style:", error);
-        }
-       
-        // Merge layer style with custom style (custom style takes precedence)
-        const finalStyle = { ...layerStyle, ...customStyle };
 
-        const geoJsonLayer = L.geoJSON(layerData, {
-          style: Object.keys(finalStyle).length > 0 ? finalStyle : undefined,
-          onEachFeature: (feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
-            // Add popup if feature has properties
-            if (feature.properties) {
-              const popupContent = Object.entries(feature.properties)
-                .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
-                .join("<br>");
-              if (hasBindPopup(leafletLayer)) {
-                leafletLayer.bindPopup(popupContent);
+          const geoJsonLayer = L.geoJSON(layerData as GeoJSON.GeoJsonObject, {
+            style: Object.keys(layerStyle).length > 0 ? layerStyle : undefined,
+            onEachFeature: (feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
+              // Add popup if feature has properties
+              if (feature.properties) {
+                const popupContent = Object.entries(feature.properties)
+                  .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
+                  .join("<br>");
+                if (hasBindPopup(leafletLayer)) {
+                  leafletLayer.bindPopup(popupContent);
+                }
               }
-            }
-            
-            // Store original style for hover/selection effects
-            type LayerWithMeta2 = Layer & {
-              _feature?: GeoJSON.Feature;
-              _layerId?: string;
-              _layerName?: string;
-              _originalStyle?: any;
-            };
-            const meta2 = leafletLayer as LayerWithMeta2;
-            meta2._feature = feature;
-            meta2._layerId = layer.id;
-            meta2._layerName = layer.name;
 
-            // Add hover handlers
-            leafletLayer.on('mouseover', (e: LeafletMouseEvent) => {
-              if (!('setStyle' in leafletLayer)) return;
-              
-              // Store original style if not already stored
-              if (!meta2._originalStyle) {
-                const currentOptions = (leafletLayer as any).options || {};
-                meta2._originalStyle = {
-                  color: currentOptions.color || '#3388ff',
-                  weight: currentOptions.weight || 3,
-                  opacity: currentOptions.opacity || 1.0,
-                  fillColor: currentOptions.fillColor || currentOptions.color || '#3388ff',
-                  fillOpacity: currentOptions.fillOpacity || 0.2,
-                  dashArray: currentOptions.dashArray || ''
-                };
-              }
-              
-              // Apply hover style
-              (leafletLayer as any).setStyle({
-                weight: 5,
-                dashArray: '',
-                fillOpacity: 0.6
+              // Store metadata on layer
+              type LayerWithMeta = Layer & {
+                _feature?: GeoJSON.Feature;
+                _layerId?: string;
+                _layerName?: string;
+                _originalStyle?: any;
+              };
+              const meta = leafletLayer as LayerWithMeta;
+              meta._feature = feature;
+              meta._layerId = layer.id;
+              meta._layerName = layer.layerName;
+
+              // Add hover handlers
+              leafletLayer.on('mouseover', () => {
+                if (!('setStyle' in leafletLayer)) return;
+
+                // Store original style if not already stored
+                if (!meta._originalStyle) {
+                  const currentOptions = (leafletLayer as any).options || {};
+                  meta._originalStyle = {
+                    color: currentOptions.color || '#3388ff',
+                    weight: currentOptions.weight || 3,
+                    opacity: currentOptions.opacity || 1.0,
+                    fillColor: currentOptions.fillColor || currentOptions.color || '#3388ff',
+                    fillOpacity: currentOptions.fillOpacity || 0.2,
+                    dashArray: currentOptions.dashArray || ''
+                  };
+                }
+
+                // Apply hover style
+                (leafletLayer as any).setStyle({
+                  weight: 5,
+                  dashArray: '',
+                  fillOpacity: 0.6
+                });
+
+                // Bring to front
+                if ('bringToFront' in leafletLayer) {
+                  (leafletLayer as any).bringToFront();
+                }
               });
-              
-              // Bring to front
-              if ('bringToFront' in leafletLayer) {
-                (leafletLayer as any).bringToFront();
-              }
-            });
 
-            leafletLayer.on('mouseout', (e: LeafletMouseEvent) => {
-              if (!('setStyle' in leafletLayer) || !meta2._originalStyle) return;
-              
-              // Reset to original style
-              (leafletLayer as any).setStyle(meta2._originalStyle);
-            });
+              leafletLayer.on('mouseout', () => {
+                if (!('setStyle' in leafletLayer) || !meta._originalStyle) return;
 
-            // Add click handler for zone selection mode OR normal selection
-            leafletLayer.on('click', (e: LeafletMouseEvent) => {
-              const isZoneSelectionEnabled = (window as any).__zoneSelectionMode || false;
-              
-              if (isZoneSelectionEnabled) {
-                // Zone selection mode - handle in SegmentPanel
-                e.originalEvent.stopPropagation();
-                
-                const evt = new CustomEvent("storymap:zoneSelectedFromLayer", {
+                // Reset to original style
+                (leafletLayer as any).setStyle(meta._originalStyle);
+              });
+
+              // Add click handler for zone selection or normal selection
+              leafletLayer.on('click', (e: LeafletMouseEvent) => {
+                const isZoneSelectionEnabled = (window as any).__zoneSelectionMode || false;
+
+                if (isZoneSelectionEnabled) {
+                  // Zone selection mode
+                  e.originalEvent.stopPropagation();
+
+                  const evt = new CustomEvent("storymap:zoneSelectedFromLayer", {
+                    detail: {
+                      feature,
+                      layerId: layer.id,
+                      layerName: layer.layerName
+                    }
+                  });
+                  window.dispatchEvent(evt);
+                } else {
+                  // Normal click - emit feature-selection event for highlighting
+                  const evt = new CustomEvent("layer-feature-click", {
+                    detail: {
+                      feature,
+                      layerId: layer.id,
+                      layerName: layer.layerName,
+                      leafletLayer
+                    }
+                  });
+                  window.dispatchEvent(evt);
+                }
+              });
+
+              // Add contextmenu (right-click) handler
+              leafletLayer.on("contextmenu", (e: LeafletMouseEvent) => {
+                const original = e.originalEvent as MouseEvent;
+                original.preventDefault();
+
+                const evt = new CustomEvent("zone-contextmenu", {
                   detail: {
                     feature,
                     layerId: layer.id,
-                    layerName: layer.name
-                  }
+                    layerName: layer.layerName,
+                    x: original.clientX,
+                    y: original.clientY,
+                    leafletLayer,
+                  },
                 });
                 window.dispatchEvent(evt);
-              } else {
-                // Normal click - emit feature-selection event for highlighting
-                const evt = new CustomEvent("layer-feature-click", {
-                  detail: {
-                    feature,
-                    layerId: layer.id,
-                    layerName: layer.name,
-                    leafletLayer
-                  }
-                });
-                window.dispatchEvent(evt);
-              }
-            });
-
-            // Add contextmenu (right-click) handler
-            leafletLayer.on("contextmenu", (e: LeafletMouseEvent) => {
-              const original = e.originalEvent as MouseEvent;
-              original.preventDefault();
-
-              const evt = new CustomEvent("zone-contextmenu", {
-                detail: {
-                  feature,
-                  layerId: layer.id,
-                  layerName: layer.name,
-                  x: original.clientX,
-                  y: original.clientY,
-                  leafletLayer,
-                },
               });
-              window.dispatchEvent(evt);
-            });
-          },
-        });
+            },
+          });
 
-        const dataLayerZIndex = 1000 + (layer.zIndex || 0);
-        if (hasSetZIndex(geoJsonLayer)) {
-          geoJsonLayer.setZIndex(dataLayerZIndex);
+          const dataLayerZIndex = 1000 + (layer.featureCount || 0);
+          if (hasSetZIndex(geoJsonLayer)) {
+            geoJsonLayer.setZIndex(dataLayerZIndex);
+          }
+          map.addLayer(geoJsonLayer);
+          dataLayerRefs.current.set(layer.id, geoJsonLayer);
+        } catch (error) {
+          console.warn(`Failed to render layer ${layer.layerName}:`, error);
+          allLayersRendered = false;
         }
-        map.addLayer(geoJsonLayer);
-
-        dataLayerRefs.current.set(layer.id, geoJsonLayer);
+      } else {
+        console.warn(`Layer ${layer.layerName} is not a valid GeoJSON FeatureCollection`);
+        allLayersRendered = false;
       }
     } catch (error) {
-      console.warn(`Failed to render layer ${layer.name}:`, error);
+      console.warn(`Failed to process layer ${layer.layerName}:`, error);
+      allLayersRendered = false;
     }
   }
+
+  return allLayersRendered;
 }
 
 export async function renderFeatures(
@@ -1557,47 +1540,33 @@ export async function toggleLayerVisibility(
   map: LMap,
   layerId: string,
   isVisible: boolean,
-  layers: RawLayer[],
+  layers: LayerDTO[],
   dataLayerRefs: React.MutableRefObject<Map<string, Layer>>
-): Promise<void> {
-  if (!map) return;
+): Promise<boolean> {
+  if (!map) return false;
 
   const existingLayer = dataLayerRefs.current.get(layerId);
 
   if (isVisible && !existingLayer) {
     const layer = layers.find((l) => l.id === layerId);
-    if (!layer) return;
+    if (!layer) return false;
 
     try {
       const L = (await import("leaflet")).default;
-      const layerData = JSON.parse(layer.layerData || '{}');
+      const layerData = layer.layerData || {};
      
       if (layerData.type === 'FeatureCollection' && layerData.features) {
         // Parse layer style and custom style
         let layerStyle = {};
         let customStyle = {};
        
-        try {
-          if (layer.layerStyle) {
-            layerStyle = JSON.parse(layer.layerStyle);
-          }
-        } catch (error) {
-          console.warn("Failed to parse layer style:", error);
+        // layerStyle is already an object from backend
+        if (layer.layerStyle) {
+          layerStyle = layer.layerStyle;
         }
        
-        try {
-          if (layer.customStyle) {
-            customStyle = JSON.parse(layer.customStyle);
-          }
-        } catch (error) {
-          console.warn("Failed to parse custom style:", error);
-        }
-       
-        // Merge layer style with custom style (custom style takes precedence)
-        const finalStyle = { ...layerStyle, ...customStyle };
-
-        const geoJsonLayer = L.geoJSON(layerData, {
-          style: Object.keys(finalStyle).length > 0 ? finalStyle : undefined,
+        const geoJsonLayer = L.geoJSON(layerData as GeoJSON.GeoJsonObject, {
+          style: Object.keys(layerStyle).length > 0 ? layerStyle : undefined,
           onEachFeature: (feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
             if (feature.properties) {
               const popupContent = Object.entries(feature.properties)
@@ -1610,15 +1579,19 @@ export async function toggleLayerVisibility(
           },
         });
 
-        const dataLayerZIndex = 1000 + (layer.zIndex || 0);
+        const dataLayerZIndex = 1000 + (layer.featureCount || 0);
         if (hasSetZIndex(geoJsonLayer)) {
           geoJsonLayer.setZIndex(dataLayerZIndex);
         }
         map.addLayer(geoJsonLayer);
         dataLayerRefs.current.set(layerId, geoJsonLayer);
+        return true;
+      } else {
+        return false;
       }
     } catch (error) {
-      console.warn(`Failed to render layer ${layer.name}:`, error);
+      console.warn(`Failed to render layer ${layer.layerName}:`, error);
+      return false;
     }
   } else if (!isVisible && existingLayer) {
     if (map.hasLayer(existingLayer)) {
@@ -1626,6 +1599,7 @@ export async function toggleLayerVisibility(
     }
     dataLayerRefs.current.delete(layerId);
   }
+  return true;
 }
 
 export function toggleFeatureVisibilityLocal(
@@ -2017,7 +1991,7 @@ export async function handleRemoveDataLayer(
 
 export async function renderAllDataLayers(
   map: LMap,
-  layers: RawLayer[],
+  layers: LayerDTO[],
   dataLayerRefs: React.MutableRefObject<Map<string, Layer>>,
   signal?: AbortSignal
 ): Promise<void> {
@@ -2038,39 +2012,22 @@ export async function renderAllDataLayers(
 
   for (const layer of layers) {
     if (signal?.aborted) break;
-    if (!layer.isVisible) {
-      continue;
-    }
 
     try {
-      const layerData = JSON.parse(layer.layerData || '{}');
+      const layerData = layer.layerData || {};
      
       if (layerData.type === 'FeatureCollection' && layerData.features) {
         // Parse layer style and custom style
         let layerStyle = {};
-        let customStyle = {};
        
-        try {
-          if (layer.layerStyle) {
-            layerStyle = JSON.parse(layer.layerStyle);
-          }
-        } catch (error) {
-          console.warn("Failed to parse layer style:", error);
+        // layerStyle is already an object from backend
+        if (layer.layerStyle) {
+          layerStyle = layer.layerStyle;
         }
-       
-        try {
-          if (layer.customStyle) {
-            customStyle = JSON.parse(layer.customStyle);
-          }
-        } catch (error) {
-          console.warn("Failed to parse custom style:", error);
-        }
-       
-        // Merge layer style with custom style (custom style takes precedence)
-        const finalStyle = { ...layerStyle, ...customStyle };
+      
 
-        const geoJsonLayer = L.geoJSON(layerData, {
-          style: Object.keys(finalStyle).length > 0 ? finalStyle : undefined,
+        const geoJsonLayer = L.geoJSON(layerData as GeoJSON.GeoJsonObject, {
+          style: Object.keys(layerStyle).length > 0 ? layerStyle : undefined,
           onEachFeature: (feature: GeoJSON.Feature, leafletLayer: L.Layer) => {
             if (feature.properties) {
               const popupContent = Object.entries(feature.properties)
@@ -2090,7 +2047,7 @@ export async function renderAllDataLayers(
             const meta3 = leafletLayer as LayerWithMeta3;
             meta3._feature = feature;
             meta3._layerId = layer.id;
-            meta3._layerName = layer.name;
+            meta3._layerName = layer.layerName;
 
             // Add hover handlers
             leafletLayer.on('mouseover', (e: LeafletMouseEvent) => {
@@ -2141,7 +2098,7 @@ export async function renderAllDataLayers(
                   detail: {
                     feature,
                     layerId: layer.id,
-                    layerName: layer.name
+                    layerName: layer.layerName
                   }
                 });
                 window.dispatchEvent(evt);
@@ -2151,7 +2108,7 @@ export async function renderAllDataLayers(
                   detail: {
                     feature,
                     layerId: layer.id,
-                    layerName: layer.name,
+                    layerName: layer.layerName,
                     leafletLayer
                   }
                 });
@@ -2167,7 +2124,7 @@ export async function renderAllDataLayers(
                 detail: {
                   feature,
                   layerId: layer.id,
-                  layerName: layer.name,
+                  layerName: layer.layerName,
                   x: original.clientX,
                   y: original.clientY,
                   leafletLayer,
@@ -2185,7 +2142,7 @@ export async function renderAllDataLayers(
         dataLayerRefs.current.set(layer.id, geoJsonLayer);
       }
     } catch (error) {
-      console.warn(`Failed to render layer ${layer.name}:`, error);
+      console.warn(`Failed to render layer ${layer.layerName}:`, error);
     }
   }
 }
@@ -2199,7 +2156,7 @@ export async function updateLayerStyle(
     zIndex?: number;
   },
   map: LMap,
-  layers: RawLayer[],
+  layers: LayerDTO[],
   dataLayerRefs: React.MutableRefObject<Map<string, Layer>>
 ): Promise<boolean> {
   try {
@@ -2242,7 +2199,7 @@ export async function handleUpdateLayerStyle(
     zIndex?: number;
   },
   map: LMap,
-  layers: RawLayer[],
+  layers: LayerDTO[],
   dataLayerRefs: React.MutableRefObject<Map<string, L.Layer>>,
   onRefresh?: () => Promise<void>
 ): Promise<void> {
@@ -2307,9 +2264,9 @@ export async function handleDeleteFeature(
 }
 
 export function handleSelectLayer(
-  layer: FeatureData | RawLayer | null,
+  layer: FeatureData | LayerDTO | null,
   setSelectedLayer: React.Dispatch<
-    React.SetStateAction<FeatureData | RawLayer | null>
+    React.SetStateAction<FeatureData | LayerDTO | null>
   >,
   setShowLayerPanel: React.Dispatch<React.SetStateAction<boolean>>
 ): void {
@@ -2445,7 +2402,7 @@ export async function handleLayerVisibilityChange(
   map: LMap,
   dataLayerRefs: React.MutableRefObject<Map<string, Layer>>,
   setLayerVisibility: React.Dispatch<React.SetStateAction<Record<string, boolean>>>,
-  layerData?: RawLayer
+  layerData?: LayerDTO
 ): Promise<void> {
   if (!map) return;
 
@@ -2462,7 +2419,7 @@ export async function handleLayerVisibilityChange(
     if (success) {
       layerOnMap = dataLayerRefs.current.get(layerId);
     } else {
-      console.warn("⚠️ Failed to load layer:", layerData.name);
+      console.warn("⚠️ Failed to load layer:", layerData.layerName);
     }
   }
 

@@ -93,6 +93,10 @@ export default function StoryMapPlayerPage() {
           .build();
 
         // listeners
+        connection.on("SessionNotFound", () => {
+          setError("Phiên điều khiển không tồn tại hoặc đã kết thúc");
+        });
+
         connection.on("StoryStepChanged", (state: any) => {
           // Expecting { segmentIndex?: number, isPlaying?: boolean } from backend
           if (typeof state?.segmentIndex === "number") {
@@ -105,6 +109,12 @@ export default function StoryMapPlayerPage() {
 
         connection.on("SessionEnded", () => {
           setControlledPlaying(false);
+          setError("Phiên điều khiển đã kết thúc");
+        });
+
+        connection.on("JoinedSession", (_payload: any) => {
+          // Optional: could display viewer count or initial state already handled by StoryStepChanged
+          // Intentionally no-op for viewer UI
         });
 
         await connection.start();

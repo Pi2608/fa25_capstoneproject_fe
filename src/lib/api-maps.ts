@@ -2,12 +2,13 @@
  * Maps, Templates, Layers, Features & Publishing API
  */
 
+import { Feature, FeatureCollection, Geometry } from "geojson";
 import { getJson, postJson, putJson, delJson, patchJson, apiFetch, getToken, ApiErrorShape } from "./api-core";
 
 // ===== TYPES =====
 export type ViewState = { center: [number, number]; zoom: number };
-export type BaseMapProvider = "OSM" | "Satellite" | "Dark";
-export type MapStatus = "Draft" | "UnderReview" | "Published" | "Unpublished" | "Archived";
+export type BaseLayer = "OSM" | "Satellite" | "Dark";
+export type MapStatus = "Draft" | "Published" | "Archived";
 
 export type MapDto = {
   id: string;
@@ -22,63 +23,63 @@ export type MapDto = {
   workspaceName?: string | null;
 };
 
-export interface RawLayer {
-  id: string;
-  name: string;
-  layerTypeId: number;
-  layerTypeName: string;
-  layerTypeIcon: string;
-  sourceName: string;
-  filePath: string;
-  layerData: string;
-  layerStyle: string;
-  isPublic: boolean;
-  createdAt: string;
-  updatedAt: string | null;
-  ownerId: string;
-  ownerName: string;
-  mapLayerId: string;
-  isVisible: boolean;
-  zIndex: number;
-  layerOrder: number;
-  customStyle: string;
-  filterConfig: string;
+
+export type DefaultBounds = {
+  type: string;
+  coordinates: number[];
 }
+
+
+export type LayerStyle = {
+  color?: string;
+  weight?: number;
+  fillColor?: string;
+  fillOpacity?: number;
+  opacity?: number;
+  dashArray?: string;
+  dashOffset?: string;
+  lineCap?: string;
+  lineJoin?: string;
+  lineMiterLimit?: number;
+  lineWidth?: number;
+  radius?: number;
+  stroke?: boolean;
+  [key: string]: unknown;
+}
+
+
+export type LayerDTO = {
+  id: string;
+  layerName: string;
+  layerType: string;
+  sourceType: string;
+  filePath: string;
+  layerData: FeatureCollection | Record<string, unknown>;
+  layerStyle: LayerStyle | Record<string, unknown>;
+  isPublic: boolean;
+  featureCount: number;
+  dataSizeKB: number;
+  dataBounds: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 
 export interface MapDetail {
   id: string;
-  mapName: string;
+  name: string;
   description?: string;
-  baseMapProvider: BaseMapProvider;
-  initialLatitude: number;
-  initialLongitude: number;
-  initialZoom: number;
-  layers: RawLayer[];
+  previewImage?: string;
+  defaultBounds?: DefaultBounds;
+  baseLayer: BaseLayer;
+  viewState?: ViewState;
+  isPublic?: boolean;
   status?: MapStatus;
   publishedAt?: string;
-  isPublic?: boolean;
-  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+  layers: LayerDTO[];
 }
-
-type MapDetailRawWrapped = {
-  map: {
-    id: string;
-    name: string;
-    description?: string | null;
-    baseLayer: BaseMapProvider;
-    viewState: {
-      center?: [number, number];
-      zoom?: number;
-    } | null;
-    initialLatitude: number;
-    initialLongitude: number;
-    initialZoom: number;
-    layers: RawLayer[];
-    status?: MapStatus;
-    publishedAt?: string;
-    isPublic?: boolean;
-  };
-};
 
 // ===== MAP CRUD =====
 export interface CreateMapRequest {
@@ -87,7 +88,7 @@ export interface CreateMapRequest {
   isPublic: boolean;
   defaultBounds?: string;
   viewState?: string;
-  baseMapProvider?: BaseMapProvider;
+  baseLayer?: BaseLayer;
   workspaceId?: string | null;
 }
 
@@ -97,49 +98,88 @@ export interface CreateMapResponse {
   createdAt?: string;
 }
 
+// ===== MAP UTILITIES =====
+/**
+ * Calculate default bounds as a Polygon from center and zoom level
+ */
+export function createDefaultBounds(center: { lat: number; lng: number }, zoom: number): string {
+  const latDiff = 180 / Math.pow(2, zoom);
+  const lngDiff = 360 / Math.pow(2, zoom);
+  return JSON.stringify({
+    type: "Polygon",
+    coordinates: [[
+      [center.lng - lngDiff / 2, center.lat - latDiff / 2],
+      [center.lng + lngDiff / 2, center.lat - latDiff / 2],
+      [center.lng + lngDiff / 2, center.lat + latDiff / 2],
+      [center.lng - lngDiff / 2, center.lat + latDiff / 2],
+      [center.lng - lngDiff / 2, center.lat - latDiff / 2],
+    ]],
+  });
+}
+
+/**
+ * Create viewState JSON string from center and zoom
+ * Format: { center: [lat, lng], zoom: number }
+ */
+export function createViewState(center: { lat: number; lng: number }, zoom: number): string {
+  return JSON.stringify({ center: [center.lat, center.lng], zoom });
+}
+
+/**
+ * Create both defaultBounds and viewState from center and zoom
+ */
+export function createMapViewData(center: { lat: number; lng: number }, zoom: number): {
+  defaultBounds: string;
+  viewState: string;
+} {
+  return {
+    defaultBounds: createDefaultBounds(center, zoom),
+    viewState: createViewState(center, zoom),
+  };
+}
+
+/**
+ * Default map center (Vietnam)
+ */
+export const DEFAULT_MAP_CENTER = { lat: 14.058324, lng: 108.277199 };
+export const DEFAULT_MAP_ZOOM = 13;
+
 export function createMap(req: CreateMapRequest) {
-  let center: [number, number] = [10.78, 106.69];
-  let zoom = 13;
-
-  if (req.viewState) {
-    try {
-      const vs = JSON.parse(req.viewState) as Partial<ViewState>;
-      const c = vs?.center;
-      const z = vs?.zoom;
-      if (
-        Array.isArray(c) &&
-        c.length === 2 &&
-        typeof c[0] === "number" &&
-        typeof c[1] === "number"
-      ) {
-        center = [c[0], c[1]];
-      }
-      if (typeof z === "number") {
-        zoom = z;
-      }
-    } catch {
-      // ignore malformed view state input
-    }
-  }
-
-  const finalViewState =
-    req.viewState ??
-    JSON.stringify({
-      center,
-      zoom,
-    });
-
   const body = {
     Name: req.name,
     Description: req.description ?? null,
     IsPublic: req.isPublic,
     DefaultBounds: req.defaultBounds ?? null,
-    ViewState: finalViewState,
-    BaseMapProvider: req.baseMapProvider ?? "OSM",
+    ViewState: req.viewState ?? null,
+    BaseLayer: req.baseLayer ?? "OSM",
     WorkspaceId: req.workspaceId ?? null,
   };
 
   return postJson<typeof body, CreateMapResponse>("/maps", body);
+}
+
+export async function createDefaultMap(options?: {
+  name?: string;
+  description?: string;
+  isPublic?: boolean;
+  baseLayer?: BaseLayer;
+  workspaceId?: string | null;
+  center?: { lat: number; lng: number };
+  zoom?: number;
+}): Promise<CreateMapResponse> {
+  const center = options?.center ?? DEFAULT_MAP_CENTER;
+  const zoom = options?.zoom ?? DEFAULT_MAP_ZOOM;
+  const { defaultBounds, viewState } = createMapViewData(center, zoom);
+
+  return createMap({
+    name: options?.name ?? "Untitled Map",
+    description: options?.description ?? "",
+    isPublic: options?.isPublic ?? false,
+    defaultBounds,
+    viewState,
+    baseLayer: options?.baseLayer ?? "OSM",
+    workspaceId: options?.workspaceId ?? null,
+  });
 }
 
 export function getMapById(mapId: string) {
@@ -151,8 +191,8 @@ export interface UpdateMapRequest {
   description?: string;
   previewImageUrl?: string | null;
   isPublic?: boolean;
-  baseMapProvider?: BaseMapProvider;
-  geographicBounds?: string;
+  baseLayer?: BaseLayer;
+  defaultBounds?: string;
   viewState?: string;
 }
 export interface UpdateMapResponse { message?: string; }
@@ -192,25 +232,7 @@ export async function getOrganizationMaps(orgId: string): Promise<MapDto[]> {
 }
 
 export async function getMapDetail(mapId: string): Promise<MapDetail> {
-  const res = await getJson<MapDetailRawWrapped | MapDetail>(`/maps/${mapId}`);
-
-  if (res && typeof res === "object" && "map" in res) {
-    const m = (res as MapDetailRawWrapped).map;
-    return {
-      id: m.id,
-      mapName: m.name,
-      description: m.description ?? "",
-      baseMapProvider: m.baseLayer,
-      initialLatitude: m.initialLatitude,
-      initialLongitude: m.initialLongitude,
-      initialZoom: m.viewState?.zoom ?? m.initialZoom ?? 10,
-      layers: m.layers ?? [],
-      status: m.status,
-      publishedAt: m.publishedAt,
-      isPublic: m.isPublic,
-    };
-  }
-
+  const res = await getJson<MapDetail | MapDetail>(`/maps/${mapId}`);
   return res as MapDetail;
 }
 

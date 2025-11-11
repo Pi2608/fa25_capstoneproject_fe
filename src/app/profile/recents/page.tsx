@@ -4,7 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
-import { createMap, createMapFromTemplate, deleteMap, getMyRecentMaps, MapDto, updateMap, UpdateMapRequest } from "@/lib/api-maps";
+import { 
+  createMap, 
+  createMapFromTemplate, 
+  createDefaultMap,
+  deleteMap, 
+  getMyRecentMaps, 
+  MapDto, 
+  updateMap, 
+  UpdateMapRequest 
+} from "@/lib/api-maps";
 
 type ViewMode = "grid" | "list";
 
@@ -208,30 +217,8 @@ export default function RecentsPage() {
   }, [loadMyMaps]);
 
   const clickNewMap = useCallback(async () => {
-    const center = { lat: 10.78, lng: 106.69 };
-    const zoom = 13;
-
-    const latDiff = 180 / Math.pow(2, zoom);
-    const lngDiff = 360 / Math.pow(2, zoom);
-    const defaultBounds = JSON.stringify({
-      type: "Polygon",
-      coordinates: [[
-        [center.lng - lngDiff / 2, center.lat - latDiff / 2],
-        [center.lng + lngDiff / 2, center.lat - latDiff / 2],
-        [center.lng + lngDiff / 2, center.lat + latDiff / 2],
-        [center.lng - lngDiff / 2, center.lat + latDiff / 2],
-        [center.lng - lngDiff / 2, center.lat - latDiff / 2],
-      ]],
-    });
-    const viewState = JSON.stringify({ center: [center.lat, center.lng], zoom });
-
-    const created = await createMap({
+    const created = await createDefaultMap({
       name: "Untitled Map",
-      description: "",
-      isPublic: false,
-      defaultBounds,
-      viewState,
-      baseMapProvider: "OSM",
       workspaceId: null,
     });
 
