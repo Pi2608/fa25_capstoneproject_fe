@@ -6,7 +6,7 @@ import { useToast } from "@/contexts/ToastContext";
 import { Workspace } from "@/types/workspace";
 import { formatDate } from "@/utils/formatUtils";
 import { getOrganizationById, OrganizationDetailDto } from "@/lib/api-organizations";
-import { createMap, deleteMap } from "@/lib/api-maps";
+import { createDefaultMap, deleteMap } from "@/lib/api-maps";
 import { getWorkspaceById, getWorkspaceMaps, removeMapFromWorkspace } from "@/lib/api-workspaces";
 
 type ViewMode = "grid" | "list";
@@ -47,32 +47,8 @@ export default function WorkspaceDetailPage() {
 
   const handleCreateMap = useCallback(async () => {
     try {
-      const center = { lat: 10.78, lng: 106.69 };
-      const zoom = 13;
-      const latDiff = 180 / Math.pow(2, zoom);
-      const lngDiff = 360 / Math.pow(2, zoom);
-      const defaultBounds = JSON.stringify({
-        type: "Polygon",
-        coordinates: [
-          [
-            [center.lng - lngDiff / 2, center.lat - latDiff / 2],
-            [center.lng + lngDiff / 2, center.lat - latDiff / 2],
-            [center.lng + lngDiff / 2, center.lat + latDiff / 2],
-            [center.lng - lngDiff / 2, center.lat + latDiff / 2],
-            [center.lng - lngDiff / 2, center.lat - latDiff / 2],
-          ],
-        ],
-      });
-      const viewState = JSON.stringify({ center: [center.lat, center.lng], zoom });
-
-      const created = await createMap({
-        // Giữ nguyên tên gửi lên API để không ảnh hưởng logic
+      const created = await createDefaultMap({
         name: "Untitled Map",
-        description: "",
-        isPublic: false,
-        defaultBounds,
-        viewState,
-        baseMapProvider: "OSM",
         workspaceId,
       });
       router.push(`/maps/${created.mapId}?created=1`);

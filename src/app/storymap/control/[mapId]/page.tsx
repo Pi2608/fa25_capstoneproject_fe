@@ -41,7 +41,7 @@ export default function StoryMapControlPage() {
           getSegments(mapId),
         ]);
 
-        if (detail.status !== "Published") {
+        if (detail.status !== "Published" && !detail.isPublic) {
           setError("This map is not published yet");
           return;
         }

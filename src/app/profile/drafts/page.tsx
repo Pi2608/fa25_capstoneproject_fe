@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getMapDetail, getMyMaps, MapDto, MapStatus, publishMap } from "@/lib/api-maps";
+import { getMyDraftMaps, MapDto, MapStatus, publishMap } from "@/lib/api-maps";
 
 
 type DraftItem = MapDto & { status?: MapStatus | string };
@@ -21,24 +21,8 @@ export default function DraftsPage() {
     setLoading(true);
     setErr(null);
     try {
-      const mine = await getMyMaps();
-      // Load details in parallel to know publish status
-      const details = await Promise.all(
-        mine.map(async (m) => {
-          try {
-            const d = await getMapDetail(m.id);
-            return { ...m, status: d.status } as DraftItem;
-          } catch {
-            return { ...m } as DraftItem;
-          }
-        })
-      );
-
-      const drafts = details.filter((x) => {
-        const s = (x.status || "").toString();
-        return s === "Draft" || s === "Unpublished" || s === "";
-      });
-      setItems(drafts);
+      const mine = await getMyDraftMaps();
+      setItems(mine as DraftItem[]);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Không thể tải bản nháp.");
     } finally {

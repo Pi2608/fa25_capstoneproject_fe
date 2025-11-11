@@ -124,6 +124,7 @@ export interface GetUserNotificationsResponse {
   pageSize: number;
   totalItems?: number;
   totalPages?: number;
+  unreadCount?: number;
 }
 
 export interface MarkNotificationReadResponse {
@@ -180,8 +181,10 @@ function unwrapNotificationsEnvelope(res: unknown): GetUserNotificationsResponse
 
     const page = asNumber(o.page) ?? 1;
     const pageSize = asNumber(o.pageSize) ?? 20;
-    const totalItems = asNumber(o.totalItems) ?? asNumber(o.total);
+    // Backend returns totalCount (camelCase from TotalCount)
+    const totalItems = asNumber(o.totalCount) ?? asNumber(o.totalItems) ?? asNumber(o.total);
     const totalPages = asNumber(o.totalPages);
+    const unreadCount = asNumber(o.unreadCount);
 
     return {
       notifications: mapped,
@@ -189,6 +192,7 @@ function unwrapNotificationsEnvelope(res: unknown): GetUserNotificationsResponse
       pageSize,
       totalItems: totalItems ?? undefined,
       totalPages: totalPages ?? undefined,
+      unreadCount: unreadCount ?? undefined,
     };
   }
 

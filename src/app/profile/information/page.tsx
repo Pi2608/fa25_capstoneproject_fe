@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { getMe, type Me } from "@/lib/api-auth";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { getMe, type Me, clearMeCache } from "@/lib/api-auth";
 import {
   updateMyPersonalInfo,
   type UpdateUserPersonalInfoRequest,
@@ -32,16 +32,44 @@ export default function ThongTinCaNhanPage() {
   const [phone, setPhone] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  
+  // Use ref to prevent duplicate API calls during component lifecycle
+  const requestIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    getMe()
-      .then((m) => {
-        setMe(m);
-        setFullName(m.fullName ?? "");
-        setPhone(m.phone ?? "");
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    // Generate unique request ID for this mount
+    const requestId = `getMe-${Date.now()}-${Math.random()}`;
+    requestIdRef.current = requestId;
+
+    let cancelled = false;
+
+    const loadData = async () => {
+      try {
+        const m = await getMe();
+        
+        // Only update state if this is still the current request
+        if (!cancelled && requestIdRef.current === requestId) {
+          setMe(m);
+          setFullName(m.fullName ?? "");
+          setPhone(m.phone ?? "");
+          setLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to load user info:", err);
+        // Only update state if this is still the current request
+        if (!cancelled && requestIdRef.current === requestId) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadData();
+
+    // Cleanup: mark as cancelled when component unmounts or effect re-runs
+    return () => {
+      cancelled = true;
+    };
+  }, []); // Empty deps - only run once on mount
 
   const dirty = useMemo(() => {
     if (!me) return false;
@@ -68,6 +96,10 @@ export default function ThongTinCaNhanPage() {
     setSaving(true);
     try {
       const res: UpdateUserPersonalInfoResponse = await updateMyPersonalInfo(payload);
+      
+      // Clear cache to force refresh on next getMe() call
+      clearMeCache();
+      
       setMe((prev) =>
         prev
           ? { ...prev, fullName: res.fullName ?? prev.fullName, phone: res.phone ?? prev.phone, email: res.email ?? prev.email }

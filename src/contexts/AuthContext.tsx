@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
 import { parseToken } from "@/utils/jwt";
 
 export interface User {
@@ -24,89 +24,106 @@ const LS_USER_KEY = "auth_user";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+function readStorage<T>(key: string, parser?: (value: string) => T | null): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = localStorage.getItem(key);
+    if (!value) return null;
+    return parser ? parser(value) : (value as T);
+  } catch {
+    return null;
+  }
+}
 
-  useEffect(() => {
-    try {
-      const storedToken = localStorage.getItem(LS_TOKEN_KEY);
-      const storedUserRaw = localStorage.getItem(LS_USER_KEY);
-      if (storedToken) {
-        setToken(storedToken);
-        // Parse token to extract userId and email
-        const identity = parseToken(storedToken);
-        setUserId(identity.userId);
-        setUserEmail(identity.email);
-      }
-      if (storedUserRaw) {
-        const parsed = JSON.parse(storedUserRaw) as User;
-        if (parsed && parsed.id) setUser(parsed);
-      }
-    } catch {
+function writeStorage(key: string, value: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (value) {
+      localStorage.setItem(key, value);
+    } else {
+      localStorage.removeItem(key);
     }
+  } catch {
+    return;
+  }
+}
+
+function getInitialToken(): string | null {
+  return readStorage<string>(LS_TOKEN_KEY);
+}
+
+function getInitialUser(): User | null {
+  return readStorage<User>(LS_USER_KEY, (value) => {
+    try {
+      const parsed = JSON.parse(value) as User;
+      return parsed?.id ? parsed : null;
+    } catch {
+      return null;
+    }
+  });
+}
+
+function extractIdentity(token: string | null) {
+  if (!token) return { userId: null, userEmail: null };
+  try {
+    const { userId, email } = parseToken(token);
+    return { userId, userEmail: email };
+  } catch {
+    return { userId: null, userEmail: null };
+  }
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const initialToken = getInitialToken();
+  const initialIdentity = extractIdentity(initialToken);
+
+  const [user, setUserState] = useState<User | null>(getInitialUser);
+  const [token, setTokenState] = useState<string | null>(initialToken);
+  const [userId, setUserId] = useState<string | null>(initialIdentity.userId);
+  const [userEmail, setUserEmail] = useState<string | null>(initialIdentity.userEmail);
+
+  const updateIdentityFromToken = useCallback((newToken: string | null) => {
+    const identity = extractIdentity(newToken);
+    setUserId(identity.userId);
+    setUserEmail(identity.userEmail);
   }, []);
 
   useEffect(() => {
-    // Listen for auth changes from api-core
     const handleAuthChange = () => {
-      try {
-        const newToken = localStorage.getItem(LS_TOKEN_KEY);
-        setToken(newToken);
-        if (newToken) {
-          const identity = parseToken(newToken);
-          setUserId(identity.userId);
-          setUserEmail(identity.email);
-        } else {
-          setUserId(null);
-          setUserEmail(null);
-          setUser(null);
+      const newToken = readStorage<string>(LS_TOKEN_KEY);
+      if (newToken !== token) {
+        setTokenState(newToken);
+        updateIdentityFromToken(newToken);
+        if (!newToken) {
+          setUserState(null);
+          writeStorage(LS_USER_KEY, null);
         }
-      } catch {
       }
     };
 
     window.addEventListener("auth-changed", handleAuthChange);
-    return () => {
-      window.removeEventListener("auth-changed", handleAuthChange);
-    };
+    return () => window.removeEventListener("auth-changed", handleAuthChange);
+  }, [token, updateIdentityFromToken]);
+
+  const setToken = useCallback((newToken: string | null) => {
+    setTokenState(newToken);
+    updateIdentityFromToken(newToken);
+    if (!newToken) {
+      setUserState(null);
+      writeStorage(LS_USER_KEY, null);
+    }
+  }, [updateIdentityFromToken]);
+
+  const setUser = useCallback((newUser: User | null) => {
+    setUserState(newUser);
+    writeStorage(LS_USER_KEY, newUser ? JSON.stringify(newUser) : null);
   }, []);
 
-  useEffect(() => {
-    try {
-      if (token) {
-        localStorage.setItem(LS_TOKEN_KEY, token);
-        // Parse token to extract userId and email
-        const identity = parseToken(token);
-        setUserId(identity.userId);
-        setUserEmail(identity.email);
-      } else {
-        localStorage.removeItem(LS_TOKEN_KEY);
-        setUserId(null);
-        setUserEmail(null);
-      }
-    } catch {}
-  }, [token]);
-
-  useEffect(() => {
-    try {
-      if (user) localStorage.setItem(LS_USER_KEY, JSON.stringify(user));
-      else localStorage.removeItem(LS_USER_KEY);
-    } catch {}
-  }, [user]);
-
-  const logout = () => {
-    try {
-      localStorage.removeItem(LS_TOKEN_KEY);
-      localStorage.removeItem(LS_USER_KEY);
-    } catch {}
-    setUser(null);
-    setToken(null);
-    setUserId(null);
-    setUserEmail(null);
-  };
+  const logout = useCallback(() => {
+    writeStorage(LS_TOKEN_KEY, null);
+    writeStorage(LS_USER_KEY, null);
+    window.dispatchEvent(new Event("auth-changed"));
+  }, []);
 
   const value = useMemo<AuthContextType>(
     () => ({
@@ -119,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setToken,
       logout,
     }),
-    [user, token, userId, userEmail]
+    [user, token, userId, userEmail, setUser, setToken, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

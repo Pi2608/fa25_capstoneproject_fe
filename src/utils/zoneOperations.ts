@@ -1,4 +1,24 @@
 import type { LatLngBounds } from 'leaflet';
+import { messages, type Lang } from "@/i18n/messages";
+
+/**
+ * Get current language from localStorage or default to 'en'
+ */
+function getCurrentLang(): Lang {
+  if (typeof window === "undefined") return "en";
+  const saved = localStorage.getItem("lang") as Lang | null;
+  return saved === "vi" || saved === "en" ? saved : "en";
+}
+
+/**
+ * Get translated message from i18n messages
+ */
+function t(namespace: "common", key: string): string {
+  const lang = getCurrentLang();
+  const pack = messages[lang]?.[namespace] as Record<string, unknown> | undefined;
+  const msg = pack ? (pack[key] as string | undefined) : undefined;
+  return typeof msg === "string" ? msg : key;
+}
 
 /**
  * Get center coordinates from a feature
@@ -81,10 +101,12 @@ export function getFeatureBounds(feature: GeoJSON.Feature): [[number, number], [
  */
 export function formatCoordinates(feature: GeoJSON.Feature): string {
   const center = getFeatureCenter(feature);
-  if (!center) return 'N/A';
+  if (!center) return t("common", "notAvailable");
 
   const [lng, lat] = center;
-  return `Latitude: ${lat.toFixed(6)}, Longitude: ${lng.toFixed(6)}`;
+  const latLabel = t("common", "latitude");
+  const lngLabel = t("common", "longitude");
+  return `${latLabel}: ${lat.toFixed(6)}, ${lngLabel}: ${lng.toFixed(6)}`;
 }
 
 /**
@@ -118,7 +140,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
  * Get feature name from properties
  */
 export function getFeatureName(feature: GeoJSON.Feature): string {
-  if (!feature.properties) return 'Unknown Zone';
+  if (!feature.properties) return t("common", "unknownZone");
   
   // Try common name properties
   const nameProps = ['name', 'Name', 'NAME', 'TinhThanh', 'title', 'label'];
@@ -128,7 +150,7 @@ export function getFeatureName(feature: GeoJSON.Feature): string {
     }
   }
   
-  return 'Zone';
+  return t("common", "zone");
 }
 
 /**

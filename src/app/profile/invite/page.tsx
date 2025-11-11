@@ -10,6 +10,7 @@ import {
   RejectInviteOrganizationReqDto,
 } from "@/lib/api-organizations";
 import { useI18n } from "@/i18n/I18nProvider";
+import type { KeysOf, Namespaces } from "@/i18n/messages";
 
 function fmtDate(iso?: string) {
   if (!iso) return "—";
@@ -40,7 +41,9 @@ function toApiError(err: unknown): ApiLikeError {
 
 export default function MyInvitationsPage() {
   const { t } = useI18n();
-  const tr = (k: string) => t("invites", k);
+  const tPath = t as unknown as (path: `${Namespaces}.${string}`, vars?: Record<string, string | number>) => string;
+  type InviteKeys = KeysOf<"invites">;
+  const tr = (k: InviteKeys) => tPath(`invites.${k}` as const);
 
   const [data, setData] = useState<GetInvitationsResDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -113,9 +116,9 @@ export default function MyInvitationsPage() {
   }
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="min-w-0 relative px-4">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl sm:text-3xl font-semibold flex items-center gap-2">
+        <h1 className="text-2xl sm:text-3xl font-semibold flex items-center gap-2 mb-6">
           {tr("title")}
           <span
             className={[

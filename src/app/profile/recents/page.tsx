@@ -4,11 +4,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
-import { createMap, createMapFromTemplate, deleteMap, getMyMaps, MapDto, updateMap, UpdateMapRequest } from "@/lib/api-maps";
+import { 
+  createMap, 
+  createMapFromTemplate, 
+  createDefaultMap,
+  deleteMap, 
+  getMyRecentMaps, 
+  MapDto, 
+  updateMap, 
+  UpdateMapRequest 
+} from "@/lib/api-maps";
 
 type ViewMode = "grid" | "list";
-type SortKey = "recentlyModified" | "dateCreated" | "name";
-type SortOrder = "asc" | "desc";
 
 type Sample = {
   key: string;
@@ -152,8 +159,6 @@ export default function RecentsPage() {
 
   const [viewOpen, setViewOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [sortKey, setSortKey] = useState<SortKey>("dateCreated");
-  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
 
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
@@ -198,7 +203,7 @@ export default function RecentsPage() {
     setLoading(true);
     setErr(null);
     try {
-      const res = await getMyMaps();
+      const res = await getMyRecentMaps(20);
       setMaps(res);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load your maps.");
@@ -212,54 +217,13 @@ export default function RecentsPage() {
   }, [loadMyMaps]);
 
   const clickNewMap = useCallback(async () => {
-    const center = { lat: 10.78, lng: 106.69 };
-    const zoom = 13;
-
-    const latDiff = 180 / Math.pow(2, zoom);
-    const lngDiff = 360 / Math.pow(2, zoom);
-    const defaultBounds = JSON.stringify({
-      type: "Polygon",
-      coordinates: [[
-        [center.lng - lngDiff / 2, center.lat - latDiff / 2],
-        [center.lng + lngDiff / 2, center.lat - latDiff / 2],
-        [center.lng + lngDiff / 2, center.lat + latDiff / 2],
-        [center.lng - lngDiff / 2, center.lat + latDiff / 2],
-        [center.lng - lngDiff / 2, center.lat - latDiff / 2],
-      ]],
-    });
-    const viewState = JSON.stringify({ center: [center.lat, center.lng], zoom });
-
-    const created = await createMap({
+    const created = await createDefaultMap({
       name: "Untitled Map",
-      description: "",
-      isPublic: false,
-      defaultBounds,
-      viewState,
-      baseMapProvider: "OSM",
       workspaceId: null,
     });
 
     router.push(`/maps/${created.mapId}?created=1&name=${encodeURIComponent("Untitled Map")}`);
   }, [router]);
-
-  const sortedMaps = useMemo(() => {
-    const arr = [...maps];
-    arr.sort((a, b) => {
-      if (sortKey === "name") {
-        return (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" });
-      }
-      // Use updatedAt for recentlyModified, createdAt for dateCreated
-      const aTime = new Date(
-        sortKey === "recentlyModified" ? (a.updatedAt ?? a.createdAt ?? 0) : (a.createdAt ?? 0)
-      ).getTime();
-      const bTime = new Date(
-        sortKey === "recentlyModified" ? (b.updatedAt ?? b.createdAt ?? 0) : (b.createdAt ?? 0)
-      ).getTime();
-      return aTime - bTime;
-    });
-    if (sortOrder === "desc") arr.reverse();
-    return arr;
-  }, [maps, sortKey, sortOrder]);
 
   const createFromSample = async (s: Sample) => {
     setActionErr(null);
@@ -383,7 +347,7 @@ export default function RecentsPage() {
             </button>
             {viewOpen && (
               <div
-                className="absolute right-0 mt-2 w-64 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl p-2"
+                className="absolute right-0 mt-2 w-48 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl p-2"
                 onMouseLeave={() => setViewOpen(false)}
               >
                 <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Show items as</div>
@@ -394,32 +358,6 @@ export default function RecentsPage() {
                     onClick={() => setViewMode(m)}
                   >
                     {m === "grid" ? "Grid" : "List"}
-                  </button>
-                ))}
-                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Sort by</div>
-                {(
-                  [
-                    ["recentlyModified", "Recently modified"],
-                    ["dateCreated", "Date created"],
-                    ["name", "Name"],
-                  ] as readonly [SortKey, string][]
-                ).map(([k, label]) => (
-                  <button
-                    key={k}
-                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${sortKey === k ? "text-emerald-300" : "text-zinc-200"}`}
-                    onClick={() => setSortKey(k)}
-                  >
-                    {label}
-                  </button>
-                ))}
-                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Order</div>
-                {(["desc", "asc"] as const).map((o) => (
-                  <button
-                    key={o}
-                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${sortOrder === o ? "text-emerald-300" : "text-zinc-200"}`}
-                    onClick={() => setSortOrder(o)}
-                  >
-                    {o === "desc" ? "Descending" : "Ascending"}
                   </button>
                 ))}
               </div>
@@ -437,7 +375,7 @@ export default function RecentsPage() {
       <section className="mb-8">
         <h2 className="mb-3 text-lg font-semibold">Your maps</h2>
 
-        {sortedMaps.length === 0 && (
+        {maps.length === 0 && (
           <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
             <p className="text-zinc-400 mb-4">You have no maps yet.</p>
             <button
@@ -449,9 +387,9 @@ export default function RecentsPage() {
           </div>
         )}
 
-        {sortedMaps.length > 0 && viewMode === "grid" && (
+        {maps.length > 0 && viewMode === "grid" && (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {sortedMaps.map((m) => (
+            {maps.map((m) => (
               <li
                 key={m.id}
                 className="group relative rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4"
@@ -527,7 +465,7 @@ export default function RecentsPage() {
           </ul>
         )}
 
-        {sortedMaps.length > 0 && viewMode === "list" && (
+        {maps.length > 0 && viewMode === "list" && (
           <div className="rounded-xl border border-white/10 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-white/5 text-zinc-300">
@@ -538,7 +476,7 @@ export default function RecentsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/10">
-                {sortedMaps.map((m) => (
+                {maps.map((m) => (
                   <tr key={m.id} className="hover:bg-white/5">
                     <td className="px-3 py-2">
                       <button
