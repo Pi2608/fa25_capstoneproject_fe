@@ -16,6 +16,7 @@ type StoryMapViewerProps = {
   onSegmentChange?: (segment: Segment, index: number) => void;
   controlledIndex?: number; // For control page synchronization
   controlledPlaying?: boolean;
+  controlsEnabled?: boolean;
 };
 
 export default function StoryMapViewer({
@@ -27,6 +28,7 @@ export default function StoryMapViewer({
   onSegmentChange,
   controlledIndex,
   controlledPlaying,
+  controlsEnabled = true,
 }: StoryMapViewerProps) {
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapWithPM | null>(null);
@@ -145,38 +147,40 @@ export default function StoryMapViewer({
         </div>
       )}
 
-      {/* Playback Controls (optional, can be customized) */}
-      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-[1000] bg-zinc-900/90 backdrop-blur-sm border border-zinc-700 rounded-lg px-6 py-3 flex items-center gap-4 shadow-xl">
-        <button
-          onClick={playback.isPlaying ? playback.handleStopPreview : playback.handlePlayPreview}
-          className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
-          title={playback.isPlaying ? "Pause" : "Play"}
-        >
-          {playback.isPlaying ? (
-            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-            </svg>
-          ) : (
-            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          )}
-        </button>
+      {/* Playback Controls (hidden when controlsEnabled = false) */}
+      {controlsEnabled && (
+        <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-[1000] bg-zinc-900/90 backdrop-blur-sm border border-zinc-700 rounded-lg px-6 py-3 flex items-center gap-4 shadow-xl">
+          <button
+            onClick={playback.isPlaying ? playback.handleStopPreview : playback.handlePlayPreview}
+            className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
+            title={playback.isPlaying ? "Pause" : "Play"}
+          >
+            {playback.isPlaying ? (
+              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            )}
+          </button>
 
-        <div className="text-white text-sm font-medium">
-          {playback.currentPlayIndex + 1} / {segments.length}
+          <div className="text-white text-sm font-medium">
+            {playback.currentPlayIndex + 1} / {segments.length}
+          </div>
+
+          <button
+            onClick={playback.handleClearMap}
+            className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
+            title="Clear Map"
+          >
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-
-        <button
-          onClick={playback.handleClearMap}
-          className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
-          title="Clear Map"
-        >
-          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+      )}
     </div>
   );
 }

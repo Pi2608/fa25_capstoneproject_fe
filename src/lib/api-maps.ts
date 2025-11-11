@@ -17,6 +17,9 @@ export type MapDto = {
   previewImageUrl?: string | null;
   createdAt: string;
   updatedAt?: string | null;
+  lastActivityAt?: string | null; // For recent maps - backend calculated activity time
+  status?: string; // Map status: draft, published, etc.
+  workspaceName?: string | null;
 };
 
 export interface RawLayer {
@@ -71,6 +74,9 @@ type MapDetailRawWrapped = {
     initialLongitude: number;
     initialZoom: number;
     layers: RawLayer[];
+    status?: MapStatus;
+    publishedAt?: string;
+    isPublic?: boolean;
   };
 };
 
@@ -168,6 +174,16 @@ export async function getMyMaps(): Promise<MapDto[]> {
   return Array.isArray(res) ? res : (res.maps ?? []);
 }
 
+export async function getMyRecentMaps(limit = 20): Promise<MapDto[]> {
+  const res = await getJson<GetMyMapsResponse | MapDto[]>(`/maps/my/recents?limit=${encodeURIComponent(String(limit))}`);
+  return Array.isArray(res) ? res : (res.maps ?? []);
+}
+
+export async function getMyDraftMaps(): Promise<MapDto[]> {
+  const res = await getJson<GetMyMapsResponse | MapDto[]>("/maps/my/drafts");
+  return Array.isArray(res) ? res : (res.maps ?? []);
+}
+
 export interface GetOrganizationMapsResponse { maps: MapDto[] }
 
 export async function getOrganizationMaps(orgId: string): Promise<MapDto[]> {
@@ -189,6 +205,9 @@ export async function getMapDetail(mapId: string): Promise<MapDetail> {
       initialLongitude: m.initialLongitude,
       initialZoom: m.viewState?.zoom ?? m.initialZoom ?? 10,
       layers: m.layers ?? [],
+      status: m.status,
+      publishedAt: m.publishedAt,
+      isPublic: m.isPublic,
     };
   }
 

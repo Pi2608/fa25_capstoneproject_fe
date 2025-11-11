@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { getSegments, Segment } from "@/lib/api-storymap";
 import { getMapDetail } from "@/lib/api-maps";
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
+import * as signalR from "@microsoft/signalr";
+import { getToken } from "@/lib/api-core";
 
 export default function StoryMapPlayerPage() {
   const params = useParams<{ mapId: string }>();
@@ -30,7 +32,7 @@ export default function StoryMapPlayerPage() {
           getSegments(mapId),
         ]);
 
-        if (detail.status !== "Published") {
+        if (detail.status !== "Published" && !detail.isPublic) {
           setError("This map is not published yet");
           return;
         }
@@ -63,6 +65,60 @@ export default function StoryMapPlayerPage() {
     console.log('[Viewer] Listening on channel:', `storymap-${mapId}`);
 
     return () => channel.close();
+  }, [mapId]);
+
+  // SignalR: join as viewer for cross-device sync
+  useEffect(() => {
+    let connection: signalR.HubConnection | null = null;
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "");
+    // StoryHub is mapped at app root: /hubs/story (not under /api/v1)
+    const hubBase = apiBase ? apiBase.replace(/\/api(\/v\d+)?$/i, "") : undefined;
+    const token = getToken();
+
+    if (!mapId || !hubBase || !token) {
+      return;
+    }
+
+    (async () => {
+      try {
+        connection = new signalR.HubConnectionBuilder()
+          .withUrl(`${hubBase}/hubs/story`, {
+            accessTokenFactory: () => token,
+            withCredentials: true,
+            skipNegotiation: false,
+            transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
+          })
+          .withAutomaticReconnect()
+          .configureLogging(signalR.LogLevel.Information)
+          .build();
+
+        // listeners
+        connection.on("StoryStepChanged", (state: any) => {
+          // Expecting { segmentIndex?: number, isPlaying?: boolean } from backend
+          if (typeof state?.segmentIndex === "number") {
+            setControlledIndex(state.segmentIndex);
+          }
+          if (typeof state?.isPlaying === "boolean") {
+            setControlledPlaying(state.isPlaying);
+          }
+        });
+
+        connection.on("SessionEnded", () => {
+          setControlledPlaying(false);
+        });
+
+        await connection.start();
+        await connection.invoke("JoinAsViewer", mapId);
+      } catch (e) {
+        console.warn("[StoryMap Viewer] SignalR connection failed:", e);
+      }
+    })();
+
+    return () => {
+      if (connection) {
+        void connection.stop();
+      }
+    };
   }, [mapId]);
 
   if (loading) {
@@ -106,6 +162,7 @@ export default function StoryMapPlayerPage() {
         initialZoom={mapDetail?.defaultZoom || 10}
         controlledIndex={controlledIndex}
         controlledPlaying={controlledPlaying}
+        controlsEnabled={false}
       />
     </div>
   );

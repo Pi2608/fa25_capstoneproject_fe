@@ -60,12 +60,49 @@ export type Me = {
   lastLogin?: string | null
 }
 
-export async function getMe(): Promise<Me> {
-  const r = await getJson<MeRaw | Me>("/user/me");
-  if (r && typeof r === "object" && "user" in r) {
-    return (r as MeRaw).user;
+// Cache for getMe to prevent duplicate calls
+let meCache: { data: Me; timestamp: number } | null = null;
+const ME_CACHE_DURATION = 5000; // 5 seconds cache
+let mePromise: Promise<Me> | null = null;
+
+export async function getMe(forceRefresh = false): Promise<Me> {
+  // Return cached data if still valid
+  if (!forceRefresh && meCache) {
+    const age = Date.now() - meCache.timestamp;
+    if (age < ME_CACHE_DURATION) {
+      return meCache.data;
+    }
   }
-  return r as Me;
+
+  // If there's already a pending request, return it
+  if (mePromise) {
+    return mePromise;
+  }
+
+  // Create new request
+  mePromise = (async () => {
+    try {
+      const r = await getJson<MeRaw | Me>("/user/me");
+      const me: Me = (r && typeof r === "object" && "user" in r)
+        ? (r as MeRaw).user
+        : (r as Me);
+      
+      // Update cache
+      meCache = { data: me, timestamp: Date.now() };
+      return me;
+    } finally {
+      // Clear promise after request completes
+      mePromise = null;
+    }
+  })();
+
+  return mePromise;
+}
+
+// Clear cache (useful after updates)
+export function clearMeCache() {
+  meCache = null;
+  mePromise = null;
 }
 
 // ===== PASSWORD RESET =====

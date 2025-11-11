@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPlans, type Plan, getMyMembership } from "@/lib/api-membership";
-import { getUnreadNotificationCount } from "@/lib/api-user";
 import { getMyOrganizations, type MyOrganizationDto } from "@/lib/api-organizations";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
 import { useTheme } from "next-themes";
@@ -32,6 +31,7 @@ import {
   Menu,
 } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
+import { NotificationProvider, useNotifications } from "@/contexts/NotificationContext";
 
 export type MyMembership = {
   planId: number;
@@ -101,12 +101,13 @@ function ThemeToggle() {
   );
 }
 
-export default function ProfileLayout({ children }: { children: ReactNode }) {
+function ProfileLayoutContent({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const pathname = usePathname() || "";
   const { isLoggedIn } = useAuthStatus();
   const { resolvedTheme, theme } = useTheme();
   const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const { unreadCount: unread } = useNotifications();
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
@@ -123,13 +124,11 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
   );
 
   const plansRef = useRef<Plan[] | null>(null);
-  const timerRef = useRef<number | null>(null);
 
   const [planLabel, setPlanLabel] = useState<string | null>(null);
   const [planStatus, setPlanStatus] = useState<string | null>(null);
   const [orgs, setOrgs] = useState<MyOrganizationDto[] | null>(null);
   const [orgsErr, setOrgsErr] = useState<string | null>(null);
-  const [unread, setUnread] = useState<number>(0);
 
   useEffect(() => {
     let alive = true;
@@ -204,38 +203,16 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       }
     };
 
-    const loadUnread = async () => {
-      if (!isLoggedIn) {
-        setUnread(0);
-        return;
-      }
-      try {
-        const n = await getUnreadNotificationCount();
-        if (!alive) return;
-        setUnread(n || 0);
-      } catch {
-        if (!alive) return;
-        setUnread(0);
-      }
-    };
-
     loadPlans().then((ps) => loadOrgs(ps));
-    loadUnread();
 
     const onAuthChanged = () => {
       loadPlans().then((ps) => loadOrgs(ps));
-      loadUnread();
     };
     const onOrgsChanged = () => loadOrgs(plansRef.current);
-    const onNotifChanged = () => loadUnread();
 
     if (typeof window !== "undefined") {
       window.addEventListener("auth-changed", onAuthChanged);
       window.addEventListener("orgs-changed", onOrgsChanged as EventListener);
-      window.addEventListener("notifications-changed", onNotifChanged as EventListener);
-
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = window.setInterval(loadUnread, 30000);
     }
 
     return () => {
@@ -243,14 +220,10 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
       if (typeof window !== "undefined") {
         window.removeEventListener("auth-changed", onAuthChanged);
         window.removeEventListener("orgs-changed", onOrgsChanged as EventListener);
-        window.removeEventListener("notifications-changed", onNotifChanged as EventListener);
-        if (timerRef.current) {
-          clearInterval(timerRef.current);
-          timerRef.current = null;
-        }
       }
     };
-  }, [isLoggedIn, t]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoggedIn]); // Remove 't' from dependencies to prevent re-renders when translation function reference changes
 
   const commonNav = [
     { href: "/", label: t("profilelayout.nav_home"), icon: Home },
@@ -508,5 +481,13 @@ export default function ProfileLayout({ children }: { children: ReactNode }) {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function ProfileLayout({ children }: { children: ReactNode }) {
+  return (
+    <NotificationProvider>
+      <ProfileLayoutContent>{children}</ProfileLayoutContent>
+    </NotificationProvider>
   );
 }

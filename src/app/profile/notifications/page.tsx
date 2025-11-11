@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   getUserNotifications,
@@ -10,8 +10,8 @@ import {
   NotificationItem,
 } from "@/lib/api-user";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useNotifications } from "@/contexts/NotificationContext";
 
-// ====== Helpers ======
 function fmtTime(iso: string | undefined, locale: string) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -100,55 +100,111 @@ function translateMessage(item: NotificationItem, lang: "vi" | "en") {
 
 export default function NotificationsPage() {
   const { t, lang } = useI18n();
-  const tr = (k: string) => t("notifications", k);
+  const tr = (k: string) => (t as (ns: string, key: string) => string)("notifications", k);
 
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [data, setData] = useState<GetUserNotificationsResponse>({
+  const [data, setData] = useState<GetUserNotificationsResponse & { unreadCount?: number }>({
     notifications: [],
     page: 1,
     pageSize: 20,
     totalItems: 0,
     totalPages: 0,
+    unreadCount: 0,
   });
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
+  
+  const { isConnected, unreadCount: contextUnreadCount, onNotificationReceived, onUnreadCountUpdated, offNotificationReceived, offUnreadCountUpdated } = useNotifications();
 
   async function load(p = page, s = pageSize) {
+    const currentRequestId = ++requestIdRef.current;
+
     setLoading(true);
     try {
       const res = await getUserNotifications(p, s);
-      setData({
-        notifications: res.notifications ?? [],
-        page: res.page ?? p,
-        pageSize: res.pageSize ?? s,
-        totalItems: res.totalItems ?? (res.notifications?.length ?? 0),
-        totalPages:
-          res.totalPages ??
-          Math.max(
-            1,
-            Math.ceil((res.totalItems ?? (res.notifications?.length ?? 0)) / (res.pageSize ?? s))
-          ),
-      });
-      setError(null);
-    } catch {
-      setError(tr("error_load"));
+      
+      if (currentRequestId === requestIdRef.current) {
+        setData({
+          notifications: res.notifications ?? [],
+          page: res.page ?? p,
+          pageSize: res.pageSize ?? s,
+          totalItems: res.totalItems ?? (res.notifications?.length ?? 0),
+          totalPages:
+            res.totalPages ??
+            Math.max(
+              1,
+              Math.ceil((res.totalItems ?? (res.notifications?.length ?? 0)) / (res.pageSize ?? s))
+            ),
+          unreadCount: res.unreadCount,
+        });
+        setError(null);
+      }
+    } catch (err) {
+      if (currentRequestId === requestIdRef.current) {
+        setError(tr("error_load"));
+      }
     } finally {
-      setLoading(false);
+      if (currentRequestId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }
 
   useEffect(() => {
-    load(1, pageSize);
-  }, [pageSize]);
+    load(page, pageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, pageSize]);
+
+  const handleNotificationReceived = useCallback((notification: NotificationItem) => {
+    setData((prev) => {
+      const exists = prev.notifications.some((n) => n.notificationId === notification.notificationId);
+      if (exists) {
+        return prev;
+      }
+
+      const newNotifications = [notification, ...prev.notifications];
+      const newTotalItems = (prev.totalItems ?? 0) + 1;
+      const newTotalPages = Math.ceil(newTotalItems / (prev.pageSize || 20));
+      
+      if (prev.page === 1) {
+        return {
+          ...prev,
+          notifications: newNotifications.slice(0, prev.pageSize),
+          totalItems: newTotalItems,
+          totalPages: newTotalPages,
+        };
+      } else {
+        return {
+          ...prev,
+          totalItems: newTotalItems,
+          totalPages: newTotalPages,
+        };
+      }
+    });
+  }, []);
+
+  const handleUnreadCountUpdated = useCallback((count: number) => {
+    setData((prev) => ({
+      ...prev,
+      unreadCount: count,
+    }));
+  }, []);
 
   useEffect(() => {
-    load(page, pageSize);
-  }, [page]);
+    onNotificationReceived(handleNotificationReceived);
+    onUnreadCountUpdated(handleUnreadCountUpdated);
+
+    return () => {
+      offNotificationReceived(handleNotificationReceived);
+      offUnreadCountUpdated(handleUnreadCountUpdated);
+    };
+  }, [onNotificationReceived, onUnreadCountUpdated, offNotificationReceived, offUnreadCountUpdated, handleNotificationReceived, handleUnreadCountUpdated]);
 
   const unreadCount = useMemo(
-    () => (data.notifications ?? []).filter((n) => !n.isRead).length,
-    [data.notifications]
+    () => contextUnreadCount ?? data.unreadCount ?? (data.notifications ?? []).filter((n) => !n.isRead).length,
+    [contextUnreadCount, data.notifications, data.unreadCount]
   );
 
   async function onMarkRead(n: NotificationItem) {
@@ -160,7 +216,6 @@ export default function NotificationsPage() {
           x.notificationId === n.notificationId ? { ...x, isRead: true } : x
         ),
       }));
-      if (typeof window !== "undefined") window.dispatchEvent(new Event("notifications-changed"));
     } catch {}
   }
 
@@ -170,8 +225,8 @@ export default function NotificationsPage() {
       setData((prev) => ({
         ...prev,
         notifications: prev.notifications.map((x) => ({ ...x, isRead: true })),
+        unreadCount: 0,
       }));
-      if (typeof window !== "undefined") window.dispatchEvent(new Event("notifications-changed"));
     } catch {}
   }
 
@@ -193,6 +248,23 @@ export default function NotificationsPage() {
             title={tr("unread_title")}
           >
             {unreadCount}
+          </span>
+          <span
+            className={[
+              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs border",
+              isConnected
+                ? "bg-green-500/10 text-green-400 border-green-400/30"
+                : "bg-yellow-500/10 text-yellow-400 border-yellow-400/30",
+            ].join(" ")}
+            title={isConnected ? "Real-time notifications connected" : "Real-time notifications disconnected"}
+          >
+            <span
+              className={[
+                "h-1.5 w-1.5 rounded-full",
+                isConnected ? "bg-green-400 animate-pulse" : "bg-yellow-400",
+              ].join(" ")}
+            />
+            {isConnected ? "Live" : "Offline"}
           </span>
           <p className="text-sm text-zinc-400 ml-1">{tr("subtitle")}</p>
         </div>

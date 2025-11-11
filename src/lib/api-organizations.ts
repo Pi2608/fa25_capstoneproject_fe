@@ -99,7 +99,7 @@ export type UpdateMemberRoleResDto = { result?: string };
 export type RemoveMemberReqDto = { orgId: string; memberId: string };
 export type RemoveMemberResDto = { result?: string };
 
-export type TransferOwnershipReqDto = { orgId: string; newOwnerId: string };
+export type TransferOwnershipReqDto = { newOwnerId: string };
 export type TransferOwnershipResDto = { result?: string };
 
 // ===== CRUD Organization =====
@@ -187,9 +187,9 @@ export function cancelInvite(body: CancelInviteOrganizationReqDto) {
 
 // ===== Transfer Ownership =====
 export function transferOwnership(orgId: string, newOwnerId: string) {
-  return postJson<{ orgId: string; newOwnerId: string }, TransferOwnershipResDto>(
+  return postJson<TransferOwnershipReqDto, TransferOwnershipResDto>(
     `/organizations/${orgId}/ownership`,
-    { orgId, newOwnerId } 
+    { newOwnerId } 
   );
 }
 // ===== ORGANIZATION ADMIN =====

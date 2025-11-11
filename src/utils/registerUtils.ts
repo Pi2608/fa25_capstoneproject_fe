@@ -1,4 +1,5 @@
 import { UnknownApiError, NameParts } from "@/types/register";
+import { messages, type Lang } from "@/i18n/messages";
 
 export const phoneValid = (v: string) => /^\d{10}$/.test(v);
 export const emailValid = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
@@ -15,30 +16,51 @@ export function hasString(x: Record<string, unknown>, key: string): x is Record<
   return key in x && typeof x[key] === "string";
 }
 
+/**
+ * Get current language from localStorage or default to 'en'
+ */
+function getCurrentLang(): Lang {
+  if (typeof window === "undefined") return "en";
+  const saved = localStorage.getItem("lang") as Lang | null;
+  return saved === "vi" || saved === "en" ? saved : "en";
+}
+
+/**
+ * Get translated message from i18n messages
+ */
+function t(namespace: "register", key: string): string {
+  const lang = getCurrentLang();
+  const pack = messages[lang]?.[namespace] as Record<string, unknown> | undefined;
+  const msg = pack ? (pack[key] as string | undefined) : undefined;
+  return typeof msg === "string" ? msg : key;
+}
+
 export function splitVietnameseName(fullName: string): NameParts {
   const clean = fullName.replace(/\s+/g, " ").trim();
   if (!clean) return { firstName: "", lastName: "" };
   const parts = clean.split(" ");
   if (parts.length < 2) {
-    throw new Error("Please enter your full name");
+    throw new Error(t("register", "errorNameParse"));
   }
   const lastName = parts[0] ?? "";
   const firstName = parts.slice(1).join(" ");
   return { firstName, lastName };
 }
 
-export function prettyError(err: unknown, fallback = "Something went wrong. Please try again."): string {
+export function prettyError(err: unknown, fallback?: string): string {
+  const defaultFallback = fallback ?? t("register", "errorGeneric");
+  
   try {
     if (isPlainObject(err)) {
       const obj = err as Record<string, unknown>;
 
       if (hasNumber(obj, "status")) {
         const st = obj.status as number;
-        if (st === 429) return "Too many attempts. Please try again in a moment.";
-        if (st === 401) return "You are not authorized to perform this action.";
-        if (st === 403) return "You don't have permission to access this resource.";
-        if (st === 404) return "Requested resource was not found.";
-        if (st >= 500) return "The server is busy. Please try again later.";
+        if (st === 429) return t("register", "errorTooManyAttempts");
+        if (st === 401) return t("register", "errorUnauthorized");
+        if (st === 403) return t("register", "errorForbidden");
+        if (st === 404) return t("register", "errorNotFound");
+        if (st >= 500) return t("register", "errorServerBusy");
       }
 
       const msgLike: string[] = [];
@@ -48,10 +70,10 @@ export function prettyError(err: unknown, fallback = "Something went wrong. Plea
       if (hasString(obj, "type")) msgLike.push(String(obj.type));
 
       for (const msg of msgLike) {
-        if (/already exists/i.test(msg)) return "This email is already registered. Please use a different email.";
-        if (/otp/i.test(msg) && /invalid|expired/i.test(msg)) return "The verification code is invalid or expired.";
-        if (/too many/i.test(msg) || /rate/i.test(msg)) return "Too many attempts. Please try again later.";
-        if (/500|internal server/i.test(msg)) return "The server is busy. Please try again later.";
+        if (/already exists/i.test(msg)) return t("register", "errorEmailExists");
+        if (/otp/i.test(msg) && /invalid|expired/i.test(msg)) return t("register", "errorOtpInvalidExpired");
+        if (/too many/i.test(msg) || /rate/i.test(msg)) return t("register", "errorRateLimit");
+        if (/500|internal server/i.test(msg)) return t("register", "errorServerBusy");
       }
 
       if (msgLike.length > 0) return msgLike[0]!;
@@ -60,16 +82,16 @@ export function prettyError(err: unknown, fallback = "Something went wrong. Plea
     if (typeof err === "string") {
       try {
         const j = JSON.parse(err) as unknown;
-        return prettyError(j, fallback);
+        return prettyError(j, defaultFallback);
       } catch {
         const s = err;
-        if (/already exists/i.test(s)) return "This email is already registered. Please use a different email.";
-        if (/otp/i.test(s) && /invalid|expired/i.test(s)) return "The verification code is invalid or expired.";
-        if (/500|internal server/i.test(s)) return "The server is busy. Please try again later.";
+        if (/already exists/i.test(s)) return t("register", "errorEmailExists");
+        if (/otp/i.test(s) && /invalid|expired/i.test(s)) return t("register", "errorOtpInvalidExpired");
+        if (/500|internal server/i.test(s)) return t("register", "errorServerBusy");
         return s;
       }
     }
   } catch {
   }
-  return fallback;
+  return defaultFallback;
 }

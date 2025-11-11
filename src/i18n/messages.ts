@@ -17,6 +17,11 @@ export const messages = {
             close: "Đóng",
             invite: "Mời",
             inviting: "Đang mời...",
+            notAvailable: "N/A",
+            unknownZone: "Vùng không xác định",
+            zone: "Vùng",
+            latitude: "Vĩ độ",
+            longitude: "Kinh độ",
         },
         settings_members: {
             title: "Thành viên",
@@ -223,7 +228,16 @@ export const messages = {
             verifyAndFinish: "Xác minh & hoàn tất",
             verifying: "Đang xác minh…",
             noCode: "Không nhận được mã?",
-            resendCode: "Gửi lại mã"
+            resendCode: "Gửi lại mã",
+            errorGeneric: "Đã xảy ra lỗi. Vui lòng thử lại.",
+            errorTooManyAttempts: "Quá nhiều lần thử. Vui lòng thử lại sau.",
+            errorUnauthorized: "Bạn không được phép thực hiện hành động này.",
+            errorForbidden: "Bạn không có quyền truy cập tài nguyên này.",
+            errorNotFound: "Không tìm thấy tài nguyên được yêu cầu.",
+            errorServerBusy: "Máy chủ đang bận. Vui lòng thử lại sau.",
+            errorEmailExists: "Email này đã được đăng ký. Vui lòng sử dụng email khác.",
+            errorOtpInvalidExpired: "Mã xác minh không hợp lệ hoặc đã hết hạn.",
+            errorRateLimit: "Quá nhiều lần thử. Vui lòng thử lại sau."
         },
         forgot: {
             title: "Quên mật khẩu",
@@ -1451,6 +1465,11 @@ export const messages = {
             close: "Close",
             invite: "Invite",
             inviting: "Inviting...",
+            notAvailable: "N/A",
+            unknownZone: "Unknown Zone",
+            zone: "Zone",
+            latitude: "Latitude",
+            longitude: "Longitude",
         },
         settings_members: {
             title: "Members",
@@ -2557,7 +2576,16 @@ export const messages = {
             verifyAndFinish: "Verify & finish",
             verifying: "Verifying…",
             noCode: "Didn't receive the code?",
-            resendCode: "Resend code"
+            resendCode: "Resend code",
+            errorGeneric: "Something went wrong. Please try again.",
+            errorTooManyAttempts: "Too many attempts. Please try again in a moment.",
+            errorUnauthorized: "You are not authorized to perform this action.",
+            errorForbidden: "You don't have permission to access this resource.",
+            errorNotFound: "Requested resource was not found.",
+            errorServerBusy: "The server is busy. Please try again later.",
+            errorEmailExists: "This email is already registered. Please use a different email.",
+            errorOtpInvalidExpired: "The verification code is invalid or expired.",
+            errorRateLimit: "Too many attempts. Please try again later."
         },
         forgot: {
             title: "Forgot password",
