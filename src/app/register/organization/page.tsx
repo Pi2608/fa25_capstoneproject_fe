@@ -16,11 +16,13 @@ import {
   createOrganization,
   type OrganizationReqDto,
 } from "@/lib/api-organizations";
+import { useI18n } from "@/i18n/I18nProvider";
 
 export default function OrganizationSetupPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const { isLoggedIn } = useAuthStatus();
+  const { t } = useI18n();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);
@@ -32,7 +34,6 @@ export default function OrganizationSetupPage() {
     orgName: "",
     selectedPlanId: 1,
     orgBilling: "monthly" as "monthly" | "yearly",
-    orgSeats: 1,
   });
 
   const [showPaymentPopup, setShowPaymentPopup] = useState(false);
@@ -44,36 +45,36 @@ export default function OrganizationSetupPage() {
       try {
         const data = await getPlans();
         setPlans(data);
-      } catch (error) {
-        showToast("error", "Không tải được danh sách gói. Vui lòng tải lại trang.");
+      } catch {
+        showToast("error", t("orgSetup.toast_plans_error"));
       } finally {
         setLoadingPlans(false);
       }
     };
     fetchPlans();
-  }, [showToast]);
+  }, [showToast, t]);
 
   const getStepInfo = () => {
     switch (step) {
       case 1:
         return {
-          title: "Đặt tên tổ chức của bạn",
-          subtitle: "Tạo tổ chức để cộng tác cùng đội ngũ của bạn trên IMOS.",
+          title: t("orgSetup.step1_title"),
+          subtitle: t("orgSetup.step1_subtitle"),
         };
       case 2:
         return {
-          title: "Gói IMOS Teams",
-          subtitle: "Chọn gói mà bạn muốn bắt đầu:",
+          title: t("orgSetup.step2_title"),
+          subtitle: t("orgSetup.step2_subtitle"),
         };
       case 3:
         return {
-          title: "Thiết lập thanh toán",
-          subtitle: "Hoàn tất thiết lập tổ chức với phương thức thanh toán an toàn.",
+          title: t("orgSetup.step3_title"),
+          subtitle: t("orgSetup.step3_subtitle"),
         };
       default:
         return {
-          title: "Đặt tên tổ chức của bạn",
-          subtitle: "Tạo tổ chức để cộng tác cùng đội ngũ của bạn trên IMOS.",
+          title: t("orgSetup.step1_title"),
+          subtitle: t("orgSetup.step1_subtitle"),
         };
     }
   };
@@ -84,7 +85,7 @@ export default function OrganizationSetupPage() {
 
   const handlePaymentMethod = async (method: PaymentGateway) => {
     if (!isLoggedIn) {
-      showToast("error", "Vui lòng đăng nhập để tiếp tục thanh toán.");
+      showToast("error", t("orgSetup.toast_login_required"));
       return;
     }
 
@@ -92,7 +93,7 @@ export default function OrganizationSetupPage() {
     try {
       const orgId = createdOrgId || localStorage.getItem("created_org_id");
       if (!orgId) {
-        showToast("error", "Không tìm thấy tổ chức. Vui lòng thử lại.");
+        showToast("error", t("orgSetup.toast_org_not_found"));
         return;
       }
 
@@ -113,8 +114,8 @@ export default function OrganizationSetupPage() {
       );
 
       window.location.href = res.paymentUrl;
-    } catch (err) {
-      showToast("error", "Thiết lập thanh toán thất bại. Vui lòng thử lại.");
+    } catch {
+      showToast("error", t("orgSetup.toast_payment_failed"));
     } finally {
       setPaymentLoading(false);
     }
@@ -123,9 +124,7 @@ export default function OrganizationSetupPage() {
   const stepInfo = getStepInfo();
 
   const toVnNumber = (n: number) =>
-    new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
-      n
-    );
+    new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
   return (
     <main className="relative min-h-screen text-gray-900 dark:text-white transition-colors">
@@ -166,7 +165,7 @@ export default function OrganizationSetupPage() {
                   <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-8">
                     <div>
                       <label className="block text-base font-medium text-gray-700 dark:text-gray-300 mb-3">
-                        Tên tổ chức *
+                        {t("orgSetup.field_org_name")} *
                       </label>
                       <input
                         type="text"
@@ -174,7 +173,7 @@ export default function OrganizationSetupPage() {
                         onChange={(e) =>
                           setFormData({ ...formData, orgName: e.target.value })
                         }
-                        placeholder="Nhập tên tổ chức của bạn"
+                        placeholder={t("orgSetup.ph_org_name")}
                         className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-base text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white dark:bg-gray-800"
                         required
                       />
@@ -184,7 +183,7 @@ export default function OrganizationSetupPage() {
                         disabled={!formData.orgName.trim()}
                         className="w-full mt-6 bg-emerald-500 text-white text-base py-3 px-4 rounded-lg font-medium hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Tiếp tục
+                        {t("orgSetup.btn_continue")}
                       </button>
                     </div>
                   </div>
@@ -200,24 +199,27 @@ export default function OrganizationSetupPage() {
                         onClick={() =>
                           setFormData({ ...formData, orgBilling: "monthly" })
                         }
-                        className={`px-6 py-2 text-base rounded-md transition-colors ${formData.orgBilling === "monthly"
+                        className={`px-6 py-2 text-base rounded-md transition-colors ${
+                          formData.orgBilling === "monthly"
                             ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
                             : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                          }`}
+                        }`}
                       >
-                        Thanh toán theo tháng
+                        {t("orgSetup.billing_monthly")}
                       </button>
                       <button
                         type="button"
                         onClick={() =>
                           setFormData({ ...formData, orgBilling: "yearly" })
                         }
-                        className={`px-6 py-2 text-base rounded-md transition-colors ${formData.orgBilling === "yearly"
+                        className={`px-6 py-2 text-base rounded-md transition-colors ${
+                          formData.orgBilling === "yearly"
                             ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
                             : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white"
-                          }`}
+                        }`}
                       >
-                        Thanh toán theo năm <span className="text-emerald-500">(Tiết kiệm 33%)</span>
+                        {t("orgSetup.billing_yearly")}{" "}
+                        <span className="text-emerald-500">{t("orgSetup.save_33")}</span>
                       </button>
                     </div>
                   </div>
@@ -225,13 +227,13 @@ export default function OrganizationSetupPage() {
                   {loadingPlans ? (
                     <div className="text-center py-12">
                       <p className="text-base text-gray-600 dark:text-gray-300">
-                        Đang tải các gói…
+                        {t("orgSetup.loading_plans")}
                       </p>
                     </div>
                   ) : plans.length === 0 ? (
                     <div className="text-center py-12">
                       <p className="text-base text-gray-600 dark:text-gray-300">
-                        Chưa có gói khả dụng.
+                        {t("orgSetup.no_plans")}
                       </p>
                     </div>
                   ) : (
@@ -245,41 +247,35 @@ export default function OrganizationSetupPage() {
                             : priceYearly;
 
                         const formatLimit = (value: number, unit = "") => {
-                          if (value === -1) return "Không giới hạn";
+                          if (value === -1) return t("orgSetup.unlimited");
                           return `${value}${unit}`;
                         };
 
                         let featureList: string[] = [];
                         try {
                           if (plan.features) {
-                            const featuresObj = JSON.parse(plan.features);
+                            const featuresObj = JSON.parse(plan.features as string);
                             const featureKeys = Object.keys(featuresObj).filter(
-                              (k) => featuresObj[k] === true
+                              (k) => (featuresObj as Record<string, unknown>)[k] === true
                             );
-                            const jsonFeatures = featureKeys
-                              .slice(0, 3)
-                              .map((key) => {
-                                const title = key
-                                  .split("_")
-                                  .map(
-                                    (w: string) =>
-                                      w.charAt(0).toUpperCase() + w.slice(1)
-                                  )
-                                  .join(" ");
-                                return title;
-                              });
+                            const jsonFeatures = featureKeys.slice(0, 3).map((key) => {
+                              const title = key
+                                .split("_")
+                                .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+                                .join(" ");
+                              return title;
+                            });
                             featureList = jsonFeatures;
                           }
-                        } catch { }
+                        } catch { /* ignore */ }
 
                         const quotaFeatures = [
-                          `${formatLimit(plan.maxMapsPerMonth)} bản đồ/tháng`,
-                          `${formatLimit(plan.maxUsersPerOrg)} người dùng`,
-                          <span title="Lớp dữ liệu (layer) là một tập dữ liệu chồng lên bản đồ nền, ví dụ: ranh giới, khu vực, POI…">
-                            {`${formatLimit(plan.maxCustomLayers)} lớp dữ liệu`}
-                          </span>
-                          ,
-                          plan.prioritySupport ? "Hỗ trợ ưu tiên" : null,
+                          `${formatLimit(plan.maxMapsPerMonth, "")} ${t("orgSetup.unit_maps_per_month")}`,
+                          `${formatLimit(plan.maxUsersPerOrg, "")} ${t("orgSetup.unit_users")}`,
+                          <span key="layers" title={t("orgSetup.tooltip_layers")}>
+                            {`${formatLimit(plan.maxCustomLayers, "")} ${t("orgSetup.unit_layers")}`}
+                          </span> as unknown as string,
+                          plan.prioritySupport ? t("orgSetup.priority_support") : null,
                         ].filter(Boolean) as string[];
 
                         featureList = [...featureList, ...quotaFeatures].slice(0, 6);
@@ -287,10 +283,11 @@ export default function OrganizationSetupPage() {
                         return (
                           <div
                             key={plan.planId}
-                            className={`p-6 border-2 rounded-xl cursor-pointer transition-all ${formData.selectedPlanId === plan.planId
+                            className={`p-6 border-2 rounded-xl cursor-pointer transition-all ${
+                              formData.selectedPlanId === plan.planId
                                 ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 shadow-lg"
                                 : "border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md"
-                              }`}
+                            }`}
                             onClick={() =>
                               setFormData({
                                 ...formData,
@@ -305,27 +302,23 @@ export default function OrganizationSetupPage() {
                               <div className="text-3xl font-bold text-gray-900 dark:text-white mb-1">
                                 ${toVnNumber(displayPrice)}
                                 <span className="text-lg text-gray-500 dark:text-gray-400">
-                                  /{formData.orgBilling === "monthly" ? "tháng" : "năm"}
+                                  /{formData.orgBilling === "monthly" ? t("orgSetup.per_month") : t("orgSetup.per_year")}
                                 </span>
                               </div>
-                              {priceMonthly > 0 &&
-                                formData.orgBilling === "yearly" && (
-                                  <div className="text-sm text-gray-500 dark:text-gray-400">
-                                    {`$${toVnNumber(priceMonthly)}/tháng thanh toán theo năm`}
-                                  </div>
-                                )}
+                              {priceMonthly > 0 && formData.orgBilling === "yearly" && (
+                                <div className="text-sm text-gray-500 dark:text-gray-400">
+                                  {`$${toVnNumber(priceMonthly)}/${t("orgSetup.per_month")} ${t("orgSetup.paid_yearly")}`}
+                                </div>
+                              )}
                             </div>
 
                             <div className="space-y-2">
                               <h4 className="text-sm font-medium text-emerald-600 dark:text-emerald-400 mb-1">
-                                Tính năng chính
+                                {t("orgSetup.key_features")}
                               </h4>
                               <ul className="space-y-2">
                                 {featureList.map((feature, index) => (
-                                  <li
-                                    key={index}
-                                    className="text-sm text-gray-600 dark:text-gray-300 flex items-start gap-2"
-                                  >
+                                  <li key={index} className="text-sm text-gray-600 dark:text-gray-300 flex items-start gap-2">
                                     <span className="text-emerald-500 mt-0.5">✓</span>
                                     <span className="leading-snug">{feature}</span>
                                   </li>
@@ -336,7 +329,7 @@ export default function OrganizationSetupPage() {
                             {formData.selectedPlanId === plan.planId && (
                               <div className="mt-4">
                                 <div className="w-full py-2 bg-emerald-500 text-white rounded-lg font-medium text-center text-sm">
-                                  Đã chọn
+                                  {t("orgSetup.selected")}
                                 </div>
                               </div>
                             )}
@@ -352,7 +345,7 @@ export default function OrganizationSetupPage() {
                       onClick={() => setStep(1)}
                       className="text-base text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                     >
-                      Quay lại
+                      {t("orgSetup.back")}
                     </button>
                     <button
                       type="button"
@@ -361,10 +354,8 @@ export default function OrganizationSetupPage() {
                         try {
                           const orgRequest: OrganizationReqDto = {
                             orgName: formData.orgName,
-                            abbreviation: formData.orgName
-                              .substring(0, 3)
-                              .toUpperCase(),
-                            description: "Tổ chức được tạo từ quy trình thiết lập",
+                            abbreviation: formData.orgName.substring(0, 3).toUpperCase(),
+                            description: t("orgSetup.org_created_desc"),
                             contactEmail: "",
                             contactPhone: "",
                             address: "",
@@ -372,10 +363,7 @@ export default function OrganizationSetupPage() {
 
                           const response = await createOrganization(orgRequest);
                           if (!response.orgId) {
-                            showToast(
-                              "error",
-                              "Đã tạo tổ chức nhưng không lấy được ID. Vui lòng thử lại."
-                            );
+                            showToast("error", t("orgSetup.toast_created_no_id"));
                             return;
                           }
 
@@ -385,24 +373,15 @@ export default function OrganizationSetupPage() {
 
                           if (!isFreePlan) {
                             setStep(3);
-                            showToast(
-                              "success",
-                              "Đã tạo tổ chức! Tiếp theo là thiết lập thanh toán."
-                            );
+                            showToast("success", t("orgSetup.toast_created_next_payment"));
                           } else {
-                            showToast(
-                              "success",
-                              "Tạo tổ chức thành công! 🎉"
-                            );
+                            showToast("success", t("orgSetup.toast_created_success"));
                             setTimeout(() => {
                               router.push(`/profile/organizations/${newOrgId}`);
                             }, 1000);
                           }
                         } catch {
-                          showToast(
-                            "error",
-                            "Không thể tạo tổ chức. Vui lòng thử lại."
-                          );
+                          showToast("error", t("orgSetup.toast_create_failed"));
                         } finally {
                           setLoading(false);
                         }
@@ -411,10 +390,10 @@ export default function OrganizationSetupPage() {
                       className="px-6 py-2 bg-emerald-500 text-white text-base rounded-lg font-medium hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {loading
-                        ? "Đang tạo tổ chức..."
+                        ? t("orgSetup.creating_org")
                         : isFreePlan
-                          ? "Tạo tổ chức"
-                          : "Tiếp tục thanh toán"}
+                        ? t("orgSetup.btn_create_org")
+                        : t("orgSetup.btn_continue_payment")}
                     </button>
                   </div>
                 </div>
@@ -425,55 +404,53 @@ export default function OrganizationSetupPage() {
                   <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 p-8">
                     <div className="text-center mb-8">
                       <h3 className="text-3xl font-semibold text-gray-900 dark:text-white mb-4">
-                        Hoàn tất thiết lập
+                        {t("orgSetup.finish_setup")}
                       </h3>
                       <p className="text-base text-gray-600 dark:text-gray-300 mb-6">
-                        Bạn đã chọn gói{" "}
+                        {t("orgSetup.you_chose_plan")}{" "}
                         <span className="font-semibold text-emerald-600">
-                          {selectedPlan?.planName || "đã chọn"}
+                          {selectedPlan?.planName || t("orgSetup.chosen")}
                         </span>
-                        . Hãy thiết lập thanh toán để kích hoạt tổ chức.
+                        . {t("orgSetup.setup_payment_to_activate")}
                       </p>
 
                       <div className="bg-gray-50 dark:bg-gray-700 rounded-xl p-6 mb-6 text-left">
                         <div className="flex justify-between items-center mb-4">
                           <span className="text-xl font-medium text-gray-900 dark:text-white">
-                            Chi tiết gói
+                            {t("orgSetup.plan_details")}
                           </span>
                           <span className="text-3xl font-bold text-emerald-600">
                             {(() => {
                               const monthly = selectedPlan?.priceMonthly ?? 0;
                               const yearly = monthly * 12 * 0.67;
                               const price =
-                                formData.orgBilling === "monthly"
-                                  ? monthly
-                                  : yearly;
+                                formData.orgBilling === "monthly" ? monthly : yearly;
                               return `$${toVnNumber(price)}`;
                             })()}
                             <span className="text-lg text-gray-500">
-                              /{formData.orgBilling === "monthly" ? "tháng" : "năm"}
+                              /{formData.orgBilling === "monthly" ? t("orgSetup.per_month") : t("orgSetup.per_year")}
                             </span>
                           </span>
                         </div>
                         <div className="text-base text-gray-600 dark:text-gray-300">
                           <p>
-                            Tổ chức: <span className="font-medium">{formData.orgName}</span>
+                            {t("orgSetup.label_org")}: <span className="font-medium">{formData.orgName}</span>
                           </p>
                           <p>
-                            Gói: <span className="font-medium">{selectedPlan?.planName}</span>
+                            {t("orgSetup.label_plan")}: <span className="font-medium">{selectedPlan?.planName}</span>
                           </p>
                           <p>
-                            Chu kỳ thanh toán:{" "}
+                            {t("orgSetup.label_billing_cycle")}:{" "}
                             {formData.orgBilling === "monthly"
-                              ? "Hàng tháng"
-                              : "Hàng năm (Tiết kiệm 33%)"}
+                              ? t("orgSetup.billing_cycle_monthly")
+                              : t("orgSetup.billing_cycle_yearly")}
                           </p>
                           {selectedPlan && (
                             <p>
-                              Số người dùng tối đa:{" "}
+                              {t("orgSetup.label_max_users")}:{" "}
                               <span className="font-medium">
                                 {selectedPlan.maxUsersPerOrg === -1
-                                  ? "Không giới hạn"
+                                  ? t("orgSetup.unlimited")
                                   : selectedPlan.maxUsersPerOrg}
                               </span>
                             </p>
@@ -488,16 +465,15 @@ export default function OrganizationSetupPage() {
                         onClick={() => setStep(2)}
                         className="text-base text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                       >
-                        Quay lại
+                        {t("orgSetup.back")}
                       </button>
 
                       <div className="flex gap-3">
                         <button
                           type="button"
                           onClick={() => {
-                            const orgId =
-                              createdOrgId || localStorage.getItem("created_org_id");
-                            showToast("info", "Bỏ qua thanh toán. Sử dụng gói miễn phí.");
+                            const orgId = createdOrgId || localStorage.getItem("created_org_id");
+                            showToast("info", t("orgSetup.skip_payment_info"));
                             setTimeout(() => {
                               if (orgId) {
                                 router.push(`/profile/organizations/${orgId}`);
@@ -508,7 +484,7 @@ export default function OrganizationSetupPage() {
                           }}
                           className="px-6 py-2 border border-gray-300 dark:border-gray-600 text-base text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
                         >
-                          Bỏ qua thanh toán
+                          {t("orgSetup.skip_payment")}
                         </button>
 
                         <button
@@ -517,7 +493,7 @@ export default function OrganizationSetupPage() {
                           disabled={paymentLoading}
                           className="px-6 py-2 bg-emerald-500 text-white text-base rounded-lg font-medium hover:bg-emerald-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                          {paymentLoading ? "Đang xử lý..." : "Tiếp tục thanh toán"}
+                          {paymentLoading ? t("orgSetup.processing") : t("orgSetup.btn_continue_payment")}
                         </button>
                       </div>
                     </div>
@@ -533,11 +509,10 @@ export default function OrganizationSetupPage() {
         <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
           <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-6 max-w-md w-full mx-4">
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
-              Chọn phương thức thanh toán
+              {t("orgSetup.choose_payment_method")}
             </h2>
             <p className="text-base text-gray-600 dark:text-gray-300 mb-6">
-              Hãy chọn phương thức thanh toán cho gói{" "}
-              {selectedPlan?.planName || "đã chọn"}.
+              {t("orgSetup.choose_payment_for_plan")} {selectedPlan?.planName || t("orgSetup.chosen")}.
             </p>
 
             <div className="space-y-3 mb-6">
@@ -551,11 +526,9 @@ export default function OrganizationSetupPage() {
                     <span className="text-white font-bold text-base">P</span>
                   </div>
                   <div>
-                    <p className="text-base font-medium text-gray-900 dark:text-white">
-                      PayOS
-                    </p>
+                    <p className="text-base font-medium text-gray-900 dark:text-white">PayOS</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Chuyển khoản ngân hàng, mã QR, thẻ ATM
+                      {t("orgSetup.payos_subtitle")}
                     </p>
                   </div>
                 </div>
@@ -567,7 +540,7 @@ export default function OrganizationSetupPage() {
                 onClick={() => setShowPaymentPopup(false)}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-base text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
               >
-                Hủy
+                {t("orgSetup.cancel")}
               </button>
             </div>
           </div>

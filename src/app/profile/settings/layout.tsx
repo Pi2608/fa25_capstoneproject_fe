@@ -3,25 +3,29 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { useI18n } from "@/i18n/I18nProvider";
 
-const DANH_SACH_TAB = [
-  { href: "/profile/settings/members", label: "Thành viên" },
-  { href: "/profile/settings/usage", label: "Sử dụng" },
-  { href: "/profile/settings/plans", label: "Gói" },
-  { href: "/profile/settings/billing", label: "Thanh toán" },
-  { href: "/profile/settings/developers", label: "Nhà phát triển" },
-  { href: "/profile/settings/workspace", label: "Workspace" },
+type Tab = { href: string; i18nKey: string };
+
+const TABS: Tab[] = [
+  { href: "/profile/settings/members",    i18nKey: "tabs_members" },
+  { href: "/profile/settings/usage",      i18nKey: "tabs_usage" },
+  { href: "/profile/settings/plans",      i18nKey: "tabs_plans" },
+  { href: "/profile/settings/billing",    i18nKey: "tabs_billing" },
+  { href: "/profile/settings/developers", i18nKey: "tabs_developers" },
+  { href: "/profile/settings/workspace",  i18nKey: "tabs_workspace" },
 ];
 
-export default function BoCucCaiDat({ children }: { children: ReactNode }) {
+export default function SettingsLayout({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   const pathname = usePathname() || "";
-  const laDangChon = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   return (
     <div className="mx-auto max-w-6xl">
       <div className="flex items-center gap-6 border-b border-zinc-200 dark:border-white/10">
-        {DANH_SACH_TAB.map((tab) => {
-          const active = laDangChon(tab.href);
+        {TABS.map((tab) => {
+          const active = isActive(tab.href);
           return (
             <Link
               key={tab.href}
@@ -36,7 +40,7 @@ export default function BoCucCaiDat({ children }: { children: ReactNode }) {
                     : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white"
                 }
               >
-                {tab.label}
+                {t("settings", tab.i18nKey)}
               </span>
               <span
                 aria-hidden
