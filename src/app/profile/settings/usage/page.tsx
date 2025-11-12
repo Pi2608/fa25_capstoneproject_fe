@@ -6,6 +6,7 @@ import { getMyOrganizations, type GetMyOrganizationsResDto } from "@/lib/api-org
 import { getMyOrgMembership } from "@/lib/api-membership";
 import { getOrganizationMaps, getMapViews, getMapById, type MapDto } from "@/lib/api-maps";
 import { getUserUsage, checkUserQuota, type UserUsageResponse, type CheckQuotaRequest } from "@/lib/api-user";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type UsageLimits = {
   viewsMonthly?: number | null;
@@ -61,7 +62,7 @@ function normalize(s?: string | null) {
   return (s ?? "").trim().toLowerCase();
 }
 function capText(v?: number | null, unit?: string) {
-  if (v == null) return "không giới hạn";
+  if (v == null) return "∞";
   const t = formatNumber(v);
   return unit ? `${t} ${unit}` : t;
 }
@@ -83,6 +84,7 @@ function bytesToMB(b: number) {
 }
 
 export default function UsagePage() {
+  const { t } = useI18n();
   const [orgId, setOrgId] = useState<string | null>(null);
   const [orgs, setOrgs] = useState<GetMyOrganizationsResDto["organizations"]>([]);
   const [maps, setMaps] = useState<MapRow[]>([]);
@@ -177,7 +179,7 @@ export default function UsagePage() {
   }, [orgId]);
 
   const totalViews = useMemo(() => maps.reduce((s, m) => s + (m.views || 0), 0), [maps]);
-  const resetDateText = useMemo(() => `Làm mới vào ${fmtDate(firstOfNextMonth())}`, []);
+  const resetDateText = useMemo(() => `${t("usage.resetOn")} ${fmtDate(firstOfNextMonth())}`, [t]);
   const viewsMax = limits.viewsMonthly;
 
   const mapsLimitFromUsage =
@@ -198,25 +200,25 @@ export default function UsagePage() {
     try {
       const res = await checkUserQuota(orgId, payload);
       if (res.isAllowed) {
-        window.alert("Bạn còn đủ hạn mức để tạo thêm 1 bản đồ.");
+        window.alert(t("usage.quota_ok"));
       } else {
-        window.alert(res.message ?? "Không đủ hạn mức.");
+        window.alert(res.message ?? t("usage.quota_notEnough"));
       }
     } catch (e) {
       const msg =
         e && typeof e === "object" && "message" in e && typeof (e as { message: unknown }).message === "string"
           ? (e as { message: string }).message
-          : "Kiểm tra hạn mức thất bại.";
+          : t("usage.quota_failed");
       window.alert(msg);
     }
   }
 
   return (
     <div className="space-y-6 p-6">
-      <h1 className="text-xl font-semibold">Sử dụng</h1>
+      <h1 className="text-xl font-semibold">{t("usage.title")}</h1>
 
       <div className="mb-1 flex items-center gap-3">
-        <label className="text-sm text-zinc-600 dark:text-zinc-400">Tổ chức</label>
+        <label className="text-sm text-zinc-600 dark:text-zinc-400">{t("usage.organization")}</label>
         <select
           className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
           value={orgId ?? ""}
@@ -235,24 +237,24 @@ export default function UsagePage() {
       </div>
 
       {!orgId && (
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-neutral-300">Chưa chọn tổ chức.</div>
+        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-neutral-300">{t("usage.noOrgSelected")}</div>
       )}
 
       {orgId && (
         <>
           <section className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-medium text-neutral-100">Tổng quan hạn mức</h2>
+              <h2 className="text-base font-medium text-neutral-100">{t("usage.limits_overview")}</h2>
               <button
                 onClick={onCheckQuotaClick}
                 className="rounded-md bg-neutral-800 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700"
               >
-                Kiểm tra hạn mức (Bản đồ +1)
+                {t("usage.limits_checkQuotaPlusOne")}
               </button>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               <div className="rounded-lg border border-neutral-800 p-3">
-                <div className="text-xs text-neutral-400">Bản đồ</div>
+                <div className="text-xs text-neutral-400">{t("usage.metrics_maps")}</div>
                 <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
                   <div className="h-full bg-neutral-500" style={{ width: `${percent(mapsUsedFromUsage, mapsLimitFromUsage)}%` }} />
                 </div>
@@ -262,7 +264,7 @@ export default function UsagePage() {
               </div>
 
               <div className="rounded-lg border border-neutral-800 p-3">
-                <div className="text-xs text-neutral-400">Lớp dữ liệu</div>
+                <div className="text-xs text-neutral-400">{t("usage.metrics_layers")}</div>
                 <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
                   <div className="h-full bg-neutral-500" style={{ width: `${percent(layersUsedFromUsage, layersLimitFromUsage)}%` }} />
                 </div>
@@ -272,7 +274,7 @@ export default function UsagePage() {
               </div>
 
               <div className="rounded-lg border border-neutral-800 p-3">
-                <div className="text-xs text-neutral-400">Thành viên</div>
+                <div className="text-xs text-neutral-400">{t("usage.metrics_members")}</div>
                 <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
                   <div className="h-full bg-neutral-500" style={{ width: `${percent(membersUsedFromUsage, membersLimitFromUsage)}%` }} />
                 </div>
@@ -282,7 +284,7 @@ export default function UsagePage() {
               </div>
 
               <div className="rounded-lg border border-neutral-800 p-3">
-                <div className="text-xs text-neutral-400">Lưu trữ</div>
+                <div className="text-xs text-neutral-400">{t("usage.metrics_storage")}</div>
                 <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
                   <div
                     className="h-full bg-neutral-500"
@@ -292,9 +294,9 @@ export default function UsagePage() {
                 <div className="mt-1 text-sm text-neutral-300">
                   {capText(usageBars.hostingUsedMb, "MB")} / {capText(usageBars.hostingCapMb, "MB")}
                 </div>
-                {userUsage?.period && <div className="mt-1 text-xs text-neutral-500">Chu kỳ: {userUsage.period}</div>}
+                {userUsage?.period && <div className="mt-1 text-xs text-neutral-500">{t("usage.period")}: {userUsage.period}</div>}
                 {userUsage?.lastReset && (
-                  <div className="text-xs text-neutral-500">Làm mới lần cuối: {formatDateTime(userUsage.lastReset)}</div>
+                  <div className="text-xs text-neutral-500">{t("usage.lastReset")}: {formatDateTime(userUsage.lastReset)}</div>
                 )}
               </div>
             </div>
@@ -302,36 +304,38 @@ export default function UsagePage() {
 
           <section className="rounded-xl border border-neutral-800 bg-neutral-900">
             <div className="flex items-center justify-between px-4 pt-4">
-              <h2 className="text-base font-medium text-neutral-100">Xử lý dữ liệu</h2>
-              <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500">Nâng cấp</button>
+              <h2 className="text-base font-medium text-neutral-100">{t("usage.processing_title")}</h2>
+              <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500">
+                {t("usage.actions_upgrade")}
+              </button>
             </div>
             <div className="px-4 pb-3">
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
                 <div className="h-full bg-neutral-500" style={{ width: `${percent(usageBars.processingUsedMb, usageBars.processingCapMb)}%` }} />
               </div>
               <div className="mt-2 text-sm text-neutral-300">
-                {capText(usageBars.processingUsedMb, "MB")} trong {capText(usageBars.processingCapMb ?? 0, "MB")}
+                {capText(usageBars.processingUsedMb, "MB")} {t("usage.in")} {capText(usageBars.processingCapMb ?? 0, "MB")}
               </div>
             </div>
-            <div className="px-4 pb-4 text-sm text-neutral-400">Chưa có dữ liệu. Nâng cấp để tăng hạn mức hàng tháng.</div>
+            <div className="px-4 pb-4 text-sm text-neutral-400">{t("usage.processing_emptyHint")}</div>
             <div className="overflow-x-auto pb-4">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-t border-neutral-800 bg-neutral-900/40 text-left text-neutral-400">
-                    <th className="py-2 pl-4 pr-4 font-normal">Tập dữ liệu</th>
-                    <th className="py-2 pr-4 font-normal">Nguồn</th>
-                    <th className="py-2 pr-4 font-normal">Loại</th>
-                    <th className="py-2 pr-4 font-normal">Cập nhật</th>
-                    <th className="py-2 pr-4 font-normal">Bản đồ</th>
-                    <th className="py-2 pr-4 font-normal">Kích thước TB</th>
-                    <th className="py-2 pr-4 font-normal">Lượt chạy</th>
-                    <th className="py-2 pr-4 font-normal">Đang xử lý</th>
+                    <th className="py-2 pl-4 pr-4 font-normal">{t("usage.table_dataset")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_source")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_type")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_updated")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_maps")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_avgSize")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_runs")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_processing")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={8}>
-                      Không có dữ liệu
+                      {t("usage.table_empty")}
                     </td>
                   </tr>
                 </tbody>
@@ -341,35 +345,37 @@ export default function UsagePage() {
 
           <section className="rounded-xl border border-neutral-800 bg-neutral-900">
             <div className="flex items-center justify-between px-4 pt-4">
-              <h2 className="text-base font-medium text-neutral-100">Lưu trữ dữ liệu</h2>
-              <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500">Nâng cấp</button>
+              <h2 className="text-base font-medium text-neutral-100">{t("usage.hosting_title")}</h2>
+              <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500">
+                {t("usage.actions_upgrade")}
+              </button>
             </div>
             <div className="px-4 pb-3">
               <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
                 <div className="h-full bg-neutral-500" style={{ width: `${percent(usageBars.hostingUsedMb, usageBars.hostingCapMb)}%` }} />
               </div>
               <div className="mt-2 text-sm text-neutral-300">
-                {capText(usageBars.hostingUsedMb, "MB")} trong {capText(usageBars.hostingCapMb ?? 0, "MB")}
+                {capText(usageBars.hostingUsedMb, "MB")} {t("usage.in")} {capText(usageBars.hostingCapMb ?? 0, "MB")}
               </div>
             </div>
-            <div className="px-4 pb-4 text-sm text-neutral-400">Chưa có dữ liệu. Nâng cấp để tăng hạn mức hàng tháng.</div>
+            <div className="px-4 pb-4 text-sm text-neutral-400">{t("usage.hosting_emptyHint")}</div>
             <div className="overflow-x-auto pb-4">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-t border-neutral-800 bg-neutral-900/40 text-left text-neutral-400">
-                    <th className="py-2 pl-4 pr-4 font-normal">Tập dữ liệu</th>
-                    <th className="py-2 pr-4 font-normal">Nguồn</th>
-                    <th className="py-2 pr-4 font-normal">Loại</th>
-                    <th className="py-2 pr-4 font-normal">Cập nhật</th>
-                    <th className="py-2 pr-4 font-normal">Bản đồ</th>
-                    <th className="py-2 pr-4 font-normal">Người tải lên</th>
-                    <th className="py-2 pr-4 font-normal">Lưu trữ</th>
+                    <th className="py-2 pl-4 pr-4 font-normal">{t("usage.table_dataset")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_source")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_type")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_updated")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_maps")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_uploader")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_storage")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr>
                     <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={7}>
-                      Không có dữ liệu
+                      {t("usage.table_empty")}
                     </td>
                   </tr>
                 </tbody>
@@ -379,7 +385,7 @@ export default function UsagePage() {
 
           <section className="rounded-xl border border-neutral-800 bg-neutral-900">
             <div className="flex items-center justify-between px-4 py-3">
-              <h2 className="text-base font-medium text-neutral-100">Lượt xem bản đồ</h2>
+              <h2 className="text-base font-medium text-neutral-100">{t("usage.views_title")}</h2>
               <span className="text-xs text-neutral-400">{resetDateText}</span>
             </div>
             <div className="px-4 pb-2">
@@ -387,32 +393,32 @@ export default function UsagePage() {
                 <div className="h-full bg-pink-400" style={{ width: `${percent(totalViews, viewsMax)}%` }} />
               </div>
               <div className="mt-2 text-sm text-neutral-300">
-                <span className="text-pink-300 font-medium">{formatNumber(totalViews)}</span> trong{" "}
-                <span className="font-medium">{capText(viewsMax)}</span> / tháng
+                <span className="text-pink-300 font-medium">{formatNumber(totalViews)}</span> {t("usage.of")}{" "}
+                <span className="font-medium">{capText(viewsMax)}</span> {t("usage.perMonth")}
               </div>
-              <p className="mt-1 text-xs text-neutral-400">Mỗi lần người dùng tải bản đồ trên trình duyệt hoặc nhúng đều được tính là một lượt xem.</p>
+              <p className="mt-1 text-xs text-neutral-400">{t("usage.views_hint")}</p>
             </div>
             <div className="mt-2 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-t border-neutral-800 bg-neutral-900/40 text-left text-neutral-400">
-                    <th className="py-2 pl-4 pr-4 font-normal">Bản đồ</th>
-                    <th className="py-2 pr-4 font-normal">Tạo bởi</th>
-                    <th className="py-2 pr-4 font-normal">Lượt xem</th>
+                    <th className="py-2 pl-4 pr-4 font-normal">{t("usage.table_map")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_createdBy")}</th>
+                    <th className="py-2 pr-4 font-normal">{t("usage.table_views")}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading && (
                     <tr>
                       <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={3}>
-                        Đang tải…
+                        {t("usage.loading")}
                       </td>
                     </tr>
                   )}
                   {!loading && maps.length === 0 && (
                     <tr>
                       <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={3}>
-                        Không có dữ liệu
+                        {t("usage.table_empty")}
                       </td>
                     </tr>
                   )}
@@ -421,7 +427,7 @@ export default function UsagePage() {
                       <tr key={m.id} className="border-t border-neutral-800 text-neutral-200">
                         <td className="py-2 pl-4 pr-4">
                           <a className="text-blue-300 hover:underline" href={`/maps/${m.id}`}>
-                            {m.name || "Bản đồ chưa đặt tên"}
+                            {m.name || t("usage.untitledMap")}
                           </a>
                         </td>
                         <td className="py-2 pr-4">{m.createdBy ?? "—"}</td>
