@@ -23,19 +23,21 @@ import {
 import { CurrentMembershipDto, getMyMembership } from "@/lib/api-membership";
 import { getProjectsByOrganization } from "@/lib/api-workspaces";
 import ManageWorkspaces from "@/components/ManageWorkspaces";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type MapRow = Awaited<ReturnType<typeof getOrganizationMaps>>[number];
 
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 }
-function safeMessage(err: unknown): string {
+
+function safeMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message;
   if (err && typeof err === "object" && "message" in err) {
     const m = (err as { message?: unknown }).message;
     if (typeof m === "string") return m;
   }
-  return "Yêu cầu thất bại";
+  return fallback;
 }
 
 type ApiErr = {
@@ -88,7 +90,7 @@ function parseApiError(err: unknown): ApiErr {
   return {};
 }
 
-function userMessage(err: unknown): string {
+function userMessage(err: unknown, t: (k: string, vars?: Record<string, unknown>) => string): string {
   const e = parseApiError(err);
   const code = String(e.type || e.title || "").toLowerCase();
   const text = String(e.detail || e.message || "").toLowerCase();
@@ -100,34 +102,32 @@ function userMessage(err: unknown): string {
     text.includes("maximum user limit") ||
     text.includes("max user") ||
     text.includes("quota") ||
-    text.includes("limit") && text.includes("user");
+    (text.includes("limit") && text.includes("user"));
 
-  if (quotaHit) {
-    return "Tổ chức đã đạt giới hạn thành viên của gói hiện tại. Hãy nâng cấp gói hoặc xoá bớt thành viên để tiếp tục mời.";
-  }
+  if (quotaHit) return t("org_detail.err_quota");
 
-  if (status === 409 || code.includes("conflict") || text.includes("already") && text.includes("member")) {
-    return "Email này đã được mời hoặc đã là thành viên của tổ chức.";
+  if (status === 409 || code.includes("conflict") || (text.includes("already") && text.includes("member"))) {
+    return t("org_detail.err_already_member");
   }
   if (status === 403 || code.includes("forbidden")) {
-    return "Bạn không có quyền thực hiện thao tác này. Hãy liên hệ Owner/Admin.";
+    return t("org_detail.err_forbidden");
   }
   if (status === 404) {
-    return "Không tìm thấy tổ chức hoặc lời mời. Vui lòng tải lại trang.";
+    return t("org_detail.err_not_found");
   }
   if (status === 400) {
-    return "Dữ liệu không hợp lệ. Vui lòng kiểm tra email và thử lại.";
+    return t("org_detail.err_bad_request");
   }
   if (status === 429) {
-    return "Bạn thao tác quá nhanh. Vui lòng thử lại sau ít phút.";
+    return t("org_detail.err_rate_limited");
   }
   if (status >= 500) {
-    return "Máy chủ đang gặp sự cố. Vui lòng thử lại sau.";
+    return t("org_detail.err_server");
   }
 
   if (e.detail && !/stack|trace|exception/i.test(e.detail)) return e.detail;
   if (e.message && !/stack|trace|exception/i.test(e.message)) return e.message;
-  return "Không thể thực hiện yêu cầu. Vui lòng thử lại.";
+  return t("org_detail.err_generic");
 }
 
 type ViewMode = "grid" | "list";
@@ -159,6 +159,7 @@ function asMemberArray(x: unknown): MemberLike[] {
 }
 
 export default function OrgDetailPage() {
+  const { t } = useI18n();
   const p = useParams<{ orgId: string }>();
   const orgId = p?.orgId ?? "";
   const router = useRouter();
@@ -239,9 +240,7 @@ export default function OrgDetailPage() {
   const planAllows = [2, 3].includes(Number(membership?.planId ?? 0));
 
   const disabledImport = !(isAdminOrOwner && planAllows);
-  const tooltipText = !isAdminOrOwner
-    ? "Chỉ Owner/Admin mới dùng chức năng này"
-    : "Nâng cấp gói (plan 2 hoặc 3) để sử dụng";
+  const tooltipText = !isAdminOrOwner ? t("org_detail.tip_only_owner_admin") : t("org_detail.tip_upgrade_plan");
 
   const refreshMembers = useCallback(async () => {
     const memRes = await getOrganizationMembers(orgId);
@@ -254,7 +253,7 @@ export default function OrgDetailPage() {
     async (memberId?: string | null, currentRole?: string | null, newRole?: string) => {
       if (!memberId || !newRole || newRole === currentRole) return;
       if (!isOwner) {
-        setInviteMsg("Bạn không có quyền đổi vai trò. Hãy liên hệ Owner/Admin.");
+        setInviteMsg(t("org_detail.err_no_permission_role"));
         return;
       }
 
@@ -262,29 +261,29 @@ export default function OrgDetailPage() {
         setRoleBusyId(memberId);
         await updateMemberRole({ orgId, memberId, newRole });
         await refreshMembers();
-        setInviteMsg("Đã cập nhật vai trò thành viên.");
+        setInviteMsg(t("org_detail.msg_role_updated"));
       } catch (e) {
-        setInviteMsg(safeMessage(e));
+        setInviteMsg(safeMessage(e, t("org_detail.action_failed")));
       } finally {
         setRoleBusyId(null);
       }
     },
-    [isOwner, orgId, refreshMembers]
+    [isOwner, orgId, refreshMembers, t]
   );
 
   const askRemoveMember = useCallback(
     (memberId?: string | null, label?: string | null) => {
       if (!memberId) {
-        setInviteMsg("Không xác định được thành viên để xoá.");
+        setInviteMsg(t("org_detail.err_member_unknown"));
         return;
       }
       if (!isOwner) {
-        setInviteMsg("Bạn không có quyền xoá thành viên. Hãy liên hệ Owner/Admin.");
+        setInviteMsg(t("org_detail.err_no_permission_remove"));
         return;
       }
       setRemoveDialog({ open: true, memberId, label });
     },
-    [isOwner]
+    [isOwner, t]
   );
 
   const doRemoveMember = useCallback(async () => {
@@ -295,15 +294,15 @@ export default function OrgDetailPage() {
       setRemoveBusyId(memberId);
       await removeMember({ orgId, memberId });
       await refreshMembers();
-      setInviteMsg("Đã xoá thành viên.");
+      setInviteMsg(t("org_detail.msg_member_removed"));
     } catch (e) {
-      setInviteMsg(safeMessage(e));
+      setInviteMsg(safeMessage(e, t("org_detail.action_failed")));
     } finally {
       setRemoveBusyId(null);
       setOpenMemberMenu(null);
       setRemoveDialog({ open: false });
     }
-  }, [removeDialog.memberId, orgId, refreshMembers]);
+  }, [removeDialog.memberId, orgId, refreshMembers, t]);
 
   useEffect(() => {
     let alive = true;
@@ -322,7 +321,7 @@ export default function OrgDetailPage() {
         setWorkspaces(workspacesData);
       } catch (e) {
         if (!alive) return;
-        setErr(safeMessage(e));
+        setErr(safeMessage(e, t("org_detail.load_failed")));
       } finally {
         if (alive) setLoading(false);
       }
@@ -331,7 +330,7 @@ export default function OrgDetailPage() {
     return () => {
       alive = false;
     };
-  }, [orgId]);
+  }, [orgId, t]);
 
   useEffect(() => {
     let alive = true;
@@ -357,7 +356,7 @@ export default function OrgDetailPage() {
 
   const onInvite = useCallback(async () => {
     if (!isOwner) {
-      setInviteMsg("Chỉ Owner mới được mời thành viên.");
+      setInviteMsg(t("org_detail.err_only_owner_invite"));
       return;
     }
     const emails = inviteInput
@@ -365,12 +364,12 @@ export default function OrgDetailPage() {
       .map((x) => x.trim())
       .filter(Boolean);
     if (emails.length === 0) {
-      setInviteMsg("Hãy nhập ít nhất 1 email.");
+      setInviteMsg(t("org_detail.err_enter_at_least_one_email"));
       return;
     }
     const invalid = emails.find((e) => !isValidEmail(e));
     if (invalid) {
-      setInviteMsg(`Email không hợp lệ: ${invalid}`);
+      setInviteMsg(t("org_detail.err_invalid_email", { email: invalid }));
       return;
     }
     setInviteBusy(true);
@@ -380,20 +379,20 @@ export default function OrgDetailPage() {
         const body: InviteMemberOrganizationReqDto = { orgId, memberEmail: email, memberType: "Member" };
         await inviteMember(body);
       }
-      setInviteMsg(`Đã gửi lời mời tới ${emails.join(", ")}.`);
+      setInviteMsg(t("org_detail.msg_invited", { count: emails.length, list: emails.join(", ") }));
       setInviteInput("");
       await refreshMembers();
     } catch (e) {
-      setInviteMsg(userMessage(e));
+      setInviteMsg(userMessage(e, t));
     } finally {
       setInviteBusy(false);
     }
-  }, [inviteInput, orgId, refreshMembers]);
+  }, [inviteInput, orgId, refreshMembers, isOwner, t]);
 
   const onDeleteOrg = useCallback(async () => {
     if (!org) return;
     if (!isOwner) {
-      setDeleteErr("Bạn không có quyền xoá workspace.");
+      setDeleteErr(t("org_detail.err_no_permission_delete"));
       return;
     }
     setDeleteBusy(true);
@@ -405,46 +404,46 @@ export default function OrgDetailPage() {
       }
       router.push("/profile");
     } catch (e) {
-      setDeleteErr(safeMessage(e));
+      setDeleteErr(safeMessage(e, t("org_detail.delete_failed")));
     } finally {
       setDeleteBusy(false);
     }
-  }, [org, router, isOwner]);
+  }, [org, router, isOwner, t]);
 
   const onImportStudents = useCallback(async () => {
     if (!isAdminOrOwner) {
-      setImportMsg("Chỉ Owner/Admin được dùng chức năng này.");
+      setImportMsg(t("org_detail.err_only_owner_admin"));
       return;
     }
     if (!planAllows) {
-      setImportMsg("Tính năng yêu cầu gói có planId = 2 hoặc 3.");
+      setImportMsg(t("org_detail.err_plan_required"));
       return;
     }
     if (!excelFile) {
-      setImportMsg("Hãy chọn file Excel (.xlsx).");
+      setImportMsg(t("org_detail.err_select_excel"));
       return;
     }
     if (!domain.trim()) {
-      setImportMsg("Hãy nhập domain (ví dụ: se1739.edu).");
+      setImportMsg(t("org_detail.err_enter_domain"));
       return;
     }
 
     try {
       setImportBusy(true);
-      setImportMsg("Đang xử lý...");
+      setImportMsg(t("org_detail.import_processing"));
       setImportResult(null);
 
       const res = await bulkCreateStudents(orgId, excelFile, domain.trim());
 
       setImportResult(res);
-      setImportMsg(`Tạo thành công ${res.totalCreated} tài khoản, bỏ qua ${res.totalSkipped}.`);
+      setImportMsg(t("org_detail.import_done", { created: res.totalCreated, skipped: res.totalSkipped }));
     } catch (e) {
-      setImportMsg(safeMessage(e));
+      setImportMsg(safeMessage(e, t("org_detail.action_failed")));
       setImportResult(null);
     } finally {
       setImportBusy(false);
     }
-  }, [isAdminOrOwner, planAllows, excelFile, domain, orgId]);
+  }, [isAdminOrOwner, planAllows, excelFile, domain, orgId, t]);
 
   const downloadCreatedCsv = () => {
     if (!importResult) return;
@@ -470,49 +469,47 @@ export default function OrgDetailPage() {
       .map((a) => `${a.email}\t${a.password}\t${a.fullName}\t${a.class}`)
       .join("\n");
     await navigator.clipboard.writeText(text);
-    setImportMsg("Đã sao chép danh sách tài khoản vào clipboard.");
+    setImportMsg(t("org_detail.import_copied"));
   };
 
   const onRemoveMember = useCallback(
     async (memberId?: string | null) => {
       if (!memberId) {
-        setInviteMsg("Không xác định được thành viên để xoá.");
+        setInviteMsg(t("org_detail.err_member_unknown"));
         return;
       }
       if (!isOwner) {
-        setInviteMsg("Bạn không có quyền xoá thành viên. Hãy liên hệ Owner/Admin.");
+        setInviteMsg(t("org_detail.err_no_permission_remove"));
         return;
       }
 
-      if (!confirm("Xoá thành viên này khỏi workspace?")) return;
+      if (!confirm(t("org_detail.confirm_remove_member"))) return;
 
       try {
         setRemoveBusyId(memberId);
         await removeMember({ orgId, memberId });
         await refreshMembers();
-        setInviteMsg("Đã xoá thành viên.");
+        setInviteMsg(t("org_detail.msg_member_removed"));
       } catch (e) {
-        setInviteMsg(safeMessage(e));
+        setInviteMsg(safeMessage(e, t("org_detail.action_failed")));
       } finally {
         setRemoveBusyId(null);
         setOpenMemberMenu(null);
       }
     },
-    [isOwner, orgId, refreshMembers]
+    [isOwner, orgId, refreshMembers, t]
   );
 
   const requireOwner = useCallback(
     (action: () => void) => {
       if (!isOwner) {
-        setPermMsg(
-          "Bạn đang có quyền hạn chế trong workspace này. Để quản lý cài đặt workspace, hãy liên hệ quản trị viên để được cấp quyền đầy đủ."
-        );
+        setPermMsg(t("org_detail.msg_limited_perm"));
         return;
       }
       setPermMsg(null);
       action();
     },
-    [isOwner]
+    [isOwner, t]
   );
 
   const handleWorkspaceSettings = useCallback(() => {
@@ -536,8 +533,8 @@ export default function OrgDetailPage() {
     void navigator.clipboard.writeText(String(orgId));
   }, [orgId]);
 
-  if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">Đang tải…</div>;
-  if (err || !org) return <div className="max-w-3xl px-4 text-red-400">{err ?? "Không tìm thấy workspace."}</div>;
+  if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">{t("org_detail.loading")}</div>;
+  if (err || !org) return <div className="max-w-3xl px-4 text-red-400">{err ?? t("org_detail.not_found")}</div>;
 
   const memberRows: MemberLike[] = asMemberArray(members?.members ?? []);
 
@@ -547,7 +544,7 @@ export default function OrgDetailPage() {
         <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           {permMsg}{" "}
           <button onClick={() => setPermMsg(null)} className="ml-2 rounded bg-amber-500/20 px-2 py-[2px] text-amber-100">
-            Đóng
+            {t("org_detail.btn_close")}
           </button>
         </div>
       )}
@@ -566,14 +563,14 @@ export default function OrgDetailPage() {
               onClick={() => setViewOpen((v) => !v)}
               className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
             >
-              Hiển thị ▾
+              {t("org_detail.view")} ▾
             </button>
             {viewOpen && (
               <div
                 className="absolute right-0 mt-2 w-64 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl p-2"
                 onMouseLeave={() => setViewOpen(false)}
               >
-                <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Kiểu hiển thị</div>
+                <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">{t("org_detail.view_mode")}</div>
                 {(["grid", "list"] as ViewMode[]).map((m) => (
                   <button
                     key={m}
@@ -581,17 +578,17 @@ export default function OrgDetailPage() {
                       }`}
                     onClick={() => setViewMode(m)}
                   >
-                    {m === "grid" ? "Lưới" : "Danh sách"}
+                    {m === "grid" ? t("org_detail.mode_grid") : t("org_detail.mode_list")}
                   </button>
                 ))}
-                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Sắp xếp theo</div>
+                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">{t("org_detail.sort_by")}</div>
                 {(
                   [
-                    ["recentlyModified", "Chỉnh sửa gần đây"],
-                    ["dateCreated", "Ngày tạo"],
-                    ["lastViewed", "Xem gần đây"],
-                    ["name", "Tên"],
-                    ["author", "Tác giả"],
+                    ["recentlyModified", t("org_detail.sort_recently_modified")],
+                    ["dateCreated", t("org_detail.sort_date_created")],
+                    ["lastViewed", t("org_detail.sort_last_viewed")],
+                    ["name", t("org_detail.sort_name")],
+                    ["author", t("org_detail.sort_author")],
                   ] as const
                 ).map(([k, label]) => (
                   <button
@@ -603,7 +600,7 @@ export default function OrgDetailPage() {
                     {label}
                   </button>
                 ))}
-                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Thứ tự</div>
+                <div className="mt-2 px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">{t("org_detail.order")}</div>
                 {(["desc", "asc"] as SortOrder[]).map((o) => (
                   <button
                     key={o}
@@ -611,7 +608,7 @@ export default function OrgDetailPage() {
                       }`}
                     onClick={() => setSortOrder(o)}
                   >
-                    {o === "desc" ? "Giảm dần" : "Tăng dần"}
+                    {o === "desc" ? t("org_detail.order_desc") : t("org_detail.order_asc")}
                   </button>
                 ))}
               </div>
@@ -619,32 +616,32 @@ export default function OrgDetailPage() {
           </div>
 
           <button
-            onClick={() => (isOwner ? setShareOpen(true) : setPermMsg("Chỉ Owner mới dùng Chia sẻ"))}
+            onClick={() => (isOwner ? setShareOpen(true) : setPermMsg(t("org_detail.only_owner_share")))}
             disabled={!isOwner}
             aria-disabled={!isOwner}
             className={`px-3 py-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 text-sm
               ${!isOwner ? "opacity-50 cursor-not-allowed text-emerald-300/60" : "text-emerald-300 hover:bg-emerald-500/20"}`}
           >
-            Chia sẻ
+            {t("org_detail.share")}
           </button>
 
           {isOwner ? (
             <button
               onClick={handleWorkspaceSettings}
               className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm hover:bg-white/10"
-              title="Cài đặt workspace"
+              title={t("org_detail.settings_title")}
             >
-              Cài đặt
+              {t("org_detail.settings")}
             </button>
           ) : (
             <button
               type="button"
               disabled
               aria-disabled
-              title="Chỉ Owner"
+              title={t("org_detail.only_owner")}
               className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 text-sm opacity-60 cursor-not-allowed"
             >
-              Cài đặt
+              {t("org_detail.settings")}
             </button>
           )}
 
@@ -654,7 +651,7 @@ export default function OrgDetailPage() {
               className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
               aria-haspopup="menu"
               aria-expanded={moreOpen}
-              title="Thêm"
+              title={t("org_detail.more")}
             >
               ⋯
             </button>
@@ -665,13 +662,13 @@ export default function OrgDetailPage() {
                 onMouseLeave={() => setMoreOpen(false)}
               >
                 <button onClick={copyWorkspaceUrl} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
-                  Sao chép URL workspace
+                  {t("org_detail.copy_ws_url")}
                 </button>
                 <button onClick={copyWorkspaceId} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
-                  Sao chép ID workspace (API)
+                  {t("org_detail.copy_ws_id")}
                 </button>
                 <button onClick={handleWorkspaceAnalytics} className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-zinc-200" role="menuitem">
-                  Xem phân tích
+                  {t("org_detail.view_analytics")}
                 </button>
 
                 {isOwner && (
@@ -683,7 +680,7 @@ export default function OrgDetailPage() {
                     className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 text-red-300"
                     role="menuitem"
                   >
-                    Xoá workspace…
+                    {t("org_detail.delete_ws_ellipsis")}
                   </button>
                 )}
               </div>
@@ -695,7 +692,7 @@ export default function OrgDetailPage() {
       {/* Workspaces Section */}
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Workspace</h2>
+          <h2 className="text-lg font-semibold">{t("org_detail.section_ws")}</h2>
           <div className="flex items-center gap-2">
             <ManageWorkspaces orgId={orgId} canManage={isAdminOrOwner} />
 
@@ -710,7 +707,7 @@ export default function OrgDetailPage() {
                     : "border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
                     }`}
                 >
-                  Nhập danh sách sinh viên (.xlsx)
+                  {t("org_detail.import_students_btn")}
                 </button>
 
                 {disabledImport && (
@@ -729,7 +726,7 @@ export default function OrgDetailPage() {
 
         {workspaces.length === 0 && (
           <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
-            <p className="text-zinc-400 mb-4">Chưa có workspace nào. Tạo workspace đầu tiên để tổ chức dự án.</p>
+            <p className="text-zinc-400 mb-4">{t("org_detail.no_ws")}</p>
             <button
               onClick={() => router.push(`/profile/workspaces`)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
@@ -737,7 +734,7 @@ export default function OrgDetailPage() {
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              Tạo workspace
+              {t("org_detail.create_ws")}
             </button>
           </div>
         )}
@@ -757,21 +754,24 @@ export default function OrgDetailPage() {
                 </div>
                 <div className="min-w-0">
                   <div className="truncate font-semibold">{workspace.workspaceName}</div>
-                  <div className="text-xs text-zinc-400 truncate">{workspace.description ?? "Không có mô tả"}</div>
+                  <div className="text-xs text-zinc-400 truncate">{workspace.description ?? t("org_detail.no_description")}</div>
                 </div>
               </div>
             ))}
             {workspaces.length > 4 && (
-              <div className="group rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4 cursor-pointer" onClick={() => router.push(`/profile/workspaces`)}>
+              <div
+                className="group rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4 cursor-pointer"
+                onClick={() => router.push(`/profile/workspaces`)}
+              >
                 <div className="h-24 w-full rounded-lg bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/5 mb-3 grid place-items-center text-zinc-400 text-xs">
                   <div className="text-center">
                     <div className="text-lg font-bold">+{workspaces.length - 4}</div>
-                    <div className="text-xs">thêm</div>
+                    <div className="text-xs">{t("org_detail.more_lower")}</div>
                   </div>
                 </div>
                 <div className="min-w-0">
-                  <div className="truncate font-semibold">Xem tất cả workspace</div>
-                  <div className="text-xs text-zinc-400">Xem toàn bộ {workspaces.length} workspace</div>
+                  <div className="truncate font-semibold">{t("org_detail.view_all_ws")}</div>
+                  <div className="text-xs text-zinc-400">{t("org_detail.view_all_ws_count", { count: workspaces.length })}</div>
                 </div>
               </div>
             )}
@@ -782,25 +782,25 @@ export default function OrgDetailPage() {
       {/* Workspace Overview */}
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Tổng quan workspace</h2>
+          <h2 className="text-lg font-semibold">{t("org_detail.section_overview")}</h2>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
             <div className="text-2xl font-bold text-emerald-300">{workspaces.length}</div>
-            <div className="text-sm text-zinc-400">Workspace</div>
+            <div className="text-sm text-zinc-400">{t("org_detail.stat_ws")}</div>
           </div>
           <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
             <div className="text-2xl font-bold text-emerald-300">{memberRows.length}</div>
-            <div className="text-sm text-zinc-400">Thành viên</div>
+            <div className="text-sm text-zinc-400">{t("org_detail.stat_members")}</div>
           </div>
           <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
             <div className="text-2xl font-bold text-emerald-300">{membership?.planName || "Basic"}</div>
-            <div className="text-sm text-zinc-400">Gói</div>
+            <div className="text-sm text-zinc-400">{t("org_detail.stat_plan")}</div>
           </div>
           <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
             <div className="text-2xl font-bold text-emerald-300">—</div>
-            <div className="text-sm text-zinc-400">Hành động</div>
+            <div className="text-sm text-zinc-400">{t("org_detail.stat_actions")}</div>
           </div>
         </div>
       </section>
@@ -808,8 +808,8 @@ export default function OrgDetailPage() {
       {shareOpen && isOwner && (
         <div className="absolute top-12 right-0 w-[28rem] rounded-xl border border-white/10 bg-zinc-900/95 shadow-xl p-4">
           <div className="flex items-center justify-between mb-2">
-            <div className="text-sm font-medium text-zinc-200">Chia sẻ workspace</div>
-            <button className="text-zinc-500 hover:text-white" onClick={() => setShareOpen(false)} aria-label="Đóng chia sẻ">
+            <div className="text-sm font-medium text-zinc-200">{t("org_detail.share_ws")}</div>
+            <button className="text-zinc-500 hover:text-white" onClick={() => setShareOpen(false)} aria-label={t("org_detail.close_share")}>
               ✕
             </button>
           </div>
@@ -820,7 +820,7 @@ export default function OrgDetailPage() {
                 type="text"
                 value={inviteInput}
                 onChange={(e) => setInviteInput(e.target.value)}
-                placeholder="Thêm cộng tác viên"
+                placeholder={t("org_detail.ph_add_collaborator")}
                 className="flex-1 rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !inviteBusy) void onInvite();
@@ -832,7 +832,7 @@ export default function OrgDetailPage() {
                 disabled={inviteBusy}
                 className="px-3 py-2 rounded-md bg-emerald-500 text-zinc-900 font-semibold text-sm hover:bg-emerald-400 disabled:opacity-60"
               >
-                {inviteBusy ? "Đang mời..." : "Mời"}
+                {inviteBusy ? t("org_detail.inviting") : t("org_detail.invite")}
               </button>
             </div>
             {inviteMsg && <div className="mt-2 text-xs text-zinc-300">{inviteMsg}</div>}
@@ -855,16 +855,25 @@ export default function OrgDetailPage() {
                       type="button"
                       onClick={() => setExpandedMemberId(expanded ? null : key)}
                       className="ml-3 shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
-                      title="Vai trò / Xoá"
+                      title={t("org_detail.role_remove")}
                     >
-                      {roleLabel} <span aria-hidden>▾</span>
+                      {t(
+                        roleLabel === "Owner"
+                          ? "org_detail.role_owner"
+                          : roleLabel === "Admin"
+                          ? "org_detail.role_admin"
+                          : roleLabel === "Viewer"
+                          ? "org_detail.role_viewer"
+                          : "org_detail.role_member"
+                      )}{" "}
+                      <span aria-hidden>▾</span>
                     </button>
                   </div>
 
                   {expanded && (
                     <div className="mb-2 rounded-md border border-white/10 bg-zinc-900/70 p-2">
                       <div className="flex items-center gap-2">
-                        <label className="text-xs text-zinc-400">Vai trò</label>
+                        <label className="text-xs text-zinc-400">{t("org_detail.role")}</label>
                         <select
                           className="flex-1 rounded-md bg-zinc-800 border border-white/10 px-2 py-1 text-xs text-zinc-100"
                           value={roleLabel}
@@ -873,19 +882,27 @@ export default function OrgDetailPage() {
                         >
                           {ROLE_OPTIONS.map((r) => (
                             <option key={r} value={r}>
-                              {r}
+                              {t(
+                                r === "Owner"
+                                  ? "org_detail.role_owner"
+                                  : r === "Admin"
+                                  ? "org_detail.role_admin"
+                                  : r === "Viewer"
+                                  ? "org_detail.role_viewer"
+                                  : "org_detail.role_member"
+                              )}
                             </option>
                           ))}
                         </select>
 
                         <button
                           type="button"
-                          onClick={() => askRemoveMember(m.memberId ?? null, m.fullName || m.email || "Người dùng")}
+                          onClick={() => askRemoveMember(m.memberId ?? null, m.fullName || m.email || t("org_detail.user"))}
                           disabled={removeBusyId === m.memberId}
                           className="shrink-0 text-xs px-2 py-1 rounded border border-red-500/30 text-red-300 hover:bg-red-500/10 disabled:opacity-60"
-                          title="Xoá thành viên"
+                          title={t("org_detail.remove_member")}
                         >
-                          {removeBusyId === m.memberId ? "Đang xoá…" : "Xoá"}
+                          {removeBusyId === m.memberId ? t("org_detail.removing") : t("org_detail.remove")}
                         </button>
                       </div>
                     </div>
@@ -894,17 +911,17 @@ export default function OrgDetailPage() {
               );
             })}
 
-            {memberRows.length === 0 && <div className="py-6 text-center text-zinc-400">Chưa có thành viên</div>}
+            {memberRows.length === 0 && <div className="py-6 text-center text-zinc-400">{t("org_detail.no_members")}</div>}
           </div>
           <div className="mt-3 flex items-center justify-between text-xs text-zinc-400">
-            <span>Chỉ người được mời mới xem được workspace này</span>
+            <span>{t("org_detail.share_note")}</span>
             <button
               className="text-emerald-300 hover:underline"
               onClick={() => {
                 if (typeof window !== "undefined") void navigator.clipboard.writeText(window.location.href);
               }}
             >
-              Sao chép liên kết
+              {t("org_detail.copy_link")}
             </button>
           </div>
         </div>
@@ -913,21 +930,20 @@ export default function OrgDetailPage() {
       {removeDialog.open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[30rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
-            <h2 className="text-lg font-semibold text-white">Xoá thành viên</h2>
+            <h2 className="text-lg font-semibold text-white">{t("org_detail.remove_member")}</h2>
             <p className="text-sm text-zinc-300 mt-2">
-              Bạn sắp xoá <span className="font-semibold">{removeDialog.label ?? "thành viên"}</span> khỏi workspace này.
-              Hành động này sẽ gỡ quyền truy cập của họ vào tất cả dự án trong workspace.
+              {t("org_detail.remove_member_desc", { name: removeDialog.label ?? t("org_detail.member") })}
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm" onClick={() => setRemoveDialog({ open: false })}>
-                Huỷ
+                {t("org_detail.cancel")}
               </button>
               <button
                 onClick={() => void doRemoveMember()}
                 disabled={removeBusyId === removeDialog.memberId}
                 className="px-3 py-2 rounded-lg bg-red-500 text-zinc-900 text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
               >
-                {removeBusyId === removeDialog.memberId ? "Đang xoá..." : "Xoá thành viên"}
+                {removeBusyId === removeDialog.memberId ? t("org_detail.removing") : t("org_detail.remove_member")}
               </button>
             </div>
           </div>
@@ -938,22 +954,22 @@ export default function OrgDetailPage() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60" role="dialog" aria-modal="true">
           <div className="w-[40rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-white">Nhập danh sách sinh viên (.xlsx)</h2>
-              <button onClick={() => setImportOpen(false)} className="text-zinc-400 hover:text-white" aria-label="Đóng">
+              <h2 className="text-lg font-semibold text-white">{t("org_detail.import_students_title")}</h2>
+              <button onClick={() => setImportOpen(false)} className="text-zinc-400 hover:text-white" aria-label={t("org_detail.close")}>
                 ✕
               </button>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs text-zinc-400 mb-1">File Excel (.xlsx)</label>
+                <label className="block text-xs text-zinc-400 mb-1">{t("org_detail.excel_label")}</label>
                 <input
                   type="file"
                   accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                   onChange={(e) => setExcelFile(e.target.files?.[0] ?? null)}
                   className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100 file:mr-3 file:rounded file:border-0 file:bg-emerald-600 file:px-3 file:py-1.5 file:text-sm file:font-semibold file:text-zinc-900 hover:file:bg-emerald-500"
                 />
-                {excelFile && <div className="mt-1 text-xs text-zinc-400">Đã chọn: {excelFile.name}</div>}
+                {excelFile && <div className="mt-1 text-xs text-zinc-400">{t("org_detail.selected_file", { name: excelFile.name })}</div>}
               </div>
 
               <div>
@@ -962,7 +978,7 @@ export default function OrgDetailPage() {
                   type="text"
                   value={domain}
                   onChange={(e) => setDomain(e.target.value)}
-                  placeholder="vd: se1739.edu"
+                  placeholder={t("org_detail.ph_domain")}
                   className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
                 />
               </div>
@@ -974,14 +990,14 @@ export default function OrgDetailPage() {
               <div className="mt-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-zinc-200">
-                    <b>{importResult.totalCreated}</b> tài khoản mới, bỏ qua <b>{importResult.totalSkipped}</b>.
+                    {t("org_detail.import_summary", { created: importResult.totalCreated, skipped: importResult.totalSkipped })}
                   </div>
                   <div className="flex gap-2">
                     <button onClick={copyCreatedList} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm">
-                      Sao chép
+                      {t("org_detail.copy")}
                     </button>
                     <button onClick={downloadCreatedCsv} className="px-3 py-1.5 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400">
-                      Tải CSV
+                      {t("org_detail.download_csv")}
                     </button>
                   </div>
                 </div>
@@ -991,9 +1007,9 @@ export default function OrgDetailPage() {
                     <thead className="bg-white/5 text-zinc-300">
                       <tr>
                         <th className="text-left px-3 py-2">Email</th>
-                        <th className="text-left px-3 py-2">Họ tên</th>
-                        <th className="text-left px-3 py-2">Mật khẩu</th>
-                        <th className="text-left px-3 py-2">Lớp</th>
+                        <th className="text-left px-3 py-2">{t("org_detail.fullname")}</th>
+                        <th className="text-left px-3 py-2">{t("org_detail.password")}</th>
+                        <th className="text-left px-3 py-2">{t("org_detail.class")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1013,14 +1029,14 @@ export default function OrgDetailPage() {
 
             <div className="mt-5 flex justify-end gap-2">
               <button className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm" onClick={() => setImportOpen(false)} disabled={importBusy}>
-                Huỷ
+                {t("org_detail.cancel")}
               </button>
               <button
                 onClick={() => void onImportStudents()}
                 disabled={importBusy}
                 className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
               >
-                {importBusy ? "Đang nhập..." : "Nhập danh sách"}
+                {importBusy ? t("org_detail.importing") : t("org_detail.import_list")}
               </button>
             </div>
           </div>
@@ -1030,10 +1046,9 @@ export default function OrgDetailPage() {
       {isOwner && deleteOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
-            <h2 className="text-lg font-semibold text-white">Xoá workspace</h2>
+            <h2 className="text-lg font-semibold text-white">{t("org_detail.delete_ws")}</h2>
             <p className="text-sm text-zinc-300 mt-2">
-              Bạn sắp xoá workspace <span className="font-semibold">{title}</span>. Hành động này không thể hoàn tác. Nhập{" "}
-              <span className="font-mono">{title}</span> để xác nhận.
+              {t("org_detail.delete_ws_desc", { title })}
             </p>
             <input
               autoFocus
@@ -1052,14 +1067,14 @@ export default function OrgDetailPage() {
                   setDeleteConfirm("");
                 }}
               >
-                Huỷ
+                {t("org_detail.cancel")}
               </button>
               <button
                 disabled={deleteBusy || deleteConfirm !== title}
                 className="px-3 py-2 rounded-lg bg-red-500 text-zinc-900 text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
                 onClick={() => void onDeleteOrg()}
               >
-                {deleteBusy ? "Đang xoá..." : "Xoá workspace"}
+                {deleteBusy ? t("org_detail.deleting") : t("org_detail.delete_ws")}
               </button>
             </div>
           </div>
