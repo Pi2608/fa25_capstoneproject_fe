@@ -1,5 +1,17 @@
-import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, DragEndEvent } from "@dnd-kit/core";
-import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  horizontalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import SortableSegmentItem from "@/components/storymap/items/SortableSegmentItem";
 import { Segment, SegmentZone } from "@/lib/api-storymap";
 
@@ -27,7 +39,7 @@ export default function SegmentList({
   segments,
   loading,
   activeSegmentId,
-  currentMap,
+  currentMap, 
   onSelect,
   onToggle,
   onEdit,
@@ -44,50 +56,55 @@ export default function SegmentList({
 }: SegmentListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   if (loading) {
     return (
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="text-center text-zinc-500 py-8">Loading...</div>
+      <div className="h-[180px] flex items-center justify-center text-sm text-zinc-500">
+        Loading segments...
       </div>
     );
   }
 
   if (segments.length === 0) {
     return (
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="text-center text-zinc-500 py-8">No segments yet</div>
+      <div className="h-[180px] flex items-center justify-center text-sm text-zinc-500">
+        No segments yet – click &quot;+ Segment&quot; to create one.
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={segments.map(s => s.segmentId)} strategy={verticalListSortingStrategy}>
-          {segments.map((segment) => (
-            <SortableSegmentItem
-              key={segment.segmentId}
-              segment={segment as any}
-              isActive={activeSegmentId === segment.segmentId}
-              onSelect={() => onSelect(segment)}
-              onToggle={onToggle}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onAddZone={onAddZone}
-              onDeleteZone={onDeleteZone}
-              onAddLayer={onAddLayer}
-              onDeleteLayer={onDeleteLayer}
-              onAddLocation={onAddLocation}
-              onDeleteLocation={onDeleteLocation}
-              onCaptureCamera={onCaptureCamera}
-              onViewOnMap={onViewOnMap}
-            />
-          ))}
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <div className="w-full overflow-x-auto">
+        <SortableContext
+          items={segments.map((s) => s.segmentId)}
+          strategy={horizontalListSortingStrategy}
+        >
+          <div className="flex flex-row gap-4 px-4 py-3">
+            {segments.map((segment) => (
+              <SortableSegmentItem
+                key={segment.segmentId}
+                segment={segment as any}
+                isActive={activeSegmentId === segment.segmentId}
+                onSelect={() => onSelect(segment)}
+                onToggle={onToggle}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onAddZone={onAddZone}
+                onDeleteZone={onDeleteZone}
+                onAddLayer={onAddLayer}
+                onDeleteLayer={onDeleteLayer}
+                onAddLocation={onAddLocation}
+                onDeleteLocation={onDeleteLocation}
+                onCaptureCamera={onCaptureCamera}
+                onViewOnMap={onViewOnMap}
+              />
+            ))}
+          </div>
         </SortableContext>
-      </DndContext>
-    </div>
+      </div>
+    </DndContext>
   );
 }

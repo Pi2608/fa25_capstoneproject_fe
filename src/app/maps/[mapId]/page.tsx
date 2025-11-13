@@ -25,11 +25,11 @@ import {
   type UpdateMapFeatureRequest,
   uploadGeoJsonToMap,
   updateLayerData,
-  MapStatus,     
+  MapStatus,
   updateMapFeature,
   LayerDTO,
 } from "@/lib/api-maps";
-import { 
+import {
   type FeatureData,
   serializeFeature,
   extractLayerStyle,
@@ -90,7 +90,7 @@ export default function EditMapPage() {
   const [layers, setLayers] = useState<LayerDTO[]>([]);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({});
   const [featureVisibility, setFeatureVisibility] = useState<Record<string, boolean>>({})
-  
+
   // New state for multi-selection and hover interaction
   const [currentLayer, setCurrentLayer] = useState<Layer | null>(null);
   const [selectedLayers, setSelectedLayers] = useState<Set<Layer>>(new Set());
@@ -141,18 +141,18 @@ export default function EditMapPage() {
   // Helper: Store original style
   const storeOriginalStyle = useCallback((layer: Layer) => {
     if (originalStylesRef.current.has(layer)) return;
-    
+
     const style: LayerStyle = {};
     if ('setStyle' in layer && typeof layer.setStyle === 'function') {
       // Check if layer has options property at runtime
       const unknownLayer = layer as unknown;
       const hasOptions = (
-        unknownLayer !== null && 
-        typeof unknownLayer === 'object' && 
+        unknownLayer !== null &&
+        typeof unknownLayer === 'object' &&
         'options' in unknownLayer &&
         typeof (unknownLayer as { options: unknown }).options === 'object'
       );
-      
+
       if (hasOptions) {
         const layerWithOptions = unknownLayer as LayerWithOptions;
         const options = layerWithOptions.options || {};
@@ -183,7 +183,7 @@ export default function EditMapPage() {
         dashArray: '',
         fillOpacity: 0.6
       });
-      
+
       // Bring to front
       const pathLayer = layer as unknown as PathLayer;
       if ('bringToFront' in layer && pathLayer.bringToFront) {
@@ -200,9 +200,9 @@ export default function EditMapPage() {
       // It's a Marker, don't reset style
       return;
     }
-    
+
     const originalStyle = originalStylesRef.current.get(layer);
-    
+
     // For PathLayers (Polygon, Line, Circle, etc.)
     if (originalStyle && 'setStyle' in layer && typeof layer.setStyle === 'function') {
       (layer as unknown as PathLayer).setStyle(originalStyle);
@@ -244,7 +244,7 @@ export default function EditMapPage() {
         applyMultiSelectionStyle(layer);
       }
       setSelectedLayers(newSelected);
-      
+
       // Update currentLayer to the last selected
       if (newSelected.size > 0) {
         setCurrentLayer(layer);
@@ -258,11 +258,11 @@ export default function EditMapPage() {
           resetToOriginalStyle(l);
         }
       });
-      
+
       setSelectedLayers(new Set([layer]));
       setCurrentLayer(layer);
       applySelectionStyle(layer);
-      
+
       // Show style panel and find corresponding feature/layer data
       const feature = features.find(f => f.layer === layer);
       if (feature) {
@@ -275,7 +275,7 @@ export default function EditMapPage() {
   // Handle layer hover
   const handleLayerHover = useCallback((layer: Layer | null, isEntering: boolean) => {
     if (!layer) return;
-    
+
     if (isEntering) {
       // Don't apply hover style if already selected
       if (!selectedLayers.has(layer)) {
@@ -297,11 +297,11 @@ export default function EditMapPage() {
       setSelectedLayer(null);
       setShowStylePanel(false);
     }
-    
+
     const newSelected = new Set(selectedLayers);
     newSelected.delete(layer);
     setSelectedLayers(newSelected);
-    
+
     // Clear from refs
     originalStylesRef.current.delete(layer);
   }, [currentLayer, selectedLayers]);
@@ -385,11 +385,11 @@ export default function EditMapPage() {
     (async () => {
       const L = (await import("leaflet")).default;
       await import("@geoman-io/leaflet-geoman-free");
-      
+
       // Get custom icons
       const customDefaultIcon = await getCustomDefaultIcon();
       const customMarkerIcon = await getCustomMarkerIcon();
-      
+
       if (customDefaultIcon) {
         // Override icon mặc định bằng cách tạo constructor mới
         (L.Icon.Default as any) = L.Icon.extend({
@@ -400,18 +400,18 @@ export default function EditMapPage() {
             shadowSize: [0, 0],
             shadowAnchor: [0, 0]
           },
-          _getIconUrl: function() {
+          _getIconUrl: function () {
             return '';
           },
-          createIcon: function() {
+          createIcon: function () {
             return customDefaultIcon.createIcon();
           },
-          createShadow: function() {
+          createShadow: function () {
             return null;
           }
         });
       }
-      
+
       if (!alive || !el) return;
 
       const VN_CENTER: LatLngTuple = [14.058324, 108.277199];
@@ -421,28 +421,28 @@ export default function EditMapPage() {
       // Backend returns center as [lat, lng] in viewState
       const viewState = detail.viewState;
       const center = viewState?.center;
-      
+
       // Extract lat/lng from center array: [lat, lng]
-      const rawLat = center && Array.isArray(center) && center.length >= 2 
-        ? Number(center[0]) 
+      const rawLat = center && Array.isArray(center) && center.length >= 2
+        ? Number(center[0])
         : null;
-      const rawLng = center && Array.isArray(center) && center.length >= 2 
-        ? Number(center[1]) 
+      const rawLng = center && Array.isArray(center) && center.length >= 2
+        ? Number(center[1])
         : null;
       const rawZoom = viewState?.zoom ? Number(viewState.zoom) : null;
-      
+
       // Check if we have valid coordinates (not null, not zero/zero)
-      const hasValidCoordinates = rawLat !== null && rawLng !== null && 
+      const hasValidCoordinates = rawLat !== null && rawLng !== null &&
         !(Math.abs(rawLat) < 1e-6 && Math.abs(rawLng) < 1e-6);
       const hasValidZoom = rawZoom !== null && rawZoom >= 3 && rawZoom <= 20;
 
       // Use VN center only if map was just created, or if viewState is missing/invalid
       const useVN = createdFlag || !hasValidCoordinates;
-      const initialCenter: LatLngTuple = useVN 
-        ? VN_CENTER 
+      const initialCenter: LatLngTuple = useVN
+        ? VN_CENTER
         : [rawLat!, rawLng!]; // Safe to use ! here because hasValidCoordinates ensures they're not null
-      const initialZoom = useVN || !hasValidZoom 
-        ? VN_ZOOM 
+      const initialZoom = useVN || !hasValidZoom
+        ? VN_ZOOM
         : Math.min(Math.max(rawZoom!, 3), 20);
 
       const map = L.map(el, { zoomControl: false, minZoom: 2, maxZoom: 20 }).setView(initialCenter, initialZoom) as MapWithPM;
@@ -457,7 +457,7 @@ export default function EditMapPage() {
 
       try {
         // Features will be loaded in a separate useEffect
-        } catch (error) {
+      } catch (error) {
         console.error("Failed to initialize map:", error);
       }
 
@@ -494,15 +494,15 @@ export default function EditMapPage() {
       map.on("pm:create", async (e: PMCreateEvent) => {
         const extLayer = e.layer as ExtendedLayer;
         sketch.addLayer(e.layer);
-        
+
         // Áp dụng custom marker icon cho markers (giờ an toàn hơn)
         if (extLayer instanceof L.Marker && customMarkerIcon) {
           extLayer.setIcon(customMarkerIcon);
         }
-        
+
         // Store original style
         storeOriginalStyle(e.layer);
-        
+
         // Attach hover and click event listeners
         e.layer.on('mouseover', () => handleLayerHover(e.layer, true));
         e.layer.on('mouseout', () => handleLayerHover(e.layer, false));
@@ -513,12 +513,12 @@ export default function EditMapPage() {
           }
           handleLayerClick(e.layer, event.originalEvent.shiftKey);
         });
-        
+
         const type = getFeatureTypeUtil(extLayer);
         const serialized = serializeFeature(extLayer);
         const { geometryType, coordinates, text, annotationType } = serialized;
         const layerStyle = extractLayerStyle(extLayer);
-        
+
         const localId = `feature-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
         const newFeature: FeatureData = {
           id: localId,
@@ -527,13 +527,13 @@ export default function EditMapPage() {
           layer: extLayer,
           isVisible: true,
         };
-        
-        
+
+
         // Save to database
         // Note: saveFeature already handles adding to features state (optimistic update)
         try {
           const savedFeature = await saveFeature(detail.id, "", extLayer, features, setFeatures);
-          
+
           if (savedFeature) {
             // Attach edit/drag/rotate event listeners for the saved feature
             e.layer.on('pm:edit', async () => {
@@ -542,7 +542,7 @@ export default function EditMapPage() {
                 const lastUpdate = lastUpdateRef.current.get(savedFeature.featureId) || 0;
                 if (now - lastUpdate < 1000) return;
                 lastUpdateRef.current.set(savedFeature.featureId, now);
-                
+
                 try {
                   // Reset to original style first to remove selection styling
                   resetToOriginalStyle(e.layer);
@@ -552,14 +552,14 @@ export default function EditMapPage() {
                 }
               }
             });
-            
+
             e.layer.on('pm:dragend', async () => {
               if (savedFeature.featureId) {
                 const now = Date.now();
                 const lastUpdate = lastUpdateRef.current.get(savedFeature.featureId) || 0;
                 if (now - lastUpdate < 1000) return;
                 lastUpdateRef.current.set(savedFeature.featureId, now);
-                
+
                 try {
                   resetToOriginalStyle(e.layer);
                   await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
@@ -568,14 +568,14 @@ export default function EditMapPage() {
                 }
               }
             });
-            
+
             e.layer.on('pm:rotateend', async () => {
               if (savedFeature.featureId) {
                 const now = Date.now();
                 const lastUpdate = lastUpdateRef.current.get(savedFeature.featureId) || 0;
                 if (now - lastUpdate < 1000) return;
                 lastUpdateRef.current.set(savedFeature.featureId, now);
-                
+
                 try {
                   await updateFeatureInDB(detail.id, savedFeature.featureId, savedFeature);
                 } catch (error) {
@@ -583,7 +583,7 @@ export default function EditMapPage() {
                 }
               }
             });
-            
+
             // Update visibility for the saved feature
             setFeatureVisibility(prev => ({
               ...prev,
@@ -606,7 +606,7 @@ export default function EditMapPage() {
             [newFeature.id]: true
           }));
         }
-        
+
         // Enable dragging and editing via Geoman
         if ('pm' in e.layer && e.layer.pm) {
           (e.layer as GeomanLayer).pm.enable({
@@ -620,22 +620,22 @@ export default function EditMapPage() {
 
       sketch.on("pm:edit", async (e: { layer: Layer; shape: string }) => {
         const extLayer = e.layer as ExtendedLayer;
-        
+
         const editedFeature = features.find(f => f.layer === extLayer);
         if (editedFeature && editedFeature.featureId) {
           const now = Date.now();
           const lastUpdate = lastUpdateRef.current.get(editedFeature.featureId) || 0;
           if (now - lastUpdate < 1000) return; // Skip if updated less than 1 second ago
           lastUpdateRef.current.set(editedFeature.featureId, now);
-          
+
           try {
             await updateFeatureInDB(detail.id, editedFeature.featureId, editedFeature);
-            
+
             const serialized = serializeFeature(extLayer);
             const { geometryType, coordinates, text } = serialized;
             const layerStyle = extractLayerStyle(extLayer);
-                
-            setFeatures(prev => prev.map(f => 
+
+            setFeatures(prev => prev.map(f =>
               f.id === editedFeature.id || f.featureId === editedFeature.featureId
                 ? { ...f, layer: extLayer }
                 : f
@@ -648,18 +648,18 @@ export default function EditMapPage() {
 
       sketch.on("pm:dragend", async (e: { layer: Layer; shape: string }) => {
         const extLayer = e.layer as ExtendedLayer;
-        
+
         const draggedFeature = features.find(f => f.layer === extLayer);
         if (draggedFeature && draggedFeature.featureId) {
           const now = Date.now();
           const lastUpdate = lastUpdateRef.current.get(draggedFeature.featureId) || 0;
           if (now - lastUpdate < 1000) return; // Skip if updated less than 1 second ago
           lastUpdateRef.current.set(draggedFeature.featureId, now);
-          
+
           try {
             await updateFeatureInDB(detail.id, draggedFeature.featureId, draggedFeature);
-            
-            setFeatures(prev => prev.map(f => 
+
+            setFeatures(prev => prev.map(f =>
               f.id === draggedFeature.id || f.featureId === draggedFeature.featureId
                 ? { ...f, layer: extLayer }
                 : f
@@ -673,18 +673,18 @@ export default function EditMapPage() {
 
       sketch.on("pm:rotateend", async (e: { layer: Layer }) => {
         const extLayer = e.layer as ExtendedLayer;
-        
+
         const rotatedFeature = features.find(f => f.layer === extLayer);
         if (rotatedFeature && rotatedFeature.featureId) {
           const now = Date.now();
           const lastUpdate = lastUpdateRef.current.get(rotatedFeature.featureId) || 0;
           if (now - lastUpdate < 1000) return; // Skip if updated less than 1 second ago
           lastUpdateRef.current.set(rotatedFeature.featureId, now);
-          
+
           try {
             await updateFeatureInDB(detail.id, rotatedFeature.featureId, rotatedFeature);
-            
-            setFeatures(prev => prev.map(f => 
+
+            setFeatures(prev => prev.map(f =>
               f.id === rotatedFeature.id || f.featureId === rotatedFeature.featureId
                 ? { ...f, layer: extLayer }
                 : f
@@ -705,23 +705,23 @@ export default function EditMapPage() {
 
   useEffect(() => {
     if (!detail?.id || !isMapReady) return;
-    
+
     let alive = true;
-    
+
     (async () => {
       try {
         const L = (await import("leaflet")).default;
         const sketch = sketchRef.current;
         if (!sketch || !alive) return;
-        
+
         const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
-        
+
         // Attach event listeners to loaded features
         dbFeatures.forEach(feature => {
           if (feature.layer) {
             // Store original style
             storeOriginalStyle(feature.layer);
-            
+
             // Attach hover and click event listeners
             feature.layer.on('mouseover', () => handleLayerHover(feature.layer, true));
             feature.layer.on('mouseout', () => handleLayerHover(feature.layer, false));
@@ -732,7 +732,7 @@ export default function EditMapPage() {
               }
               handleLayerClick(feature.layer, event.originalEvent.shiftKey);
             });
-            
+
             // Attach edit/drag/rotate event listeners for database updates
             if (feature.featureId) {
               feature.layer.on('pm:edit', async () => {
@@ -740,7 +740,7 @@ export default function EditMapPage() {
                 const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
                 if (now - lastUpdate < 1000) return;
                 lastUpdateRef.current.set(feature.featureId!, now);
-                
+
                 try {
                   // Reset to original style first to remove selection styling
                   resetToOriginalStyle(feature.layer);
@@ -749,13 +749,13 @@ export default function EditMapPage() {
                   console.error("Error updating feature after edit:", error);
                 }
               });
-              
+
               feature.layer.on('pm:dragend', async () => {
                 const now = Date.now();
                 const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
                 if (now - lastUpdate < 1000) return;
                 lastUpdateRef.current.set(feature.featureId!, now);
-                
+
                 try {
                   // Reset to original style first to remove selection styling
                   resetToOriginalStyle(feature.layer);
@@ -764,13 +764,13 @@ export default function EditMapPage() {
                   console.error("Error updating feature after drag:", error);
                 }
               });
-              
+
               feature.layer.on('pm:rotateend', async () => {
                 const now = Date.now();
                 const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
                 if (now - lastUpdate < 1000) return;
                 lastUpdateRef.current.set(feature.featureId!, now);
-                
+
                 try {
                   await updateFeatureInDB(detail.id, feature.featureId!, feature);
                 } catch (error) {
@@ -778,7 +778,7 @@ export default function EditMapPage() {
                 }
               });
             }
-            
+
             // Enable dragging and editing via Geoman
             if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
               (feature.layer as GeomanLayer).pm.enable({
@@ -789,7 +789,7 @@ export default function EditMapPage() {
             }
           }
         });
-        
+
         if (alive) {
           setFeatures(dbFeatures);
           const initialFeatureVisibility: Record<string, boolean> = {};
@@ -805,7 +805,7 @@ export default function EditMapPage() {
         console.error("Failed to load features from database:", error);
       }
     })();
-    
+
     return () => {
       alive = false;
     };
@@ -814,26 +814,26 @@ export default function EditMapPage() {
   useEffect(() => {
     if (!mapRef.current || !detail?.layers || detail.layers.length === 0 || !isMapReady) return;
     const map = mapRef.current;
-    
+
     let alive = true;
-    
+
     (async () => {
       setLayers((detail.layers));
-      
+
       dataLayerRefs.current.forEach((layer) => {
         if (map.hasLayer(layer)) {
           map.removeLayer(layer);
         }
       });
       dataLayerRefs.current.clear();
-      
+
       const initialLayerVisibility: Record<string, boolean> = {};
-      
+
       for (const layer of detail.layers) {
         if (!alive) break;
         const isVisible = layer.isPublic ?? true;
         initialLayerVisibility[layer.id] = isVisible;
-        
+
         try {
           const loaded = await loadLayerToMap(map as any, layer as LayerDTO, dataLayerRefs);
           if (loaded && !isVisible) {
@@ -845,12 +845,12 @@ export default function EditMapPage() {
         } catch (error) {
           console.error(`Error loading layer ${layer.layerName}:`, error);
         }
-        
+
       }
-      
+
       if (alive) setLayerVisibility(initialLayerVisibility);
     })();
-    
+
     return () => {
       alive = false;
     };
@@ -858,13 +858,13 @@ export default function EditMapPage() {
 
   useEffect(() => {
     if (!mapRef.current) return;
-    
+
     Object.entries(layerVisibility).forEach(([layerId, isVisible]) => {
       const layerOnMap = dataLayerRefs.current.get(layerId);
       if (!layerOnMap) return;
-      
+
       const isOnMap = mapRef.current!.hasLayer(layerOnMap);
-      
+
       if (isVisible && !isOnMap) {
         mapRef.current!.addLayer(layerOnMap);
       } else if (!isVisible && isOnMap) {
@@ -875,13 +875,13 @@ export default function EditMapPage() {
 
   useEffect(() => {
     if (!mapRef.current || !sketchRef.current) return;
-    
+
     Object.entries(featureVisibility).forEach(([featureId, isVisible]) => {
       const feature = features.find(f => f.id === featureId || f.featureId === featureId);
       if (!feature) return;
-      
+
       const isOnMap = sketchRef.current!.hasLayer(feature.layer);
-      
+
       if (isVisible && !isOnMap) {
         sketchRef.current!.addLayer(feature.layer);
       } else if (!isVisible && isOnMap) {
@@ -900,7 +900,7 @@ export default function EditMapPage() {
       const { enabled } = e.detail;
       // Set global flag for zone selection mode
       (window as any).__zoneSelectionMode = enabled;
-      
+
       // Optionally add visual feedback by changing cursor
       if (mapRef.current) {
         const mapContainer = mapRef.current.getContainer();
@@ -913,7 +913,7 @@ export default function EditMapPage() {
     };
 
     window.addEventListener('storymap:enableZoneSelection', handleEnableZoneSelection as EventListener);
-    
+
     return () => {
       window.removeEventListener('storymap:enableZoneSelection', handleEnableZoneSelection as EventListener);
     };
@@ -937,7 +937,7 @@ export default function EditMapPage() {
     };
 
     window.addEventListener('zone-contextmenu', handleZoneContextMenu as EventListener);
-    
+
     return () => {
       window.removeEventListener('zone-contextmenu', handleZoneContextMenu as EventListener);
     };
@@ -956,7 +956,7 @@ export default function EditMapPage() {
       }
 
       isPickingPoi = true;
-      
+
       // Thay đổi cursor thành crosshair
       const mapContainer = map.getContainer();
       mapContainer.style.cursor = 'crosshair';
@@ -966,7 +966,7 @@ export default function EditMapPage() {
         if (!isPickingPoi) return;
 
         const { lat, lng } = e.latlng;
-        
+
         // Dispatch event với tọa độ đã chọn
         window.dispatchEvent(
           new CustomEvent("poi:locationPicked", {
@@ -979,7 +979,7 @@ export default function EditMapPage() {
         // Reset cursor và tắt picking mode
         mapContainer.style.cursor = '';
         isPickingPoi = false;
-        
+
         if (clickHandler) {
           map.off('click', clickHandler);
           clickHandler = null;
@@ -1003,9 +1003,9 @@ export default function EditMapPage() {
   useEffect(() => {
     const handleLayerFeatureClick = (e: CustomEvent) => {
       const { leafletLayer } = e.detail;
-      
+
       if (!leafletLayer || !('setStyle' in leafletLayer)) return;
-      
+
       // Store original style if not already stored
       if (!originalStylesRef.current.has(leafletLayer)) {
         const currentOptions = (leafletLayer as any).options || {};
@@ -1019,7 +1019,7 @@ export default function EditMapPage() {
         };
         originalStylesRef.current.set(leafletLayer, style);
       }
-      
+
       // Clear previous selections
       selectedLayers.forEach(layer => {
         if (layer !== leafletLayer) {
@@ -1029,20 +1029,20 @@ export default function EditMapPage() {
           }
         }
       });
-      
+
       // Apply selection style
       (leafletLayer as any).setStyle({
         color: '#ff6600',
         weight: 4,
         fillOpacity: 0.5
       });
-      
+
       setSelectedLayers(new Set([leafletLayer]));
       setCurrentLayer(leafletLayer);
     };
 
     window.addEventListener('layer-feature-click', handleLayerFeatureClick as EventListener);
-    
+
     return () => {
       window.removeEventListener('layer-feature-click', handleLayerFeatureClick as EventListener);
     };
@@ -1051,7 +1051,7 @@ export default function EditMapPage() {
   // Map click handler for deselecting when clicking on empty space or base layer
   useEffect(() => {
     if (!mapRef.current) return;
-    
+
     const handleMapClick = (e: LeafletMapClickEvent) => {
       // Only reset if clicking directly on map/base layer (not on a feature layer)
       const target = e.originalEvent.target;
@@ -1071,7 +1071,7 @@ export default function EditMapPage() {
     };
 
     mapRef.current.on('click', handleMapClick);
-    
+
     return () => {
       mapRef.current?.off('click', handleMapClick);
     };
@@ -1098,7 +1098,7 @@ export default function EditMapPage() {
       mapRef.current.zoomIn();
     }
   };
-  
+
   const zoomOut = () => {
     if (mapRef.current) {
       mapRef.current.zoomOut();
@@ -1211,7 +1211,7 @@ export default function EditMapPage() {
 
   const clearSketch = useCallback(async () => {
     if (!detail) return;
-    
+
     // Delete all features from database
     for (const feature of features) {
       if (feature.featureId) {
@@ -1222,7 +1222,7 @@ export default function EditMapPage() {
         }
       }
     }
-    
+
     sketchRef.current?.clearLayers();
     setFeatures([]);
     setFeatureVisibility({});
@@ -1230,9 +1230,9 @@ export default function EditMapPage() {
 
   const onLayerVisibilityChange = useCallback(async (layerId: string, isVisible: boolean) => {
     if (!detail?.id || !mapRef.current) return;
-    
+
     const layerData = layers.find(l => l.id === layerId);
-    
+
     await handleLayerVisibilityChange(
       detail.id,
       layerId,
@@ -1246,7 +1246,7 @@ export default function EditMapPage() {
 
   const onFeatureVisibilityChange = useCallback(async (featureId: string, isVisible: boolean) => {
     if (!detail?.id) return;
-    
+
     await handleFeatureVisibilityChange(
       detail.id,
       featureId,
@@ -1270,14 +1270,14 @@ export default function EditMapPage() {
 
   const onUpdateFeature = useCallback(async (featureId: string, updates: UpdateMapFeatureRequest) => {
     if (!detail) return;
-    
+
     try {
       await updateMapFeature(detail.id, featureId, updates);
-      
+
       // Update local state
-      setFeatures(prev => prev.map(f => 
-        f.featureId === featureId 
-          ? { ...f, name: updates.name || f.name } 
+      setFeatures(prev => prev.map(f =>
+        f.featureId === featureId
+          ? { ...f, name: updates.name || f.name }
           : f
       ));
     } catch (error) {
@@ -1287,10 +1287,10 @@ export default function EditMapPage() {
   // Apply style visually to layer
   const onApplyStyle = useCallback((layer: Layer, styleOptions: LayerStyle) => {
     if (!layer || !('setStyle' in layer)) return;
-    
+
     // Apply style
     (layer as unknown as PathLayer).setStyle(styleOptions);
-    
+
     // Update original style ref
     originalStylesRef.current.set(layer, {
       ...styleOptions
@@ -1299,27 +1299,27 @@ export default function EditMapPage() {
 
   const onDeleteFeature = useCallback(async (featureId: string) => {
     if (!detail) return;
-    
+
     const feature = features.find(f => f.id === featureId || f.featureId === featureId);
     if (!feature) {
       return;
     }
-    
+
     // Handle layer deletion state cleanup
     handleLayerDelete(feature.layer);
-    
+
     if (mapRef.current && sketchRef.current) {
       sketchRef.current.removeLayer(feature.layer);
     }
-    
+
     setFeatures(prev => prev.filter(f => f.id !== featureId && f.featureId !== featureId));
-    
+
     setFeatureVisibility(prev => {
       const newVisibility = { ...prev };
       delete newVisibility[featureId];
       return newVisibility;
     });
-    
+
     if (feature.featureId) {
       try {
         await deleteFeatureFromDB(detail.id, feature.featureId);
@@ -1327,7 +1327,7 @@ export default function EditMapPage() {
         console.error("Error deleting from database:", error);
       }
     }
-    
+
   }, [detail, features, handleLayerDelete]);
 
   // Keyboard event handler for delete/backspace
@@ -1339,9 +1339,9 @@ export default function EditMapPage() {
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
           return;
         }
-        
+
         e.preventDefault();
-        
+
         // Delete all selected layers
         const layersToDelete = Array.from(selectedLayers);
         for (const layer of layersToDelete) {
@@ -1386,7 +1386,7 @@ export default function EditMapPage() {
   const getCurrentFeatureStyle = useCallback((featureId: string) => {
     const feature = features.find(f => f.id === featureId);
     if (!feature) return {};
-    
+
     return extractLayerStyle(feature.layer);
   }, [features]);
 
@@ -1543,24 +1543,24 @@ export default function EditMapPage() {
                   const file = e.target.files?.[0];
                   if (file && mapId) {
                     try {
-                  showToast("info", "Đang tải file lên...");
-                      
+                      showToast("info", "Đang tải file lên...");
+
                       // Backend tự động tạo layer mới, chỉ cần truyền mapId
                       const result = await uploadGeoJsonToMap(mapId, file);
-                      
-                  showToast("info", "Đang load dữ liệu...");
-                      
+
+                      showToast("info", "Đang load dữ liệu...");
+
                       // Refresh toàn bộ map detail để lấy layer mới
                       const updatedDetail = await getMapDetail(mapId);
                       setDetail(updatedDetail);
-                      
-                  showToast("success", `Tải lên thành công! Đã thêm ${result.featuresAdded} đối tượng vào layer "${result.layerId}".`);
-                      
+
+                      showToast("success", `Tải lên thành công! Đã thêm ${result.featuresAdded} đối tượng vào layer "${result.layerId}".`);
+
                       // Clear the input
                       e.target.value = '';
                     } catch (error) {
                       console.error("Upload error:", error);
-                  showToast("error", error instanceof Error ? error.message : "Tải file thất bại");
+                      showToast("error", error instanceof Error ? error.message : "Tải file thất bại");
                       e.target.value = '';
                     }
                   }
@@ -1632,7 +1632,7 @@ export default function EditMapPage() {
                 title="Re-enable delete confirmation dialogs"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
               </button>
             </div>
@@ -1687,16 +1687,18 @@ export default function EditMapPage() {
 
       {/* Right Panel - POI or Story Map Timeline */}
       {detail && showPoiPanel && <MapPoiPanel mapId={detail.id} isOpen={showPoiPanel} />}
-      
+
       {showSegmentPanel && detail && (
-        <div className="fixed right-30 top-16 bottom-0 w-[420px] z-[1000]">
-          <StoryMapTimeline
-            mapId={detail.id}
-            currentMap={mapRef.current}
-            onSegmentSelect={(segment) => {
-              console.log("Segment selected:", segment);
-            }}
-          />
+        <div className="fixed left-0 right-0 bottom-0 z-[1000] pointer-events-none">
+          <div className="pointer-events-auto">
+            <StoryMapTimeline
+              mapId={detail.id}
+              currentMap={mapRef.current}
+              onSegmentSelect={(segment) => {
+                console.log("Segment selected:", segment);
+              }}
+            />
+          </div>
         </div>
       )}
 
