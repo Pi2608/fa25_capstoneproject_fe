@@ -119,7 +119,11 @@ export default function TimelineDialogs({
         onClose={onCloseConfirmDeleteZone}
         onConfirm={onConfirmDeleteZone}
         title="Remove Zone"
-        message="Remove this zone from segment?"
+        message={
+          confirmDeleteZone
+            ? `Remove "${confirmDeleteZone.zone?.name ?? "this zone"}" from segment?`
+            : ""
+        }
         variant="warning"
       />
     </>
