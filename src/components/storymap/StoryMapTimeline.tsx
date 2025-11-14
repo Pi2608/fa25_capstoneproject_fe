@@ -176,6 +176,38 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
                     />
                   </div>
                 </div>
+
+                {/* Thông báo khi đang chờ chọn vị trí */}
+                {handlers.waitingForLocation && (
+                  <div className="mt-2 ml-5 mr-5 bg-blue-900/20 border border-blue-500/50 rounded-lg p-3">
+                    <div className="flex items-start gap-2">
+                      <div className="flex-shrink-0 mt-0.5">
+                        <svg className="w-4 h-4 text-blue-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-blue-300 text-xs font-medium">
+                          Vui lòng chọn một địa điểm trên bản đồ
+                        </p>
+                        <p className="text-blue-400 text-[10px] mt-0.5">
+                          Click vào bất kỳ đâu trên bản đồ để đặt Location
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          handlers.setShowLocationDialog(false);
+                          handlers.setWaitingForLocation(false);
+                        }}
+                        className="flex-shrink-0 text-blue-400 hover:text-blue-300 transition-colors text-xs"
+                        title="Hủy"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="w-16 flex-shrink-0" />
             </div>
@@ -228,8 +260,12 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
             onCloseLayerDialog={() => handlers.setShowLayerDialog(false)}
             onSaveLayer={handlers.handleAddLayer}
             showLocationDialog={handlers.showLocationDialog}
-            onCloseLocationDialog={() => handlers.setShowLocationDialog(false)}
+            onCloseLocationDialog={() => {
+              handlers.setShowLocationDialog(false);
+              handlers.setWaitingForLocation(false);
+            }}
             onSaveLocation={handlers.handleAddLocation}
+            onWaitingStateChange={(waiting) => handlers.setWaitingForLocation(waiting)}
             confirmDelete={handlers.confirmDelete}
             onCloseConfirmDelete={() => handlers.setConfirmDelete(null)}
             onConfirmDelete={handlers.handleDeleteSegment}

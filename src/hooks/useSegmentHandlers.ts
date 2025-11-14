@@ -40,6 +40,7 @@ export function useSegmentHandlers({
   const [showZoneDialog, setShowZoneDialog] = useState(false);
   const [showLayerDialog, setShowLayerDialog] = useState(false);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
+  const [waitingForLocation, setWaitingForLocation] = useState(false);
   const [targetSegmentId, setTargetSegmentId] = useState<string>("");
   const [confirmDelete, setConfirmDelete] = useState<Segment | null>(null);
   const [confirmDeleteZone, setConfirmDeleteZone] = useState<SegmentZone | null>(null);
@@ -191,18 +192,28 @@ export function useSegmentHandlers({
     try {
       const newLocation = await createLocation(mapId, targetSegmentId, data);
       setShowLocationDialog(false);
+      setWaitingForLocation(false);
       
+      // Update segments state với location mới
+      let updatedSegment: Segment | undefined;
       updateSegmentsState(segs => segs.map(seg => {
         if (seg.segmentId === targetSegmentId) {
-          return { ...seg, locations: [...seg.locations, newLocation] };
+          updatedSegment = { ...seg, locations: [...(seg.locations || []), newLocation] };
+          return updatedSegment;
         }
         return seg;
       }));
       
-      if (activeSegmentId === targetSegmentId) {
-        const updatedSegment = segments.find(s => s.segmentId === targetSegmentId);
-        if (updatedSegment) {
-          await onViewSegment({ ...updatedSegment, locations: [...updatedSegment.locations, newLocation] });
+      // Luôn luôn render location mới trên map nếu segment đang được view
+      // hoặc view lại segment để render location mới
+      if (updatedSegment) {
+        // Nếu segment đang active, re-render với location mới
+        if (activeSegmentId === targetSegmentId) {
+          await onViewSegment(updatedSegment);
+        } else {
+          // Nếu segment chưa active, view segment để render location mới
+          // Hoặc chỉ thêm location vào map mà không cần view toàn bộ segment
+          await onViewSegment(updatedSegment);
         }
       }
     } catch (error) {
@@ -270,6 +281,7 @@ export function useSegmentHandlers({
 
   const openAddLocationDialog = (segmentId: string) => {
     setTargetSegmentId(segmentId);
+    setWaitingForLocation(true);
     setShowLocationDialog(true);
   };
 
@@ -284,6 +296,8 @@ export function useSegmentHandlers({
     setShowLayerDialog,
     showLocationDialog,
     setShowLocationDialog,
+    waitingForLocation,
+    setWaitingForLocation,
     targetSegmentId,
     confirmDelete,
     setConfirmDelete,

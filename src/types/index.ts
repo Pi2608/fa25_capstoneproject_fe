@@ -18,3 +18,6 @@ export * from "./map";
 
 // Re-export component types
 export * from "./components";
+
+// Re-export location/POI types
+export * from "./location-poi";
