@@ -1,9 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import React, { Fragment, useEffect, useState } from "react";
 
 import type { GeoJsonObject, Point, GeometryCollection } from "geojson";
 import { createMapPoi, CreatePoiReq, deletePoi, getMapPois, MapPoi, updatePoi, updatePoiDisplayConfig, updatePoiInteractionConfig } from "@/lib/api-poi";
+import LocationPoiDialog from "@/components/shared/LocationPoiDialog";
+import type { LocationPoiDialogForm, LocationType } from "@/types";
 
 type Props = { mapId: string };
 
@@ -53,6 +55,7 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
   const [editingPoiId, setEditingPoiId] = useState<string | null>(null);
   const [expandedPoiId, setExpandedPoiId] = useState<string | null>(null);
   const [isPickingLocation, setIsPickingLocation] = useState(false);
+  const [waitingForLocation, setWaitingForLocation] = useState(false);
 
   const [displayConfig, setDisplayConfig] = useState({
     isVisible: undefined as boolean | undefined,
@@ -68,12 +71,30 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
     externalUrl: undefined as string | undefined,
   });
 
-  const [form, setForm] = useState<CreatePoiReq>({
+  const [form, setForm] = useState<LocationPoiDialogForm>({
     title: "",
     subtitle: "",
+    storyContent: "",
+    locationType: "PointOfInterest",
     markerGeometry: "",
+    iconType: "📍",
+    iconColor: "#FF0000",
+    iconSize: 32,
     highlightOnEnter: false,
-    shouldPin: false,
+    showTooltip: true,
+    tooltipContent: "",
+    openSlideOnClick: false,
+    slideContent: "",
+    playAudioOnClick: false,
+    audioUrl: "",
+    externalUrl: "",
+    displayOrder: 0,
+    isVisible: true,
+    zIndex: 100,
+    mediaResources: "",
+    entryEffect: "fade",
+    entryDelayMs: 0,
+    entryDurationMs: 400,
   });
 
   useEffect(() => {
@@ -97,8 +118,39 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
   };
 
   const openCreate = () => {
-    // Bật chế độ chọn vị trí trên map
+    // Reset form
+    setForm({
+      title: "",
+      subtitle: "",
+      storyContent: "",
+      locationType: "PointOfInterest",
+      markerGeometry: "",
+      iconType: "📍",
+      iconColor: "#FF0000",
+      iconSize: 32,
+      highlightOnEnter: false,
+      showTooltip: true,
+      tooltipContent: "",
+      openSlideOnClick: false,
+      slideContent: "",
+      playAudioOnClick: false,
+      audioUrl: "",
+      externalUrl: "",
+      displayOrder: 0,
+      isVisible: true,
+      zIndex: 100,
+      mediaResources: "",
+      entryEffect: "fade",
+      entryDelayMs: 0,
+      entryDurationMs: 400,
+    });
+    setEditingPoiId(null);
+    setError(null);
+    // Không mở dialog ngay, mà bật chế độ chọn vị trí
+    setWaitingForLocation(true);
     setIsPickingLocation(true);
+    setDialogOpen(false);
+    // Dispatch event để map component biết cần bật picking mode
     window.dispatchEvent(
       new CustomEvent("poi:startPickLocation", {
         detail: { mapId },
@@ -109,55 +161,60 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
   // Lắng nghe sự kiện khi user chọn vị trí trên map
   useEffect(() => {
     const handleLocationPicked = async (e: Event) => {
-      if (!isPickingLocation) {
-        console.warn('⚠️ PoiPanel: Not in picking mode, ignoring event');
+      // Chỉ xử lý khi đang chờ chọn vị trí
+      if (!waitingForLocation && !isPickingLocation) {
         return;
       }
       
       const customEvent = e as CustomEvent;
       const { lngLat } = customEvent.detail;
+      
+      // Cập nhật markerGeometry trong form
+      const markerGeometry = JSON.stringify({
+        type: "Point",
+        coordinates: [lngLat[0], lngLat[1]], // [lng, lat]
+      });
+      
+      setForm(prev => ({
+        ...prev,
+        markerGeometry,
+      }));
+      
+      // Tắt chế độ chọn vị trí và mở dialog
       setIsPickingLocation(false);
-      
-      // Tạo POI với tên mặc định
-      const defaultPoi: CreatePoiReq = {
-        title: `POI ${pois.length + 1}`,
-        subtitle: "",
-        markerGeometry: JSON.stringify({
-          type: "Point",
-          coordinates: [lngLat[0], lngLat[1]],
-        }),
-        highlightOnEnter: false,
-        shouldPin: true,
-      };
-      
-      try {
-        setBusy(true);
-        await createMapPoi(mapId, defaultPoi);
-        await refresh();
-      } catch (err) {
-        console.error('❌ PoiPanel: Failed to create POI:', err);
-        setError("Tạo POI thất bại");
-      } finally {
-        setBusy(false);
-      }
+      setWaitingForLocation(false);
+      setDialogOpen(true);
     };
 
     window.addEventListener("poi:locationPicked", handleLocationPicked);
     return () => {
       window.removeEventListener("poi:locationPicked", handleLocationPicked);
     };
-  }, [isPickingLocation, pois.length, mapId]);
+  }, [waitingForLocation, isPickingLocation]);
 
-  const openEdit = (p: MapPoi) => {
+  const openEdit = (p: MapPoiExt) => {
     setEditingPoiId(p.poiId);
     setForm({
       title: p.title,
       subtitle: p.subtitle ?? "",
+      storyContent: p.storyContent ?? "",
       markerGeometry: p.markerGeometry ?? "",
+      locationType: (p.locationType as LocationType) ?? "PointOfInterest",
       highlightOnEnter: !!p.highlightOnEnter,
-      shouldPin: !!p.shouldPin,
+      showTooltip: p.showTooltip ?? true,
+      tooltipContent: p.tooltipContent ?? "",
+      openSlideOnClick: p.openSlideOnClick ?? false,
+      slideContent: p.slideContent ?? "",
+      playAudioOnClick: p.playAudioOnClick ?? false,
+      audioUrl: p.audioUrl ?? "",
+      externalUrl: p.externalUrl ?? "",
+      displayOrder: p.displayOrder ?? 0,
+      isVisible: p.isVisible ?? true,
+      zIndex: p.zIndex ?? 100,
+      mediaResources: p.mediaResources ?? "",
     });
     setDialogOpen(true);
+    setIsPickingLocation(false);
   };
 
   const toggleExpand = (p: MapPoiExt) => {
@@ -180,24 +237,87 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
   };
 
   const handleSubmit = async (): Promise<void> => {
+    if (!form.markerGeometry) {
+      setError("Vui lòng chọn vị trí trên bản đồ");
+      return;
+    }
     try {
       setBusy(true);
+      // Convert LocationPoiDialogForm to CreatePoiReq
+      const payload: CreatePoiReq = {
+        title: form.title,
+        subtitle: form.subtitle || undefined,
+        storyContent: form.storyContent || undefined,
+        locationType: form.locationType || "PointOfInterest",
+        markerGeometry: form.markerGeometry,
+        displayOrder: form.displayOrder ?? 0,
+        highlightOnEnter: form.highlightOnEnter ?? false,
+        showTooltip: form.showTooltip ?? true,
+        tooltipContent: form.tooltipContent || undefined,
+        openSlideOnClick: form.openSlideOnClick ?? false,
+        slideContent: form.slideContent || undefined,
+        playAudioOnClick: form.playAudioOnClick ?? false,
+        audioUrl: form.audioUrl || undefined,
+        externalUrl: form.externalUrl || undefined,
+        isVisible: form.isVisible ?? true,
+        zIndex: form.zIndex ?? 100,
+        mediaResources: form.mediaResources || undefined,
+      };
+      
       if (editingPoiId) {
-        await updatePoi(editingPoiId, form);
+        await updatePoi(editingPoiId, payload);
       } else {
-        await createMapPoi(mapId, form);
+        await createMapPoi(mapId, payload);
       }
       await refresh();
+      
+      // Lưu editingPoiId trước khi reset
+      const wasEditing = !!editingPoiId;
+      const editedPoiId = editingPoiId;
+      
       setDialogOpen(false);
       setEditingPoiId(null);
+      setIsPickingLocation(false);
+      setWaitingForLocation(false);
+      // Dispatch event để tắt picking mode
+      window.dispatchEvent(
+        new CustomEvent("poi:stopPickLocation", {
+          detail: { mapId },
+        })
+      );
+      // Dispatch event để refresh POIs trên map
+      window.dispatchEvent(
+        new CustomEvent(wasEditing ? "poi:updated" : "poi:created", {
+          detail: { mapId, poiId: editedPoiId || "new" },
+        })
+      );
       setForm({
         title: "",
         subtitle: "",
+        storyContent: "",
+        locationType: "PointOfInterest",
         markerGeometry: "",
+        iconType: "📍",
+        iconColor: "#FF0000",
+        iconSize: 32,
         highlightOnEnter: false,
-        shouldPin: false,
+        showTooltip: true,
+        tooltipContent: "",
+        openSlideOnClick: false,
+        slideContent: "",
+        playAudioOnClick: false,
+        audioUrl: "",
+        externalUrl: "",
+        displayOrder: 0,
+        isVisible: true,
+        zIndex: 100,
+        mediaResources: "",
+        entryEffect: "fade",
+        entryDelayMs: 0,
+        entryDurationMs: 400,
       });
-    } catch {
+    } catch (err) {
+      console.error("Failed to save POI:", err);
       setError(editingPoiId ? "Cập nhật POI thất bại" : "Tạo POI thất bại");
     } finally {
       setBusy(false);
@@ -210,6 +330,12 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
       setBusy(true);
       await deletePoi(poiId);
       await refresh();
+      // Dispatch event để refresh POIs trên map
+      window.dispatchEvent(
+        new CustomEvent("poi:deleted", {
+          detail: { mapId, poiId },
+        })
+      );
     } catch {
       setError("Xoá POI thất bại");
     } finally {
@@ -252,26 +378,63 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
         </div>
         <button
           onClick={openCreate}
-          disabled={isPickingLocation}
+          disabled={waitingForLocation}
           className={`px-3 py-1.5 ${
-            isPickingLocation 
+            waitingForLocation 
               ? "bg-yellow-600 hover:bg-yellow-500" 
               : "bg-emerald-600 hover:bg-emerald-500"
           } text-white rounded-lg text-sm font-medium flex items-center gap-1 disabled:cursor-not-allowed`}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {isPickingLocation ? (
+            {waitingForLocation ? (
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
             ) : (
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             )}
           </svg>
-          {isPickingLocation ? "Chọn vị trí..." : "POI"}
+          {waitingForLocation ? "Đang chọn..." : "Tạo POI"}
         </button>
       </div>
 
       {/* POI Content */}
       <div className="flex-1 overflow-y-auto p-4">
+        {/* Thông báo khi đang chờ chọn vị trí */}
+        {waitingForLocation && (
+          <div className="mb-4 bg-blue-900/20 border border-blue-500/50 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0 mt-0.5">
+                <svg className="w-5 h-5 text-blue-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <p className="text-blue-300 font-medium text-sm mb-1">
+                  Vui lòng chọn một địa điểm trên bản đồ
+                </p>
+                <p className="text-blue-400 text-xs">
+                  Click vào bất kỳ đâu trên bản đồ để đặt POI của bạn
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setWaitingForLocation(false);
+                  setIsPickingLocation(false);
+                  window.dispatchEvent(
+                    new CustomEvent("poi:stopPickLocation", {
+                      detail: { mapId },
+                    })
+                  );
+                }}
+                className="flex-shrink-0 text-blue-400 hover:text-blue-300 transition-colors"
+                title="Hủy"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
         {loading ? (
           <div className="flex items-center justify-center h-full text-zinc-500">
             <div className="text-center">
@@ -542,18 +705,36 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
 
       {/* Dialogs */}
       {dialogOpen && (
-        <AddPoiDialog
+        <LocationPoiDialog
           open={dialogOpen}
           busy={busy}
+          mode="poi"
           form={form}
+          isPickingLocation={isPickingLocation}
           titleText={editingPoiId ? "Sửa POI" : "Thêm POI"}
           submitLabel={busy ? "Đang lưu..." : editingPoiId ? "Cập nhật" : "Tạo mới"}
           onClose={() => {
             setDialogOpen(false);
             setEditingPoiId(null);
+            setIsPickingLocation(false);
+            setWaitingForLocation(false);
+            // Dispatch event để tắt picking mode
+            window.dispatchEvent(
+              new CustomEvent("poi:stopPickLocation", {
+                detail: { mapId },
+              })
+            );
           }}
           onChange={(f) => setForm(f)}
           onSubmit={() => void handleSubmit()}
+          onPickLocation={() => {
+            setIsPickingLocation(true);
+            window.dispatchEvent(
+              new CustomEvent("poi:startPickLocation", {
+                detail: { mapId },
+              })
+            );
+          }}
         />
       )}
 
@@ -568,118 +749,3 @@ export default function MapPoiPanel({ mapId, isOpen }: PanelProps) {
   );
 }
 
-function AddPoiDialog({
-  open,
-  busy,
-  form,
-  titleText,
-  submitLabel,
-  onClose,
-  onSubmit,
-  onChange,
-}: {
-  open: boolean;
-  busy: boolean;
-  form: CreatePoiReq;
-  titleText: string;
-  submitLabel: string;
-  onClose: () => void;
-  onSubmit: () => void;
-  onChange: (next: CreatePoiReq) => void;
-}) {
-  const setField = <K extends keyof CreatePoiReq>(key: K, val: CreatePoiReq[K]) => {
-    onChange({ ...form, [key]: val });
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const json = JSON.parse(text) as GeoJsonObject;
-      setField("markerGeometry", JSON.stringify(json));
-    } catch {
-      alert("File không hợp lệ hoặc không phải JSON!");
-    }
-  };
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-[5000] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative bg-zinc-900 rounded-xl text-white w-[460px] shadow-2xl ring-1 ring-white/10">
-        <div className="flex justify-between items-center px-4 py-3 border-b border-white/10">
-          <div className="font-semibold">{titleText}</div>
-          <button onClick={onClose} className="text-white/60 hover:text-white">✕</button>
-        </div>
-
-        <div className="p-4 space-y-3 text-sm">
-          <div>
-            <label className="block text-white/60 mb-1">Tiêu đề</label>
-            <input
-              value={form.title}
-              onChange={(e) => setField("title", e.target.value)}
-              placeholder="VD: Cầu Sài Gòn"
-              className="w-full rounded bg-zinc-800 px-2 py-2 outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-white/60 mb-1">Phụ đề</label>
-            <input
-              value={form.subtitle ?? ""}
-              onChange={(e) => setField("subtitle", e.target.value)}
-              placeholder="VD: Điểm nhìn đẹp lúc hoàng hôn"
-              className="w-full rounded bg-zinc-800 px-2 py-2 outline-none"
-            />
-          </div>
-
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={form.highlightOnEnter ?? false}
-                onChange={(e) => setField("highlightOnEnter", e.target.checked)}
-              />
-              Highlight khi vào bản đồ
-            </label>
-            <label className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                checked={form.shouldPin ?? false}
-                onChange={(e) => setField("shouldPin", e.target.checked)}
-              />
-              Pin trên bản đồ
-            </label>
-          </div>
-
-          <div>
-            <label className="block text-white/60 mb-1">Hình học GeoJSON</label>
-            <input type="file" accept=".json,.geojson" onChange={handleFileUpload} />
-            <textarea
-              rows={5}
-              value={form.markerGeometry ?? ""}
-              onChange={(e) => setField("markerGeometry", e.target.value)}
-              placeholder='{"type":"Point","coordinates":[106.73,10.80]}'
-              className="w-full mt-2 rounded bg-zinc-800 px-2 py-2 font-mono text-xs"
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
-            <button className="px-3 py-1.5 rounded bg-zinc-700 hover:bg-zinc-600" onClick={onClose}>
-              Hủy
-            </button>
-            <button
-              className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60"
-              onClick={onSubmit}
-              disabled={!form.title.trim() || !form.markerGeometry || busy}
-            >
-              {submitLabel}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}

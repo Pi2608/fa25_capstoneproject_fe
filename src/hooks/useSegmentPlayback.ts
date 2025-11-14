@@ -191,23 +191,43 @@ export function useSegmentPlayback({
             const coords = geoJsonData.coordinates;
             const latLng: [number, number] = [coords[1], coords[0]];
 
-            const iconHtml = `<div style="
-              font-size: ${location.iconSize || 32}px;
-              text-align: center;
-              filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-              color: ${location.iconColor || '#FF0000'};
-            ">${location.iconType || '📍'}</div>`;
+            // Create marker icon based on config
+            const iconSize = location.iconSize || 32;
+            const iconColor = location.iconColor || '#FF0000';
+            
+            // Determine icon content: IconUrl (image), IconType (emoji), or default
+            let iconHtml = '';
+            if (location.iconUrl) {
+              // Use custom image
+              iconHtml = `<img src="${location.iconUrl}" style="
+                width: ${iconSize}px;
+                height: ${iconSize}px;
+                object-fit: contain;
+                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+              " />`;
+            } else {
+              // Use emoji or default
+              const iconContent = location.iconType || '📍';
+              iconHtml = `<div style="
+                font-size: ${iconSize}px;
+                text-align: center;
+                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+                color: ${iconColor};
+                line-height: 1;
+              ">${iconContent}</div>`;
+            }
 
             const marker = L.marker(latLng, {
               icon: L.divIcon({
                 className: 'location-marker',
                 html: iconHtml,
-                iconSize: [location.iconSize || 32, location.iconSize || 32],
-                iconAnchor: [(location.iconSize || 32) / 2, location.iconSize || 32],
+                iconSize: [iconSize, iconSize],
+                iconAnchor: [iconSize / 2, iconSize],
               }),
               zIndexOffset: location.zIndex || 100,
             });
 
+            // Add tooltip if enabled - support HTML content
             if (location.showTooltip && location.tooltipContent) {
               marker.bindTooltip(location.tooltipContent, {
                 permanent: false,
@@ -217,21 +237,115 @@ export function useSegmentPlayback({
               });
             }
 
+            // Add popup if enabled - rich HTML content with media, audio, external link
             if (location.openPopupOnClick && location.popupContent) {
+              // Build media gallery
+              let mediaHtml = '';
+              if (location.mediaUrls) {
+                const mediaUrls = location.mediaUrls.split('\n').filter((url: string) => url.trim());
+                if (mediaUrls.length > 0) {
+                  mediaHtml = '<div style="margin: 12px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px;">';
+                  mediaUrls.forEach((url: string) => {
+                    const trimmedUrl = url.trim();
+                    // Check if image or video
+                    if (trimmedUrl.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
+                      mediaHtml += `<img src="${trimmedUrl}" style="width: 100%; height: 80px; object-fit: cover; border-radius: 4px; cursor: pointer;" onclick="window.open('${trimmedUrl}', '_blank')" />`;
+                    } else if (trimmedUrl.match(/\.(mp4|webm|ogg)$/i)) {
+                      mediaHtml += `<video controls style="width: 100%; height: 80px; object-fit: cover; border-radius: 4px;"><source src="${trimmedUrl}" /></video>`;
+                    }
+                  });
+                  mediaHtml += '</div>';
+                }
+              }
+
+              // Build audio player
+              let audioHtml = '';
+              if (location.playAudioOnClick && location.audioUrl) {
+                audioHtml = `
+                  <div style="margin: 12px 0;">
+                    <audio controls style="width: 100%; height: 32px;">
+                      <source src="${location.audioUrl}" />
+                      Your browser does not support the audio element.
+                    </audio>
+                  </div>
+                `;
+              }
+
+              // Build external link button
+              let linkHtml = '';
+              if (location.externalUrl) {
+                linkHtml = `
+                  <div style="margin: 12px 0;">
+                    <a href="${location.externalUrl}" target="_blank" rel="noopener noreferrer" 
+                       style="display: inline-block; padding: 8px 16px; background: #3b82f6; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500;">
+                      🔗 Open External Link
+                    </a>
+                  </div>
+                `;
+              }
+
               const popupHtml = `
-                <div style="min-width: 200px;">
-                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${location.title}</h3>
-                  ${location.subtitle ? `<p style="margin: 0 0 8px 0; font-size: 12px; color: #888;">${location.subtitle}</p>` : ''}
-                  <p style="margin: 0; font-size: 14px;">${location.popupContent}</p>
+                <div style="min-width: 250px; max-width: 400px;">
+                  <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600; color: #1f2937;">
+                    ${location.title}
+                  </h3>
+                  ${location.subtitle ? `<p style="margin: 0 0 12px 0; font-size: 13px; color: #6b7280; font-style: italic;">${location.subtitle}</p>` : ''}
+                  <div style="margin: 12px 0; font-size: 14px; line-height: 1.6; color: #374151;">
+                    ${location.popupContent}
+                  </div>
+                  ${mediaHtml}
+                  ${audioHtml}
+                  ${linkHtml}
                 </div>
               `;
-              marker.bindPopup(popupHtml);
+              
+              marker.bindPopup(popupHtml, {
+                maxWidth: 400,
+                className: 'location-popup-custom',
+              });
             }
 
+            // Add entry animation if configured
+            const entryEffect = location.entryEffect || 'fade';
+            const entryDelayMs = location.entryDelayMs || 0;
+            const entryDurationMs = location.entryDurationMs || 400;
+            
             marker.addTo(currentMap);
-            if (opts?.transitionType && opts.transitionType !== 'Jump') {
+            
+            // Apply entry animation (only if not using segment transition)
+            if (!opts?.transitionType && entryEffect !== 'none') {
+              const markerElement = marker.getElement();
+              if (markerElement) {
+                // Initial state
+                markerElement.style.transition = 'none';
+                markerElement.style.opacity = '0';
+                
+                if (entryEffect === 'fade') {
+                  markerElement.style.opacity = '0';
+                } else if (entryEffect === 'scale') {
+                  markerElement.style.transform = 'scale(0)';
+                  markerElement.style.opacity = '0';
+                } else if (entryEffect === 'slide-up') {
+                  markerElement.style.transform = 'translateY(20px)';
+                  markerElement.style.opacity = '0';
+                } else if (entryEffect === 'bounce') {
+                  markerElement.style.transform = 'scale(0.3)';
+                  markerElement.style.opacity = '0';
+                }
+                
+                // Animate after delay
+                setTimeout(() => {
+                  if (!markerElement) return;
+                  markerElement.style.transition = `all ${entryDurationMs}ms ease-out`;
+                  markerElement.style.opacity = '1';
+                  markerElement.style.transform = 'scale(1) translateY(0)';
+                }, entryDelayMs);
+              }
+            } else if (opts?.transitionType && opts.transitionType !== 'Jump') {
+              // Use segment transition fade
               try { marker.setOpacity?.(0); } catch {}
             }
+            
             newLayers.push(marker);
             
             allBounds.push(L.latLngBounds([latLng, latLng]));
