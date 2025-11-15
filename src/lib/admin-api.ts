@@ -233,23 +233,60 @@ export interface GetTicketsFilter extends PageParams {
   [key: string]: unknown;
 }
 
-export function adminGetSupportTickets<TTicket = unknown>(p: GetTicketsFilter = {}) {
+type AdminSupportTicketsResponse<TTicket> = {
+  tickets: TTicket[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export async function adminGetSupportTickets<TTicket = unknown>(
+  p: GetTicketsFilter = {},
+): Promise<Paged<TTicket>> {
   const sp = new URLSearchParams();
   Object.entries(p).forEach(([k, v]) => {
     if (v === undefined || v === null) return;
     sp.append(k, String(v));
   });
   const query = sp.toString() ? `?${sp.toString()}` : "";
-  return getJson<Paged<TTicket>>(`${ADMIN_BASE}/support-tickets${query}`);
+
+  const res = await getJson<
+    AdminSupportTicketsResponse<TTicket> | Paged<TTicket>
+  >(`${ADMIN_BASE}/support-tickets${query}`);
+
+  if ("tickets" in res) {
+    const data = res as AdminSupportTicketsResponse<TTicket>;
+    const items = Array.isArray(data.tickets) ? data.tickets : [];
+    return {
+      items,
+      page: Number(data.page ?? 1),
+      pageSize: Number(data.pageSize ?? items.length),
+      totalItems: Number(data.totalCount ?? items.length),
+      totalPages: Number(data.totalPages ?? 1),
+    };
+  }
+
+  const data = res as Paged<TTicket>;
+  const items = Array.isArray(data.items) ? data.items : [];
+  return {
+    items,
+    page: Number(data.page ?? 1),
+    pageSize: Number(data.pageSize ?? items.length),
+    totalItems: Number(data.totalItems ?? items.length),
+    totalPages: Number(data.totalPages ?? 1),
+  };
 }
 
-export function adminGetSupportTicketById<TTicket = unknown>(ticketId: string) {
+export function adminGetSupportTicketById<TTicket = unknown>(
+  ticketId: string,
+) {
   return getJson<TTicket>(`${ADMIN_BASE}/support-tickets/${ticketId}`);
 }
 
 export function adminUpdateSupportTicket<TReq extends object, TRes = unknown>(
   ticketId: string,
-  body: TReq
+  body: TReq,
 ) {
   return putJson<TReq, TRes>(`${ADMIN_BASE}/support-tickets/${ticketId}`, body);
 }
@@ -259,9 +296,12 @@ export interface CloseTicketRequestDto {
 }
 export function adminCloseSupportTicket<TRes = unknown>(
   ticketId: string,
-  body: CloseTicketRequestDto
+  body: CloseTicketRequestDto,
 ) {
-  return postJson<CloseTicketRequestDto, TRes>(`${ADMIN_BASE}/support-tickets/${ticketId}/close`, body);
+  return postJson<CloseTicketRequestDto, TRes>(
+    `${ADMIN_BASE}/support-tickets/${ticketId}/close`,
+    body,
+  );
 }
 
 export interface AssignTicketRequestDto {
@@ -269,9 +309,12 @@ export interface AssignTicketRequestDto {
 }
 export function adminAssignSupportTicket<TRes = unknown>(
   ticketId: string,
-  body: AssignTicketRequestDto
+  body: AssignTicketRequestDto,
 ) {
-  return postJson<AssignTicketRequestDto, TRes>(`${ADMIN_BASE}/support-tickets/${ticketId}/assign`, body);
+  return postJson<AssignTicketRequestDto, TRes>(
+    `${ADMIN_BASE}/support-tickets/${ticketId}/assign`,
+    body,
+  );
 }
 
 export interface EscalateTicketRequestDto {
@@ -279,14 +322,16 @@ export interface EscalateTicketRequestDto {
 }
 export function adminEscalateSupportTicket<TRes = unknown>(
   ticketId: string,
-  body: EscalateTicketRequestDto
+  body: EscalateTicketRequestDto,
 ) {
-  return postJson<EscalateTicketRequestDto, TRes>(`${ADMIN_BASE}/support-tickets/${ticketId}/escalate`, body);
+  return postJson<EscalateTicketRequestDto, TRes>(
+    `${ADMIN_BASE}/support-tickets/${ticketId}/escalate`,
+    body,
+  );
 }
 
 /* ==================== USAGE & DASHBOARD (DÙNG CHO /dashboard) ==================== */
 
-/** Tổng quan hệ thống: phục vụ 4 thẻ KPI trên dashboard */
 export function adminGetSystemDashboard<TRes = unknown>() {
   return getJson<TRes>(`${ADMIN_BASE}/dashboard`);
 }

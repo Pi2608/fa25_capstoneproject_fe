@@ -13,9 +13,9 @@ const NAV = [
   { href: "/organizations", label: "Tổ chức", icon: <OrgIcon /> },
   { href: "/subscription-plans", label: "Gói đăng ký", icon: <PlanIcon /> },
   { href: "/support-tickets", label: "Phiếu hỗ trợ", icon: <TicketIcon /> },
-  { href: "/exports", label: "Xuất dữ liệu", icon: <FileIcon /> },
-  { href: "/billing", label: "Lịch sử thanh toán", icon: <CardIcon /> },
-  { href: "/template", label: "Mẫu bản đồ", icon: <MapIcon /> },
+  // { href: "/exports", label: "Xuất dữ liệu", icon: <FileIcon /> },
+  // { href: "/billing", label: "Lịch sử thanh toán", icon: <CardIcon /> },
+  // { href: "/template", label: "Mẫu bản đồ", icon: <MapIcon /> },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
