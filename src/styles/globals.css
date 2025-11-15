@@ -56,3 +56,22 @@ body {
   border: none !important;
   box-shadow: none !important;
 }
+
+/* Location title tooltip styling - always visible during playback */
+.location-title-tooltip {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.95) 100%) !important;
+  border: 2px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 8px !important;
+  padding: 6px 12px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(8px) !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+}
+
+.location-title-tooltip::before {
+  border-top-color: rgba(255, 255, 255, 0.3) !important;
+}

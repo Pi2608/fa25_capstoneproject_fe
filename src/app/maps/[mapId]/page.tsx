@@ -60,6 +60,13 @@ import { CopyFeatureDialog } from "@/components/features";
 import MapPoiPanel from "@/components/poi/PoiPanel";
 import { PoiTooltipModal } from "@/components/poi/PoiTooltipModal";
 import { getMapPois, type MapPoi } from "@/lib/api-poi";
+import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions } from "@/lib/api-storymap";
+import { LeftSidebarToolbox } from "@/components/map-editor-ui/LeftSidebarToolbox";
+import { TimelineWorkspace } from "@/components/map-editor-ui/TimelineWorkspace";
+import { PropertiesPanel } from "@/components/map-editor-ui/PropertiesPanel";
+import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
+// import SegmentDialog from "@/components/storymap/dialogs/SegmentDialog";
+// import TimelineTransitionsDialog from "@/components/storymap/dialogs/TimelineTransitionsDialog";
 
 import { useToast } from "@/contexts/ToastContext";
 import type { FeatureCollection, Feature as GeoJSONFeature } from "geojson";
@@ -103,6 +110,29 @@ export default function EditMapPage() {
   }>({
     isOpen: false,
   });
+
+  // New VSCode-style UI state
+  const [leftSidebarView, setLeftSidebarView] = useState<"explorer" | "segments" | "transitions" | null>("explorer");
+  const [isPropertiesPanelOpen, setIsPropertiesPanelOpen] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState<{
+    type: "feature" | "layer" | "segment";
+    data: FeatureData | LayerDTO | Segment;
+  } | null>(null);
+
+  // Active drawing tool state
+  const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [segments, setSegments] = useState<Segment[]>([]);
+  const [transitions, setTransitions] = useState<TimelineTransition[]>([]);
+  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+  const [isPlayingTimeline, setIsPlayingTimeline] = useState(false);
+  const [currentPlaybackTime, setCurrentPlaybackTime] = useState(0);
+  const [isTimelineOpen, setIsTimelineOpen] = useState(true);
+  const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
+
+  // Dialog state - removed, now handled inline in LeftSidebarToolbox
+  // const [showSegmentDialog, setShowSegmentDialog] = useState(false);
+  // const [editingSegment, setEditingSegment] = useState<Segment | undefined>(undefined);
+  // const [showTransitionDialog, setShowTransitionDialog] = useState(false);
 
   // New state for multi-selection and hover interaction
   const [currentLayer, setCurrentLayer] = useState<Layer | null>(null);
@@ -151,6 +181,15 @@ export default function EditMapPage() {
   const lastUpdateRef = useRef<Map<string, number>>(new Map());
   const poiMarkersRef = useRef<L.Marker[]>([]);
 
+  // Initialize segment playback hook
+  const playback = useSegmentPlayback({
+    mapId,
+    segments,
+    currentMap: mapRef.current,
+    currentSegmentLayers,
+    setCurrentSegmentLayers,
+    setActiveSegmentId,
+  });
 
   // Helper: Store original style
   const storeOriginalStyle = useCallback((layer: Layer) => {
@@ -908,6 +947,33 @@ export default function EditMapPage() {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
 
+  // Load segments and transitions for timeline
+  useEffect(() => {
+    if (!mapId || !isMapReady) return;
+
+    let alive = true;
+
+    (async () => {
+      try {
+        const [segmentsData, transitionsData] = await Promise.all([
+          getSegments(mapId),
+          getTimelineTransitions(mapId),
+        ]);
+
+        if (alive) {
+          setSegments(segmentsData);
+          setTransitions(transitionsData);
+        }
+      } catch (error) {
+        console.error("Failed to load segments/transitions:", error);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [mapId, isMapReady]);
+
   // Zone selection mode handler
   useEffect(() => {
     const handleEnableZoneSelection = (e: CustomEvent) => {
@@ -1010,7 +1076,7 @@ export default function EditMapPage() {
       if (!map) return;
 
       isPickingPoi = false;
-      
+
       // Reset cursor
       const mapContainer = map.getContainer();
       mapContainer.style.cursor = '';
@@ -1151,7 +1217,7 @@ export default function EditMapPage() {
               existingTooltip.remove();
             }
             mapRef.current?.removeLayer(marker);
-          } catch {}
+          } catch { }
         });
         poiMarkersRef.current = [];
 
@@ -1163,14 +1229,17 @@ export default function EditMapPage() {
         }
 
         const L = (await import("leaflet")).default;
-        const allBounds: L.LatLngBounds[] = [];
+
+        if (mapRef.current) {
+          mapRef.current.invalidateSize();
+        }
 
         // Render each POI
         for (const poi of pois) {
           if (cancelled || !mapRef.current) break;
-          
+
           try {
-         if (poi.isVisible === false) {
+            if (poi.isVisible === false) {
 
               continue;
             }
@@ -1199,7 +1268,7 @@ export default function EditMapPage() {
             // Determine icon content: IconUrl (image), IconType (emoji), or default
             let iconHtml = '';
             const defaultIcon = '📍';
-            
+
             if (poi.iconUrl) {
               // Use custom image
               iconHtml = `<div style="
@@ -1243,7 +1312,7 @@ export default function EditMapPage() {
                 font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif !important;
               ">${iconContent}</div>`;
             }
-            
+
             const marker = L.marker(latLng, {
               icon: L.divIcon({
                 className: 'poi-marker',
@@ -1257,41 +1326,17 @@ export default function EditMapPage() {
               keyboard: true,
               riseOnHover: true,
             });
-            
-            // Force styles after marker is created
-            const iconElement = marker.getIcon();
-            if (iconElement && iconElement.options) {
-              // Ensure icon is visible by default
-              setTimeout(() => {
-                const markerElement = marker.getElement();
-                if (markerElement) {
-                  markerElement.style.cssText += `
-                    display: block !important;
-                    visibility: visible !important;
-                    opacity: 1 !important;
-                  `;
-                  const iconDiv = markerElement.querySelector('div');
-                  if (iconDiv) {
-                    iconDiv.style.cssText += `
-                      display: flex !important;
-                      visibility: visible !important;
-                      opacity: 1 !important;
-                    `;
-                  }
-                }
-              }, 50);
-            }
-            
+
             // Store POI ID for cleanup
             (marker as any)._poiId = poi.poiId;
-            
+
             // Add click handler to show tooltip modal if enabled
             if (poi.showTooltip !== false && poi.tooltipContent) {
               marker.on('click', (e) => {
                 // Process content
                 let rawContent = poi.tooltipContent || '';
                 let processedContent = rawContent;
-                
+
                 // Method 1: Parse JSON string if needed
                 if (rawContent.startsWith('"') && rawContent.endsWith('"')) {
                   try {
@@ -1300,7 +1345,7 @@ export default function EditMapPage() {
                     // Not JSON, use as-is
                   }
                 }
-                
+
                 // Method 2: Unescape common escape sequences
                 if (processedContent.includes('\\"') || processedContent.includes('\\n') || processedContent.includes('\\r')) {
                   processedContent = processedContent
@@ -1310,7 +1355,7 @@ export default function EditMapPage() {
                     .replace(/\\t/g, '\t')
                     .replace(/\\\\/g, '\\');
                 }
-                
+
                 // Method 3: Decode HTML entities
                 try {
                   const textarea = document.createElement('textarea');
@@ -1322,7 +1367,7 @@ export default function EditMapPage() {
                 } catch (e) {
                   // Decode failed, use as-is
                 }
-                
+
                 // Open modal with processed content
                 setPoiTooltipModal({
                   isOpen: true,
@@ -1393,7 +1438,7 @@ export default function EditMapPage() {
                   ${linkHtml}
                 </div>
               `;
-              
+
               marker.bindPopup(popupHtml, {
                 maxWidth: 400,
                 className: 'poi-popup-custom',
@@ -1401,110 +1446,60 @@ export default function EditMapPage() {
             }
 
             marker.addTo(mapRef.current);
-  
-            // Verify marker is actually on map
-            setTimeout(() => {
-              const markerElement = marker.getElement();
-              if (markerElement) {
-                const rect = markerElement.getBoundingClientRect();
-              } else {
-              }
-            }, 100);
-            
-            // Apply entry animation if configured (only if explicitly set, not by default)
-            const entryEffect = poi.entryEffect;
-            const entryDelayMs = poi.entryDelayMs || 0;
-            const entryDurationMs = poi.entryDurationMs || 400;
-            
-            // Only apply animation if entryEffect is explicitly set and not 'none'
-            // If entryEffect is undefined/null, show marker immediately (no animation)
-            if (entryEffect && entryEffect !== 'none') {
-              // Wait for marker to be added to DOM
-              setTimeout(() => {
-                const markerElement = marker.getElement();
-                if (markerElement) {
-                  // Initial state
-                  markerElement.style.transition = 'none';
-                  markerElement.style.opacity = '0';
-                  
-                  if (entryEffect === 'fade') {
-                    markerElement.style.opacity = '0';
-                  } else if (entryEffect === 'scale') {
-                    markerElement.style.transform = 'scale(0)';
-                    markerElement.style.opacity = '0';
-                  } else if (entryEffect === 'slide-up') {
-                    markerElement.style.transform = 'translateY(20px)';
-                    markerElement.style.opacity = '0';
-                  } else if (entryEffect === 'bounce') {
-                    markerElement.style.transform = 'scale(0.3)';
-                    markerElement.style.opacity = '0';
+
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                if (marker && mapRef.current) {
+                  const currentLatLng = marker.getLatLng();
+                  marker.setLatLng(currentLatLng);
+
+                  const markerElement = marker.getElement();
+                  if (markerElement) {
+                    markerElement.style.transform = '';
+                    markerElement.style.opacity = '1';
+                    markerElement.style.display = 'block';
+                    markerElement.style.visibility = 'visible';
+
+                    const iconDiv = markerElement.querySelector('div');
+                    if (iconDiv) {
+                      iconDiv.style.opacity = '1';
+                      iconDiv.style.display = 'flex';
+                      iconDiv.style.visibility = 'visible';
+                    }
                   }
-                  
-                  // Animate after delay
-                  setTimeout(() => {
-                    const currentElement = marker.getElement();
-                    if (!currentElement) return;
-                    currentElement.style.transition = `all ${entryDurationMs}ms ease-out`;
-                    currentElement.style.opacity = '1';
-                    currentElement.style.transform = 'scale(1) translateY(0)';
-                  }, entryDelayMs);
-                } else {
                 }
-              }, 50); // Small delay to ensure marker is in DOM
-            } else {
-              // No animation - ensure marker is visible immediately
-              setTimeout(() => {
-                const markerElement = marker.getElement();
-                if (markerElement) {
-                  markerElement.style.opacity = '1';
-                  markerElement.style.transform = '';
-                  markerElement.style.display = 'block';
-                  markerElement.style.visibility = 'visible';
-                  // Ensure icon child is visible
-                  const iconDiv = markerElement.querySelector('div');
-                  if (iconDiv) {
-                    iconDiv.style.opacity = '1';
-                    iconDiv.style.display = 'flex';
-                    iconDiv.style.visibility = 'visible';
-                  }
-                } else {
-                }
-              }, 100);
-            }
-            
+              });
+            });
+
             poiMarkersRef.current.push(marker);
-            allBounds.push(L.latLngBounds([latLng, latLng]));
           } catch (error) {
             console.error(`❌ Failed to render POI ${poi.poiId}:`, error);
           }
         }
 
-        // Fit map to show all POIs if there are any
-        if (allBounds.length > 0 && mapRef.current) {
-          try {
-            const combinedBounds = allBounds.reduce((acc: L.LatLngBounds, bounds: L.LatLngBounds) => {
-              return acc.extend(bounds);
-            }, allBounds[0]);
-            
-            mapRef.current.fitBounds(combinedBounds, {
-              padding: [50, 50],
-              maxZoom: 18,
+        if (mapRef.current && poiMarkersRef.current.length > 0) {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (mapRef.current && poiMarkersRef.current.length > 0) {
+                mapRef.current.invalidateSize();
+
+                poiMarkersRef.current.forEach(marker => {
+                  if (marker) {
+                    const currentLatLng = marker.getLatLng();
+                    marker.setLatLng(currentLatLng);
+                  }
+                });
+              }
             });
-          } catch (error) {
-            // Fallback: zoom to first POI
-            if (poiMarkersRef.current.length > 0) {
-              const firstMarker = poiMarkersRef.current[0];
-              mapRef.current.setView(firstMarker.getLatLng(), 15);
-            }
-          }
+          });
         }
+
       } catch (error) {
       }
     };
 
     loadAndRenderPois();
 
-    // Listen for POI changes to refresh markers
     const handlePoiChange = () => {
       if (!cancelled && mapRef.current && showPoiPanel) {
         loadAndRenderPois();
@@ -1520,11 +1515,10 @@ export default function EditMapPage() {
       window.removeEventListener('poi:created', handlePoiChange);
       window.removeEventListener('poi:updated', handlePoiChange);
       window.removeEventListener('poi:deleted', handlePoiChange);
-      // Cleanup: remove all POI markers
       poiMarkersRef.current.forEach(marker => {
         try {
           mapRef.current?.removeLayer(marker);
-        } catch {}
+        } catch { }
       });
       poiMarkersRef.current = [];
     };
@@ -1793,7 +1787,215 @@ export default function EditMapPage() {
   const onSelectLayer = useCallback((layer: FeatureData | LayerDTO) => {
     setSelectedLayer(layer);
     setShowStylePanel(true);
+    // Also update new UI
+    setSelectedEntity({ type: "layer", data: layer });
+    setIsPropertiesPanelOpen(true);
   }, []);
+
+  // New handlers for video editor UI
+  const handleSelectFeature = useCallback((feature: FeatureData) => {
+    setSelectedEntity({ type: "feature", data: feature });
+    setIsPropertiesPanelOpen(true);
+    setSelectedLayer(feature);
+    setShowStylePanel(true);
+  }, []);
+
+  const handleSelectLayerNew = useCallback((layer: LayerDTO) => {
+    setSelectedEntity({ type: "layer", data: layer });
+    setIsPropertiesPanelOpen(true);
+    setSelectedLayer(layer);
+    setShowStylePanel(true);
+  }, []);
+
+  const handleSegmentClick = useCallback((segmentId: string) => {
+    const segment = segments.find((s) => s.segmentId === segmentId);
+    if (segment) {
+      setSelectedEntity({ type: "segment", data: segment });
+      setIsPropertiesPanelOpen(true);
+      setActiveSegmentId(segmentId);
+    }
+  }, [segments]);
+
+  // Save segment (create or update) - used by inline form
+  const handleSaveSegment = useCallback(async (data: any, segmentId?: string) => {
+    if (!mapId) return;
+
+    try {
+      const { createSegment, updateSegment, getSegments } = await import("@/lib/api-storymap");
+
+      if (segmentId) {
+        // Update existing segment
+        await updateSegment(mapId, segmentId, data);
+        showToast("success", "Segment updated successfully");
+      } else {
+        // Create new segment
+        await createSegment(mapId, data);
+        showToast("success", "Segment created successfully");
+      }
+
+      // Reload segments
+      const updatedSegments = await getSegments(mapId);
+      setSegments(updatedSegments);
+    } catch (error) {
+      console.error("Failed to save segment:", error);
+      showToast("error", "Failed to save segment");
+    }
+  }, [mapId, showToast]);
+
+  // Delete segment
+  const handleDeleteSegment = useCallback(async (segmentId: string) => {
+    if (!mapId) return;
+
+    try {
+      const { deleteSegment, getSegments } = await import("@/lib/api-storymap");
+      await deleteSegment(mapId, segmentId);
+      showToast("success", "Segment deleted successfully");
+
+      // Reload segments
+      const updatedSegments = await getSegments(mapId);
+      setSegments(updatedSegments);
+    } catch (error) {
+      console.error("Failed to delete segment:", error);
+      showToast("error", "Failed to delete segment");
+    }
+  }, [mapId, showToast]);
+
+  // Save transition (create only - edit not supported by API yet)
+  const handleSaveTransition = useCallback(async (data: any, transitionId?: string) => {
+    if (!mapId) return;
+
+    try {
+      const { createTimelineTransition, getTimelineTransitions } = await import("@/lib/api-storymap");
+
+      if (transitionId) {
+        // Update not supported by API - would need to delete and recreate
+        showToast("warning", "Transition editing not yet supported. Please delete and recreate.");
+        return;
+      } else {
+        // Create new transition
+        await createTimelineTransition(mapId, data);
+        showToast("success", "Transition created successfully");
+      }
+
+      // Reload transitions
+      const updatedTransitions = await getTimelineTransitions(mapId);
+      setTransitions(updatedTransitions);
+    } catch (error) {
+      console.error("Failed to save transition:", error);
+      showToast("error", "Failed to save transition");
+    }
+  }, [mapId, showToast]);
+
+  // Delete transition
+  const handleDeleteTransition = useCallback(async (transitionId: string) => {
+    if (!mapId) return;
+
+    try {
+      const { deleteTimelineTransition, getTimelineTransitions } = await import("@/lib/api-storymap");
+      await deleteTimelineTransition(mapId, transitionId);
+      showToast("success", "Transition deleted successfully");
+
+      // Reload transitions
+      const updatedTransitions = await getTimelineTransitions(mapId);
+      setTransitions(updatedTransitions);
+    } catch (error) {
+      console.error("Failed to delete transition:", error);
+      showToast("error", "Failed to delete transition");
+    }
+  }, [mapId, showToast]);
+
+  const handleTimelineReorder = useCallback(
+    async (newOrder: Segment[]) => {
+      if (!mapId) return;
+
+      // Check affected transitions
+      const affectedTransitions = transitions.filter((t) => {
+        const fromIndex = newOrder.findIndex((s) => s.segmentId === t.fromSegmentId);
+        const toIndex = newOrder.findIndex((s) => s.segmentId === t.toSegmentId);
+        return toIndex !== fromIndex + 1;
+      });
+
+      if (affectedTransitions.length > 0) {
+        const confirmed = window.confirm(
+          `Reordering will affect ${affectedTransitions.length} transition(s). Continue?`
+        );
+        if (!confirmed) return;
+      }
+
+      try {
+        await reorderSegments(mapId, newOrder.map((s) => s.segmentId));
+        setSegments(newOrder);
+        showToast("success", "Segments reordered successfully");
+      } catch (error) {
+        console.error("Failed to reorder segments:", error);
+        showToast("error", "Failed to reorder segments");
+      }
+    },
+    [mapId, transitions, showToast]
+  );
+
+  const handlePlayTimeline = useCallback(() => {
+    if (playback.isPlaying) {
+      playback.handleStopPreview();
+      setIsPlayingTimeline(false);
+    } else {
+      playback.handlePlayPreview();
+      setIsPlayingTimeline(true);
+    }
+  }, [playback]);
+
+  const handleStopTimeline = useCallback(() => {
+    playback.handleStopPreview();
+    setIsPlayingTimeline(false);
+    setCurrentPlaybackTime(0);
+  }, [playback]);
+
+  const handleSkipForward = useCallback((seconds: number) => {
+    const totalDuration = segments.reduce((sum, seg) => sum + seg.durationMs, 0) / 1000;
+    setCurrentPlaybackTime((prev) => Math.min(totalDuration, prev + seconds));
+  }, [segments]);
+
+  const handleSkipBackward = useCallback((seconds: number) => {
+    setCurrentPlaybackTime((prev) => Math.max(0, prev - seconds));
+  }, []);
+
+  // Sync isPlayingTimeline with hook's isPlaying state
+  useEffect(() => {
+    setIsPlayingTimeline(playback.isPlaying);
+  }, [playback.isPlaying]);
+
+  // Smooth playback time progression
+  useEffect(() => {
+    if (!playback.isPlaying || segments.length === 0) return;
+
+    // Calculate base time from completed segments
+    let baseTime = 0;
+    for (let i = 0; i < playback.currentPlayIndex && i < segments.length; i++) {
+      baseTime += segments[i].durationMs / 1000;
+    }
+
+    // Set initial time when segment changes
+    setCurrentPlaybackTime(baseTime);
+
+    // Start smooth time progression
+    const startTime = Date.now();
+    const currentSegmentDuration = segments[playback.currentPlayIndex]?.durationMs || 0;
+
+    const intervalId = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const newTime = baseTime + elapsed;
+
+      // Stop advancing if we've reached the end of current segment
+      if (elapsed >= currentSegmentDuration / 1000) {
+        setCurrentPlaybackTime(baseTime + currentSegmentDuration / 1000);
+        return;
+      }
+
+      setCurrentPlaybackTime(newTime);
+    }, 100); // Update every 100ms for smooth animation
+
+    return () => clearInterval(intervalId);
+  }, [playback.isPlaying, playback.currentPlayIndex, segments]);
 
   const onUpdateLayer = useCallback(async (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => {
     if (!detail || !mapRef.current) return;
@@ -2172,9 +2374,87 @@ export default function EditMapPage() {
         </div>
       </div>
 
-      <div ref={mapEl} className="absolute inset-0" />
+      {/* Map Canvas - Adjusted for VSCode-style UI panels */}
+      <div
+        ref={mapEl}
+        className="absolute inset-0 transition-all duration-300"
+        style={{
+          left: leftSidebarView ? "332px" : "48px", // Icon bar (48px) + panel (280px) when open
+          right: isPropertiesPanelOpen ? "360px" : "0",
+          // top: "60px",
+          bottom: "200px", // Space for timeline workspace
+        }}
+      />
 
-      <DataLayersPanel
+      {/* NEW: VSCode-style Left Sidebar */}
+      <LeftSidebarToolbox
+        activeView={leftSidebarView}
+        onViewChange={setLeftSidebarView}
+        features={features}
+        layers={layers}
+        segments={segments}
+        transitions={transitions}
+        baseLayer={baseKey}
+        currentMap={mapRef.current}
+        onSelectFeature={handleSelectFeature}
+        onSelectLayer={handleSelectLayerNew}
+        onBaseLayerChange={setBaseKey}
+        onFeatureVisibilityChange={onFeatureVisibilityChange}
+        onLayerVisibilityChange={onLayerVisibilityChange}
+        onDeleteFeature={onDeleteFeature}
+        onSegmentClick={handleSegmentClick}
+        onSaveSegment={handleSaveSegment}
+        onDeleteSegment={handleDeleteSegment}
+        onSaveTransition={handleSaveTransition}
+        onDeleteTransition={handleDeleteTransition}
+      />
+
+      {/* NEW: Right Properties Panel */}
+      <PropertiesPanel
+        isOpen={isPropertiesPanelOpen}
+        selectedItem={selectedEntity}
+        onClose={() => setIsPropertiesPanelOpen(false)}
+      />
+
+      {/* NEW: Bottom Timeline Workspace */}
+      <TimelineWorkspace
+        segments={segments}
+        transitions={transitions}
+        activeSegmentId={activeSegmentId}
+        isPlaying={isPlayingTimeline}
+        currentTime={currentPlaybackTime}
+        leftOffset={leftSidebarView ? 332 : 48} // Icon bar (48px) + panel (280px) when open
+        isOpen={isTimelineOpen}
+        onToggle={() => setIsTimelineOpen((prev) => !prev)}
+        onReorder={handleTimelineReorder}
+        onPlay={handlePlayTimeline}
+        onStop={handleStopTimeline}
+        // onSkipForward={handleSkipForward}
+        // onSkipBackward={handleSkipBackward}
+        onSegmentClick={handleSegmentClick}
+      />
+
+      {/* Segment Dialog - Now handled inline in LeftSidebarToolbox */}
+      {/* {showSegmentDialog && (
+        <SegmentDialog
+          editing={editingSegment}
+          currentMap={mapRef.current}
+          onClose={() => setShowSegmentDialog(false)}
+          onSave={handleSaveSegment}
+        />
+      )} */}
+
+      {/* Transitions Dialog - Now handled inline in LeftSidebarToolbox */}
+      {/* {showTransitionDialog && mapId && (
+        <TimelineTransitionsDialog
+          mapId={mapId}
+          segments={segments}
+          onClose={() => setShowTransitionDialog(false)}
+        />
+      )} */}
+
+      {/* EXISTING PANELS - Keep for backward compatibility */}
+      {/* <DataLayersPanel
         features={features}
         layers={layers}
         showDataLayersPanel={showDataLayersPanel}
@@ -2199,7 +2479,7 @@ export default function EditMapPage() {
         onUpdateLayer={onUpdateLayer}
         onUpdateFeature={onUpdateFeature}
         onApplyStyle={onApplyStyle}
-      />
+      /> */}
 
       <MapControls
         zoomIn={zoomIn}
@@ -2214,6 +2494,7 @@ export default function EditMapPage() {
           setShowSegmentPanel(!showSegmentPanel);
           if (!showSegmentPanel) setShowPoiPanel(false);
         }}
+        isTimelineOpen={isTimelineOpen}
       />
 
       {/* Right Panel - POI or Story Map Timeline */}
