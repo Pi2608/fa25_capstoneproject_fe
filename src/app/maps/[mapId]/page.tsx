@@ -60,6 +60,13 @@ import { CopyFeatureDialog } from "@/components/features";
 import MapPoiPanel from "@/components/poi/PoiPanel";
 import { PoiTooltipModal } from "@/components/poi/PoiTooltipModal";
 import { getMapPois, type MapPoi } from "@/lib/api-poi";
+import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions } from "@/lib/api-storymap";
+import { LeftSidebarToolbox } from "@/components/map-editor-ui/LeftSidebarToolbox";
+import { TimelineWorkspace } from "@/components/map-editor-ui/TimelineWorkspace";
+import { PropertiesPanel } from "@/components/map-editor-ui/PropertiesPanel";
+import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
+// import SegmentDialog from "@/components/storymap/dialogs/SegmentDialog";
+// import TimelineTransitionsDialog from "@/components/storymap/dialogs/TimelineTransitionsDialog";
 
 import { useToast } from "@/contexts/ToastContext";
 import type { FeatureCollection, Feature as GeoJSONFeature } from "geojson";
@@ -103,6 +110,29 @@ export default function EditMapPage() {
   }>({
     isOpen: false,
   });
+
+  // New VSCode-style UI state
+  const [leftSidebarView, setLeftSidebarView] = useState<"explorer" | "segments" | "transitions" | null>("explorer");
+  const [isPropertiesPanelOpen, setIsPropertiesPanelOpen] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState<{
+    type: "feature" | "layer" | "segment";
+    data: FeatureData | LayerDTO | Segment;
+  } | null>(null);
+
+  // Active drawing tool state
+  const [activeTool, setActiveTool] = useState<string | null>(null);
+  const [segments, setSegments] = useState<Segment[]>([]);
+  const [transitions, setTransitions] = useState<TimelineTransition[]>([]);
+  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
+  const [isPlayingTimeline, setIsPlayingTimeline] = useState(false);
+  const [currentPlaybackTime, setCurrentPlaybackTime] = useState(0);
+  const [isTimelineOpen, setIsTimelineOpen] = useState(true);
+  const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
+
+  // Dialog state - removed, now handled inline in LeftSidebarToolbox
+  // const [showSegmentDialog, setShowSegmentDialog] = useState(false);
+  // const [editingSegment, setEditingSegment] = useState<Segment | undefined>(undefined);
+  // const [showTransitionDialog, setShowTransitionDialog] = useState(false);
 
   // New state for multi-selection and hover interaction
   const [currentLayer, setCurrentLayer] = useState<Layer | null>(null);
@@ -151,6 +181,15 @@ export default function EditMapPage() {
   const lastUpdateRef = useRef<Map<string, number>>(new Map());
   const poiMarkersRef = useRef<L.Marker[]>([]);
 
+  // Initialize segment playback hook
+  const playback = useSegmentPlayback({
+    mapId,
+    segments,
+    currentMap: mapRef.current,
+    currentSegmentLayers,
+    setCurrentSegmentLayers,
+    setActiveSegmentId,
+  });
 
   // Helper: Store original style
   const storeOriginalStyle = useCallback((layer: Layer) => {
@@ -907,6 +946,33 @@ export default function EditMapPage() {
   useEffect(() => {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
+
+  // Load segments and transitions for timeline
+  useEffect(() => {
+    if (!mapId || !isMapReady) return;
+
+    let alive = true;
+
+    (async () => {
+      try {
+        const [segmentsData, transitionsData] = await Promise.all([
+          getSegments(mapId),
+          getTimelineTransitions(mapId),
+        ]);
+
+        if (alive) {
+          setSegments(segmentsData);
+          setTransitions(transitionsData);
+        }
+      } catch (error) {
+        console.error("Failed to load segments/transitions:", error);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [mapId, isMapReady]);
 
   // Zone selection mode handler
   useEffect(() => {
@@ -1721,7 +1787,215 @@ export default function EditMapPage() {
   const onSelectLayer = useCallback((layer: FeatureData | LayerDTO) => {
     setSelectedLayer(layer);
     setShowStylePanel(true);
+    // Also update new UI
+    setSelectedEntity({ type: "layer", data: layer });
+    setIsPropertiesPanelOpen(true);
   }, []);
+
+  // New handlers for video editor UI
+  const handleSelectFeature = useCallback((feature: FeatureData) => {
+    setSelectedEntity({ type: "feature", data: feature });
+    setIsPropertiesPanelOpen(true);
+    setSelectedLayer(feature);
+    setShowStylePanel(true);
+  }, []);
+
+  const handleSelectLayerNew = useCallback((layer: LayerDTO) => {
+    setSelectedEntity({ type: "layer", data: layer });
+    setIsPropertiesPanelOpen(true);
+    setSelectedLayer(layer);
+    setShowStylePanel(true);
+  }, []);
+
+  const handleSegmentClick = useCallback((segmentId: string) => {
+    const segment = segments.find((s) => s.segmentId === segmentId);
+    if (segment) {
+      setSelectedEntity({ type: "segment", data: segment });
+      setIsPropertiesPanelOpen(true);
+      setActiveSegmentId(segmentId);
+    }
+  }, [segments]);
+
+  // Save segment (create or update) - used by inline form
+  const handleSaveSegment = useCallback(async (data: any, segmentId?: string) => {
+    if (!mapId) return;
+
+    try {
+      const { createSegment, updateSegment, getSegments } = await import("@/lib/api-storymap");
+
+      if (segmentId) {
+        // Update existing segment
+        await updateSegment(mapId, segmentId, data);
+        showToast("success", "Segment updated successfully");
+      } else {
+        // Create new segment
+        await createSegment(mapId, data);
+        showToast("success", "Segment created successfully");
+      }
+
+      // Reload segments
+      const updatedSegments = await getSegments(mapId);
+      setSegments(updatedSegments);
+    } catch (error) {
+      console.error("Failed to save segment:", error);
+      showToast("error", "Failed to save segment");
+    }
+  }, [mapId, showToast]);
+
+  // Delete segment
+  const handleDeleteSegment = useCallback(async (segmentId: string) => {
+    if (!mapId) return;
+
+    try {
+      const { deleteSegment, getSegments } = await import("@/lib/api-storymap");
+      await deleteSegment(mapId, segmentId);
+      showToast("success", "Segment deleted successfully");
+
+      // Reload segments
+      const updatedSegments = await getSegments(mapId);
+      setSegments(updatedSegments);
+    } catch (error) {
+      console.error("Failed to delete segment:", error);
+      showToast("error", "Failed to delete segment");
+    }
+  }, [mapId, showToast]);
+
+  // Save transition (create only - edit not supported by API yet)
+  const handleSaveTransition = useCallback(async (data: any, transitionId?: string) => {
+    if (!mapId) return;
+
+    try {
+      const { createTimelineTransition, getTimelineTransitions } = await import("@/lib/api-storymap");
+
+      if (transitionId) {
+        // Update not supported by API - would need to delete and recreate
+        showToast("warning", "Transition editing not yet supported. Please delete and recreate.");
+        return;
+      } else {
+        // Create new transition
+        await createTimelineTransition(mapId, data);
+        showToast("success", "Transition created successfully");
+      }
+
+      // Reload transitions
+      const updatedTransitions = await getTimelineTransitions(mapId);
+      setTransitions(updatedTransitions);
+    } catch (error) {
+      console.error("Failed to save transition:", error);
+      showToast("error", "Failed to save transition");
+    }
+  }, [mapId, showToast]);
+
+  // Delete transition
+  const handleDeleteTransition = useCallback(async (transitionId: string) => {
+    if (!mapId) return;
+
+    try {
+      const { deleteTimelineTransition, getTimelineTransitions } = await import("@/lib/api-storymap");
+      await deleteTimelineTransition(mapId, transitionId);
+      showToast("success", "Transition deleted successfully");
+
+      // Reload transitions
+      const updatedTransitions = await getTimelineTransitions(mapId);
+      setTransitions(updatedTransitions);
+    } catch (error) {
+      console.error("Failed to delete transition:", error);
+      showToast("error", "Failed to delete transition");
+    }
+  }, [mapId, showToast]);
+
+  const handleTimelineReorder = useCallback(
+    async (newOrder: Segment[]) => {
+      if (!mapId) return;
+
+      // Check affected transitions
+      const affectedTransitions = transitions.filter((t) => {
+        const fromIndex = newOrder.findIndex((s) => s.segmentId === t.fromSegmentId);
+        const toIndex = newOrder.findIndex((s) => s.segmentId === t.toSegmentId);
+        return toIndex !== fromIndex + 1;
+      });
+
+      if (affectedTransitions.length > 0) {
+        const confirmed = window.confirm(
+          `Reordering will affect ${affectedTransitions.length} transition(s). Continue?`
+        );
+        if (!confirmed) return;
+      }
+
+      try {
+        await reorderSegments(mapId, newOrder.map((s) => s.segmentId));
+        setSegments(newOrder);
+        showToast("success", "Segments reordered successfully");
+      } catch (error) {
+        console.error("Failed to reorder segments:", error);
+        showToast("error", "Failed to reorder segments");
+      }
+    },
+    [mapId, transitions, showToast]
+  );
+
+  const handlePlayTimeline = useCallback(() => {
+    if (playback.isPlaying) {
+      playback.handleStopPreview();
+      setIsPlayingTimeline(false);
+    } else {
+      playback.handlePlayPreview();
+      setIsPlayingTimeline(true);
+    }
+  }, [playback]);
+
+  const handleStopTimeline = useCallback(() => {
+    playback.handleStopPreview();
+    setIsPlayingTimeline(false);
+    setCurrentPlaybackTime(0);
+  }, [playback]);
+
+  const handleSkipForward = useCallback((seconds: number) => {
+    const totalDuration = segments.reduce((sum, seg) => sum + seg.durationMs, 0) / 1000;
+    setCurrentPlaybackTime((prev) => Math.min(totalDuration, prev + seconds));
+  }, [segments]);
+
+  const handleSkipBackward = useCallback((seconds: number) => {
+    setCurrentPlaybackTime((prev) => Math.max(0, prev - seconds));
+  }, []);
+
+  // Sync isPlayingTimeline with hook's isPlaying state
+  useEffect(() => {
+    setIsPlayingTimeline(playback.isPlaying);
+  }, [playback.isPlaying]);
+
+  // Smooth playback time progression
+  useEffect(() => {
+    if (!playback.isPlaying || segments.length === 0) return;
+
+    // Calculate base time from completed segments
+    let baseTime = 0;
+    for (let i = 0; i < playback.currentPlayIndex && i < segments.length; i++) {
+      baseTime += segments[i].durationMs / 1000;
+    }
+
+    // Set initial time when segment changes
+    setCurrentPlaybackTime(baseTime);
+
+    // Start smooth time progression
+    const startTime = Date.now();
+    const currentSegmentDuration = segments[playback.currentPlayIndex]?.durationMs || 0;
+
+    const intervalId = setInterval(() => {
+      const elapsed = (Date.now() - startTime) / 1000;
+      const newTime = baseTime + elapsed;
+
+      // Stop advancing if we've reached the end of current segment
+      if (elapsed >= currentSegmentDuration / 1000) {
+        setCurrentPlaybackTime(baseTime + currentSegmentDuration / 1000);
+        return;
+      }
+
+      setCurrentPlaybackTime(newTime);
+    }, 100); // Update every 100ms for smooth animation
+
+    return () => clearInterval(intervalId);
+  }, [playback.isPlaying, playback.currentPlayIndex, segments]);
 
   const onUpdateLayer = useCallback(async (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => {
     if (!detail || !mapRef.current) return;
@@ -2100,9 +2374,87 @@ export default function EditMapPage() {
         </div>
       </div>
 
-      <div ref={mapEl} className="absolute inset-0" />
+      {/* Map Canvas - Adjusted for VSCode-style UI panels */}
+      <div
+        ref={mapEl}
+        className="absolute inset-0 transition-all duration-300"
+        style={{
+          left: leftSidebarView ? "332px" : "48px", // Icon bar (48px) + panel (280px) when open
+          right: isPropertiesPanelOpen ? "360px" : "0",
+          // top: "60px",
+          bottom: "200px", // Space for timeline workspace
+        }}
+      />
 
-      <DataLayersPanel
+      {/* NEW: VSCode-style Left Sidebar */}
+      <LeftSidebarToolbox
+        activeView={leftSidebarView}
+        onViewChange={setLeftSidebarView}
+        features={features}
+        layers={layers}
+        segments={segments}
+        transitions={transitions}
+        baseLayer={baseKey}
+        currentMap={mapRef.current}
+        onSelectFeature={handleSelectFeature}
+        onSelectLayer={handleSelectLayerNew}
+        onBaseLayerChange={setBaseKey}
+        onFeatureVisibilityChange={onFeatureVisibilityChange}
+        onLayerVisibilityChange={onLayerVisibilityChange}
+        onDeleteFeature={onDeleteFeature}
+        onSegmentClick={handleSegmentClick}
+        onSaveSegment={handleSaveSegment}
+        onDeleteSegment={handleDeleteSegment}
+        onSaveTransition={handleSaveTransition}
+        onDeleteTransition={handleDeleteTransition}
+      />
+
+      {/* NEW: Right Properties Panel */}
+      <PropertiesPanel
+        isOpen={isPropertiesPanelOpen}
+        selectedItem={selectedEntity}
+        onClose={() => setIsPropertiesPanelOpen(false)}
+      />
+
+      {/* NEW: Bottom Timeline Workspace */}
+      <TimelineWorkspace
+        segments={segments}
+        transitions={transitions}
+        activeSegmentId={activeSegmentId}
+        isPlaying={isPlayingTimeline}
+        currentTime={currentPlaybackTime}
+        leftOffset={leftSidebarView ? 332 : 48} // Icon bar (48px) + panel (280px) when open
+        isOpen={isTimelineOpen}
+        onToggle={() => setIsTimelineOpen((prev) => !prev)}
+        onReorder={handleTimelineReorder}
+        onPlay={handlePlayTimeline}
+        onStop={handleStopTimeline}
+        // onSkipForward={handleSkipForward}
+        // onSkipBackward={handleSkipBackward}
+        onSegmentClick={handleSegmentClick}
+      />
+
+      {/* Segment Dialog - Now handled inline in LeftSidebarToolbox */}
+      {/* {showSegmentDialog && (
+        <SegmentDialog
+          editing={editingSegment}
+          currentMap={mapRef.current}
+          onClose={() => setShowSegmentDialog(false)}
+          onSave={handleSaveSegment}
+        />
+      )} */}
+
+      {/* Transitions Dialog - Now handled inline in LeftSidebarToolbox */}
+      {/* {showTransitionDialog && mapId && (
+        <TimelineTransitionsDialog
+          mapId={mapId}
+          segments={segments}
+          onClose={() => setShowTransitionDialog(false)}
+        />
+      )} */}
+
+      {/* EXISTING PANELS - Keep for backward compatibility */}
+      {/* <DataLayersPanel
         features={features}
         layers={layers}
         showDataLayersPanel={showDataLayersPanel}
@@ -2127,7 +2479,7 @@ export default function EditMapPage() {
         onUpdateLayer={onUpdateLayer}
         onUpdateFeature={onUpdateFeature}
         onApplyStyle={onApplyStyle}
-      />
+      /> */}
 
       <MapControls
         zoomIn={zoomIn}
@@ -2142,6 +2494,7 @@ export default function EditMapPage() {
           setShowSegmentPanel(!showSegmentPanel);
           if (!showSegmentPanel) setShowPoiPanel(false);
         }}
+        isTimelineOpen={isTimelineOpen}
       />
 
       {/* Right Panel - POI or Story Map Timeline */}
