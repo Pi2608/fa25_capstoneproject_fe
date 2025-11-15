@@ -250,7 +250,7 @@ export const messages = {
             errEmailRequired: 'Vui lòng nhập email',
             errEmailFormat: 'Định dạng email không hợp lệ',
             errPasswordRequired: 'Vui lòng nhập mật khẩu',
-            toastWelcomeAdmin: 'Chào mừng Admin! Đang chuyển tới trang quản trị...',
+            toastWelcomeAdmin: 'Chào mừng Admin! Đang chuyển tới trang quản trị viên...',
             toastLoginSetup: 'Đăng nhập thành công! Hãy thiết lập tài khoản của bạn...',
             toastLoginOk: 'Đăng nhập thành công! Đang chuyển hướng...',
             toastLoginFail: 'Email hoặc mật khẩu không đúng'
@@ -634,6 +634,62 @@ export const messages = {
             tabs_billing: "Thanh toán",
             tabs_developers: "Nhà phát triển",
             tabs_workspace: "Workspace",
+        },
+        support: {
+            ticketListSubtitle: "Danh sách yêu cầu hỗ trợ",
+            createCancel: "Hủy",
+            badgeLabel: "Trung tâm trợ giúp",
+            title: "Help & Support",
+            subtitle:
+                "Tìm câu trả lời nhanh hoặc gửi ticket để đội ngũ hỗ trợ xử lý vấn đề của bạn.",
+
+            errorRequestFailed: "Yêu cầu thất bại. Vui lòng thử lại.",
+            createButtonHeader: "Tạo yêu cầu",
+            createTitle: "Tạo ticket mới",
+            createDescription: "Hãy mô tả rõ vấn đề để chúng tôi hỗ trợ nhanh hơn.",
+            createSubjectLabel: "Tiêu đề",
+            createSubjectPlaceholder: "Ví dụ: Lỗi khi tạo bản đồ mới",
+            createPriorityLabel: "Mức độ ưu tiên (tuỳ chọn)",
+            createPriorityPlaceholder: "Ví dụ: Cao, Trung bình, Thấp",
+            createDescriptionLabel: "Mô tả chi tiết",
+            createDescriptionPlaceholder:
+                "Mô tả các bước dẫn tới lỗi, màn hình, thời gian xảy ra...",
+            createSubmit: "Gửi ticket",
+            createSubmitting: "Đang gửi...",
+
+            ticketListTitle: "Ticket của bạn",
+            ticketListLoading: "Đang tải...",
+            ticketListCount: "{{count}} ticket",
+            ticketListEmpty:
+                "Bạn chưa có ticket nào. Hãy tạo ticket mới khi cần hỗ trợ.",
+            ticketCreatedAt: "Tạo lúc {{createdAt}}",
+
+            detailPlaceholder: "Chọn một ticket để xem chi tiết",
+            detailMeta: "Mã ticket: {{ticketId}} • Tạo lúc {{createdAt}}",
+            detailLoading: "Đang tải chi tiết ticket...",
+            detailEmpty:
+                "Chọn một ticket ở danh sách bên trái để xem nội dung trao đổi với đội ngũ hỗ trợ.",
+            detailInitialDescriptionTitle: "Mô tả ban đầu",
+            detailCloseButton: "Đóng ticket",
+            detailClosing: "Đang đóng...",
+
+            messagesEmpty:
+                "Ticket chưa có tin nhắn nào. Hãy gửi tin nhắn đầu tiên cho đội hỗ trợ.",
+            messagesNotice:
+                "Vui lòng không chia sẻ mật khẩu hay thông tin nhạy cảm trong tin nhắn.",
+            messagesPlaceholder:
+                "Nhập nội dung tin nhắn để trao đổi với đội hỗ trợ...",
+            messagesPlaceholderClosed:
+                "Ticket đã đóng, bạn không thể gửi thêm tin nhắn.",
+            messagesPlaceholderNoTicket:
+                "Chọn ticket trước khi gửi tin nhắn.",
+            messagesSend: "Gửi tin nhắn",
+            messagesSending: "Đang gửi...",
+
+            statusOpen: "Đang mở",
+            statusPending: "Đang xử lý",
+            statusClosed: "Đã đóng",
+            statusOther: "Khác",
         },
         workspaces: {
             title: "Không gian làm việc",
@@ -2503,6 +2559,62 @@ export const messages = {
 
             toast_deleted: "Map deleted!",
             toast_removed: "Removed map from workspace!"
+        },
+        support: {
+            ticketListSubtitle: "Ticket list",
+            createCancel: "Cancel",
+            badgeLabel: "Help center",
+            title: "Help & Support",
+            subtitle:
+                "Find quick answers or submit a ticket so our team can help you solve issues.",
+
+            errorRequestFailed: "Request failed. Please try again.",
+            createButtonHeader: "Create a request",
+            createTitle: "Create a new ticket",
+            createDescription: "Describe your issue clearly so we can assist you faster.",
+            createSubjectLabel: "Subject",
+            createSubjectPlaceholder: "Example: Error when creating a new map",
+            createPriorityLabel: "Priority (optional)",
+            createPriorityPlaceholder: "Example: High, Medium, Low",
+            createDescriptionLabel: "Detailed description",
+            createDescriptionPlaceholder:
+                "Describe the steps leading to the issue, screen, time it happened...",
+            createSubmit: "Submit ticket",
+            createSubmitting: "Submitting...",
+
+            ticketListTitle: "Your tickets",
+            ticketListLoading: "Loading...",
+            ticketListCount: "{{count}} tickets",
+            ticketListEmpty:
+                "You don’t have any tickets yet. Create one when you need help.",
+            ticketCreatedAt: "Created at {{createdAt}}",
+
+            detailPlaceholder: "Select a ticket to view its details",
+            detailMeta: "Ticket ID: {{ticketId}} • Created at {{createdAt}}",
+            detailLoading: "Loading ticket details...",
+            detailEmpty:
+                "Select a ticket from the list on the left to see the conversation with support.",
+            detailInitialDescriptionTitle: "Initial description",
+            detailCloseButton: "Close ticket",
+            detailClosing: "Closing...",
+
+            messagesEmpty:
+                "This ticket has no messages yet. Send the first message to support.",
+            messagesNotice:
+                "Please do not share passwords or sensitive information in messages.",
+            messagesPlaceholder:
+                "Type your message to continue the conversation with support...",
+            messagesPlaceholderClosed:
+                "This ticket is closed. You can no longer send messages.",
+            messagesPlaceholderNoTicket:
+                "Select a ticket before sending a message.",
+            messagesSend: "Send message",
+            messagesSending: "Sending...",
+
+            statusOpen: "Open",
+            statusPending: "Pending",
+            statusClosed: "Closed",
+            statusOther: "Other",
         },
         profile: {
             header_title: "Personal information",
