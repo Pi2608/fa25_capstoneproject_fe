@@ -58,6 +58,8 @@ import { PublishButton } from "@/components/map-editor";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
 import MapPoiPanel from "@/components/poi/PoiPanel";
+import { PoiTooltipModal } from "@/components/poi/PoiTooltipModal";
+import { getMapPois, type MapPoi } from "@/lib/api-poi";
 
 import { useToast } from "@/contexts/ToastContext";
 import type { FeatureCollection, Feature as GeoJSONFeature } from "geojson";
@@ -90,6 +92,17 @@ export default function EditMapPage() {
   const [layers, setLayers] = useState<LayerDTO[]>([]);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({});
   const [featureVisibility, setFeatureVisibility] = useState<Record<string, boolean>>({})
+
+  // POI tooltip modal state
+  const [poiTooltipModal, setPoiTooltipModal] = useState<{
+    isOpen: boolean;
+    title?: string;
+    content?: string;
+    x?: number;
+    y?: number;
+  }>({
+    isOpen: false,
+  });
 
   // New state for multi-selection and hover interaction
   const [currentLayer, setCurrentLayer] = useState<Layer | null>(null);
@@ -136,6 +149,7 @@ export default function EditMapPage() {
   const dataLayerRefs = useRef<Map<string, L.Layer>>(new Map());
   const originalStylesRef = useRef<Map<Layer, LayerStyle>>(new Map());
   const lastUpdateRef = useRef<Map<string, number>>(new Map());
+  const poiMarkersRef = useRef<L.Marker[]>([]);
 
 
   // Helper: Store original style
@@ -957,9 +971,11 @@ export default function EditMapPage() {
 
       isPickingPoi = true;
 
-      // Thay đổi cursor thành crosshair
+      // Thay đổi cursor thành crosshair (dấu cộng)
       const mapContainer = map.getContainer();
       mapContainer.style.cursor = 'crosshair';
+      // Đảm bảo cursor được apply ngay
+      mapContainer.style.setProperty('cursor', 'crosshair', 'important');
 
       // Xử lý click trên map
       clickHandler = (e: LeafletMouseEvent) => {
@@ -989,15 +1005,530 @@ export default function EditMapPage() {
       map.on('click', clickHandler);
     };
 
+    const handleStopPickLocation = () => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      isPickingPoi = false;
+      
+      // Reset cursor
+      const mapContainer = map.getContainer();
+      mapContainer.style.cursor = '';
+
+      // Remove click handler nếu có
+      if (clickHandler) {
+        map.off('click', clickHandler);
+        clickHandler = null;
+      }
+    };
+
     window.addEventListener('poi:startPickLocation', handleStartPickLocation);
+    window.addEventListener('poi:stopPickLocation', handleStopPickLocation);
 
     return () => {
       window.removeEventListener('poi:startPickLocation', handleStartPickLocation);
+      window.removeEventListener('poi:stopPickLocation', handleStopPickLocation);
       if (clickHandler && mapRef.current) {
         mapRef.current.off('click', clickHandler);
       }
+      // Reset cursor khi cleanup
+      if (mapRef.current) {
+        mapRef.current.getContainer().style.cursor = '';
+      }
     };
   }, []);
+
+  // Inject global CSS for POI markers
+  useEffect(() => {
+    const styleId = 'poi-marker-styles';
+    if (document.getElementById(styleId)) return;
+
+    const style = document.createElement('style');
+    style.id = styleId;
+    style.textContent = `
+      .poi-marker {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background: transparent !important;
+        border: none !important;
+      }
+      .poi-marker > div {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        background: transparent !important;
+        border: none !important;
+        width: 100% !important;
+        height: 100% !important;
+      }
+      .poi-marker img {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+      .poi-tooltip-modal {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+      }
+      .poi-tooltip-modal::-webkit-scrollbar {
+        width: 6px;
+      }
+      .poi-tooltip-modal::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .poi-tooltip-modal::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 3px;
+      }
+      .poi-tooltip-modal::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.5);
+      }
+      .poi-tooltip-modal h1,
+      .poi-tooltip-modal h2,
+      .poi-tooltip-modal h3,
+      .poi-tooltip-modal h4,
+      .poi-tooltip-modal h5,
+      .poi-tooltip-modal h6 {
+        margin: 0 0 8px 0;
+        color: #ffffff;
+      }
+      .poi-tooltip-modal p {
+        margin: 0 0 8px 0;
+      }
+      .poi-tooltip-modal p:last-child {
+        margin-bottom: 0;
+      }
+      .poi-tooltip-modal ul,
+      .poi-tooltip-modal ol {
+        margin: 8px 0;
+        padding-left: 24px;
+      }
+      .poi-tooltip-modal * {
+        color: inherit !important;
+      }
+      .poi-tooltip-modal {
+        color: #ffffff !important;
+      }
+      .poi-tooltip-modal p,
+      .poi-tooltip-modal span,
+      .poi-tooltip-modal div,
+      .poi-tooltip-modal li {
+        color: #ffffff !important;
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      const existingStyle = document.getElementById(styleId);
+      if (existingStyle) {
+        existingStyle.remove();
+      }
+    };
+  }, []);
+
+  // Load and render POIs when PoiPanel is opened
+  useEffect(() => {
+    if (!showPoiPanel || !mapRef.current || !mapId || !isMapReady) return;
+
+    let cancelled = false;
+
+    const loadAndRenderPois = async () => {
+      try {
+        // Clear existing POI markers
+        poiMarkersRef.current.forEach(marker => {
+          try {
+            // Cleanup tooltip modal if exists
+            const tooltipCleanup = (marker as any)._tooltipCleanup;
+            if (tooltipCleanup) {
+              tooltipCleanup();
+            }
+            // Remove any existing tooltip modal
+            const existingTooltip = document.querySelector(`.poi-tooltip-modal[data-poi-id="${(marker as any)._poiId}"]`);
+            if (existingTooltip) {
+              existingTooltip.remove();
+            }
+            mapRef.current?.removeLayer(marker);
+          } catch {}
+        });
+        poiMarkersRef.current = [];
+
+        // Load POIs
+        const pois = await getMapPois(mapId) as MapPoi[];
+
+        if (cancelled || !mapRef.current) {
+          return;
+        }
+
+        const L = (await import("leaflet")).default;
+        const allBounds: L.LatLngBounds[] = [];
+
+        // Render each POI
+        for (const poi of pois) {
+          if (cancelled || !mapRef.current) break;
+          
+          try {
+         if (poi.isVisible === false) {
+
+              continue;
+            }
+
+            if (!poi.markerGeometry) {
+              console.warn(`⚠️ POI ${poi.poiId} has no geometry`);
+              continue;
+            }
+
+            let geoJsonData;
+            try {
+              geoJsonData = JSON.parse(poi.markerGeometry);
+            } catch (parseError) {
+              console.error(`❌ Failed to parse geometry for POI ${poi.poiId}:`, parseError);
+              continue;
+            }
+
+            const coords = geoJsonData.coordinates;
+            const latLng: [number, number] = [coords[1], coords[0]];
+
+
+            // Create marker icon based on config
+            const iconSize = poi.iconSize || 32;
+            const iconColor = poi.iconColor || '#FF0000';
+
+            // Determine icon content: IconUrl (image), IconType (emoji), or default
+            let iconHtml = '';
+            const defaultIcon = '📍';
+            
+            if (poi.iconUrl) {
+              // Use custom image
+              iconHtml = `<div style="
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                width: ${iconSize}px !important;
+                height: ${iconSize}px !important;
+                background: transparent !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+              "><img src="${poi.iconUrl}" style="
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: contain !important;
+                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)) !important;
+                pointer-events: none !important;
+                display: block !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+              " alt="${poi.title}" /></div>`;
+            } else {
+              // Use emoji or default
+              const iconContent = (poi.iconType && poi.iconType.trim()) || defaultIcon;
+              iconHtml = `<div style="
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                width: ${iconSize}px !important;
+                height: ${iconSize}px !important;
+                font-size: ${iconSize}px !important;
+                text-align: center !important;
+                line-height: 1 !important;
+                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)) !important;
+                color: ${iconColor} !important;
+                background: transparent !important;
+                pointer-events: none !important;
+                user-select: none !important;
+                visibility: visible !important;
+                opacity: 1 !important;
+                font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif !important;
+              ">${iconContent}</div>`;
+            }
+            
+            const marker = L.marker(latLng, {
+              icon: L.divIcon({
+                className: 'poi-marker',
+                html: iconHtml,
+                iconSize: [iconSize, iconSize],
+                iconAnchor: [iconSize / 2, iconSize],
+                popupAnchor: [0, -iconSize],
+              }),
+              zIndexOffset: poi.zIndex || 100,
+              interactive: true,
+              keyboard: true,
+              riseOnHover: true,
+            });
+            
+            // Force styles after marker is created
+            const iconElement = marker.getIcon();
+            if (iconElement && iconElement.options) {
+              // Ensure icon is visible by default
+              setTimeout(() => {
+                const markerElement = marker.getElement();
+                if (markerElement) {
+                  markerElement.style.cssText += `
+                    display: block !important;
+                    visibility: visible !important;
+                    opacity: 1 !important;
+                  `;
+                  const iconDiv = markerElement.querySelector('div');
+                  if (iconDiv) {
+                    iconDiv.style.cssText += `
+                      display: flex !important;
+                      visibility: visible !important;
+                      opacity: 1 !important;
+                    `;
+                  }
+                }
+              }, 50);
+            }
+            
+            // Store POI ID for cleanup
+            (marker as any)._poiId = poi.poiId;
+            
+            // Add click handler to show tooltip modal if enabled
+            if (poi.showTooltip !== false && poi.tooltipContent) {
+              marker.on('click', (e) => {
+                // Process content
+                let rawContent = poi.tooltipContent || '';
+                let processedContent = rawContent;
+                
+                // Method 1: Parse JSON string if needed
+                if (rawContent.startsWith('"') && rawContent.endsWith('"')) {
+                  try {
+                    processedContent = JSON.parse(rawContent);
+                  } catch (e) {
+                    // Not JSON, use as-is
+                  }
+                }
+                
+                // Method 2: Unescape common escape sequences
+                if (processedContent.includes('\\"') || processedContent.includes('\\n') || processedContent.includes('\\r')) {
+                  processedContent = processedContent
+                    .replace(/\\"/g, '"')
+                    .replace(/\\n/g, '\n')
+                    .replace(/\\r/g, '\r')
+                    .replace(/\\t/g, '\t')
+                    .replace(/\\\\/g, '\\');
+                }
+                
+                // Method 3: Decode HTML entities
+                try {
+                  const textarea = document.createElement('textarea');
+                  textarea.innerHTML = processedContent;
+                  const decoded = textarea.value;
+                  if (decoded !== processedContent) {
+                    processedContent = decoded;
+                  }
+                } catch (e) {
+                  // Decode failed, use as-is
+                }
+                
+                // Open modal with processed content
+                setPoiTooltipModal({
+                  isOpen: true,
+                  title: poi.title,
+                  content: processedContent,
+                });
+              });
+            }
+
+            // Add popup if enabled - rich HTML content with media, audio, external link
+            if (poi.openSlideOnClick && poi.slideContent) {
+              // Build media gallery
+              let mediaHtml = '';
+              if (poi.mediaResources) {
+                const mediaUrls = poi.mediaResources.split('\n').filter((url: string) => url.trim());
+                if (mediaUrls.length > 0) {
+                  mediaHtml = '<div style="margin: 12px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px;">';
+                  mediaUrls.forEach((url: string) => {
+                    const trimmedUrl = url.trim();
+                    // Check if image or video
+                    if (trimmedUrl.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
+                      mediaHtml += `<img src="${trimmedUrl}" style="width: 100%; height: 80px; object-fit: cover; border-radius: 4px; cursor: pointer;" onclick="window.open('${trimmedUrl}', '_blank')" />`;
+                    } else if (trimmedUrl.match(/\.(mp4|webm|ogg)$/i)) {
+                      mediaHtml += `<video controls style="width: 100%; height: 80px; object-fit: cover; border-radius: 4px;"><source src="${trimmedUrl}" /></video>`;
+                    }
+                  });
+                  mediaHtml += '</div>';
+                }
+              }
+
+              // Build audio player
+              let audioHtml = '';
+              if (poi.playAudioOnClick && poi.audioUrl) {
+                audioHtml = `
+                  <div style="margin: 12px 0;">
+                    <audio controls style="width: 100%; height: 32px;">
+                      <source src="${poi.audioUrl}" />
+                      Your browser does not support the audio element.
+                    </audio>
+                  </div>
+                `;
+              }
+
+              // Build external link button
+              let linkHtml = '';
+              if (poi.externalUrl) {
+                linkHtml = `
+                  <div style="margin: 12px 0;">
+                    <a href="${poi.externalUrl}" target="_blank" rel="noopener noreferrer" 
+                       style="display: inline-block; padding: 8px 16px; background: #3b82f6; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500;">
+                      🔗 Open External Link
+                    </a>
+                  </div>
+                `;
+              }
+
+              const popupHtml = `
+                <div style="min-width: 250px; max-width: 400px;">
+                  <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600; color: #1f2937;">
+                    ${poi.title}
+                  </h3>
+                  ${poi.subtitle ? `<p style="margin: 0 0 12px 0; font-size: 13px; color: #6b7280; font-style: italic;">${poi.subtitle}</p>` : ''}
+                  <div style="margin: 12px 0; font-size: 14px; line-height: 1.6; color: #374151;">
+                    ${poi.slideContent}
+                  </div>
+                  ${mediaHtml}
+                  ${audioHtml}
+                  ${linkHtml}
+                </div>
+              `;
+              
+              marker.bindPopup(popupHtml, {
+                maxWidth: 400,
+                className: 'poi-popup-custom',
+              });
+            }
+
+            marker.addTo(mapRef.current);
+  
+            // Verify marker is actually on map
+            setTimeout(() => {
+              const markerElement = marker.getElement();
+              if (markerElement) {
+                const rect = markerElement.getBoundingClientRect();
+              } else {
+              }
+            }, 100);
+            
+            // Apply entry animation if configured (only if explicitly set, not by default)
+            const entryEffect = poi.entryEffect;
+            const entryDelayMs = poi.entryDelayMs || 0;
+            const entryDurationMs = poi.entryDurationMs || 400;
+            
+            // Only apply animation if entryEffect is explicitly set and not 'none'
+            // If entryEffect is undefined/null, show marker immediately (no animation)
+            if (entryEffect && entryEffect !== 'none') {
+              // Wait for marker to be added to DOM
+              setTimeout(() => {
+                const markerElement = marker.getElement();
+                if (markerElement) {
+                  // Initial state
+                  markerElement.style.transition = 'none';
+                  markerElement.style.opacity = '0';
+                  
+                  if (entryEffect === 'fade') {
+                    markerElement.style.opacity = '0';
+                  } else if (entryEffect === 'scale') {
+                    markerElement.style.transform = 'scale(0)';
+                    markerElement.style.opacity = '0';
+                  } else if (entryEffect === 'slide-up') {
+                    markerElement.style.transform = 'translateY(20px)';
+                    markerElement.style.opacity = '0';
+                  } else if (entryEffect === 'bounce') {
+                    markerElement.style.transform = 'scale(0.3)';
+                    markerElement.style.opacity = '0';
+                  }
+                  
+                  // Animate after delay
+                  setTimeout(() => {
+                    const currentElement = marker.getElement();
+                    if (!currentElement) return;
+                    currentElement.style.transition = `all ${entryDurationMs}ms ease-out`;
+                    currentElement.style.opacity = '1';
+                    currentElement.style.transform = 'scale(1) translateY(0)';
+                  }, entryDelayMs);
+                } else {
+                }
+              }, 50); // Small delay to ensure marker is in DOM
+            } else {
+              // No animation - ensure marker is visible immediately
+              setTimeout(() => {
+                const markerElement = marker.getElement();
+                if (markerElement) {
+                  markerElement.style.opacity = '1';
+                  markerElement.style.transform = '';
+                  markerElement.style.display = 'block';
+                  markerElement.style.visibility = 'visible';
+                  // Ensure icon child is visible
+                  const iconDiv = markerElement.querySelector('div');
+                  if (iconDiv) {
+                    iconDiv.style.opacity = '1';
+                    iconDiv.style.display = 'flex';
+                    iconDiv.style.visibility = 'visible';
+                  }
+                } else {
+                }
+              }, 100);
+            }
+            
+            poiMarkersRef.current.push(marker);
+            allBounds.push(L.latLngBounds([latLng, latLng]));
+          } catch (error) {
+            console.error(`❌ Failed to render POI ${poi.poiId}:`, error);
+          }
+        }
+
+        // Fit map to show all POIs if there are any
+        if (allBounds.length > 0 && mapRef.current) {
+          try {
+            const combinedBounds = allBounds.reduce((acc: L.LatLngBounds, bounds: L.LatLngBounds) => {
+              return acc.extend(bounds);
+            }, allBounds[0]);
+            
+            mapRef.current.fitBounds(combinedBounds, {
+              padding: [50, 50],
+              maxZoom: 18,
+            });
+          } catch (error) {
+            // Fallback: zoom to first POI
+            if (poiMarkersRef.current.length > 0) {
+              const firstMarker = poiMarkersRef.current[0];
+              mapRef.current.setView(firstMarker.getLatLng(), 15);
+            }
+          }
+        }
+      } catch (error) {
+      }
+    };
+
+    loadAndRenderPois();
+
+    // Listen for POI changes to refresh markers
+    const handlePoiChange = () => {
+      if (!cancelled && mapRef.current && showPoiPanel) {
+        loadAndRenderPois();
+      }
+    };
+
+    window.addEventListener('poi:created', handlePoiChange);
+    window.addEventListener('poi:updated', handlePoiChange);
+    window.addEventListener('poi:deleted', handlePoiChange);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('poi:created', handlePoiChange);
+      window.removeEventListener('poi:updated', handlePoiChange);
+      window.removeEventListener('poi:deleted', handlePoiChange);
+      // Cleanup: remove all POI markers
+      poiMarkersRef.current.forEach(marker => {
+        try {
+          mapRef.current?.removeLayer(marker);
+        } catch {}
+      });
+      poiMarkersRef.current = [];
+    };
+  }, [showPoiPanel, mapId, isMapReady]);
 
   // Layer feature click handler for highlighting
   useEffect(() => {
@@ -1727,6 +2258,13 @@ export default function EditMapPage() {
         featureIndex={copyFeatureDialog.featureIndex}
         initialCopyMode={copyFeatureDialog.copyMode}
         onSuccess={handleCopyFeatureSuccess}
+      />
+
+      <PoiTooltipModal
+        isOpen={poiTooltipModal.isOpen}
+        onClose={() => setPoiTooltipModal(prev => ({ ...prev, isOpen: false }))}
+        title={poiTooltipModal.title}
+        content={poiTooltipModal.content}
       />
 
       <style jsx global>{`

@@ -1,4 +1,5 @@
 import { getJson, postJson, putJson, delJson } from "./api-core";
+import type { LocationType } from "@/types";
 
 // ================== TYPES ==================
 
@@ -163,7 +164,7 @@ export type Location = {
   zoneId?: string;
   title: string;
   subtitle?: string;
-  locationType: "PointOfInterest" | "Line" | "Polygon" | "TextOnly" | "MediaSpot" | "Custom";
+  locationType: LocationType;
   markerGeometry?: string; // GeoJSON Point
   storyContent?: string;
   mediaResources?: string;
@@ -416,7 +417,7 @@ export type CreateLocationRequest = {
   title: string;
   subtitle?: string;
   description?: string;
-  locationType: "PointOfInterest" | "Line" | "Polygon" | "TextOnly" | "MediaSpot" | "Custom";
+  locationType: LocationType;
   markerGeometry: string; // GeoJSON Point
   iconType?: string;
   iconUrl?: string;

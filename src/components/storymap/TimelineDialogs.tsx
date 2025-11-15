@@ -29,6 +29,7 @@ type TimelineDialogsProps = {
   showLocationDialog: boolean;
   onCloseLocationDialog: () => void;
   onSaveLocation: (data: CreateLocationRequest) => Promise<void>;
+  onWaitingStateChange?: (waiting: boolean) => void;
   
   // Delete confirmations
   confirmDelete: Segment | null;
@@ -56,6 +57,7 @@ export default function TimelineDialogs({
   showLocationDialog,
   onCloseLocationDialog,
   onSaveLocation,
+  onWaitingStateChange,
   confirmDelete,
   onCloseConfirmDelete,
   onConfirmDelete,
@@ -100,6 +102,7 @@ export default function TimelineDialogs({
           currentMap={currentMap}
           onClose={onCloseLocationDialog}
           onSave={onSaveLocation}
+          onWaitingStateChange={onWaitingStateChange}
         />
       )}
 
