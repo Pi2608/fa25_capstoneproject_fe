@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { arrayMove } from "@dnd-kit/sortable";
 import { useSegments } from "@/hooks/useSegments";
 import { useSegmentHandlers } from "@/hooks/useSegmentHandlers";
@@ -9,7 +9,8 @@ import TimelineHeader from "@/components/storymap/TimelineHeader";
 import SegmentList from "@/components/storymap/SegmentList";
 import TimelineDialogs from "@/components/storymap/TimelineDialogs";
 import TimelineTransitionsDialog from "@/components/storymap/dialogs/TimelineTransitionsDialog";
-import { Segment, getCurrentCameraState } from "@/lib/api-storymap";
+import { PoiTooltipModal } from "@/components/poi/PoiTooltipModal";
+import { Segment, getCurrentCameraState, Location } from "@/lib/api-storymap";
 
 type Props = {
   mapId: string;
@@ -21,6 +22,15 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
   const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
   const [showTransitionsDialog, setShowTransitionsDialog] = useState(false);
+  
+  // PoiTooltipModal state
+  const [tooltipModalOpen, setTooltipModalOpen] = useState(false);
+  const [tooltipModalData, setTooltipModalData] = useState<{
+    title?: string;
+    content?: string;
+    x?: number;
+    y?: number;
+  } | null>(null);
 
   const {
     segments,
@@ -35,6 +45,19 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
     updateSegmentsState,
   } = useSegments(mapId);
 
+  // Handle location click to show PoiTooltipModal
+  const handleLocationClick = useCallback((location: Location, event?: { latlng?: { lat: number; lng: number } }) => {
+    // Always center the modal on screen for better UX
+    setTooltipModalData({
+      title: location.title,
+      content: location.popupContent || location.tooltipContent || location.description || "",
+      // Don't set x, y to always center the modal
+      x: undefined,
+      y: undefined,
+    });
+    setTooltipModalOpen(true);
+  }, []);
+
   const playback = useSegmentPlayback({
     mapId,
     segments,
@@ -43,6 +66,7 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
     setCurrentSegmentLayers,
     setActiveSegmentId,
     onSegmentSelect,
+    onLocationClick: handleLocationClick,
   });
 
   const handlers = useSegmentHandlers({
@@ -308,6 +332,21 @@ export default function StoryMapTimeline({ mapId, currentMap, onSegmentSelect }:
             </button>
           </div>
         </div>
+      )}
+
+      {/* PoiTooltipModal for StoryMap locations */}
+      {tooltipModalOpen && tooltipModalData && (
+        <PoiTooltipModal
+          isOpen={tooltipModalOpen}
+          onClose={() => {
+            setTooltipModalOpen(false);
+            setTooltipModalData(null);
+          }}
+          title={tooltipModalData.title}
+          content={tooltipModalData.content}
+          x={tooltipModalData.x}
+          y={tooltipModalData.y}
+        />
       )}
     </>
   );
