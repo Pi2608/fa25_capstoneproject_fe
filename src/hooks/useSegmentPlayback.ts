@@ -10,6 +10,7 @@ type UseSegmentPlaybackProps = {
   setCurrentSegmentLayers: (layers: any[]) => void;
   setActiveSegmentId: (id: string | null) => void;
   onSegmentSelect?: (segment: Segment) => void;
+  onLocationClick?: (location: any, event?: any) => void;
 };
 
 export function useSegmentPlayback({
@@ -20,6 +21,7 @@ export function useSegmentPlayback({
   setCurrentSegmentLayers,
   setActiveSegmentId,
   onSegmentSelect,
+  onLocationClick,
 }: UseSegmentPlaybackProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPlayIndex, setCurrentPlayIndex] = useState(0);
@@ -228,12 +230,15 @@ export function useSegmentPlayback({
             });
 
             // Add tooltip if enabled - support HTML content
-            if (location.showTooltip && location.tooltipContent) {
-              marker.bindTooltip(location.tooltipContent, {
-                permanent: false,
+            // During playback, always show title as permanent label above marker
+            const tooltipContent = location.title || location.tooltipContent || '';
+            if (tooltipContent) {
+              marker.bindTooltip(tooltipContent, {
+                permanent: true, // Always show during playback
                 direction: 'top',
-                className: 'location-tooltip',
+                className: 'location-title-tooltip',
                 opacity: 0.95,
+                offset: [0, -(iconSize / 2) - 8], // Position above marker
               });
             }
 
@@ -241,8 +246,8 @@ export function useSegmentPlayback({
             if (location.openPopupOnClick && location.popupContent) {
               // Build media gallery
               let mediaHtml = '';
-              if (location.mediaUrls) {
-                const mediaUrls = location.mediaUrls.split('\n').filter((url: string) => url.trim());
+              if (location.mediaResources) {
+                const mediaUrls = location.mediaResources.split('\n').filter((url: string) => url.trim());
                 if (mediaUrls.length > 0) {
                   mediaHtml = '<div style="margin: 12px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px;">';
                   mediaUrls.forEach((url: string) => {
@@ -299,16 +304,27 @@ export function useSegmentPlayback({
                 </div>
               `;
               
-              marker.bindPopup(popupHtml, {
-                maxWidth: 400,
-                className: 'location-popup-custom',
+              // Use custom modal if callback provided, otherwise use Leaflet popup
+              if (onLocationClick) {
+                marker.on('click', (e: any) => {
+                  onLocationClick(location, e);
+                });
+              } else {
+                marker.bindPopup(popupHtml, {
+                  maxWidth: 400,
+                  className: 'location-popup-custom',
+                });
+              }
+            } else if (onLocationClick && (location.tooltipContent || location.description)) {
+              // If no popup but has tooltip content and callback, allow click to show modal
+              marker.on('click', (e: any) => {
+                onLocationClick(location, e);
               });
             }
 
-            // Add entry animation if configured
-            const entryEffect = location.entryEffect || 'fade';
-            const entryDelayMs = location.entryDelayMs || 0;
-            const entryDurationMs = location.entryDurationMs || 400;
+            const entryEffect = (location as any).entryEffect || 'fade';
+            const entryDelayMs = (location as any).entryDelayMs || 0;
+            const entryDurationMs = (location as any).entryDurationMs || 400;
             
             marker.addTo(currentMap);
             
