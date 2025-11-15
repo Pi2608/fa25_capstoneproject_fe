@@ -1010,7 +1010,7 @@ export default function EditMapPage() {
       if (!map) return;
 
       isPickingPoi = false;
-      
+
       // Reset cursor
       const mapContainer = map.getContainer();
       mapContainer.style.cursor = '';
@@ -1151,7 +1151,7 @@ export default function EditMapPage() {
               existingTooltip.remove();
             }
             mapRef.current?.removeLayer(marker);
-          } catch {}
+          } catch { }
         });
         poiMarkersRef.current = [];
 
@@ -1163,14 +1163,17 @@ export default function EditMapPage() {
         }
 
         const L = (await import("leaflet")).default;
-        const allBounds: L.LatLngBounds[] = [];
+
+        if (mapRef.current) {
+          mapRef.current.invalidateSize();
+        }
 
         // Render each POI
         for (const poi of pois) {
           if (cancelled || !mapRef.current) break;
-          
+
           try {
-         if (poi.isVisible === false) {
+            if (poi.isVisible === false) {
 
               continue;
             }
@@ -1199,7 +1202,7 @@ export default function EditMapPage() {
             // Determine icon content: IconUrl (image), IconType (emoji), or default
             let iconHtml = '';
             const defaultIcon = '📍';
-            
+
             if (poi.iconUrl) {
               // Use custom image
               iconHtml = `<div style="
@@ -1243,7 +1246,7 @@ export default function EditMapPage() {
                 font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif !important;
               ">${iconContent}</div>`;
             }
-            
+
             const marker = L.marker(latLng, {
               icon: L.divIcon({
                 className: 'poi-marker',
@@ -1257,41 +1260,17 @@ export default function EditMapPage() {
               keyboard: true,
               riseOnHover: true,
             });
-            
-            // Force styles after marker is created
-            const iconElement = marker.getIcon();
-            if (iconElement && iconElement.options) {
-              // Ensure icon is visible by default
-              setTimeout(() => {
-                const markerElement = marker.getElement();
-                if (markerElement) {
-                  markerElement.style.cssText += `
-                    display: block !important;
-                    visibility: visible !important;
-                    opacity: 1 !important;
-                  `;
-                  const iconDiv = markerElement.querySelector('div');
-                  if (iconDiv) {
-                    iconDiv.style.cssText += `
-                      display: flex !important;
-                      visibility: visible !important;
-                      opacity: 1 !important;
-                    `;
-                  }
-                }
-              }, 50);
-            }
-            
+
             // Store POI ID for cleanup
             (marker as any)._poiId = poi.poiId;
-            
+
             // Add click handler to show tooltip modal if enabled
             if (poi.showTooltip !== false && poi.tooltipContent) {
               marker.on('click', (e) => {
                 // Process content
                 let rawContent = poi.tooltipContent || '';
                 let processedContent = rawContent;
-                
+
                 // Method 1: Parse JSON string if needed
                 if (rawContent.startsWith('"') && rawContent.endsWith('"')) {
                   try {
@@ -1300,7 +1279,7 @@ export default function EditMapPage() {
                     // Not JSON, use as-is
                   }
                 }
-                
+
                 // Method 2: Unescape common escape sequences
                 if (processedContent.includes('\\"') || processedContent.includes('\\n') || processedContent.includes('\\r')) {
                   processedContent = processedContent
@@ -1310,7 +1289,7 @@ export default function EditMapPage() {
                     .replace(/\\t/g, '\t')
                     .replace(/\\\\/g, '\\');
                 }
-                
+
                 // Method 3: Decode HTML entities
                 try {
                   const textarea = document.createElement('textarea');
@@ -1322,7 +1301,7 @@ export default function EditMapPage() {
                 } catch (e) {
                   // Decode failed, use as-is
                 }
-                
+
                 // Open modal with processed content
                 setPoiTooltipModal({
                   isOpen: true,
@@ -1393,7 +1372,7 @@ export default function EditMapPage() {
                   ${linkHtml}
                 </div>
               `;
-              
+
               marker.bindPopup(popupHtml, {
                 maxWidth: 400,
                 className: 'poi-popup-custom',
@@ -1401,110 +1380,60 @@ export default function EditMapPage() {
             }
 
             marker.addTo(mapRef.current);
-  
-            // Verify marker is actually on map
-            setTimeout(() => {
-              const markerElement = marker.getElement();
-              if (markerElement) {
-                const rect = markerElement.getBoundingClientRect();
-              } else {
-              }
-            }, 100);
-            
-            // Apply entry animation if configured (only if explicitly set, not by default)
-            const entryEffect = poi.entryEffect;
-            const entryDelayMs = poi.entryDelayMs || 0;
-            const entryDurationMs = poi.entryDurationMs || 400;
-            
-            // Only apply animation if entryEffect is explicitly set and not 'none'
-            // If entryEffect is undefined/null, show marker immediately (no animation)
-            if (entryEffect && entryEffect !== 'none') {
-              // Wait for marker to be added to DOM
-              setTimeout(() => {
-                const markerElement = marker.getElement();
-                if (markerElement) {
-                  // Initial state
-                  markerElement.style.transition = 'none';
-                  markerElement.style.opacity = '0';
-                  
-                  if (entryEffect === 'fade') {
-                    markerElement.style.opacity = '0';
-                  } else if (entryEffect === 'scale') {
-                    markerElement.style.transform = 'scale(0)';
-                    markerElement.style.opacity = '0';
-                  } else if (entryEffect === 'slide-up') {
-                    markerElement.style.transform = 'translateY(20px)';
-                    markerElement.style.opacity = '0';
-                  } else if (entryEffect === 'bounce') {
-                    markerElement.style.transform = 'scale(0.3)';
-                    markerElement.style.opacity = '0';
+
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                if (marker && mapRef.current) {
+                  const currentLatLng = marker.getLatLng();
+                  marker.setLatLng(currentLatLng);
+
+                  const markerElement = marker.getElement();
+                  if (markerElement) {
+                    markerElement.style.transform = '';
+                    markerElement.style.opacity = '1';
+                    markerElement.style.display = 'block';
+                    markerElement.style.visibility = 'visible';
+
+                    const iconDiv = markerElement.querySelector('div');
+                    if (iconDiv) {
+                      iconDiv.style.opacity = '1';
+                      iconDiv.style.display = 'flex';
+                      iconDiv.style.visibility = 'visible';
+                    }
                   }
-                  
-                  // Animate after delay
-                  setTimeout(() => {
-                    const currentElement = marker.getElement();
-                    if (!currentElement) return;
-                    currentElement.style.transition = `all ${entryDurationMs}ms ease-out`;
-                    currentElement.style.opacity = '1';
-                    currentElement.style.transform = 'scale(1) translateY(0)';
-                  }, entryDelayMs);
-                } else {
                 }
-              }, 50); // Small delay to ensure marker is in DOM
-            } else {
-              // No animation - ensure marker is visible immediately
-              setTimeout(() => {
-                const markerElement = marker.getElement();
-                if (markerElement) {
-                  markerElement.style.opacity = '1';
-                  markerElement.style.transform = '';
-                  markerElement.style.display = 'block';
-                  markerElement.style.visibility = 'visible';
-                  // Ensure icon child is visible
-                  const iconDiv = markerElement.querySelector('div');
-                  if (iconDiv) {
-                    iconDiv.style.opacity = '1';
-                    iconDiv.style.display = 'flex';
-                    iconDiv.style.visibility = 'visible';
-                  }
-                } else {
-                }
-              }, 100);
-            }
-            
+              });
+            });
+
             poiMarkersRef.current.push(marker);
-            allBounds.push(L.latLngBounds([latLng, latLng]));
           } catch (error) {
             console.error(`❌ Failed to render POI ${poi.poiId}:`, error);
           }
         }
 
-        // Fit map to show all POIs if there are any
-        if (allBounds.length > 0 && mapRef.current) {
-          try {
-            const combinedBounds = allBounds.reduce((acc: L.LatLngBounds, bounds: L.LatLngBounds) => {
-              return acc.extend(bounds);
-            }, allBounds[0]);
-            
-            mapRef.current.fitBounds(combinedBounds, {
-              padding: [50, 50],
-              maxZoom: 18,
+        if (mapRef.current && poiMarkersRef.current.length > 0) {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (mapRef.current && poiMarkersRef.current.length > 0) {
+                mapRef.current.invalidateSize();
+
+                poiMarkersRef.current.forEach(marker => {
+                  if (marker) {
+                    const currentLatLng = marker.getLatLng();
+                    marker.setLatLng(currentLatLng);
+                  }
+                });
+              }
             });
-          } catch (error) {
-            // Fallback: zoom to first POI
-            if (poiMarkersRef.current.length > 0) {
-              const firstMarker = poiMarkersRef.current[0];
-              mapRef.current.setView(firstMarker.getLatLng(), 15);
-            }
-          }
+          });
         }
+
       } catch (error) {
       }
     };
 
     loadAndRenderPois();
 
-    // Listen for POI changes to refresh markers
     const handlePoiChange = () => {
       if (!cancelled && mapRef.current && showPoiPanel) {
         loadAndRenderPois();
@@ -1520,11 +1449,10 @@ export default function EditMapPage() {
       window.removeEventListener('poi:created', handlePoiChange);
       window.removeEventListener('poi:updated', handlePoiChange);
       window.removeEventListener('poi:deleted', handlePoiChange);
-      // Cleanup: remove all POI markers
       poiMarkersRef.current.forEach(marker => {
         try {
           mapRef.current?.removeLayer(marker);
-        } catch {}
+        } catch { }
       });
       poiMarkersRef.current = [];
     };
