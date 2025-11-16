@@ -17,6 +17,12 @@ import type {
   LayerWithOptions,
   GeomanLayer,
 } from "@/types";
+
+// CircleLayer type for circle radius updates
+interface CircleLayer extends Layer {
+  setRadius(radius: number): void;
+}
+
 import {
   getMapDetail,
   type MapDetail,
@@ -28,11 +34,13 @@ import {
   MapStatus,
   updateMapFeature,
   LayerDTO,
+  getMapFeatureById,
 } from "@/lib/api-maps";
 import {
   type FeatureData,
   serializeFeature,
   extractLayerStyle,
+  applyLayerStyle,
   handleLayerVisibilityChange,
   handleFeatureVisibilityChange,
   getFeatureType as getFeatureTypeUtil,
@@ -65,11 +73,12 @@ import { LeftSidebarToolbox } from "@/components/map-editor-ui/LeftSidebarToolbo
 import { TimelineWorkspace } from "@/components/map-editor-ui/TimelineWorkspace";
 import { PropertiesPanel } from "@/components/map-editor-ui/PropertiesPanel";
 import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
+import { useMapCollaboration, type MapSelection } from "@/hooks/useMapCollaboration";
 // import SegmentDialog from "@/components/storymap/dialogs/SegmentDialog";
 // import TimelineTransitionsDialog from "@/components/storymap/dialogs/TimelineTransitionsDialog";
 
 import { useToast } from "@/contexts/ToastContext";
-import type { FeatureCollection, Feature as GeoJSONFeature } from "geojson";
+import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geojson";
 
 
 
@@ -119,7 +128,6 @@ export default function EditMapPage() {
     data: FeatureData | LayerDTO | Segment;
   } | null>(null);
 
-  // Active drawing tool state
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [transitions, setTransitions] = useState<TimelineTransition[]>([]);
@@ -129,12 +137,6 @@ export default function EditMapPage() {
   const [isTimelineOpen, setIsTimelineOpen] = useState(true);
   const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
 
-  // Dialog state - removed, now handled inline in LeftSidebarToolbox
-  // const [showSegmentDialog, setShowSegmentDialog] = useState(false);
-  // const [editingSegment, setEditingSegment] = useState<Segment | undefined>(undefined);
-  // const [showTransitionDialog, setShowTransitionDialog] = useState(false);
-
-  // New state for multi-selection and hover interaction
   const [currentLayer, setCurrentLayer] = useState<Layer | null>(null);
   const [selectedLayers, setSelectedLayers] = useState<Set<Layer>>(new Set());
   const [hoveredLayer, setHoveredLayer] = useState<Layer | null>(null);
@@ -180,6 +182,7 @@ export default function EditMapPage() {
   const originalStylesRef = useRef<Map<Layer, LayerStyle>>(new Map());
   const lastUpdateRef = useRef<Map<string, number>>(new Map());
   const poiMarkersRef = useRef<L.Marker[]>([]);
+  const otherUsersSelectionsRef = useRef<Map<string, { selection: MapSelection; marker?: L.Marker; highlight?: L.Layer }>>(new Map());
 
   // Initialize segment playback hook
   const playback = useSegmentPlayback({
@@ -190,6 +193,112 @@ export default function EditMapPage() {
     setCurrentSegmentLayers,
     setActiveSegmentId,
   });
+
+  // Visualize other user's selection on map
+  const visualizeOtherUserSelection = useCallback((selection: MapSelection) => {
+    if (!mapRef.current) return;
+
+    const existing = otherUsersSelectionsRef.current.get(selection.userId);
+    
+    // Remove existing visualization
+    if (existing) {
+      if (existing.marker && mapRef.current.hasLayer(existing.marker)) {
+        mapRef.current.removeLayer(existing.marker);
+      }
+      if (existing.highlight && mapRef.current.hasLayer(existing.highlight)) {
+        mapRef.current.removeLayer(existing.highlight);
+      }
+    }
+
+    // Create new visualization based on selection type
+    (async () => {
+      const L = (await import("leaflet")).default;
+
+      if (selection.selectionType === "Point" || selection.selectionType === "Marker") {
+        if (selection.latitude && selection.longitude) {
+          const marker = L.marker([selection.latitude, selection.longitude], {
+            icon: L.divIcon({
+              className: 'other-user-selection-marker',
+              html: `<div style="
+                width: 20px;
+                height: 20px;
+                border-radius: 50%;
+                background: ${selection.highlightColor};
+                border: 2px solid white;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+              "></div>`,
+              iconSize: [20, 20],
+              iconAnchor: [10, 10],
+            }),
+            zIndexOffset: 1000,
+          });
+          marker.addTo(mapRef.current!);
+          otherUsersSelectionsRef.current.set(selection.userId, { selection, marker });
+        }
+      } else if (selection.selectedObjectId) {
+        // Try to find and highlight the selected feature/layer
+        const currentFeatures = features; // Capture current features
+        const feature = currentFeatures.find(f => f.featureId === selection.selectedObjectId || f.id === selection.selectedObjectId);
+        if (feature && feature.layer && 'setStyle' in feature.layer) {
+          const originalStyle = originalStylesRef.current.get(feature.layer) || extractLayerStyle(feature.layer);
+          (feature.layer as unknown as PathLayer).setStyle({
+            ...originalStyle,
+            color: selection.highlightColor,
+            weight: (typeof originalStyle.weight === 'number' ? originalStyle.weight : 3) + 2,
+            fillColor: selection.highlightColor,
+            fillOpacity: 0.3,
+          });
+          otherUsersSelectionsRef.current.set(selection.userId, { selection, highlight: feature.layer });
+        }
+      }
+    })();
+  }, [features]);
+
+  // Remove user selection visualization
+  const removeUserSelectionVisualization = useCallback((userId: string) => {
+    if (!mapRef.current) return;
+
+    const existing = otherUsersSelectionsRef.current.get(userId);
+    if (existing) {
+      if (existing.marker && mapRef.current.hasLayer(existing.marker)) {
+        mapRef.current.removeLayer(existing.marker);
+      }
+      if (existing.highlight && 'setStyle' in existing.highlight) {
+        const originalStyle = originalStylesRef.current.get(existing.highlight);
+        if (originalStyle) {
+          (existing.highlight as unknown as PathLayer).setStyle(originalStyle);
+        }
+      }
+      otherUsersSelectionsRef.current.delete(userId);
+    }
+  }, []);
+
+  // Initialize map collaboration hook
+  // Use refs for callbacks to avoid recreating connection
+  const visualizeRef = useRef(visualizeOtherUserSelection);
+  const removeVisualizationRef = useRef(removeUserSelectionVisualization);
+  const showToastRef = useRef(showToast);
+
+  useEffect(() => {
+    visualizeRef.current = visualizeOtherUserSelection;
+    removeVisualizationRef.current = removeUserSelectionVisualization;
+    showToastRef.current = showToast;
+  }, [visualizeOtherUserSelection, removeUserSelectionVisualization, showToast]);
+
+  // Initialize refs (will be set later)
+  const handleMapDataChangedRef = useRef<(() => Promise<void>) | null>(null);
+  const mapDataChangedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const recentlyCreatedFeatureIdsRef = useRef<Set<string>>(new Set());
+  const collaborationRef = useRef<{
+    updateSelection?: (selection: {
+      mapId: string;
+      selectionType: string;
+      selectedObjectId?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+    }) => Promise<void>;
+    clearSelection?: (mapId: string) => Promise<void>;
+  } | null>(null);
 
   // Helper: Store original style
   const storeOriginalStyle = useCallback((layer: Layer) => {
@@ -321,9 +430,21 @@ export default function EditMapPage() {
       if (feature) {
         setSelectedLayer(feature);
         setShowStylePanel(true);
+
+        // Send selection update to collaboration hub
+        if (collaborationRef.current?.updateSelection && mapId) {
+          const latLng = (layer as any).getLatLng?.() || (layer as any).getBounds?.()?.getCenter?.();
+          collaborationRef.current.updateSelection({
+            mapId,
+            selectionType: getFeatureTypeUtil(layer as ExtendedLayer),
+            selectedObjectId: feature.featureId || feature.id,
+            latitude: latLng ? latLng.lat : null,
+            longitude: latLng ? latLng.lng : null,
+          });
+        }
       }
     }
-  }, [selectedLayers, features, resetToOriginalStyle, applySelectionStyle, applyMultiSelectionStyle]);
+  }, [selectedLayers, features, resetToOriginalStyle, applySelectionStyle, applyMultiSelectionStyle, mapId]);
 
   // Handle layer hover
   const handleLayerHover = useCallback((layer: Layer | null, isEntering: boolean) => {
@@ -343,6 +464,630 @@ export default function EditMapPage() {
       setHoveredLayer(null);
     }
   }, [selectedLayers, storeOriginalStyle, applyHoverStyle, resetToOriginalStyle]);
+
+  // Reload map data when other users make changes (triggered by SignalR events only)
+  // This should only be called for FeatureCreated, FeatureDeleted, or LayerUpdated
+  // FeatureUpdated uses handleFeatureUpdated instead (smooth update without reload)
+  const handleMapDataChanged = useCallback(async () => {
+    if (!detail?.id || !isMapReady) return;
+    
+    try {
+      // Only reload features, don't reload map detail unnecessarily
+      // Map detail (name, status, etc.) rarely changes, only features/layers change
+      
+      // Reload features directly using getMapFeatures API (more efficient than getMapDetail)
+      if (mapRef.current && sketchRef.current) {
+        const L = (await import("leaflet")).default;
+        
+        // Clear existing features from sketch
+        sketchRef.current.clearLayers();
+        
+        const dbFeatures = await loadFeaturesToMap(detail.id, L, sketchRef.current);
+        
+        // Attach event listeners to loaded features (same as in useEffect)
+        dbFeatures.forEach(feature => {
+          if (feature.layer) {
+            storeOriginalStyle(feature.layer);
+            feature.layer.on('mouseover', () => handleLayerHover(feature.layer, true));
+            feature.layer.on('mouseout', () => handleLayerHover(feature.layer, false));
+            feature.layer.on('click', (event: LeafletMouseEvent) => {
+              if (event.originalEvent) {
+                event.originalEvent.stopPropagation();
+              }
+              handleLayerClick(feature.layer, event.originalEvent.shiftKey);
+            });
+            
+            if (feature.featureId) {
+              feature.layer.on('pm:edit', async () => {
+                const now = Date.now();
+                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                if (now - lastUpdate < 1000) return;
+                lastUpdateRef.current.set(feature.featureId!, now);
+                try {
+                  resetToOriginalStyle(feature.layer);
+                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                } catch (error) {
+                  console.error("Error updating feature after edit:", error);
+                }
+              });
+              
+              feature.layer.on('pm:dragend', async () => {
+                const now = Date.now();
+                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                if (now - lastUpdate < 1000) return;
+                lastUpdateRef.current.set(feature.featureId!, now);
+                try {
+                  resetToOriginalStyle(feature.layer);
+                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                } catch (error) {
+                  console.error("Error updating feature after drag:", error);
+                }
+              });
+              
+              feature.layer.on('pm:rotateend', async () => {
+                const now = Date.now();
+                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                if (now - lastUpdate < 1000) return;
+                lastUpdateRef.current.set(feature.featureId!, now);
+                try {
+                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                } catch (error) {
+                  console.error("Error updating feature after rotation:", error);
+                }
+              });
+            }
+            
+            if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
+              (feature.layer as GeomanLayer).pm.enable({
+                draggable: true,
+                allowEditing: true,
+                allowSelfIntersection: true,
+              });
+            }
+          }
+        });
+        
+        setFeatures(dbFeatures);
+        const initialFeatureVisibility: Record<string, boolean> = {};
+        dbFeatures.forEach(feature => {
+          initialFeatureVisibility[feature.id] = feature.isVisible ?? true;
+          if (feature.featureId) {
+            initialFeatureVisibility[feature.featureId] = feature.isVisible ?? true;
+          }
+        });
+        setFeatureVisibility(initialFeatureVisibility);
+      }
+    } catch (error) {
+      console.error("Failed to reload map data:", error);
+    }
+  }, [detail?.id, isMapReady, storeOriginalStyle, handleLayerHover, handleLayerClick, resetToOriginalStyle]);
+
+  // Update ref when handleMapDataChanged changes
+  useEffect(() => {
+    handleMapDataChangedRef.current = handleMapDataChanged;
+  }, [handleMapDataChanged]);
+
+  // Update a single feature without reloading all features (smooth update)
+  const handleFeatureUpdated = useCallback(async (featureId: string) => {
+    if (!detail?.id || !isMapReady || !mapRef.current || !sketchRef.current) return;
+    
+    try {
+      // Fetch updated feature from API
+      const updatedFeature = await getMapFeatureById(detail.id, featureId);
+      if (!updatedFeature) return;
+
+      // Find existing feature in state
+      const existingFeature = features.find(f => f.featureId === featureId);
+      if (!existingFeature || !existingFeature.layer) {
+        // Feature not found, fallback to full reload
+        if (handleMapDataChangedRef.current) {
+          handleMapDataChangedRef.current();
+        }
+        return;
+      }
+
+      // Parse coordinates
+      let coordinates: Position | Position[] | Position[][];
+      try {
+        const parsed = JSON.parse(updatedFeature.coordinates);
+        if (parsed.type && parsed.coordinates) {
+          coordinates = parsed.coordinates;
+        } else {
+          coordinates = parsed;
+        }
+      } catch (error) {
+        console.error("Failed to parse coordinates for updated feature:", error);
+        return;
+      }
+
+      const L = (await import("leaflet")).default;
+      const layer = existingFeature.layer;
+
+      // Update layer coordinates based on geometry type
+      if (updatedFeature.geometryType.toLowerCase() === "point") {
+        const coords = coordinates as Position;
+        if ((layer as any)._latlng && 'setLatLng' in layer && typeof (layer as any).setLatLng === 'function') {
+          (layer as any).setLatLng([coords[1], coords[0]]);
+        }
+      } else if (updatedFeature.geometryType.toLowerCase() === "linestring") {
+        const coords = coordinates as Position[];
+        if ('setLatLngs' in layer && typeof layer.setLatLngs === 'function') {
+          (layer as any).setLatLngs(coords.map((c) => [c[1], c[0]]));
+        }
+      } else if (updatedFeature.geometryType.toLowerCase() === "polygon") {
+        const coords = coordinates as Position[][];
+        if ('setLatLngs' in layer && typeof layer.setLatLngs === 'function') {
+          (layer as any).setLatLngs(coords[0].map((c) => [c[1], c[0]]));
+        }
+      } else if (updatedFeature.geometryType.toLowerCase() === "rectangle") {
+        const rectCoords = coordinates as [number, number, number, number];
+        const [minLng, minLat, maxLng, maxLat] = rectCoords;
+        if ('setBounds' in layer && typeof layer.setBounds === 'function') {
+          (layer as any).setBounds([[minLat, minLng], [maxLat, maxLng]]);
+        }
+      } else if (updatedFeature.geometryType.toLowerCase() === "circle") {
+        // Handle circle coordinates - can be [lng, lat, radius] or GeoJSON Polygon format
+        let circleCoords: [number, number, number];
+        
+        if (Array.isArray(coordinates)) {
+          if (coordinates.length === 3) {
+            // Simple [lng, lat, radius] format
+            circleCoords = coordinates as [number, number, number];
+          } else if (coordinates.length === 1 && Array.isArray(coordinates[0])) {
+            // GeoJSON Polygon format - extract center and calculate radius
+            const polygonCoords = coordinates[0] as Position[];
+            if (polygonCoords.length > 0) {
+              // Calculate center point (average of all coordinates)
+              let sumLng = 0, sumLat = 0;
+              for (const coord of polygonCoords) {
+                sumLng += coord[0];
+                sumLat += coord[1];
+              }
+              const centerLng = sumLng / polygonCoords.length;
+              const centerLat = sumLat / polygonCoords.length;
+              
+              // Calculate radius (distance from center to first point)
+              const firstPoint = polygonCoords[0];
+              const radius = Math.sqrt(
+                Math.pow(firstPoint[0] - centerLng, 2) + 
+                Math.pow(firstPoint[1] - centerLat, 2)
+              ) * 111000; // Convert degrees to meters (approximate)
+              
+              circleCoords = [centerLng, centerLat, radius];
+            } else {
+              console.error("Empty polygon coordinates for circle");
+              return;
+            }
+          } else {
+            console.error("Invalid circle coordinates length:", coordinates.length);
+            return;
+          }
+        } else {
+          console.error("Circle coordinates is not an array:", coordinates);
+          return;
+        }
+        
+        const [lng, lat, radius] = circleCoords;
+        
+        // Validate coordinates
+        if (lng < -180 || lng > 180 || lat < -90 || lat > 90 || radius <= 0) {
+          console.error("Circle coordinates out of valid range:", circleCoords);
+          return;
+        }
+        
+        // Check if values actually changed before updating to avoid unnecessary re-render
+        const currentLatLng = (layer as any)._latlng;
+        const currentRadius = (layer as any)._mRadius;
+        
+        const hasPositionChanged = !currentLatLng || 
+          Math.abs(currentLatLng.lat - lat) > 0.000001 || 
+          Math.abs(currentLatLng.lng - lng) > 0.000001;
+        const hasRadiusChanged = currentRadius === undefined || Math.abs(currentRadius - radius) > 0.01;
+        
+        // Only update if values changed
+        if (hasPositionChanged || hasRadiusChanged) {
+          const circleLayer = layer as any;
+          
+          // Update both properties directly (Leaflet will batch the redraw internally)
+          if (hasPositionChanged && 'setLatLng' in layer && typeof layer.setLatLng === 'function') {
+            circleLayer.setLatLng([lat, lng]);
+          }
+          if (hasRadiusChanged && 'setRadius' in layer && typeof layer.setRadius === 'function') {
+            (layer as CircleLayer).setRadius(radius);
+          }
+        }
+      }
+
+      // Update style if changed
+      if (updatedFeature.style) {
+        try {
+          const storedStyle = JSON.parse(updatedFeature.style);
+          const currentStyle = extractLayerStyle(layer);
+          
+          // Only update if style actually changed
+          if (JSON.stringify(storedStyle) !== JSON.stringify(currentStyle)) {
+            applyLayerStyle(layer, storedStyle);
+            storeOriginalStyle(layer);
+          }
+        } catch (error) {
+          console.warn("Failed to parse feature style:", error);
+        }
+      }
+
+      // Update feature visibility if changed
+      if (updatedFeature.isVisible !== existingFeature.isVisible) {
+        if (updatedFeature.isVisible) {
+          if (!sketchRef.current.hasLayer(layer)) {
+            sketchRef.current.addLayer(layer);
+          }
+        } else {
+          if (sketchRef.current.hasLayer(layer)) {
+            sketchRef.current.removeLayer(layer);
+          }
+        }
+        setFeatureVisibility(prev => ({
+          ...prev,
+          [existingFeature.id]: updatedFeature.isVisible ?? true,
+          [featureId]: updatedFeature.isVisible ?? true,
+        }));
+      }
+
+      // Update feature in state
+      setFeatures(prev => prev.map(f => 
+        f.featureId === featureId 
+          ? { ...f, isVisible: updatedFeature.isVisible ?? true }
+          : f
+      ));
+    } catch (error) {
+      console.error("Failed to update feature:", error);
+      // Fallback to full reload on error
+      if (handleMapDataChangedRef.current) {
+        handleMapDataChangedRef.current();
+      }
+    }
+  }, [detail?.id, isMapReady, features, storeOriginalStyle, extractLayerStyle, applyLayerStyle]);
+
+  // Add a single feature without reloading all features (smooth add)
+  const handleFeatureCreated = useCallback(async (featureId: string) => {
+    if (!detail?.id || !isMapReady || !mapRef.current || !sketchRef.current) return;
+    
+    // Check if feature already exists (avoid duplicates)
+    const existingFeature = features.find(f => f.featureId === featureId);
+    if (existingFeature) {
+      // Feature already exists, skip
+      return;
+    }
+    
+    // Double-check: if this feature was created by current user, ignore
+    if (recentlyCreatedFeatureIdsRef.current.has(featureId)) {
+      return;
+    }
+    
+    // Also check if feature already exists in state (from saveFeature optimistic update)
+    // This handles race condition where SignalR event arrives before ref is updated
+    const alreadyInState = features.some(f => f.featureId === featureId);
+    if (alreadyInState) {
+      // Feature already in state, likely created by current user
+      // Add to tracking to prevent future events
+      recentlyCreatedFeatureIdsRef.current.add(featureId);
+      setTimeout(() => {
+        recentlyCreatedFeatureIdsRef.current.delete(featureId);
+      }, 5000);
+      return;
+    }
+    
+    try {
+      // Fetch new feature from API
+      const newFeature = await getMapFeatureById(detail.id, featureId);
+      if (!newFeature) {
+        // If feature not found, it might be because it was just created
+        // Don't fallback to full reload, just return
+        return;
+      }
+
+      // Parse coordinates
+      let coordinates: Position | Position[] | Position[][];
+      try {
+        const parsed = JSON.parse(newFeature.coordinates);
+        if (parsed.type && parsed.coordinates) {
+          coordinates = parsed.coordinates;
+        } else {
+          coordinates = parsed;
+        }
+      } catch (error) {
+        console.error("Failed to parse coordinates for new feature:", error);
+        // Don't fallback to reload, just return
+        return;
+      }
+
+      const L = (await import("leaflet")).default;
+      let layer: ExtendedLayer | null = null;
+
+      // Create layer based on geometry type (same logic as loadFeaturesToMap)
+      if (newFeature.geometryType.toLowerCase() === "point") {
+        const coords = coordinates as Position;
+        if (newFeature.annotationType?.toLowerCase() === "text") {
+          layer = L.circleMarker([coords[1], coords[0]], {
+            radius: 8,
+            color: "#3388ff",
+            fillColor: "#3388ff",
+            fillOpacity: 0.8,
+            weight: 2,
+            opacity: 1
+          }) as ExtendedLayer;
+        } else {
+          layer = L.circleMarker([coords[1], coords[0]], {
+            radius: 6,
+            color: '#3388ff',
+            fillColor: 'white',
+            fillOpacity: 1,
+            weight: 2,
+            opacity: 1
+          }) as ExtendedLayer;
+        }
+      } else if (newFeature.geometryType.toLowerCase() === "linestring") {
+        const coords = coordinates as Position[];
+        layer = L.polyline(coords.map((c) => [c[1], c[0]])) as ExtendedLayer;
+      } else if (newFeature.geometryType.toLowerCase() === "polygon") {
+        const coords = coordinates as Position[][];
+        layer = L.polygon(coords[0].map((c) => [c[1], c[0]])) as ExtendedLayer;
+      } else if (newFeature.geometryType.toLowerCase() === "rectangle") {
+        const rectCoords = coordinates as [number, number, number, number];
+        const [minLng, minLat, maxLng, maxLat] = rectCoords;
+        layer = L.rectangle([[minLat, minLng], [maxLat, maxLng]]) as ExtendedLayer;
+      } else if (newFeature.geometryType.toLowerCase() === "circle") {
+        // Handle circle coordinates - can be [lng, lat, radius] or array format
+        let circleCoords: [number, number, number];
+        if (Array.isArray(coordinates)) {
+          if (coordinates.length === 3) {
+            // Simple [lng, lat, radius] format
+            circleCoords = coordinates as [number, number, number];
+          } else if (coordinates.length === 1 && Array.isArray(coordinates[0])) {
+            // GeoJSON Polygon format - extract center and calculate radius
+            const polygonCoords = coordinates[0] as Position[];
+            if (polygonCoords.length > 0) {
+              // Calculate center point (average of all coordinates)
+              let sumLng = 0, sumLat = 0;
+              for (const coord of polygonCoords) {
+                sumLng += coord[0];
+                sumLat += coord[1];
+              }
+              const centerLng = sumLng / polygonCoords.length;
+              const centerLat = sumLat / polygonCoords.length;
+              
+              // Calculate radius (distance from center to first point)
+              const firstPoint = polygonCoords[0];
+              const radius = Math.sqrt(
+                Math.pow(firstPoint[0] - centerLng, 2) + 
+                Math.pow(firstPoint[1] - centerLat, 2)
+              ) * 111000; // Convert degrees to meters (approximate)
+              
+              circleCoords = [centerLng, centerLat, radius];
+            } else {
+              console.error("Empty polygon coordinates for circle");
+              return;
+            }
+          } else {
+            console.error("Invalid circle coordinates length:", coordinates.length);
+            return;
+          }
+        } else {
+          console.error("Circle coordinates is not an array:", coordinates);
+          return;
+        }
+        
+        const [lng, lat, radius] = circleCoords;
+        // Validate coordinates
+        if (lng < -180 || lng > 180 || lat < -90 || lat > 90 || radius <= 0) {
+          console.error("Circle coordinates out of valid range:", circleCoords);
+          return;
+        }
+        
+        // Create circle normally
+        layer = L.circle([lat, lng], { radius: radius }) as ExtendedLayer;
+      }
+
+      if (!layer) {
+        console.error("Failed to create layer for feature:", featureId);
+        return;
+      }
+
+      // Apply style if available
+      if (newFeature.style) {
+        try {
+          const storedStyle = JSON.parse(newFeature.style);
+          applyLayerStyle(layer, storedStyle);
+        } catch (error) {
+          console.warn("Failed to parse feature style:", error);
+        }
+      }
+
+      // Store original style
+      storeOriginalStyle(layer);
+
+      // Add to map if visible
+      if (newFeature.isVisible) {
+        // Add layer to map
+        // For circle, the flicker might be caused by the layer being added before style is applied
+        // So we ensure style is applied first, then add to map
+        sketchRef.current.addLayer(layer);
+      }
+
+      // Attach event listeners (same as in loadFeaturesToMap)
+      layer.on('mouseover', () => handleLayerHover(layer, true));
+      layer.on('mouseout', () => handleLayerHover(layer, false));
+      layer.on('click', (event: LeafletMouseEvent) => {
+        if (event.originalEvent) {
+          event.originalEvent.stopPropagation();
+        }
+        handleLayerClick(layer, event.originalEvent.shiftKey);
+      });
+
+      if (featureId) {
+        layer.on('pm:edit', async () => {
+          const now = Date.now();
+          const lastUpdate = lastUpdateRef.current.get(featureId) || 0;
+          if (now - lastUpdate < 1000) return;
+          lastUpdateRef.current.set(featureId, now);
+          try {
+            resetToOriginalStyle(layer);
+            const featureData = features.find(f => f.featureId === featureId) || {
+              id: `feature-${featureId}`,
+              name: newFeature.name || "Feature",
+              type: newFeature.geometryType,
+              layer,
+              isVisible: newFeature.isVisible ?? true,
+              featureId,
+            };
+            await updateFeatureInDB(detail.id, featureId, featureData);
+          } catch (error) {
+            console.error("Error updating feature after edit:", error);
+          }
+        });
+
+        layer.on('pm:dragend', async () => {
+          const now = Date.now();
+          const lastUpdate = lastUpdateRef.current.get(featureId) || 0;
+          if (now - lastUpdate < 1000) return;
+          lastUpdateRef.current.set(featureId, now);
+          try {
+            resetToOriginalStyle(layer);
+            const featureData = features.find(f => f.featureId === featureId) || {
+              id: `feature-${featureId}`,
+              name: newFeature.name || "Feature",
+              type: newFeature.geometryType,
+              layer,
+              isVisible: newFeature.isVisible ?? true,
+              featureId,
+            };
+            await updateFeatureInDB(detail.id, featureId, featureData);
+          } catch (error) {
+            console.error("Error updating feature after drag:", error);
+          }
+        });
+
+        layer.on('pm:rotateend', async () => {
+          const now = Date.now();
+          const lastUpdate = lastUpdateRef.current.get(featureId) || 0;
+          if (now - lastUpdate < 1000) return;
+          lastUpdateRef.current.set(featureId, now);
+          try {
+            const featureData = features.find(f => f.featureId === featureId) || {
+              id: `feature-${featureId}`,
+              name: newFeature.name || "Feature",
+              type: newFeature.geometryType,
+              layer,
+              isVisible: newFeature.isVisible ?? true,
+              featureId,
+            };
+            await updateFeatureInDB(detail.id, featureId, featureData);
+          } catch (error) {
+            console.error("Error updating feature after rotation:", error);
+          }
+        });
+      }
+
+      // Enable editing
+      if ('pm' in layer && (layer as GeomanLayer).pm) {
+        (layer as GeomanLayer).pm.enable({
+          draggable: true,
+          allowEditing: true,
+          allowSelfIntersection: true,
+        });
+      }
+
+      // Add to features state
+      const featureType = getFeatureTypeUtil(layer);
+      const newFeatureData: FeatureData = {
+        id: `feature-${featureId}`,
+        name: newFeature.name || featureType,
+        type: featureType,
+        layer,
+        isVisible: newFeature.isVisible ?? true,
+        featureId,
+      };
+
+      setFeatures(prev => [...prev, newFeatureData]);
+      setFeatureVisibility(prev => ({
+        ...prev,
+        [newFeatureData.id]: newFeature.isVisible ?? true,
+        [featureId]: newFeature.isVisible ?? true,
+      }));
+    } catch (error) {
+      console.error("Failed to add feature:", error);
+      // Don't fallback to full reload - feature might have been created by current user
+      // Just log the error and continue (feature is already in state from saveFeature)
+    }
+  }, [detail?.id, isMapReady, features, storeOriginalStyle, handleLayerHover, handleLayerClick, resetToOriginalStyle, applyLayerStyle]);
+
+  // Handle feature deletion
+  const handleFeatureDeleted = useCallback((featureId: string) => {
+    if (!sketchRef.current) return;
+
+    // Find and remove feature
+    const featureToRemove = features.find(f => f.featureId === featureId);
+    if (featureToRemove && featureToRemove.layer) {
+      sketchRef.current.removeLayer(featureToRemove.layer);
+      setFeatures(prev => prev.filter(f => f.featureId !== featureId));
+      setFeatureVisibility(prev => {
+        const newVisibility = { ...prev };
+        delete newVisibility[featureToRemove.id];
+        if (featureId) delete newVisibility[featureId];
+        return newVisibility;
+      });
+    }
+  }, [features]);
+
+  const collaboration = useMapCollaboration({
+    mapId: mapId || null,
+    enabled: isMapReady && !!mapId,
+    onSelectionUpdated: (selection) => {
+      visualizeRef.current(selection);
+    },
+    onSelectionCleared: (userId) => {
+      removeVisualizationRef.current(userId);
+    },
+    onUserJoined: (user) => {
+    },
+    onUserLeft: (user) => {
+      removeVisualizationRef.current(user.userId);
+    },
+    onError: (error) => {
+      console.error("Map collaboration error:", error);
+    },
+    onMapDataChanged: () => {
+      if (mapDataChangedTimeoutRef.current) {
+        clearTimeout(mapDataChangedTimeoutRef.current);
+      }
+      mapDataChangedTimeoutRef.current = setTimeout(() => {
+        if (handleMapDataChangedRef.current) {
+          handleMapDataChangedRef.current();
+        }
+      }, 500);
+    },
+    onFeatureUpdated: (featureId) => {
+      handleFeatureUpdated(featureId);
+    },
+    onFeatureDeleted: (featureId) => {
+      handleFeatureDeleted(featureId);
+    },
+    onFeatureCreated: (featureId) => {
+      // Feature created by other user - add it smoothly without reload
+      handleFeatureCreated(featureId);
+    },
+    shouldIgnoreFeatureCreated: (featureId) => {
+      // Ignore FeatureCreated event if this feature was recently created by current user
+      return recentlyCreatedFeatureIdsRef.current.has(featureId);
+    },
+  });
+
+  // Update collaboration ref when it changes
+  useEffect(() => {
+    collaborationRef.current = collaboration;
+  }, [collaboration]);
+
+  // Polling is disabled - SignalR events handle all real-time updates
+  // Only reload when SignalR events are received (FeatureCreated, FeatureUpdated, FeatureDeleted, LayerUpdated)
 
   const handleLayerDelete = useCallback((layer: Layer) => {
     if (currentLayer === layer) {
@@ -366,7 +1111,12 @@ export default function EditMapPage() {
     setCurrentLayer(null);
     setSelectedLayer(null);
     setShowStylePanel(false);
-  }, [selectedLayers, resetToOriginalStyle]);
+
+    // Clear selection in collaboration hub
+    if (collaborationRef.current?.clearSelection && mapId) {
+      collaborationRef.current.clearSelection(mapId);
+    }
+  }, [selectedLayers, resetToOriginalStyle, mapId]);
 
   const applyBaseLayer = useCallback((key: BaseKey) => {
     if (!mapRef.current) return;
@@ -586,6 +1336,18 @@ export default function EditMapPage() {
         // Note: saveFeature already handles adding to features state (optimistic update)
         try {
           const savedFeature = await saveFeature(detail.id, "", extLayer, features, setFeatures);
+
+          if (savedFeature?.featureId) {
+            // Track this feature as recently created by current user IMMEDIATELY
+            // This must happen before SignalR event can arrive to prevent race condition
+            const featureId = savedFeature.featureId;
+            recentlyCreatedFeatureIdsRef.current.add(featureId);
+            
+            // Remove from tracking after 5 seconds (enough time for SignalR event to arrive)
+            setTimeout(() => {
+              recentlyCreatedFeatureIdsRef.current.delete(featureId);
+            }, 5000);
+          }
 
           if (savedFeature) {
             // Attach edit/drag/rotate event listeners for the saved feature
@@ -2195,6 +2957,16 @@ export default function EditMapPage() {
   if (loading) return <main className="h-screen w-screen grid place-items-center text-zinc-400">Đang tải…</main>;
   if (err || !detail) return <main className="h-screen w-screen grid place-items-center text-red-300">{err ?? "Không tải được bản đồ"}</main>;
 
+  // Helper function to get initials from email
+  const getInitials = (email: string): string => {
+    if (!email) return "?";
+    const parts = email.split("@")[0];
+    if (parts.length >= 2) {
+      return parts.substring(0, 2).toUpperCase();
+    }
+    return parts.substring(0, 1).toUpperCase();
+  };
+
   return (
     <main className="relative h-screen w-screen overflow-hidden text-white">
       <div className="absolute top-0 left-0 z-[3000] w-full pointer-events-none">
@@ -2269,6 +3041,50 @@ export default function EditMapPage() {
               </GuardBtn>
             </div>
             <div className="flex items-center justify-end gap-1.5 overflow-x-auto no-scrollbar">
+              {/* Active Users Avatars */}
+              {collaboration.activeUsers.length > 0 && (
+                <div className="flex items-center gap-1.5 mr-2">
+                  {collaboration.activeUsers.slice(0, 3).map((user) => (
+                    <div
+                      key={user.userId}
+                      className="relative group"
+                      title={user.userName}
+                    >
+                      {user.userAvatar ? (
+                        <img
+                          src={user.userAvatar}
+                          alt={user.userName}
+                          className="w-8 h-8 rounded-full border-2 border-white/30 object-cover"
+                          style={{ borderColor: user.highlightColor }}
+                        />
+                      ) : (
+                        <div
+                          className="w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-semibold text-white"
+                          style={{ 
+                            backgroundColor: user.highlightColor,
+                            borderColor: user.highlightColor
+                          }}
+                        >
+                          {getInitials(user.userName)}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {collaboration.activeUsers.length > 3 && (
+                    <div
+                      className="w-8 h-8 rounded-full border-2 border-white/30 bg-zinc-700 flex items-center justify-center text-xs font-semibold text-white"
+                      title={`${collaboration.activeUsers.length - 3} more user(s)`}
+                    >
+                      +{collaboration.activeUsers.length - 3}
+                    </div>
+                  )}
+                  {collaboration.isConnected && (
+                    <div className="flex items-center gap-1 ml-1">
+                      <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Connected" />
+                    </div>
+                  )}
+                </div>
+              )}
               <input
                 type="file"
                 accept=".geojson,.json,.kml,.gpx"
@@ -2553,6 +3369,12 @@ export default function EditMapPage() {
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .leaflet-container { width: 100%; height: 100%; }
         .leaflet-top.leaflet-left .leaflet-control { display: none !important; }
+        
+        /* Other user selection markers */
+        .other-user-selection-marker {
+          background: transparent !important;
+          border: none !important;
+        }
         
         /* Hide Geoman tooltips and help text */
         .leaflet-pm-tooltip,
