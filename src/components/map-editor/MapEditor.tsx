@@ -18,15 +18,16 @@ import {
   handleDeleteFeature,
   handleSelectLayer
 } from "@/utils/mapUtils";
-import { StylePanel, DataLayersPanel } from "@/components/map";
+import { DataLayersPanel } from "@/components/map";
 import ZoneContextMenu, { LayerPickerDialog } from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog, FeaturePropertiesPanel } from "@/components/features";
 import { getFeatureName, findFeatureIndex } from "@/utils/zoneOperations";
 import { useToast } from "@/contexts/ToastContext";
-import { getMapDetail, RawLayer, updateMap, UpdateMapFeatureRequest, UpdateMapRequest } from "@/lib/api-maps";
+import { getMapDetail, LayerDTO, updateMap, UpdateMapFeatureRequest, UpdateMapRequest } from "@/lib/api-maps";
 import MapToolbar from "./components/MapToolbar";
 import { useBaseLayer, useContextMenu, usePoiPicker, useMapDetail } from "./hooks";
 import type { MapWithPM, PMCreateEvent, ExtendedLayer, CopyFeatureDialogState, SelectedFeatureState } from "./types";
+import { FeatureCollection, GeoJsonProperties, Geometry } from "geojson";
 
 export default function MapEditor() {
   const params = useParams<{ mapId: string }>();
@@ -43,7 +44,7 @@ export default function MapEditor() {
   const [showDataLayersPanel, setShowDataLayersPanel] = useState(true);
   const [showFeaturePropertiesPanel, setShowFeaturePropertiesPanel] = useState(false);
   const [features, setFeatures] = useState<FeatureData[]>([]);
-  const [selectedLayer, setSelectedLayer] = useState<FeatureData | RawLayer | null>(null);
+  const [selectedLayer, setSelectedLayer] = useState<FeatureData | LayerDTO | null>(null);
   const [, setFeatureVisibility] = useState<Record<string, boolean>>({});
   const [, setLayerVisibility] = useState<Record<string, boolean>>({});
 
@@ -80,15 +81,6 @@ export default function MapEditor() {
   // Initialize map
   useEffect(() => {
     if (!detail || !mapEl.current || mapRef.current) return;
-
-    const hasValidCoords = typeof detail.initialLatitude === 'number' &&
-      typeof detail.initialLongitude === 'number' &&
-      typeof detail.initialZoom === 'number';
-
-    if (!hasValidCoords) {
-      console.warn('Invalid map detail data, will use fallback values during initialization');
-    }
-
     let alive = true;
     const el = mapEl.current;
 
@@ -97,9 +89,9 @@ export default function MapEditor() {
       await import("@geoman-io/leaflet-geoman-free");
       if (!alive || !el) return;
 
-      const initialLat = typeof detail.initialLatitude === 'number' ? detail.initialLatitude : Number(detail.initialLatitude);
-      const initialLng = typeof detail.initialLongitude === 'number' ? detail.initialLongitude : Number(detail.initialLongitude);
-      const initialZoom = typeof detail.initialZoom === 'number' ? detail.initialZoom : Number(detail.initialZoom);
+      const initialLat = typeof detail.viewState?.center[1] === 'number' ? detail.viewState?.center[1] : Number(detail.viewState?.center[1]);
+      const initialLng = typeof detail.viewState?.center[0] === 'number' ? detail.viewState?.center[0] : Number(detail.viewState?.center[0]);
+      const initialZoom = typeof detail.viewState?.zoom === 'number' ? detail.viewState?.zoom : Number(detail.viewState?.zoom);
 
       const validLat = isNaN(initialLat) || initialLat < -90 || initialLat > 90 ? 10.78 : initialLat;
       const validLng = isNaN(initialLng) || initialLng < -180 || initialLng > 180 ? 106.69 : initialLng;
@@ -116,9 +108,9 @@ export default function MapEditor() {
       if (!alive) return;
 
       applyBaseLayer(
-        detail.baseMapProvider === "Satellite"
+        detail.baseLayer?.toLowerCase() === "satellite"
           ? "sat"
-          : detail.baseMapProvider === "Dark"
+          : detail.baseLayer === "Dark"
             ? "dark"
             : "osm"
       );
@@ -200,7 +192,7 @@ export default function MapEditor() {
 
   const onLayerVisibilityChange = useCallback(async (layerId: string, isVisible: boolean) => {
     if (!detail || !mapRef.current) return;
-    const layerData = detail.layers.find((l: RawLayer) => l.id === layerId);
+    const layerData = detail.layers.find((l: LayerDTO) => l.id === layerId);
     await handleLayerVisibilityChange(
       detail.id,
       layerId,
@@ -226,7 +218,7 @@ export default function MapEditor() {
     );
   }, [detail, features]);
 
-  const onSelectLayer = useCallback((layer: FeatureData | RawLayer) => {
+  const onSelectLayer = useCallback((layer: FeatureData | LayerDTO) => {
     handleSelectLayer(layer, setSelectedLayer, setShowStylePanel);
   }, []);
 
@@ -259,7 +251,7 @@ export default function MapEditor() {
       const body: UpdateMapRequest = {
         name: (name ?? "").trim() || "Untitled Map",
         description: (description ?? "").trim() || undefined,
-        baseMapProvider:
+        baseLayer:
           baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
       };
       await updateMap(detail.id, body);
@@ -296,10 +288,10 @@ export default function MapEditor() {
     }
 
     const sourceLayerId = contextMenu.layerId;
-    const sourceLayer = detail.layers.find((l: RawLayer) => l.id === sourceLayerId);
-    const sourceLayerName = sourceLayer?.name || 'Unknown Layer';
+    const sourceLayer = detail.layers.find((l: LayerDTO) => l.id === sourceLayerId);
+    const sourceLayerName = sourceLayer?.layerName || 'Unknown Layer';
 
-    const layerData = JSON.parse(sourceLayer?.layerData || '{}');
+    const layerData = JSON.parse(sourceLayer?.layerData as unknown as string || '{}') as FeatureCollection<Geometry, GeoJsonProperties>;
     const featureIndex = findFeatureIndex(layerData, contextMenu.feature);
 
     if (featureIndex === -1) {
@@ -411,14 +403,6 @@ export default function MapEditor() {
         onDeleteFeature={onDeleteFeature}
       />
 
-      <StylePanel
-        selectedLayer={selectedLayer}
-        showStylePanel={showStylePanel}
-        setShowStylePanel={setShowStylePanel}
-        onUpdateLayer={onUpdateLayer}
-        onUpdateFeature={onUpdateFeature}
-      />
-
       {showFeaturePropertiesPanel && (
         <div className="fixed top-20 right-4 w-96 max-h-[calc(100vh-6rem)] bg-white rounded-lg shadow-lg border border-gray-200 z-40 overflow-hidden">
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
@@ -461,7 +445,7 @@ export default function MapEditor() {
 
       <LayerPickerDialog
         visible={showLayerPicker}
-        layers={detail?.layers.map((l: RawLayer) => ({ id: l.id, name: l.name })) || []}
+        layers={detail?.layers.map((l: LayerDTO) => ({ id: l.id, name: l.layerName })) || []}
         currentLayerId={contextMenu.layerId || ''}
         onSelect={handleLayerSelected}
         onClose={() => setShowLayerPicker(false)}

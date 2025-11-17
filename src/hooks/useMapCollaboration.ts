@@ -197,23 +197,21 @@ export function useMapCollaboration({
 
     // Listen for map data changes (features/layers updated)
     connection.on("FeatureCreated", (data: { mapId: string; featureId: string }) => {
-      // Check if this feature was created by current user (should be ignored)
-      if (callbacksRef.current.shouldIgnoreFeatureCreated?.(data.featureId)) {
-        // Feature was created by current user, ignore the event
+      
+      const shouldIgnore = callbacksRef.current.shouldIgnoreFeatureCreated?.(data.featureId);
+      
+      if (shouldIgnore) {
         return;
       }
       
-      // Try to use specific callback first, fallback to full reload
       if (callbacksRef.current.onFeatureCreated) {
         callbacksRef.current.onFeatureCreated(data.featureId);
       } else {
-        // New feature created by other user - need to reload to see it
         callbacksRef.current.onMapDataChanged?.();
       }
     });
 
     connection.on("FeatureUpdated", (data: { mapId: string; featureId: string }) => {
-      // Try to update specific feature first, fallback to full reload
       if (callbacksRef.current.onFeatureUpdated) {
         callbacksRef.current.onFeatureUpdated(data.featureId);
       } else {
@@ -222,7 +220,6 @@ export function useMapCollaboration({
     });
 
     connection.on("FeatureDeleted", (data: { mapId: string; featureId: string }) => {
-      // Try to remove specific feature first, fallback to full reload
       if (callbacksRef.current.onFeatureDeleted) {
         callbacksRef.current.onFeatureDeleted(data.featureId);
       } else {
@@ -231,7 +228,6 @@ export function useMapCollaboration({
     });
 
     connection.on("LayerUpdated", () => {
-      // Layer updated - need to reload
       callbacksRef.current.onMapDataChanged?.();
     });
 
@@ -258,7 +254,7 @@ export function useMapCollaboration({
     return connection;
   }, []);
 
-  const stopConnectionRef = useRef<() => Promise<void>>();
+  const stopConnectionRef = useRef<() => Promise<void>>(async () => { return Promise.resolve(); });
 
   const stopConnection = useCallback(async () => {
     isConnectingRef.current = false;
@@ -327,12 +323,10 @@ export function useMapCollaboration({
     const performStart = async () => {
       if (!isMounted || cleanupCalled) return;
       
-      // Prevent multiple simultaneous connection attempts
       if (isConnectingRef.current) {
         return;
       }
 
-      // If already connected to the same map, skip
       if (
         connectionRef.current?.state === signalR.HubConnectionState.Connected &&
         currentMapIdRef.current === mapId
@@ -348,7 +342,6 @@ export function useMapCollaboration({
       isConnectingRef.current = true;
 
       try {
-        // Cleanup existing connection if mapId changed
         if (connectionRef.current && currentMapIdRef.current !== mapId) {
           try {
             if (currentMapIdRef.current) {
@@ -361,11 +354,9 @@ export function useMapCollaboration({
           connectionRef.current = null;
         }
 
-        // If connection exists and is in a valid state, reuse it
         if (connectionRef.current) {
           const state = connectionRef.current.state;
           if (state === signalR.HubConnectionState.Disconnected) {
-            // Connection exists but disconnected, try to start it
             try {
               await connectionRef.current.start();
               setIsConnected(true);
@@ -374,11 +365,9 @@ export function useMapCollaboration({
               isConnectingRef.current = false;
               return;
             } catch (error) {
-              // If start fails, create new connection
               connectionRef.current = null;
             }
           } else if (state === signalR.HubConnectionState.Connected) {
-            // Already connected, just join the new map
             await connectionRef.current.invoke("JoinMap", mapId);
             currentMapIdRef.current = mapId;
             isConnectingRef.current = false;
@@ -386,7 +375,6 @@ export function useMapCollaboration({
           }
         }
 
-        // Create new connection
         const connection = createConnection(mapId);
         if (!connection) {
           isConnectingRef.current = false;
@@ -398,10 +386,8 @@ export function useMapCollaboration({
         currentMapIdRef.current = mapId;
         setIsConnected(true);
 
-        // Join the map
         await connection.invoke("JoinMap", mapId);
 
-        // Start heartbeat
         if (heartbeatIntervalRef.current) {
           clearInterval(heartbeatIntervalRef.current);
         }

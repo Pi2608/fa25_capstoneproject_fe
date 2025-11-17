@@ -3,10 +3,11 @@
 import { useState, useEffect } from "react";
 import FeaturePropertiesTable from "./FeaturePropertiesTable";
 import type { GeoJSON } from "geojson";
-import { RawLayer } from "@/lib/api-maps";
+import { LayerDTO } from "@/lib/api-maps";
+
 
 interface FeaturePropertiesPanelProps {
-  layers: RawLayer[];
+  layers: LayerDTO[];
   selectedLayerId?: string;
   onFeatureSelect?: (feature: GeoJSON.Feature, layerId: string, featureIndex: number) => void;
   selectedFeature?: {
@@ -39,25 +40,25 @@ function getStringProp(o: unknown, key: string): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
-function getLayerTypeId(layer: RawLayer): number | undefined {
+function getLayerTypeId(layer: LayerDTO): number | undefined {
   return getNumberProp(layer, "layerTypeId") ?? getNumberProp(layer, "layer_type_id");
 }
 
-function getLayerId(layer: RawLayer): string {
+function getLayerId(layer: LayerDTO): string {
   return getStringProp(layer, "id")
     ?? getStringProp(layer, "layer_id")
     ?? getStringProp(layer, "layerId")
     ?? "";
 }
 
-function getLayerName(layer: RawLayer): string {
+function getLayerName(layer: LayerDTO): string {
   return getStringProp(layer, "name")
     ?? getStringProp(layer, "layer_name")
     ?? getStringProp(layer, "layerName")
     ?? "";
 }
 
-function getLayerData(layer: RawLayer): string | undefined {
+function getLayerData(layer: LayerDTO): string | undefined {
   return getStringProp(layer, "layerData")
     ?? getStringProp(layer, "layer_data")
     ?? getStringProp(layer, "layerdata");
@@ -69,7 +70,7 @@ export default function FeaturePropertiesPanel({
   onFeatureSelect,
   selectedFeature
 }: FeaturePropertiesPanelProps) {
-  const [selectedLayer, setSelectedLayer] = useState<RawLayer | null>(null);
+  const [selectedLayer, setSelectedLayer] = useState<LayerDTO | null>(null);
   const [features, setFeatures] = useState<GeoJSON.Feature[]>([]);
 
   useEffect(() => {
