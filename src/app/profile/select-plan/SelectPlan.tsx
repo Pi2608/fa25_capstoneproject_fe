@@ -672,7 +672,7 @@ export default function SelectPlanPage() {
         onClose={() => setShowPaymentPopup(false)}
         onSelectMethod={handleSelectPaymentMethod}
         planName={selectedPlan?.planName}
-        planPrice={selectedPlan?.priceMonthly ?? undefined}
+        planPrice={selectedPlan?.priceMonthly}
       />
 
       {/* Organization Selection Popup */}
