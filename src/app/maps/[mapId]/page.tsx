@@ -61,12 +61,8 @@ import {
 } from "@/utils/zoneOperations";
 import { StylePanel, DataLayersPanel, MapControls } from "@/components/map";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
-import { StoryMapTimeline } from "@/components/storymap";
-import { PublishButton } from "@/components/map-editor";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
-import MapPoiPanel from "@/components/poi/PoiPanel";
-import { PoiTooltipModal } from "@/components/poi/PoiTooltipModal";
 import { getMapPois, type MapPoi } from "@/lib/api-poi";
 import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions } from "@/lib/api-storymap";
 import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator } from "@/components/map-editor-ui";
@@ -76,13 +72,11 @@ import { useLayerStyles } from "@/hooks/useLayerStyles";
 import { useCollaborationVisualization } from "@/hooks/useCollaborationVisualization";
 import { useFeatureManagement } from "@/hooks/useFeatureManagement";
 import { usePoiMarkers } from "@/hooks/usePoiMarkers";
-// import SegmentDialog from "@/components/storymap/dialogs/SegmentDialog";
-// import TimelineTransitionsDialog from "@/components/storymap/dialogs/TimelineTransitionsDialog";
 
 import { useToast } from "@/contexts/ToastContext";
 import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geojson";
 import * as mapHelpers from "@/utils/mapHelpers";
-import * as contextMenuActions from "@/utils/contextMenuActions";
+import PublishButton from "@/components/map-editor/PublishButton";
 
 
 
@@ -2267,15 +2261,9 @@ export default function EditMapPage() {
     }
   }, [detail, showToast]);
 
-  // NOTE: GuardBtn component has been replaced by ToolButton component
-  // from @/components/map-editor-ui
-  // (Old implementation removed - now using shared component)
 
   if (loading) return <main className="h-screen w-screen grid place-items-center text-zinc-400">Đang tải…</main>;
   if (err || !detail) return <main className="h-screen w-screen grid place-items-center text-red-300">{err ?? "Không tải được bản đồ"}</main>;
-
-  // NOTE: getInitials function is now available from mapHelpers utility module
-  // (Old implementation removed - now using utility function)
 
   return (
     <main className="relative h-screen w-screen overflow-hidden text-white">
@@ -2470,23 +2458,6 @@ export default function EditMapPage() {
         isTimelineOpen={isTimelineOpen}
       />
 
-      {/* Right Panel - POI or Story Map Timeline */}
-      {detail && showPoiPanel && <MapPoiPanel mapId={detail.id} isOpen={showPoiPanel} />}
-
-      {showSegmentPanel && detail && (
-        <div className="fixed left-0 right-0 bottom-0 z-[1000] pointer-events-none">
-          <div className="pointer-events-auto">
-            <StoryMapTimeline
-              mapId={detail.id}
-              currentMap={mapRef.current}
-              onSegmentSelect={(segment) => {
-                console.log("Segment selected:", segment);
-              }}
-            />
-          </div>
-        </div>
-      )}
-
       <ZoneContextMenu
         visible={contextMenu.visible}
         x={contextMenu.x}
@@ -2514,12 +2485,6 @@ export default function EditMapPage() {
         onSuccess={handleCopyFeatureSuccess}
       />
 
-      <PoiTooltipModal
-        isOpen={poiTooltipModal.isOpen}
-        onClose={() => setPoiTooltipModal(prev => ({ ...prev, isOpen: false }))}
-        title={poiTooltipModal.title}
-        content={poiTooltipModal.content}
-      />
 
       <style jsx global>{`
         .no-scrollbar::-webkit-scrollbar { display: none; }
