@@ -580,7 +580,7 @@ export interface CreateMapFeatureRequest {
   description?: string | null;
   featureCategory: "Data" | "Annotation";
   annotationType?: "Marker" | "Highlighter" | "Text" | "Note" | "Link" | "Video" | null;
-  geometryType?: "Point" | "LineString" | "Polygon" | "Circle" | "Rectangle" | null;
+  geometryType: "Point" | "LineString" | "Polygon" | "Circle" | "Rectangle";
   coordinates: string;
   properties?: string | null;
   style?: string | null;

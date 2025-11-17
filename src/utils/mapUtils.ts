@@ -53,29 +53,6 @@ export interface FeatureData {
   featureId?: string;
 }
 
-export function dedupeFeatureList(list: FeatureData[]): FeatureData[] {
-  if (!Array.isArray(list) || list.length <= 1) {
-    return list;
-  }
-
-  const seen = new Set<string>();
-  const deduped: FeatureData[] = [];
-
-  for (let i = list.length - 1; i >= 0; i -= 1) {
-    const feature = list[i];
-    const key = feature.featureId || feature.id;
-    if (key && seen.has(key)) {
-      continue;
-    }
-    if (key) {
-      seen.add(key);
-    }
-    deduped.push(feature);
-  }
-
-  return deduped.reverse();
-}
-
 export interface LayerInfo {
   id: string;
   name: string;
@@ -729,7 +706,7 @@ export async function saveFeature(
     };
 
     // Immediately add to UI (optimistic update)
-    setFeatures((prev) => dedupeFeatureList([...prev, optimisticFeature]));
+    setFeatures((prev) => [...prev, optimisticFeature]);
 
     // Determine feature category based on type
     // Marker with circleMarker (small circle) is Data (Geometry), not Annotation
@@ -743,8 +720,8 @@ export async function saveFeature(
       name: `${type}`,
       description: "",
       featureCategory: featureCategory,
-      ...(featureCategory === "Annotation" ? { annotationType } : {}),
-      ...(featureCategory === "Data" ? { geometryType } : {}),
+      annotationType: annotationType,
+      geometryType: geometryType,
       coordinates,
       properties: JSON.stringify(properties),
       style: JSON.stringify(layerStyle),
@@ -762,9 +739,7 @@ export async function saveFeature(
 
     // Replace temporary feature with real one
     setFeatures((prev) => 
-      dedupeFeatureList(
-        prev.map(f => f.id === tempFeatureId ? realFeature : f)
-      )
+      prev.map(f => f.id === tempFeatureId ? realFeature : f)
     );
     
     return realFeature;
@@ -806,8 +781,8 @@ export async function updateFeatureInDB(
       name: feature.name,
       description: "",
       featureCategory: featureCategory,
-      ...(featureCategory === "Annotation" ? { annotationType } : {}),
-      ...(featureCategory === "Data" ? { geometryType } : {}),
+      annotationType: annotationType,
+      geometryType: geometryType,
       coordinates,
       properties: JSON.stringify(properties),
       style: JSON.stringify(layerStyle),

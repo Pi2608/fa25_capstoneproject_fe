@@ -54,12 +54,15 @@ export default function StoryMapPlayerPage() {
     const channel = new BroadcastChannel(`storymap-${mapId}`);
     
     channel.onmessage = (event) => {
+      console.log('[Viewer] Received:', event.data);
       if (event.data.type === 'segment-change') {
         setControlledIndex(event.data.segmentIndex);
       } else if (event.data.type === 'play-state') {
         setControlledPlaying(event.data.isPlaying);
       }
     };
+
+    console.log('[Viewer] Listening on channel:', `storymap-${mapId}`);
 
     return () => channel.close();
   }, [mapId]);
@@ -68,6 +71,7 @@ export default function StoryMapPlayerPage() {
   useEffect(() => {
     let connection: signalR.HubConnection | null = null;
     const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "");
+    // StoryHub is mapped at app root: /hubs/story (not under /api/v1)
     const hubBase = apiBase ? apiBase.replace(/\/api(\/v\d+)?$/i, "") : undefined;
     const token = getToken();
 
