@@ -21,3 +21,6 @@ export * from "./components";
 
 // Re-export location/POI types
 export * from "./location-poi";
+
+// Re-export map editor types
+export * from "./map-editor";
