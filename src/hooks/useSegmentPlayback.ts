@@ -34,7 +34,6 @@ export function useSegmentPlayback({
     (async () => {
       try {
         const data = await getTimelineTransitions(mapId);
-        console.log("🎬 Loaded timeline transitions:", data);
         if (!cancelled) setTransitions(data || []);
       } catch (e) {
         console.warn("Failed to load timeline transitions:", e);
