@@ -2413,6 +2413,7 @@ export default function EditMapPage() {
         transitions={transitions}
         baseLayer={baseKey}
         currentMap={mapRef.current}
+        mapId={mapId}
         onSelectFeature={handleSelectFeature}
         onSelectLayer={handleSelectLayerNew}
         onBaseLayerChange={setBaseKey}

@@ -13,6 +13,9 @@ import type {
   CameraState,
   CreateSegmentRequest,
   CreateTransitionRequest,
+  CreateLocationRequest,
+  CreateSegmentZoneRequest,
+  AttachLayerRequest,
 } from "@/lib/api-storymap";
 import {
   parseCameraState,
@@ -20,6 +23,9 @@ import {
   getCurrentCameraState,
   applyCameraState,
 } from "@/lib/api-storymap";
+import LocationDialog from "@/components/storymap/LocationDialog";
+import ZoneSelectionDialog from "@/components/storymap/ZoneSelectionDialog";
+import LayerAttachDialog from "@/components/storymap/LayerAttachDialog";
 
 interface LeftSidebarToolboxProps {
   activeView: "explorer" | "segments" | "transitions" | null;
@@ -31,6 +37,7 @@ interface LeftSidebarToolboxProps {
   transitions: TimelineTransition[];
   baseLayer: BaseKey;
   currentMap?: any;
+  mapId?: string; // Required for adding locations, zones, and layers
 
   onSelectFeature: (feature: FeatureData) => void;
   onSelectLayer: (layer: LayerDTO) => void;
@@ -47,6 +54,11 @@ interface LeftSidebarToolboxProps {
   // Transition CRUD
   onSaveTransition: (data: CreateTransitionRequest, transitionId?: string) => Promise<void>;
   onDeleteTransition?: (transitionId: string) => void;
+
+  // Location, Zone, Layer handlers (optional - will use API directly if not provided)
+  onAddLocation?: (data: CreateLocationRequest) => Promise<void>;
+  onAddZone?: (data: CreateSegmentZoneRequest) => Promise<void>;
+  onAddLayer?: (data: AttachLayerRequest) => Promise<void>;
 }
 
 type ViewType = "explorer" | "segments" | "transitions";
@@ -61,6 +73,7 @@ export function LeftSidebarToolbox({
   transitions,
   baseLayer,
   currentMap,
+  mapId,
   onSelectFeature,
   onSelectLayer,
   onBaseLayerChange,
@@ -72,6 +85,9 @@ export function LeftSidebarToolbox({
   onDeleteSegment,
   onSaveTransition,
   onDeleteTransition,
+  onAddLocation,
+  onAddZone,
+  onAddLayer,
 }: LeftSidebarToolboxProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -82,6 +98,12 @@ export function LeftSidebarToolbox({
   // Form state for transitions
   const [transitionFormMode, setTransitionFormMode] = useState<FormMode>("list");
   const [editingTransition, setEditingTransition] = useState<TimelineTransition | null>(null);
+
+  // Dialog state for locations, zones, and layers
+  const [showLocationDialog, setShowLocationDialog] = useState(false);
+  const [showZoneDialog, setShowZoneDialog] = useState(false);
+  const [showLayerDialog, setShowLayerDialog] = useState(false);
+  const [waitingForLocation, setWaitingForLocation] = useState(false);
 
   useEffect(() => {
     if (panelRef.current) {
@@ -121,8 +143,17 @@ export function LeftSidebarToolbox({
 
   const handleSaveSegmentForm = useCallback(async (data: CreateSegmentRequest) => {
     await onSaveSegment(data, editingSegment?.segmentId);
-    setSegmentFormMode("list");
-    setEditingSegment(null);
+    // If creating a new segment, keep it in edit mode so user can attach locations/zones/layers
+    if (!editingSegment) {
+      // After creating, we need to find the newly created segment
+      // For now, just go back to list - user can edit it later to attach things
+      setSegmentFormMode("list");
+      setEditingSegment(null);
+    } else {
+      // If editing, stay in edit mode
+      setSegmentFormMode("list");
+      setEditingSegment(null);
+    }
   }, [onSaveSegment, editingSegment]);
 
   // Transition form handlers
@@ -146,6 +177,60 @@ export function LeftSidebarToolbox({
     setTransitionFormMode("list");
     setEditingTransition(null);
   }, [onSaveTransition, editingTransition]);
+
+  // Handlers for adding location, zone, and layer
+  const handleAddLocation = useCallback(async (data: CreateLocationRequest) => {
+    if (!editingSegment?.segmentId) return;
+    
+    const locationData = {
+      ...data,
+      segmentId: editingSegment.segmentId,
+    };
+
+    if (onAddLocation) {
+      await onAddLocation(locationData);
+    } else if (mapId) {
+      // Use API directly if handler not provided
+      const { createLocation } = await import("@/lib/api-storymap");
+      await createLocation(mapId, editingSegment.segmentId, locationData);
+    }
+    
+    setShowLocationDialog(false);
+    setWaitingForLocation(false);
+  }, [editingSegment, onAddLocation, mapId]);
+
+  const handleAddZone = useCallback(async (data: CreateSegmentZoneRequest) => {
+    if (!editingSegment?.segmentId) return;
+    
+    const zoneData = {
+      ...data,
+      segmentId: editingSegment.segmentId,
+    };
+
+    if (onAddZone) {
+      await onAddZone(zoneData);
+    } else if (mapId) {
+      // Use API directly if handler not provided
+      const { createSegmentZone } = await import("@/lib/api-storymap");
+      await createSegmentZone(mapId, editingSegment.segmentId, zoneData);
+    }
+    
+    setShowZoneDialog(false);
+  }, [editingSegment, onAddZone, mapId]);
+
+  const handleAddLayer = useCallback(async (data: AttachLayerRequest) => {
+    if (!editingSegment?.segmentId) return;
+
+    if (onAddLayer) {
+      await onAddLayer(data);
+    } else if (mapId) {
+      // Use API directly if handler not provided
+      const { attachLayerToSegment } = await import("@/lib/api-storymap");
+      await attachLayerToSegment(mapId, editingSegment.segmentId, data);
+    }
+    
+    setShowLayerDialog(false);
+  }, [editingSegment, onAddLayer, mapId]);
 
   return (
     <>
@@ -240,6 +325,28 @@ export function LeftSidebarToolbox({
                 onAddSegment={handleAddSegment}
                 onEditSegment={handleEditSegment}
                 onDeleteSegment={onDeleteSegment}
+                onAddLocation={(segmentId: string) => {
+                  const segment = segments.find(s => s.segmentId === segmentId);
+                  if (segment) {
+                    setEditingSegment(segment);
+                    setShowLocationDialog(true);
+                  }
+                }}
+                onAddZone={(segmentId: string) => {
+                  const segment = segments.find(s => s.segmentId === segmentId);
+                  if (segment) {
+                    setEditingSegment(segment);
+                    setShowZoneDialog(true);
+                  }
+                }}
+                onAddLayer={(segmentId: string) => {
+                  const segment = segments.find(s => s.segmentId === segmentId);
+                  if (segment) {
+                    setEditingSegment(segment);
+                    setShowLayerDialog(true);
+                  }
+                }}
+                mapId={mapId}
               />
             )}
 
@@ -247,8 +354,12 @@ export function LeftSidebarToolbox({
               <SegmentFormView
                 editing={editingSegment}
                 currentMap={currentMap}
+                mapId={mapId}
                 onCancel={handleCancelSegmentForm}
                 onSave={handleSaveSegmentForm}
+                onAddLocation={() => setShowLocationDialog(true)}
+                onAddZone={() => setShowZoneDialog(true)}
+                onAddLayer={() => setShowLayerDialog(true)}
               />
             )}
 
@@ -273,6 +384,40 @@ export function LeftSidebarToolbox({
           </div>
         </div>
       </div>
+
+      {/* Dialogs for adding location, zone, and layer */}
+      {editingSegment && mapId && (
+        <>
+          <LocationDialog
+            isOpen={showLocationDialog}
+            onClose={() => {
+              setShowLocationDialog(false);
+              setWaitingForLocation(false);
+            }}
+            onSave={handleAddLocation}
+            segmentId={editingSegment.segmentId}
+            currentMap={currentMap}
+            waitingForLocation={waitingForLocation}
+            setWaitingForLocation={setWaitingForLocation}
+          />
+
+          <ZoneSelectionDialog
+            isOpen={showZoneDialog}
+            onClose={() => setShowZoneDialog(false)}
+            onSave={handleAddZone}
+            segmentId={editingSegment.segmentId}
+          />
+
+          <LayerAttachDialog
+            isOpen={showLayerDialog}
+            onClose={() => setShowLayerDialog(false)}
+            onSave={handleAddLayer}
+            mapId={mapId}
+            segmentId={editingSegment.segmentId}
+            attachedLayerIds={editingSegment.layers?.map(l => l.layerId) || []}
+          />
+        </>
+      )}
     </>
   );
 }
@@ -490,12 +635,20 @@ function SegmentsView({
   onAddSegment,
   onEditSegment,
   onDeleteSegment,
+  onAddLocation,
+  onAddZone,
+  onAddLayer,
+  mapId,
 }: {
   segments: Segment[];
   onSegmentClick: (segmentId: string) => void;
   onAddSegment: () => void;
   onEditSegment: (segment: Segment) => void;
   onDeleteSegment?: (segmentId: string) => void;
+  onAddLocation?: (segmentId: string) => void;
+  onAddZone?: (segmentId: string) => void;
+  onAddLayer?: (segmentId: string) => void;
+  mapId?: string;
 }) {
   return (
     <div className="p-3 space-y-2">
@@ -555,6 +708,51 @@ function SegmentsView({
                   </span>
                 )}
               </div>
+              
+              {/* Quick action buttons for adding location/zone/layer */}
+              {mapId && (onAddLocation || onAddZone || onAddLayer) && (
+                <div className="mt-2 pt-2 border-t border-zinc-700/50 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {onAddLocation && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddLocation(segment.segmentId);
+                      }}
+                      className="flex-1 px-2 py-1 text-[10px] rounded bg-emerald-600/80 hover:bg-emerald-600 text-white flex items-center justify-center gap-1"
+                      title="Add location"
+                    >
+                      <Icon icon="mdi:map-marker" className="w-3 h-3" />
+                      <span>Location</span>
+                    </button>
+                  )}
+                  {onAddZone && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddZone(segment.segmentId);
+                      }}
+                      className="flex-1 px-2 py-1 text-[10px] rounded bg-blue-600/80 hover:bg-blue-600 text-white flex items-center justify-center gap-1"
+                      title="Add zone"
+                    >
+                      <Icon icon="mdi:shape" className="w-3 h-3" />
+                      <span>Zone</span>
+                    </button>
+                  )}
+                  {onAddLayer && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddLayer(segment.segmentId);
+                      }}
+                      className="flex-1 px-2 py-1 text-[10px] rounded bg-purple-600/80 hover:bg-purple-600 text-white flex items-center justify-center gap-1"
+                      title="Attach layer"
+                    >
+                      <Icon icon="mdi:layers" className="w-3 h-3" />
+                      <span>Layer</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -575,13 +773,21 @@ function SegmentsView({
 function SegmentFormView({
   editing,
   currentMap,
+  mapId,
   onCancel,
   onSave,
+  onAddLocation,
+  onAddZone,
+  onAddLayer,
 }: {
   editing: Segment | null;
   currentMap?: any;
+  mapId?: string;
   onCancel: () => void;
   onSave: (data: CreateSegmentRequest) => Promise<void>;
+  onAddLocation: () => void;
+  onAddZone: () => void;
+  onAddLayer: () => void;
 }) {
   const [name, setName] = useState(editing?.name || "");
   const [description, setDescription] = useState(editing?.description || "");
@@ -762,6 +968,47 @@ function SegmentFormView({
           </div>
         )}
       </div>
+
+      {/* Attach Location, Zone, or Layer - Only show when editing an existing segment */}
+      {editing && editing.segmentId && (
+        <div className="border border-zinc-700/80 rounded-lg px-3 py-2 space-y-2 bg-zinc-900/60">
+          <div>
+            <h4 className="text-xs font-semibold text-white">Attach to Segment</h4>
+            <p className="text-[10px] text-zinc-400">
+              Add locations, zones, or layers to this segment
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <button
+              type="button"
+              onClick={onAddLocation}
+              className="px-2 py-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center justify-center gap-1"
+              title="Add location/POI marker"
+            >
+              <Icon icon="mdi:map-marker" className="w-4 h-4" />
+              <span>Location</span>
+            </button>
+            <button
+              type="button"
+              onClick={onAddZone}
+              className="px-2 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center justify-center gap-1"
+              title="Add zone"
+            >
+              <Icon icon="mdi:shape" className="w-4 h-4" />
+              <span>Zone</span>
+            </button>
+            <button
+              type="button"
+              onClick={onAddLayer}
+              className="px-2 py-1.5 text-xs rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium flex items-center justify-center gap-1"
+              title="Attach layer"
+            >
+              <Icon icon="mdi:layers" className="w-4 h-4" />
+              <span>Layer</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center gap-2 pt-2 border-t border-zinc-800">
