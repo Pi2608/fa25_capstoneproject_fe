@@ -369,7 +369,6 @@ export function useSegmentPlayback({
           }
         }
 
-        console.log(`✅ Rendered ${segment.locations.length} locations`);
       }
 
       // ==================== CAMERA STATE ====================
@@ -398,15 +397,9 @@ export function useSegmentPlayback({
         const camType = opts?.cameraAnimationType || 'Fly';
         const camDurationSec = (opts?.cameraAnimationDurationMs ?? 1500) / 1000;
 
-        console.log(`📹 Camera animation: type=${camType}, duration=${camDurationSec}s, zoom ${currentZoom}→${targetZoom}`);
-
         if (camType === 'Jump') {
-          // Immediate jump without animation
-          console.log("⚡ Jump: immediate setView");
           currentMap.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
         } else if (camType === 'Ease') {
-          // Smooth pan and zoom separately for an eased feel
-          console.log("🌊 Ease: panTo then setZoom");
           try {
             currentMap.panTo([targetCenter[1], targetCenter[0]], { animate: true, duration: camDurationSec * 0.6 });
             setTimeout(() => {
@@ -418,10 +411,7 @@ export function useSegmentPlayback({
             currentMap.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: true });
           }
         } else {
-          // Fly (default)
-          // Only use two-phase if NO transition options (manual view) AND significant zoom change
           const needsTwoPhase = !opts && Math.abs(currentZoom - targetZoom) > 1 && oldLayers.length > 0;
-          console.log(`✈️ Fly: ${needsTwoPhase ? 'two-phase (zoom out then in)' : 'direct flyTo'}`);
           if (needsTwoPhase) {
             const midZoom = Math.min(currentZoom, targetZoom) - 2;
             currentMap.flyTo([targetCenter[1], targetCenter[0]], midZoom, { duration: Math.max(0.2, camDurationSec * 0.4), animate: true });
@@ -433,7 +423,6 @@ export function useSegmentPlayback({
           }
         }
       } else if (allBounds.length > 0) {
-        // Auto-fit bounds if no camera state
         try {
           const combinedBounds = allBounds[0];
           for (let i = 1; i < allBounds.length; i++) {
@@ -448,7 +437,6 @@ export function useSegmentPlayback({
             duration: animate ? camDurationSec : undefined,
             maxZoom: 15,
           });
-          console.log(`📦 Auto-fitted bounds to show ${allBounds.length} elements (no camera state)`);
         } catch (error) {
           console.error("❌ Failed to fit bounds:", error);
         }
@@ -459,17 +447,14 @@ export function useSegmentPlayback({
       // ==================== LAYER CROSS-FADE ====================
       const doFade = opts?.transitionType && opts.transitionType !== 'Jump';
       const totalMs = opts?.durationMs ?? 800;
-      console.log(`🎭 Layer transition: type=${opts?.transitionType || 'default'}, fade=${doFade}, duration=${totalMs}ms, old=${oldLayers.length}, new=${newLayers.length}`);
-      
+
       if (!doFade) {
-        // Clear old immediately and keep new as-is
-        console.log("⚡ Jump transition: removing old layers immediately");
+
         oldLayers.forEach(layer => {
           try { currentMap.removeLayer(layer); } catch {}
         });
         if (newLayers.length > 0) setCurrentSegmentLayers(newLayers);
       } else {
-        console.log(`🌈 Cross-fade transition: ${opts?.transitionType} over ${totalMs}ms`);
         const start = performance.now();
         const easing = (t: number) => {
           if (opts?.transitionType === 'Linear') return t;
@@ -525,9 +510,6 @@ export function useSegmentPlayback({
       const prevSegment = currentPlayIndex > 0 ? segments[currentPlayIndex - 1] : undefined;
       const t = findTransition(prevSegment?.segmentId ?? null, segment.segmentId);
       
-      console.log(`🔄 Segment ${currentPlayIndex}: ${prevSegment?.segmentId || 'START'} → ${segment.segmentId}`);
-      console.log(`📌 Found transition:`, t);
-      
       // Normalize case from backend (linear/ease/jump → Linear/Ease/Jump)
       const normalizeTransitionType = (str: string): "Jump" | "Ease" | "Linear" => {
         const lower = str.toLowerCase();
@@ -550,7 +532,6 @@ export function useSegmentPlayback({
         cameraAnimationDurationMs: t.animateCamera ? t.cameraAnimationDurationMs : undefined,
       } : undefined;
       
-      console.log(`⚙️ Applying transition options:`, options);
       
       setActiveSegmentId(segment.segmentId);
       await handleViewSegment(segment, options);
@@ -558,7 +539,6 @@ export function useSegmentPlayback({
       
       // Check if this transition requires user action
       if (t && t.requireUserAction) {
-        console.log(`⏸️ Waiting for user action: "${t.triggerButtonText}"`);
         setCurrentTransition(t);
         setWaitingForUserAction(true);
         setIsPlaying(false); // Pause playback
@@ -597,8 +577,7 @@ export function useSegmentPlayback({
 
   const handleClearMap = () => {
     if (!currentMap) return;
-    
-    console.log(`🧹 Clearing ${currentSegmentLayers.length} layers from map...`);
+  
     currentSegmentLayers.forEach(layer => {
       try {
         currentMap.removeLayer(layer);
@@ -609,11 +588,9 @@ export function useSegmentPlayback({
     
     setCurrentSegmentLayers([]);
     setActiveSegmentId(null);
-    console.log("✅ Map cleared");
   };
 
   const handleContinueAfterUserAction = () => {
-    console.log("▶️ User clicked continue, resuming playback");
     setWaitingForUserAction(false);
     setCurrentTransition(null);
     setCurrentPlayIndex(prev => prev + 1); // Move to next segment

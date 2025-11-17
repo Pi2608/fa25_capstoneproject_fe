@@ -13,18 +13,30 @@ import type {
   CameraState,
   CreateSegmentRequest,
   CreateTransitionRequest,
+  Zone,
+  SegmentZone,
+  CreateSegmentZoneRequest,
 } from "@/lib/api-storymap";
 import {
   parseCameraState,
   stringifyCameraState,
   getCurrentCameraState,
   applyCameraState,
+  searchZones,
+  getSegmentZones,
+  createSegmentZone,
+  deleteSegmentZone,
 } from "@/lib/api-storymap";
+import type { MapPoi } from "@/lib/api-poi";
+import { updatePoiDisplayConfig, updatePoiInteractionConfig } from "@/lib/api-poi";
+import type { LocationPoiDialogForm } from "@/types";
+import { RichHTMLEditor } from "@/components/shared/RichHTMLEditor";
 
 interface LeftSidebarToolboxProps {
-  activeView: "explorer" | "segments" | "transitions" | null;
-  onViewChange: (view: "explorer" | "segments" | "transitions" | null) => void;
+  activeView: "explorer" | "segments" | "transitions" | "pois" | "zones" | null;
+  onViewChange: (view: "explorer" | "segments" | "transitions" | "pois" | "zones" | null) => void;
 
+  mapId?: string;
   features: FeatureData[];
   layers: LayerDTO[];
   segments: Segment[];
@@ -47,14 +59,23 @@ interface LeftSidebarToolboxProps {
   // Transition CRUD
   onSaveTransition: (data: CreateTransitionRequest, transitionId?: string) => Promise<void>;
   onDeleteTransition?: (transitionId: string) => void;
+
+  // POI support
+  pois?: MapPoi[];
+  onPoiVisibilityToggle?: (poiId: string, isVisible: boolean) => void;
+  onDeletePoi?: (poiId: string) => void;
+  onFocusPoi?: (poiId: string, lngLat: [number, number]) => void;
+  onSavePoi?: (data: LocationPoiDialogForm, poiId?: string) => Promise<void>;
+  onEditPoi?: (poi: MapPoi) => void;
 }
 
-type ViewType = "explorer" | "segments" | "transitions";
+type ViewType = "explorer" | "segments" | "transitions" | "pois" | "zones";
 type FormMode = "list" | "create" | "edit";
 
 export function LeftSidebarToolbox({
   activeView,
   onViewChange,
+  mapId,
   features,
   layers,
   segments,
@@ -72,6 +93,12 @@ export function LeftSidebarToolbox({
   onDeleteSegment,
   onSaveTransition,
   onDeleteTransition,
+  pois = [],
+  onPoiVisibilityToggle,
+  onDeletePoi,
+  onFocusPoi,
+  onSavePoi,
+  onEditPoi,
 }: LeftSidebarToolboxProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -82,6 +109,11 @@ export function LeftSidebarToolbox({
   // Form state for transitions
   const [transitionFormMode, setTransitionFormMode] = useState<FormMode>("list");
   const [editingTransition, setEditingTransition] = useState<TimelineTransition | null>(null);
+
+  // Form state for POIs
+  const [poiFormMode, setPoiFormMode] = useState<FormMode>("list");
+  const [editingPoi, setEditingPoi] = useState<MapPoi | null>(null);
+  const [isPickingLocation, setIsPickingLocation] = useState(false);
 
   useEffect(() => {
     if (panelRef.current) {
@@ -97,8 +129,11 @@ export function LeftSidebarToolbox({
     // Reset form modes when switching views
     setSegmentFormMode("list");
     setTransitionFormMode("list");
+    setPoiFormMode("list");
     setEditingSegment(null);
     setEditingTransition(null);
+    setEditingPoi(null);
+    setIsPickingLocation(false);
 
     onViewChange(activeView === view ? null : view);
   }, [activeView, onViewChange]);
@@ -147,6 +182,62 @@ export function LeftSidebarToolbox({
     setEditingTransition(null);
   }, [onSaveTransition, editingTransition]);
 
+  // POI form handlers
+  const handleAddPoi = useCallback(() => {
+    setEditingPoi(null);
+    setPoiFormMode("create");
+    setIsPickingLocation(false);
+  }, []);
+
+  const handleEditPoi = useCallback((poi: MapPoi) => {
+    setEditingPoi(poi);
+    setPoiFormMode("edit");
+    setIsPickingLocation(false);
+    if (onEditPoi) {
+      onEditPoi(poi);
+    }
+  }, [onEditPoi]);
+
+  const handleCancelPoiForm = useCallback(() => {
+    setPoiFormMode("list");
+    setEditingPoi(null);
+    setIsPickingLocation(false);
+    // Dispatch event to disable picking mode on map
+    if (mapId) {
+      window.dispatchEvent(
+        new CustomEvent("poi:stopPickLocation", {
+          detail: { mapId },
+        })
+      );
+    }
+  }, [mapId]);
+
+  const handleSavePoiForm = useCallback(async (data: LocationPoiDialogForm) => {
+    if (onSavePoi) {
+      const wasEditing = !!editingPoi;
+      const editedPoiId = editingPoi?.poiId;
+
+      await onSavePoi(data, editingPoi?.poiId);
+      setPoiFormMode("list");
+      setEditingPoi(null);
+      setIsPickingLocation(false);
+
+      // Dispatch event to stop picking mode and notify of POI change
+      if (mapId) {
+        window.dispatchEvent(
+          new CustomEvent("poi:stopPickLocation", {
+            detail: { mapId },
+          })
+        );
+        window.dispatchEvent(
+          new CustomEvent(wasEditing ? "poi:updated" : "poi:created", {
+            detail: { mapId, poiId: editedPoiId || "new" },
+          })
+        );
+      }
+    }
+  }, [onSavePoi, editingPoi, mapId]);
+
   return (
     <>
       {/* Icon Bar */}
@@ -169,6 +260,18 @@ export function LeftSidebarToolbox({
           isActive={activeView === "transitions"}
           onClick={() => handleIconClick("transitions")}
         />
+        <IconButton
+          icon="mdi:map-marker-multiple"
+          label="POIs"
+          isActive={activeView === "pois"}
+          onClick={() => handleIconClick("pois")}
+        />
+        <IconButton
+          icon="mdi:vector-polygon"
+          label="Zones"
+          isActive={activeView === "zones"}
+          onClick={() => handleIconClick("zones")}
+        />
       </div>
 
       {/* Content Panel (slides in/out) */}
@@ -184,16 +287,20 @@ export function LeftSidebarToolbox({
               {activeView === "explorer" && "Data Layers"}
               {activeView === "segments" && (segmentFormMode === "list" ? "Segments" : segmentFormMode === "create" ? "Create Segment" : "Edit Segment")}
               {activeView === "transitions" && (transitionFormMode === "list" ? "Transitions" : transitionFormMode === "create" ? "Create Transition" : "Edit Transition")}
+              {activeView === "pois" && (poiFormMode === "list" ? "POIs" : poiFormMode === "create" ? "Create POI" : "Edit POI")}
+              {activeView === "zones" && "Zones"}
             </span>
 
             <div className="flex items-center gap-1">
               {/* Back button for forms */}
               {((activeView === "segments" && segmentFormMode !== "list") ||
-                (activeView === "transitions" && transitionFormMode !== "list")) && (
+                (activeView === "transitions" && transitionFormMode !== "list") ||
+                (activeView === "pois" && poiFormMode !== "list")) && (
                 <button
                   onClick={() => {
                     if (activeView === "segments") handleCancelSegmentForm();
                     if (activeView === "transitions") handleCancelTransitionForm();
+                    if (activeView === "pois") handleCancelPoiForm();
                   }}
                   className="p-1 hover:bg-zinc-800 rounded transition-colors"
                   title="Back to list"
@@ -205,7 +312,9 @@ export function LeftSidebarToolbox({
               {/* Close panel button (only show when in list mode) */}
               {((activeView === "segments" && segmentFormMode === "list") ||
                 (activeView === "transitions" && transitionFormMode === "list") ||
-                activeView === "explorer") && (
+                (activeView === "pois" && poiFormMode === "list") ||
+                activeView === "explorer" ||
+                activeView === "zones") && (
                 <button
                   onClick={() => onViewChange(null)}
                   className="p-1 hover:bg-zinc-800 rounded transition-colors"
@@ -246,6 +355,7 @@ export function LeftSidebarToolbox({
             {activeView === "segments" && segmentFormMode !== "list" && (
               <SegmentFormView
                 editing={editingSegment}
+                mapId={mapId}
                 currentMap={currentMap}
                 onCancel={handleCancelSegmentForm}
                 onSave={handleSaveSegmentForm}
@@ -269,6 +379,54 @@ export function LeftSidebarToolbox({
                 onCancel={handleCancelTransitionForm}
                 onSave={handleSaveTransitionForm}
               />
+            )}
+
+            {activeView === "pois" && poiFormMode === "list" && (
+              <PoisView
+                pois={pois}
+                mapId={mapId}
+                onPoiVisibilityToggle={onPoiVisibilityToggle}
+                onDeletePoi={onDeletePoi}
+                onFocusPoi={onFocusPoi}
+                onAddPoi={handleAddPoi}
+                onEditPoi={handleEditPoi}
+              />
+            )}
+
+            {activeView === "pois" && poiFormMode !== "list" && (
+              <PoiFormView
+                editing={editingPoi}
+                currentMap={currentMap}
+                isPickingLocation={isPickingLocation}
+                onPickLocation={() => {
+                  const newPickingState = !isPickingLocation;
+                  setIsPickingLocation(newPickingState);
+
+                  if (mapId) {
+                    if (newPickingState) {
+                      // Start picking
+                      window.dispatchEvent(
+                        new CustomEvent("poi:startPickLocation", {
+                          detail: { mapId },
+                        })
+                      );
+                    } else {
+                      // Stop picking
+                      window.dispatchEvent(
+                        new CustomEvent("poi:stopPickLocation", {
+                          detail: { mapId },
+                        })
+                      );
+                    }
+                  }
+                }}
+                onCancel={handleCancelPoiForm}
+                onSave={handleSavePoiForm}
+              />
+            )}
+
+            {activeView === "zones" && (
+              <ZonesView />
             )}
           </div>
         </div>
@@ -574,17 +732,26 @@ function SegmentsView({
 
 function SegmentFormView({
   editing,
+  mapId,
   currentMap,
   onCancel,
   onSave,
 }: {
   editing: Segment | null;
+  mapId?: string;
   currentMap?: any;
   onCancel: () => void;
   onSave: (data: CreateSegmentRequest) => Promise<void>;
 }) {
   const [name, setName] = useState(editing?.name || "");
   const [description, setDescription] = useState(editing?.description || "");
+
+  // Zone management state
+  const [attachedZones, setAttachedZones] = useState<SegmentZone[]>([]);
+  const [zoneSearchTerm, setZoneSearchTerm] = useState("");
+  const [zoneSearchResults, setZoneSearchResults] = useState<Zone[]>([]);
+  const [isSearchingZones, setIsSearchingZones] = useState(false);
+  const [showZoneSearch, setShowZoneSearch] = useState(false);
 
   const [cameraState, setCameraState] = useState<CameraState>(() => {
     if (editing?.cameraState) {
@@ -614,6 +781,78 @@ function SegmentFormView({
   const [autoAdvance, setAutoAdvance] = useState(editing?.autoAdvance ?? true);
   const [durationMs, setDurationMs] = useState(editing?.durationMs || 6000);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch existing zones when editing
+  useEffect(() => {
+    if (editing && mapId) {
+      getSegmentZones(mapId, editing.segmentId)
+        .then(zones => setAttachedZones(zones))
+        .catch(err => console.error("Failed to load segment zones:", err));
+    }
+  }, [editing, mapId]);
+
+  // Zone search handler with debouncing
+  useEffect(() => {
+    if (!zoneSearchTerm.trim()) {
+      setZoneSearchResults([]);
+      return;
+    }
+
+    setIsSearchingZones(true);
+    const timeoutId = setTimeout(() => {
+      searchZones(zoneSearchTerm)
+        .then(results => {
+          setZoneSearchResults(results);
+          setIsSearchingZones(false);
+        })
+        .catch(err => {
+          console.error("Zone search failed:", err);
+          setZoneSearchResults([]);
+          setIsSearchingZones(false);
+        });
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [zoneSearchTerm]);
+
+  const handleAddZone = async (zone: Zone) => {
+    if (!editing || !mapId) return;
+
+    try {
+      const newSegmentZone = await createSegmentZone(mapId, editing.segmentId, {
+        zoneId: zone.zoneId,
+        displayOrder: attachedZones.length,
+        isVisible: true,
+        highlightBoundary: true,
+        boundaryColor: "#3b82f6",
+        boundaryWidth: 2,
+        fillZone: true,
+        fillColor: "#3b82f6",
+        fillOpacity: 0.2,
+        showLabel: true,
+        fitBoundsOnEntry: false,
+      });
+
+      setAttachedZones(prev => [...prev, newSegmentZone]);
+      setZoneSearchTerm("");
+      setShowZoneSearch(false);
+    } catch (error) {
+      console.error("Failed to add zone:", error);
+      alert("Failed to add zone. Please try again.");
+    }
+  };
+
+  const handleRemoveZone = async (segmentZoneId: string) => {
+    if (!editing || !mapId) return;
+
+    try {
+      await deleteSegmentZone(mapId, editing.segmentId, segmentZoneId);
+      setAttachedZones(prev => prev.filter(z => z.segmentZoneId !== segmentZoneId));
+    } catch (error) {
+      console.error("Failed to remove zone:", error);
+      alert("Failed to remove zone. Please try again.");
+    }
+  };
 
   const handleCaptureView = () => {
     if (!currentMap) {
@@ -762,6 +1001,123 @@ function SegmentFormView({
           </div>
         )}
       </div>
+
+      {/* Zone Management - Only show when editing */}
+      {editing && mapId && (
+        <div className="border border-zinc-700/80 rounded-lg px-3 py-2 space-y-2 bg-zinc-900/60">
+          <div>
+            <h4 className="text-xs font-semibold text-white">Associated Zones</h4>
+            <p className="text-[10px] text-zinc-400">
+              Geographic areas to highlight in this segment
+            </p>
+          </div>
+
+          {/* Attached zones list */}
+          {attachedZones.length > 0 && (
+            <div className="space-y-1">
+              {attachedZones.map((segmentZone) => (
+                <div
+                  key={segmentZone.segmentZoneId}
+                  className="flex items-center gap-2 bg-zinc-800 rounded-lg px-2 py-1.5 group"
+                >
+                  <Icon icon="mdi:vector-polygon" className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs text-zinc-200 truncate">
+                      {segmentZone.zone?.name || "Unknown Zone"}
+                    </div>
+                    {segmentZone.zone?.zoneType && (
+                      <div className="text-[10px] text-zinc-500">
+                        {segmentZone.zone.zoneType}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => handleRemoveZone(segmentZone.segmentZoneId)}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-all"
+                    title="Remove zone"
+                  >
+                    <Icon icon="mdi:close" className="w-3 h-3 text-red-400" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Zone search */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowZoneSearch(!showZoneSearch)}
+              className="w-full px-2 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center justify-center gap-1"
+            >
+              <Icon icon="mdi:plus-circle-outline" className="w-4 h-4" />
+              <span>Add Zone</span>
+            </button>
+
+            {showZoneSearch && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg z-10">
+                <div className="p-2">
+                  <input
+                    type="text"
+                    value={zoneSearchTerm}
+                    onChange={(e) => setZoneSearchTerm(e.target.value)}
+                    placeholder="Search zones..."
+                    className="w-full bg-zinc-900 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-blue-500/80"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Search results */}
+                <div className="max-h-48 overflow-y-auto">
+                  {isSearchingZones && (
+                    <div className="px-3 py-2 text-xs text-zinc-400 text-center">
+                      Searching...
+                    </div>
+                  )}
+
+                  {!isSearchingZones && zoneSearchResults.length === 0 && zoneSearchTerm.trim() && (
+                    <div className="px-3 py-2 text-xs text-zinc-500 text-center italic">
+                      No zones found
+                    </div>
+                  )}
+
+                  {!isSearchingZones && zoneSearchResults.length > 0 && (
+                    <div className="py-1">
+                      {zoneSearchResults.map((zone) => {
+                        const isAlreadyAttached = attachedZones.some(
+                          (sz) => sz.zoneId === zone.zoneId
+                        );
+
+                        return (
+                          <button
+                            key={zone.zoneId}
+                            onClick={() => !isAlreadyAttached && handleAddZone(zone)}
+                            disabled={isAlreadyAttached}
+                            className={cn(
+                              "w-full text-left px-3 py-2 text-xs transition-colors",
+                              isAlreadyAttached
+                                ? "bg-zinc-800/50 text-zinc-600 cursor-not-allowed"
+                                : "hover:bg-zinc-700 text-zinc-200"
+                            )}
+                          >
+                            <div className="font-medium">{zone.name}</div>
+                            <div className="text-[10px] text-zinc-500 flex items-center gap-2">
+                              <span>{zone.zoneType}</span>
+                              {isAlreadyAttached && (
+                                <span className="text-blue-400">✓ Added</span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center gap-2 pt-2 border-t border-zinc-800">
@@ -1121,6 +1477,876 @@ function TransitionFormView({
           {isSaving ? "Saving..." : editing ? "Save" : "Create"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function PoisView({
+  pois,
+  mapId,
+  onPoiVisibilityToggle,
+  onDeletePoi,
+  onFocusPoi,
+  onAddPoi,
+  onEditPoi,
+}: {
+  pois: MapPoi[];
+  mapId?: string;
+  onPoiVisibilityToggle?: (poiId: string, isVisible: boolean) => void;
+  onDeletePoi?: (poiId: string) => void;
+  onFocusPoi?: (poiId: string, lngLat: [number, number]) => void;
+  onAddPoi?: () => void;
+  onEditPoi?: (poi: MapPoi) => void;
+}) {
+  const [expandedPoiId, setExpandedPoiId] = useState<string | null>(null);
+  const [displayConfig, setDisplayConfig] = useState({
+    isVisible: undefined as boolean | undefined,
+    zIndex: undefined as number | undefined,
+    showTooltip: undefined as boolean | undefined,
+    tooltipContent: undefined as string | undefined,
+  });
+  const [interactionConfig, setInteractionConfig] = useState({
+    openSlideOnClick: undefined as boolean | undefined,
+    playAudioOnClick: undefined as boolean | undefined,
+    audioUrl: undefined as string | undefined,
+    externalUrl: undefined as string | undefined,
+  });
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  const extractLngLat = (markerGeometry: string): [number, number] | null => {
+    if (!markerGeometry) return null;
+    try {
+      const geom = JSON.parse(markerGeometry);
+      if (geom.type === "Point" && geom.coordinates) {
+        return [Number(geom.coordinates[0]), Number(geom.coordinates[1])];
+      }
+      if (geom.type === "GeometryCollection" && geom.geometries) {
+        const point = geom.geometries.find((g: any) => g.type === "Point");
+        if (point && point.coordinates) {
+          return [Number(point.coordinates[0]), Number(point.coordinates[1])];
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  return (
+    <div className="p-3 space-y-2">
+      {pois.length === 0 ? (
+        <p className="text-xs text-zinc-500 italic py-2">No POIs</p>
+      ) : (
+        <div className="space-y-2">
+          {pois.map((poi) => (
+            <div
+              key={poi.poiId}
+              className="p-3 rounded-lg border border-zinc-700 hover:border-zinc-600 transition-all group"
+            >
+              <div className="flex items-center gap-2">
+                <Icon
+                  icon="mdi:map-marker"
+                  className="w-4 h-4 text-blue-400 flex-shrink-0"
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm text-zinc-200 truncate">
+                    {poi.title}
+                  </div>
+                  {poi.subtitle && (
+                    <div className="text-xs text-zinc-400 truncate">
+                      {poi.subtitle}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Visibility toggle */}
+                  {onPoiVisibilityToggle && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPoiVisibilityToggle(poi.poiId, !poi.isVisible);
+                      }}
+                      className="p-1 hover:bg-zinc-700 rounded transition-all"
+                      title={poi.isVisible ? "Hide POI" : "Show POI"}
+                    >
+                      <Icon
+                        icon={poi.isVisible ? "mdi:eye" : "mdi:eye-off"}
+                        className={cn(
+                          "w-4 h-4",
+                          poi.isVisible ? "text-emerald-500" : "text-zinc-500"
+                        )}
+                      />
+                    </button>
+                  )}
+                  {/* Settings/Config toggle */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const isExpanded = expandedPoiId === poi.poiId;
+                      setExpandedPoiId(isExpanded ? null : poi.poiId);
+                      if (!isExpanded) {
+                        // Load current config when expanding
+                        setDisplayConfig({
+                          isVisible: poi.isVisible,
+                          zIndex: poi.zIndex,
+                          showTooltip: poi.showTooltip,
+                          tooltipContent: poi.tooltipContent ?? undefined,
+                        });
+                        setInteractionConfig({
+                          openSlideOnClick: poi.openSlideOnClick,
+                          playAudioOnClick: poi.playAudioOnClick,
+                          audioUrl: poi.audioUrl ?? undefined,
+                          externalUrl: poi.externalUrl ?? undefined,
+                        });
+                      }
+                    }}
+                    className="p-1 hover:bg-zinc-700 rounded transition-all"
+                    title="Configure POI"
+                  >
+                    <Icon
+                      icon="mdi:cog"
+                      className={cn(
+                        "w-4 h-4",
+                        expandedPoiId === poi.poiId ? "text-emerald-400" : "text-zinc-400"
+                      )}
+                    />
+                  </button>
+                  {/* Focus/Zoom to POI */}
+                  {onFocusPoi && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const lngLat = extractLngLat(poi.markerGeometry);
+                        if (lngLat) {
+                          onFocusPoi(poi.poiId, lngLat);
+                        }
+                      }}
+                      className="p-1 hover:bg-zinc-700 rounded transition-all"
+                      title="Focus POI on map"
+                    >
+                      <Icon
+                        icon="mdi:crosshairs-gps"
+                        className="w-4 h-4 text-sky-400"
+                      />
+                    </button>
+                  )}
+                  {/* Edit */}
+                  {onEditPoi && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditPoi(poi);
+                      }}
+                      className="p-1 hover:bg-zinc-700 rounded transition-all"
+                      title="Edit POI"
+                    >
+                      <Icon
+                        icon="mdi:pencil"
+                        className="w-4 h-4 text-blue-400"
+                      />
+                    </button>
+                  )}
+                  {/* Delete */}
+                  {onDeletePoi && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`Delete POI "${poi.title}"?`)) {
+                          onDeletePoi(poi.poiId);
+                        }
+                      }}
+                      className="p-1 hover:bg-zinc-700 rounded transition-all"
+                      title="Delete POI"
+                    >
+                      <Icon
+                        icon="mdi:delete-outline"
+                        className="w-4 h-4 text-red-400"
+                      />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Expanded Configuration Section */}
+              {expandedPoiId === poi.poiId && (
+                <div className="border-t border-zinc-700 bg-zinc-900/50 p-3 mt-2">
+                  <div className="grid grid-cols-1 gap-3 text-xs">
+                    {/* Display Config */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-medium text-blue-400">
+                        <Icon icon="mdi:eye" className="w-3.5 h-3.5" />
+                        <span>Display Config</span>
+                      </div>
+                      <label className="flex items-center gap-2 text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={!!displayConfig.isVisible}
+                          onChange={(e) => setDisplayConfig({ ...displayConfig, isVisible: e.target.checked })}
+                          className="h-3.5 w-3.5 rounded"
+                        />
+                        <span className="text-[11px]">Visible</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={!!displayConfig.showTooltip}
+                          onChange={(e) => setDisplayConfig({ ...displayConfig, showTooltip: e.target.checked })}
+                          className="h-3.5 w-3.5 rounded"
+                        />
+                        <span className="text-[11px]">Show tooltip</span>
+                      </label>
+                      <div>
+                        <label className="block text-zinc-400 mb-1 text-[10px]">Tooltip content</label>
+                        <input
+                          className="w-full rounded bg-zinc-800 border border-zinc-700 px-2 py-1.5 text-white text-[11px] outline-none focus:ring-2 focus:ring-blue-500"
+                          value={displayConfig.tooltipContent ?? ""}
+                          onChange={(e) => setDisplayConfig({ ...displayConfig, tooltipContent: e.target.value })}
+                          placeholder="Enter content..."
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-zinc-400 mb-1 text-[10px]">Z-Index</label>
+                        <input
+                          type="number"
+                          className="w-full rounded bg-zinc-800 border border-zinc-700 px-2 py-1.5 text-white text-[11px] outline-none focus:ring-2 focus:ring-blue-500"
+                          value={Number.isFinite(displayConfig.zIndex as number) ? String(displayConfig.zIndex) : ""}
+                          onChange={(e) => setDisplayConfig({ ...displayConfig, zIndex: e.target.value === "" ? undefined : Number(e.target.value) })}
+                          placeholder="0"
+                        />
+                      </div>
+                      <button
+                        className="w-full px-2 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-medium transition-colors disabled:opacity-50"
+                        disabled={isSavingConfig}
+                        onClick={async () => {
+                          try {
+                            setIsSavingConfig(true);
+                            await updatePoiDisplayConfig(poi.poiId, displayConfig);
+                            // Refresh POI list if available
+                            if (onPoiVisibilityToggle) {
+                              window.dispatchEvent(
+                                new CustomEvent("poi:updated", {
+                                  detail: { mapId, poiId: poi.poiId },
+                                })
+                              );
+                            }
+                          } catch (error) {
+                            console.error("Failed to save display config:", error);
+                            alert("Failed to save display config");
+                          } finally {
+                            setIsSavingConfig(false);
+                          }
+                        }}
+                      >
+                        💾 Save display
+                      </button>
+                    </div>
+
+                    {/* Interaction Config */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-medium text-purple-400">
+                        <Icon icon="mdi:cursor-pointer" className="w-3.5 h-3.5" />
+                        <span>Interaction Config</span>
+                      </div>
+                      <label className="flex items-center gap-2 text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={!!interactionConfig.openSlideOnClick}
+                          onChange={(e) => setInteractionConfig({ ...interactionConfig, openSlideOnClick: e.target.checked })}
+                          className="h-3.5 w-3.5 rounded"
+                        />
+                        <span className="text-[11px]">Open slide on click</span>
+                      </label>
+                      <label className="flex items-center gap-2 text-zinc-300">
+                        <input
+                          type="checkbox"
+                          checked={!!interactionConfig.playAudioOnClick}
+                          onChange={(e) => setInteractionConfig({ ...interactionConfig, playAudioOnClick: e.target.checked })}
+                          className="h-3.5 w-3.5 rounded"
+                        />
+                        <span className="text-[11px]">Play audio on click</span>
+                      </label>
+                      <div>
+                        <label className="block text-zinc-400 mb-1 text-[10px]">Audio URL</label>
+                        <input
+                          className="w-full rounded bg-zinc-800 border border-zinc-700 px-2 py-1.5 text-white text-[11px] outline-none focus:ring-2 focus:ring-purple-500"
+                          value={interactionConfig.audioUrl ?? ""}
+                          onChange={(e) => setInteractionConfig({ ...interactionConfig, audioUrl: e.target.value })}
+                          placeholder="https://example.com/audio.mp3"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-zinc-400 mb-1 text-[10px]">External URL</label>
+                        <input
+                          className="w-full rounded bg-zinc-800 border border-zinc-700 px-2 py-1.5 text-white text-[11px] outline-none focus:ring-2 focus:ring-purple-500"
+                          value={interactionConfig.externalUrl ?? ""}
+                          onChange={(e) => setInteractionConfig({ ...interactionConfig, externalUrl: e.target.value })}
+                          placeholder="https://example.com"
+                        />
+                      </div>
+                      <button
+                        className="w-full px-2 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-medium transition-colors disabled:opacity-50"
+                        disabled={isSavingConfig}
+                        onClick={async () => {
+                          try {
+                            setIsSavingConfig(true);
+                            await updatePoiInteractionConfig(poi.poiId, interactionConfig);
+                            // Refresh POI list if available
+                            if (onPoiVisibilityToggle) {
+                              window.dispatchEvent(
+                                new CustomEvent("poi:updated", {
+                                  detail: { mapId, poiId: poi.poiId },
+                                })
+                              );
+                            }
+                          } catch (error) {
+                            console.error("Failed to save interaction config:", error);
+                            alert("Failed to save interaction config");
+                          } finally {
+                            setIsSavingConfig(false);
+                          }
+                        }}
+                      >
+                        💾 Save interaction
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add POI Button */}
+      {onAddPoi && (
+        <button
+          onClick={onAddPoi}
+          className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-700 rounded-md flex items-center justify-center gap-2 transition-colors"
+        >
+          <Icon icon="mdi:plus-circle-outline" className="w-5 h-5" />
+          <span className="text-sm font-medium">Add POI</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PoiFormView({
+  editing,
+  currentMap,
+  isPickingLocation,
+  onPickLocation,
+  onCancel,
+  onSave,
+}: {
+  editing: MapPoi | null;
+  currentMap?: any;
+  isPickingLocation: boolean;
+  onPickLocation: () => void;
+  onCancel: () => void;
+  onSave: (data: LocationPoiDialogForm) => Promise<void>;
+}) {
+  const [title, setTitle] = useState(editing?.title || "");
+  const [subtitle, setSubtitle] = useState(editing?.subtitle || "");
+  const [storyContent, setStoryContent] = useState(editing?.storyContent || "");
+  const [markerGeometry, setMarkerGeometry] = useState(editing?.markerGeometry || "");
+  const [locationType, setLocationType] = useState<"PointOfInterest" | "Line" | "Polygon" | "TextOnly" | "MediaSpot" | "Custom">(
+    editing?.locationType || "PointOfInterest"
+  );
+  const [iconType, setIconType] = useState(editing?.iconType || "📍");
+  const [iconColor, setIconColor] = useState(editing?.iconColor || "#FF0000");
+  const [iconSize, setIconSize] = useState(editing?.iconSize ?? 32);
+  const [highlightOnEnter, setHighlightOnEnter] = useState(editing?.highlightOnEnter ?? false);
+  const [showTooltip, setShowTooltip] = useState(editing?.showTooltip ?? true);
+  const [tooltipContent, setTooltipContent] = useState(editing?.tooltipContent || "");
+  const [isVisible, setIsVisible] = useState(editing?.isVisible ?? true);
+  const [zIndex, setZIndex] = useState(editing?.zIndex ?? 100);
+  const [displayOrder, setDisplayOrder] = useState(editing?.displayOrder ?? 0);
+  const [openSlideOnClick, setOpenSlideOnClick] = useState(editing?.openSlideOnClick ?? false);
+  const [slideContent, setSlideContent] = useState(editing?.slideContent || "");
+  const [playAudioOnClick, setPlayAudioOnClick] = useState(editing?.playAudioOnClick ?? false);
+  const [audioUrl, setAudioUrl] = useState(editing?.audioUrl || "");
+  const [externalUrl, setExternalUrl] = useState(editing?.externalUrl || "");
+  const [mediaResources, setMediaResources] = useState(editing?.mediaResources || "");
+  const [entryEffect, setEntryEffect] = useState(editing?.entryEffect || "fade");
+  const [exitEffect, setExitEffect] = useState(editing?.exitEffect || "fade");
+  const [entryDelayMs, setEntryDelayMs] = useState(editing?.entryDelayMs ?? 0);
+  const [entryDurationMs, setEntryDurationMs] = useState(editing?.entryDurationMs ?? 400);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Extract coordinates from markerGeometry for display
+  const extractCoordinates = (geometry: string): { lng: number; lat: number } | null => {
+    if (!geometry) return null;
+    try {
+      const parsed = JSON.parse(geometry);
+      if (parsed.type === "Point" && Array.isArray(parsed.coordinates) && parsed.coordinates.length >= 2) {
+        return {
+          lng: Number(parsed.coordinates[0]),
+          lat: Number(parsed.coordinates[1])
+        };
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  };
+
+  // Listen for location picked event
+  useEffect(() => {
+    const handleLocationPicked = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { lngLat } = customEvent.detail;
+
+      console.log("[PoiFormView] Location picked:", lngLat);
+
+      const geometry = JSON.stringify({
+        type: "Point",
+        coordinates: [lngLat[0], lngLat[1]],
+      });
+
+      setMarkerGeometry(geometry);
+    };
+
+    window.addEventListener("poi:locationPicked", handleLocationPicked);
+    return () => {
+      window.removeEventListener("poi:locationPicked", handleLocationPicked);
+    };
+  }, []);
+
+  const hasLocation = Boolean(markerGeometry);
+  const coordinates = extractCoordinates(markerGeometry);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      setMarkerGeometry(JSON.stringify(json));
+    } catch {
+      alert("File không hợp lệ hoặc không phải JSON!");
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!title.trim()) {
+      alert("Please enter a title");
+      return;
+    }
+    if (!markerGeometry) {
+      alert("Please pick a location on the map");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await onSave({
+        title: title.trim(),
+        subtitle: subtitle?.trim() || undefined,
+        storyContent: storyContent?.trim() || undefined,
+        locationType,
+        markerGeometry,
+        displayOrder,
+        iconType: iconType?.trim() || undefined,
+        iconColor: iconColor || undefined,
+        iconSize: iconSize || undefined,
+        highlightOnEnter,
+        showTooltip,
+        tooltipContent: tooltipContent?.trim() || undefined,
+        isVisible,
+        zIndex,
+        openSlideOnClick,
+        slideContent: slideContent?.trim() || undefined,
+        playAudioOnClick,
+        audioUrl: audioUrl?.trim() || undefined,
+        externalUrl: externalUrl?.trim() || undefined,
+        mediaResources: mediaResources?.trim() || undefined,
+        entryEffect: entryEffect || undefined,
+        exitEffect: exitEffect || undefined,
+        entryDelayMs: entryDelayMs || undefined,
+        entryDurationMs: entryDurationMs || undefined,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="p-4 space-y-4 text-sm overflow-y-auto">
+      {/* Location Selection */}
+      <div>
+        <label className="block text-white/60 mb-2">Vị trí trên bản đồ *</label>
+        {hasLocation ? (
+          <div className="bg-emerald-900/20 border border-emerald-500/50 rounded p-3 mb-2">
+            <p className="text-emerald-300 text-xs mb-1">✅ Đã chọn vị trí</p>
+            <textarea
+              rows={3}
+              value={markerGeometry}
+              readOnly
+              className="w-full rounded bg-zinc-800 px-2 py-2 font-mono text-xs"
+            />
+          </div>
+        ) : (
+          <div className="bg-blue-900/20 border border-blue-500/50 rounded p-3 mb-2">
+            <p className="text-blue-300 text-xs mb-2">
+              {isPickingLocation
+                ? "🔄 Đang chờ bạn chọn vị trí trên bản đồ..."
+                : "🗺️ Chưa chọn vị trí"}
+            </p>
+          </div>
+        )}
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onPickLocation}
+            disabled={isPickingLocation || isSaving}
+            className={`px-3 py-1.5 rounded text-xs ${
+              isPickingLocation
+                ? "bg-yellow-600 text-white"
+                : "bg-blue-600 hover:bg-blue-500 text-white"
+            } disabled:opacity-50`}
+          >
+            {isPickingLocation ? "Đang chọn..." : "Chọn trên bản đồ"}
+          </button>
+          <input
+            type="file"
+            accept=".json,.geojson"
+            onChange={handleFileUpload}
+            className="hidden"
+            id="geojson-upload"
+          />
+          <label
+            htmlFor="geojson-upload"
+            className="px-3 py-1.5 rounded bg-zinc-700 hover:bg-zinc-600 text-white text-xs cursor-pointer"
+          >
+            Tải file GeoJSON
+          </label>
+        </div>
+      </div>
+
+      {/* Basic Info */}
+      <div>
+        <label className="block text-white/60 mb-1">Tiêu đề *</label>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="VD: Cầu Sài Gòn"
+          className="w-full rounded bg-zinc-800 px-3 py-2 outline-none text-white"
+        />
+      </div>
+
+      <div>
+        <label className="block text-white/60 mb-1">Phụ đề</label>
+        <input
+          value={subtitle}
+          onChange={(e) => setSubtitle(e.target.value)}
+          placeholder="VD: Điểm nhìn đẹp lúc hoàng hôn"
+          className="w-full rounded bg-zinc-800 px-3 py-2 outline-none text-white"
+        />
+      </div>
+
+      {/* Story Content */}
+      <div>
+        <label className="block text-white/60 mb-1">Nội dung câu chuyện</label>
+        <textarea
+          value={storyContent}
+          onChange={(e) => setStoryContent(e.target.value)}
+          rows={3}
+          placeholder="Mô tả về địa điểm này..."
+          className="w-full rounded bg-zinc-800 border border-zinc-700 px-3 py-2 text-white outline-none"
+        />
+      </div>
+
+      {/* Location Type */}
+      <div>
+        <label className="block text-white/60 mb-2">Loại vị trí</label>
+        <div className="grid grid-cols-3 gap-2">
+          {([
+            { value: "PointOfInterest", label: "POI" },
+            { value: "MediaSpot", label: "Media" },
+            { value: "TextOnly", label: "Text" },
+            { value: "Line", label: "Line" },
+            { value: "Polygon", label: "Polygon" },
+            { value: "Custom", label: "Custom" },
+          ] as const).map((type) => (
+            <button
+              key={type.value}
+              type="button"
+              onClick={() => setLocationType(type.value)}
+              className={`px-3 py-2 rounded text-xs ${
+                locationType === type.value
+                  ? "bg-emerald-600 text-white"
+                  : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+              }`}
+            >
+              {type.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Icon Styling */}
+      <div className="border-t border-zinc-700 pt-4">
+        <h3 className="text-sm font-medium text-zinc-300 mb-3">Icon Styling</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-white/60 mb-1">Icon</label>
+            <input
+              type="text"
+              value={iconType}
+              onChange={(e) => setIconType(e.target.value)}
+              className="w-full rounded bg-zinc-800 border border-zinc-700 px-3 py-2 text-white text-center text-2xl"
+              placeholder="📍"
+            />
+          </div>
+          <div>
+            <label className="block text-white/60 mb-1">Color</label>
+            <input
+              type="color"
+              value={iconColor}
+              onChange={(e) => setIconColor(e.target.value)}
+              className="w-full h-10 bg-zinc-800 border border-zinc-700 rounded cursor-pointer"
+            />
+          </div>
+        </div>
+        <div className="mt-2">
+          <label className="block text-white/60 mb-1">
+            Icon Size: {iconSize}px
+          </label>
+          <input
+            type="range"
+            min="16"
+            max="64"
+            value={iconSize}
+            onChange={(e) => setIconSize(parseInt(e.target.value))}
+            className="w-full"
+          />
+        </div>
+      </div>
+
+      {/* Display Settings */}
+      <div className="border-t border-zinc-700 pt-4">
+        <h3 className="text-sm font-medium text-zinc-300 mb-3">Cài đặt hiển thị</h3>
+
+        <div className="grid grid-cols-2 gap-4 mb-3">
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={highlightOnEnter}
+              onChange={(e) => setHighlightOnEnter(e.target.checked)}
+            />
+            <span className="text-sm text-zinc-300">Highlight khi vào</span>
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={isVisible}
+              onChange={(e) => setIsVisible(e.target.checked)}
+            />
+            <span className="text-sm text-zinc-300">Hiển thị</span>
+          </label>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-zinc-400 mb-1 text-xs">Z-Index</label>
+            <input
+              type="number"
+              value={zIndex}
+              onChange={(e) => setZIndex(parseInt(e.target.value) || 0)}
+              className="w-full rounded bg-zinc-800 border border-zinc-700 px-3 py-2 text-white outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-zinc-400 mb-1 text-xs">Thứ tự hiển thị</label>
+            <input
+              type="number"
+              value={displayOrder}
+              onChange={(e) => setDisplayOrder(parseInt(e.target.value) || 0)}
+              className="w-full rounded bg-zinc-800 border border-zinc-700 px-3 py-2 text-white outline-none"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Tooltip */}
+      <div>
+        <label className="flex items-center gap-2 mb-2">
+          <input
+            type="checkbox"
+            checked={showTooltip}
+            onChange={(e) => setShowTooltip(e.target.checked)}
+          />
+          <span className="text-sm font-medium text-zinc-300">
+            Hiển thị Tooltip (Rich HTML)
+          </span>
+        </label>
+        {showTooltip && (
+          <div className="space-y-2">
+            <RichHTMLEditor
+              value={tooltipContent}
+              onChange={(html) => setTooltipContent(html)}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Slide */}
+      <div>
+        <label className="flex items-center gap-2 mb-2">
+          <input
+            type="checkbox"
+            checked={openSlideOnClick}
+            onChange={(e) => setOpenSlideOnClick(e.target.checked)}
+          />
+          <span className="text-sm font-medium text-zinc-300">
+            Mở Slide khi click (Rich HTML)
+          </span>
+        </label>
+        {openSlideOnClick && (
+          <div className="space-y-2">
+            <RichHTMLEditor
+              value={slideContent}
+              onChange={(html) => setSlideContent(html)}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Audio */}
+      <div>
+        <label className="flex items-center gap-2 mb-2">
+          <input
+            type="checkbox"
+            checked={playAudioOnClick}
+            onChange={(e) => setPlayAudioOnClick(e.target.checked)}
+          />
+          <span className="text-sm font-medium text-zinc-300">Phát Audio khi click</span>
+        </label>
+        {playAudioOnClick && (
+          <input
+            type="url"
+            value={audioUrl}
+            onChange={(e) => setAudioUrl(e.target.value)}
+            placeholder="https://example.com/audio.mp3"
+            className="w-full rounded bg-zinc-800 border border-zinc-700 px-3 py-2 text-white outline-none"
+          />
+        )}
+      </div>
+
+      {/* External URL */}
+      <div>
+        <label className="block text-white/60 mb-1">External URL</label>
+        <input
+          type="url"
+          value={externalUrl}
+          onChange={(e) => setExternalUrl(e.target.value)}
+          placeholder="https://example.com"
+          className="w-full rounded bg-zinc-800 border border-zinc-700 px-3 py-2 text-white outline-none"
+        />
+      </div>
+
+      {/* Media Resources */}
+      <div>
+        <label className="block text-white/60 mb-1">Tài nguyên Media</label>
+        <textarea
+          value={mediaResources}
+          onChange={(e) => setMediaResources(e.target.value)}
+          rows={2}
+          placeholder="URLs của hình ảnh, video... (mỗi URL một dòng)"
+          className="w-full rounded bg-zinc-800 border border-zinc-700 px-3 py-2 text-white outline-none"
+        />
+      </div>
+
+      {/* Animation Configuration */}
+      <div className="border-t border-zinc-700 pt-4">
+        <h3 className="text-sm font-medium text-zinc-300 mb-3">⚡ Animation Effects</h3>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-white/60 mb-1 text-xs">Entry Effect</label>
+            <select
+              value={entryEffect}
+              onChange={(e) => setEntryEffect(e.target.value)}
+              className="w-full rounded bg-zinc-800 border border-zinc-700 px-3 py-2 text-white text-sm"
+            >
+              <option value="none">None</option>
+              <option value="fade">Fade</option>
+              <option value="scale">Scale</option>
+              <option value="slide-up">Slide Up</option>
+              <option value="bounce">Bounce</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-white/60 mb-1 text-xs">Exit Effect</label>
+            <select
+              value={exitEffect}
+              onChange={(e) => setExitEffect(e.target.value)}
+              className="w-full rounded bg-zinc-800 border border-zinc-700 px-3 py-2 text-white text-sm"
+            >
+              <option value="none">None</option>
+              <option value="fade">Fade</option>
+              <option value="scale">Scale</option>
+              <option value="slide-down">Slide Down</option>
+            </select>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 mt-3">
+          <div>
+            <label className="block text-white/60 mb-1 text-xs">
+              Entry Delay: {entryDelayMs}ms
+            </label>
+            <input
+              type="range"
+              min="0"
+              max="2000"
+              step="100"
+              value={entryDelayMs}
+              onChange={(e) => setEntryDelayMs(parseInt(e.target.value))}
+              className="w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-white/60 mb-1 text-xs">
+              Entry Duration: {entryDurationMs}ms
+            </label>
+            <input
+              type="range"
+              min="100"
+              max="2000"
+              step="100"
+              value={entryDurationMs}
+              onChange={(e) => setEntryDurationMs(parseInt(e.target.value))}
+              className="w-full"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex justify-end gap-2 px-4 py-3 border-t border-white/10">
+        <button
+          className="px-3 py-1.5 rounded bg-zinc-700 hover:bg-zinc-600 text-white"
+          onClick={onCancel}
+          disabled={isSaving}
+        >
+          Hủy
+        </button>
+        <button
+          className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white"
+          onClick={handleSubmit}
+          disabled={!title.trim() || !markerGeometry || isSaving}
+        >
+          {isSaving ? "Đang lưu..." : editing ? "Cập nhật" : "Tạo mới"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ZonesView() {
+  return (
+    <div className="p-3 space-y-2">
+      <p className="text-xs text-zinc-500 italic py-2">Zone management coming soon</p>
     </div>
   );
 }
