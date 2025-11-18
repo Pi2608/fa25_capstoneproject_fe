@@ -4,12 +4,14 @@ export interface ZoomControlsProps {
   zoomIn: () => void;
   zoomOut: () => void;
   isTimelineOpen?: boolean;
+  currentZoom?: number;
 }
 
 export default function ZoomControls({
   zoomIn,
   zoomOut,
   isTimelineOpen = true,
+  currentZoom,
 }: ZoomControlsProps) {
   const bottomPosition = isTimelineOpen ? "12px" : "40px"; 
 
@@ -27,6 +29,11 @@ export default function ZoomControls({
           <path fill="currentColor" d="M13 6a1 1 0 1 0-2 0v5H6a1 1 0 1 0 0 2h5v5a1 1 0 1 0 2 0v-5h5a1 1 0 1 0 0-2h-5z"/>
         </svg>
       </button>
+      {currentZoom !== undefined && (
+        <div className="flex items-center justify-center min-w-[40px] px-2 text-sm font-medium text-zinc-300">
+          {currentZoom % 1 === 0 ? currentZoom.toString() : currentZoom.toFixed(1)}
+        </div>
+      )}
       <button
         onClick={zoomOut}
         className="flex w-8 h-8 justify-center items-center rounded-md bg-zinc-800 text-zinc-300 shadow hover:bg-zinc-700 cursor-pointer transition-colors"
