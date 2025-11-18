@@ -47,6 +47,23 @@ function statusBadgeClass(status?: string | null): string {
 
 export default function HelpPage() {
     const { t } = useI18n();
+    const [isDark, setIsDark] = useState(false);
+
+    useEffect(() => {
+        if (typeof document === "undefined") return;
+        const root = document.documentElement;
+
+        const update = () => {
+            setIsDark(root.classList.contains("dark"));
+        };
+
+        update();
+
+        const observer = new MutationObserver(update);
+        observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+
+        return () => observer.disconnect();
+    }, []);
 
     const [tickets, setTickets] = useState<SupportTicket[]>([]);
     const [loadingTickets, setLoadingTickets] = useState(false);
@@ -246,9 +263,12 @@ export default function HelpPage() {
                         <span>{t("support.badgeLabel")}</span>
                     </div>
                     <div className="space-y-1">
-                        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-3xl">
-                            {t("support.title")}
+                        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+                            <span style={{ color: isDark ? "#ffffff" : "#000000" }}>
+                                {t("support.title")}
+                            </span>
                         </h1>
+
                         <p className="text-sm text-zinc-600 dark:text-zinc-400">
                             {t("support.subtitle")}
                         </p>

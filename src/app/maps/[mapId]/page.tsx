@@ -999,6 +999,31 @@ export default function EditMapPage() {
     if (!detail || !mapEl.current || mapRef.current) return;
     let alive = true;
     const el = mapEl.current;
+    const handleContextMenu = (e: LeafletMouseEvent) => {
+      const mapInstance = mapRef.current;
+      if (!mapInstance || !mapInstance.pm) return;
+
+      const pm = mapInstance.pm as any;
+
+      const isDrawing = pm.globalDrawModeEnabled && pm.globalDrawModeEnabled();
+      const isEditing = pm.globalEditModeEnabled && pm.globalEditModeEnabled();
+      const isRemoving = pm.globalRemovalModeEnabled && pm.globalRemovalModeEnabled();
+
+      if (isDrawing || isEditing || isRemoving) {
+        if (e.originalEvent) {
+          e.originalEvent.preventDefault();
+          e.originalEvent.stopPropagation();
+        }
+
+        if (pm.disableDraw) pm.disableDraw();
+        if (pm.disableGlobalEditMode) pm.disableGlobalEditMode();
+        if (pm.disableGlobalRemovalMode) pm.disableGlobalRemovalMode();
+
+        const container = mapInstance.getContainer();
+        container.style.cursor = "";
+      }
+    };
+
     (async () => {
       const L = (await import("leaflet")).default;
       await import("@geoman-io/leaflet-geoman-free");
@@ -1108,6 +1133,7 @@ export default function EditMapPage() {
         });
       }
 
+      map.on("contextmenu", handleContextMenu as any);
       // Handle feature creation - now managed by useFeatureManagement hook
       map.on("pm:create", async (e: PMCreateEvent) => {
         await handleFeatureCreate(e, customMarkerIcon as L.Icon | L.DivIcon | null, L, sketch);
@@ -1122,9 +1148,13 @@ export default function EditMapPage() {
     })();
     return () => {
       alive = false;
-      mapRef.current?.remove();
+      if (mapRef.current) {
+        mapRef.current.off("contextmenu", handleContextMenu as any);
+        mapRef.current.remove();
+      }
       setIsMapReady(false);
     };
+
   }, [detail?.id, applyBaseLayer, sp]);
 
   useEffect(() => {
@@ -1471,6 +1501,192 @@ export default function EditMapPage() {
       // Reset cursor khi cleanup
       if (mapRef.current) {
         mapRef.current.getContainer().style.cursor = '';
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let isPlacingIcon = false;
+    let currentIconKey: string | null = null;
+    let clickHandler: ((e: LeafletMouseEvent) => void) | null = null;
+    let contextMenuHandler: ((e: LeafletMouseEvent) => void) | null = null;
+
+    const iconEmojiMap: Record<string, string> = {
+      plane: "✈️",
+      car: "🚗",
+      bus: "🚌",
+      train: "🚆",
+      ship: "🚢",
+      bike: "🚲",
+      walk: "🚶",
+      route: "📍",
+      from: "🅰️",
+      to: "🅱️",
+      home: "🏠",
+      office: "🏢",
+      school: "🏫",
+      hospital: "🏥",
+      restaurant: "🍽️",
+      coffee: "☕",
+      shop: "🛒",
+      park: "🌳",
+      museum: "🏛️",
+      hotel: "🏨",
+      person: "👤",
+      group: "👥",
+      info: "ℹ️",
+      warning: "⚠️",
+      danger: "❗",
+      star: "⭐",
+      photo: "📷",
+      camera: "📸",
+      note: "📝",
+      chat: "💬",
+    };
+
+    const stopPlacement = () => {
+      const map = mapRef.current;
+      if (!map) return;
+
+      isPlacingIcon = false;
+      currentIconKey = null;
+
+      const mapContainer = map.getContainer();
+      mapContainer.style.cursor = "";
+
+      if (clickHandler) {
+        map.off("click", clickHandler);
+        clickHandler = null;
+      }
+      if (contextMenuHandler) {
+        map.off("contextmenu", contextMenuHandler);
+        contextMenuHandler = null;
+      }
+    };
+
+    const handleStartPlacement = (ev: Event) => {
+      const custom = ev as CustomEvent<{ iconKey: string }>;
+      const iconKey = custom.detail?.iconKey;
+      const map = mapRef.current;
+
+      if (!map || !iconKey) return;
+
+      isPlacingIcon = true;
+      currentIconKey = iconKey;
+
+      const mapContainer = map.getContainer();
+      mapContainer.style.cursor = "crosshair";
+      mapContainer.style.setProperty("cursor", "crosshair", "important");
+
+      clickHandler = async (e: LeafletMouseEvent) => {
+        if (!isPlacingIcon || !currentIconKey) return;
+
+        const L = (await import("leaflet")).default;
+        const emoji = iconEmojiMap[currentIconKey] ?? "📍";
+
+        const icon = L.divIcon({
+          className: `custom-marker-icon icon-marker icon-${currentIconKey}`,
+          html: `<div style="font-size:24px; line-height:24px;">${emoji}</div>`,
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+        });
+
+        const marker = L.marker(e.latlng, {
+          icon,
+          draggable: true,
+        }).addTo(map);
+
+        marker.on("contextmenu", (event: any) => {
+          if (event.originalEvent) {
+            event.originalEvent.preventDefault();
+            event.originalEvent.stopPropagation();
+          }
+
+          if (isPlacingIcon) {
+            stopPlacement();
+            return;
+          }
+
+          const leafletId = (marker as any)._leaflet_id;
+          const popupButtonId = `delete-icon-${leafletId}`;
+
+          const popupHtml = `
+    <div style="display:flex;align-items:center;gap:6px;">
+      <button
+        id="${popupButtonId}"
+        style="
+          background:#ef4444;
+          border:none;
+          color:white;
+          font-size:11px;
+          padding:4px 8px;
+          border-radius:4px;
+          cursor:pointer;
+          white-space:nowrap;
+        "
+      >
+        Xóa icon
+      </button>
+    </div>
+  `;
+
+          marker
+            .bindPopup(popupHtml, {
+              closeButton: false,
+              autoClose: true,
+              closeOnClick: false,
+              offset: L.point(0, -20),
+              className: "icon-delete-popup",
+            })
+            .openPopup();
+
+          setTimeout(() => {
+            const btn = document.getElementById(popupButtonId);
+            if (btn) {
+              btn.addEventListener("click", () => {
+                map.removeLayer(marker);
+                map.closePopup();
+              });
+            }
+          }, 0);
+        });
+
+      };
+
+      contextMenuHandler = (e: LeafletMouseEvent) => {
+        if (!isPlacingIcon) return;
+        if (e.originalEvent) {
+          e.originalEvent.preventDefault();
+        }
+        stopPlacement();
+      };
+
+      map.on("click", clickHandler);
+      map.on("contextmenu", contextMenuHandler);
+    };
+
+    const handleStopPlacement = () => {
+      stopPlacement();
+    };
+
+    window.addEventListener(
+      "icon:startPlacement",
+      handleStartPlacement as EventListener
+    );
+    window.addEventListener("icon:stopPlacement", handleStopPlacement);
+
+    return () => {
+      window.removeEventListener(
+        "icon:startPlacement",
+        handleStartPlacement as EventListener
+      );
+      window.removeEventListener("icon:stopPlacement", handleStopPlacement);
+
+      const map = mapRef.current;
+      if (map) {
+        if (clickHandler) map.off("click", clickHandler);
+        if (contextMenuHandler) map.off("contextmenu", contextMenuHandler);
+        map.getContainer().style.cursor = "";
       }
     };
   }, []);
