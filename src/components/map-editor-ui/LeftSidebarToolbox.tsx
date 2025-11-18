@@ -16,13 +16,18 @@ import type {
   CreateLocationRequest,
   CreateSegmentZoneRequest,
   AttachLayerRequest,
+  Location,
+  Zone,
 } from "@/lib/api-storymap";
 import {
   parseCameraState,
   stringifyCameraState,
   getCurrentCameraState,
   applyCameraState,
+  searchLocations,
+  searchZones,
 } from "@/lib/api-storymap";
+
 import LocationDialog from "@/components/storymap/LocationDialog";
 import ZoneSelectionDialog from "@/components/storymap/ZoneSelectionDialog";
 import LayerAttachDialog from "@/components/storymap/LayerAttachDialog";
@@ -136,6 +141,7 @@ export function LeftSidebarToolbox({
     setEditingSegment(segment);
     setSegmentFormMode("edit");
   }, []);
+
 
   const handleCancelSegmentForm = useCallback(() => {
     setSegmentFormMode("list");
@@ -432,6 +438,119 @@ export function LeftSidebarToolbox({
       )}
     </>
   );
+}
+
+function getZoneCenter(zone: Zone): [number, number] | null {
+  if (zone.centroid) {
+    const str = zone.centroid.trim();
+
+    // TH1: centroid lưu dạng GeoJSON Point
+    if (str.startsWith("{")) {
+      try {
+        const gj = JSON.parse(str);
+        if (
+          gj &&
+          gj.type === "Point" &&
+          Array.isArray(gj.coordinates) &&
+          gj.coordinates.length >= 2
+        ) {
+          const lng = Number(gj.coordinates[0]);
+          const lat = Number(gj.coordinates[1]);
+          if (!Number.isNaN(lng) && !Number.isNaN(lat)) {
+            return [lng, lat];
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // TH2: centroid dạng "lat,lon" hoặc "lat lon"
+    const parts = str.split(/[,\s]+/).filter(Boolean);
+    if (parts.length >= 2) {
+      const a = Number(parts[0]); // lat
+      const b = Number(parts[1]); // lon
+      if (!Number.isNaN(a) && !Number.isNaN(b)) {
+        return [b, a]; // [lng, lat]
+      }
+    }
+  }
+
+  // Nếu không có centroid thì fallback sang boundingBox
+  if (zone.boundingBox) {
+    try {
+      const bb = JSON.parse(zone.boundingBox);
+      if (Array.isArray(bb) && bb.length >= 4) {
+        const south = Number(bb[0]);
+        const north = Number(bb[1]);
+        const west = Number(bb[2]);
+        const east = Number(bb[3]);
+
+        if (
+          !Number.isNaN(south) &&
+          !Number.isNaN(north) &&
+          !Number.isNaN(west) &&
+          !Number.isNaN(east)
+        ) {
+          const lat = (south + north) / 2;
+          const lng = (west + east) / 2;
+          return [lng, lat];
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
+
+function getCenterFromMarkerGeometry(
+  markerGeometry?: string | null
+): [number, number] | null {
+  if (!markerGeometry) return null;
+
+  try {
+    const geo = JSON.parse(markerGeometry);
+
+    // Point: [lng, lat]
+    if (geo.type === "Point" && Array.isArray(geo.coordinates)) {
+      const lng = Number(geo.coordinates[0]);
+      const lat = Number(geo.coordinates[1]);
+      if (!Number.isNaN(lng) && !Number.isNaN(lat)) {
+        return [lng, lat];
+      }
+      return null;
+    }
+
+    if (
+      geo.type === "Polygon" &&
+      Array.isArray(geo.coordinates) &&
+      Array.isArray(geo.coordinates[0])
+    ) {
+      const ring = geo.coordinates[0];
+      let sumLng = 0;
+      let sumLat = 0;
+      let count = 0;
+
+      for (const coord of ring) {
+        if (!Array.isArray(coord) || coord.length < 2) continue;
+        const lng = Number(coord[0]);
+        const lat = Number(coord[1]);
+        if (Number.isNaN(lng) || Number.isNaN(lat)) continue;
+        sumLng += lng;
+        sumLat += lat;
+        count++;
+      }
+
+      if (count === 0) return null;
+      return [sumLng / count, sumLat / count];
+    }
+  } catch (err) {
+    console.error("getCenterFromMarkerGeometry error", err);
+  }
+
+  return null;
 }
 
 function IconButton({
@@ -804,6 +923,18 @@ function SegmentFormView({
   const [name, setName] = useState(editing?.name || "");
   const [description, setDescription] = useState(editing?.description || "");
 
+  const [locationQuery, setLocationQuery] = useState("");
+  const [locationResults, setLocationResults] = useState<Location[]>([]);
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+
+  type SearchMode = "location" | "zone";
+
+  const [searchMode, setSearchMode] = useState<SearchMode>("location");
+
+  const [zoneSearchQuery, setZoneSearchQuery] = useState("");
+  const [zoneResults, setZoneResults] = useState<Zone[]>([]);
+  const [isSearchingZone, setIsSearchingZone] = useState(false);
+
   const [cameraState, setCameraState] = useState<CameraState>(() => {
     if (editing?.cameraState) {
       if (typeof editing.cameraState === "string") {
@@ -858,6 +989,132 @@ function SegmentFormView({
     }
   };
 
+  const handleSearchLocation = async () => {
+    const query = locationQuery.trim();
+    if (!query) {
+      setLocationResults([]);
+      return;
+    }
+
+    setIsSearchingLocation(true);
+    try {
+      const results = await searchLocations(query);
+      setLocationResults(results || []);
+    } catch (error) {
+      console.error("Failed to search locations:", error);
+      setLocationResults([]);
+    } finally {
+      setIsSearchingLocation(false);
+    }
+  };
+
+  const handleApplyLocation = (loc: Location) => {
+    const center = getCenterFromMarkerGeometry(loc.markerGeometry);
+
+    if (!center || center.length !== 2) {
+      console.warn("handleApplyLocation: cannot compute center from geometry", loc);
+      return;
+    }
+
+    const lng = Number(center[0]);
+    const lat = Number(center[1]);
+
+    if (Number.isNaN(lng) || Number.isNaN(lat)) {
+      console.warn("handleApplyLocation: invalid center coordinates", center, loc);
+      return;
+    }
+
+    const updatedCamera: CameraState = {
+      ...cameraState,
+      center: [lng, lat],
+    };
+
+    setCameraState(updatedCamera);
+
+    if (currentMap) {
+      const m: any = currentMap;
+
+      if (typeof m.setCenter === "function") {
+        m.setCenter([lng, lat]);
+      }
+
+      if (typeof m.setZoom === "function" && typeof updatedCamera.zoom === "number") {
+        m.setZoom(updatedCamera.zoom);
+      }
+
+      if (typeof m.setBearing === "function" && typeof updatedCamera.bearing === "number") {
+        m.setBearing(updatedCamera.bearing);
+      }
+
+      if (typeof m.setPitch === "function" && typeof updatedCamera.pitch === "number") {
+        m.setPitch(updatedCamera.pitch);
+      }
+    }
+  };
+
+  const handleSearchZone = async () => {
+    const query = zoneSearchQuery.trim();
+    if (!query) {
+      setZoneResults([]);
+      return;
+    }
+
+    setIsSearchingZone(true);
+    try {
+      const results = await searchZones(query);
+      setZoneResults(results || []);
+    } catch (error) {
+      console.error("Failed to search zones:", error);
+      setZoneResults([]);
+    } finally {
+      setIsSearchingZone(false);
+    }
+  };
+
+  const handleApplyZone = (zone: Zone) => {
+    const center = getZoneCenter(zone);
+
+    if (!center || center.length !== 2) {
+      console.warn("handleApplyZone: cannot compute center from zone", zone);
+      return;
+    }
+
+    const lng = Number(center[0]);
+    const lat = Number(center[1]);
+
+    if (Number.isNaN(lng) || Number.isNaN(lat)) {
+      console.warn("handleApplyZone: invalid center coordinates", center, zone);
+      return;
+    }
+
+    const updatedCamera: CameraState = {
+      ...cameraState,
+      center: [lng, lat],
+    };
+
+    setCameraState(updatedCamera);
+
+    if (currentMap) {
+      const m: any = currentMap;
+
+      if (typeof m.setCenter === "function") {
+        m.setCenter([lng, lat]);
+      }
+
+      if (typeof m.setZoom === "function" && typeof updatedCamera.zoom === "number") {
+        m.setZoom(updatedCamera.zoom);
+      }
+
+      if (typeof m.setBearing === "function" && typeof updatedCamera.bearing === "number") {
+        m.setBearing(updatedCamera.bearing);
+      }
+
+      if (typeof m.setPitch === "function" && typeof updatedCamera.pitch === "number") {
+        m.setPitch(updatedCamera.pitch);
+      }
+    }
+  };
+
   const handleSubmit = async () => {
     if (!name.trim()) return;
 
@@ -901,6 +1158,150 @@ function SegmentFormView({
           placeholder="Brief description..."
         />
       </div>
+
+      <div className="border border-zinc-700/80 rounded-lg px-3 py-2 space-y-2 bg-zinc-900/40">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-xs font-semibold text-white">Find place</h4>
+            <p className="text-[10px] text-zinc-400">
+              Search a location or zone and apply it to this segment&apos;s camera.
+            </p>
+          </div>
+
+          {/* Toggle Location / Zone */}
+          <div className="inline-flex text-[10px] rounded-full bg-zinc-800 p-0.5">
+            <button
+              type="button"
+              onClick={() => setSearchMode("location")}
+              className={cn(
+                "px-2 py-0.5 rounded-full",
+                searchMode === "location"
+                  ? "bg-emerald-600 text-white"
+                  : "text-zinc-300"
+              )}
+            >
+              Location
+            </button>
+            <button
+              type="button"
+              onClick={() => setSearchMode("zone")}
+              className={cn(
+                "px-2 py-0.5 rounded-full",
+                searchMode === "zone"
+                  ? "bg-emerald-600 text-white"
+                  : "text-zinc-300"
+              )}
+            >
+              Zone
+            </button>
+          </div>
+        </div>
+
+        {/* ----- LOCATION SEARCH UI ----- */}
+        {searchMode === "location" && (
+          <>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 px-2 py-1.5 text-xs rounded-lg bg-zinc-950 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                placeholder="e.g. Hà Nội, Đà Nẵng..."
+                value={locationQuery}
+                onChange={(e) => setLocationQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSearchLocation();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleSearchLocation}
+                disabled={!locationQuery.trim() || isSearchingLocation}
+                className="px-3 py-1.5 text-xs rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 font-medium"
+              >
+                {isSearchingLocation ? "Searching..." : "Search"}
+              </button>
+            </div>
+
+            {locationResults.length > 0 && (
+              <div className="mt-2 max-h-32 overflow-y-auto space-y-1 -mx-1">
+                {locationResults.map((loc, index) => {
+                  const safeKey =
+                    loc.poiId &&
+                      loc.poiId !== "00000000-0000-0000-0000-000000000000"
+                      ? loc.poiId
+                      : `${loc.title}-${index}`;
+
+                  return (
+                    <button
+                      key={safeKey}
+                      type="button"
+                      onClick={() => handleApplyLocation(loc)}
+                      className="w-full text-left px-2 py-1 text-xs rounded-md hover:bg-zinc-800"
+                    >
+                      <div className="font-medium text-zinc-100">{loc.title}</div>
+                      {loc.subtitle && (
+                        <div className="text-[10px] text-zinc-400 truncate">
+                          {loc.subtitle}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ----- ZONE SEARCH UI ----- */}
+        {searchMode === "zone" && (
+          <>
+            <div className="flex gap-2">
+              <input
+                className="flex-1 px-2 py-1.5 text-xs rounded-lg bg-zinc-950 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                placeholder="e.g. Hà Nội, Hồ Chí Minh..."
+                value={zoneSearchQuery}
+                onChange={(e) => setZoneSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleSearchZone();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleSearchZone}
+                disabled={!zoneSearchQuery.trim() || isSearchingZone}
+                className="px-3 py-1.5 text-xs rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 font-medium"
+              >
+                {isSearchingZone ? "Searching..." : "Search"}
+              </button>
+            </div>
+
+            {zoneResults.length > 0 && (
+              <div className="mt-2 max-h-32 overflow-y-auto space-y-1 -mx-1">
+                {zoneResults.map((zone, index) => (
+                  <button
+                    key={zone.zoneId || `${zone.name}-${index}`}
+                    type="button"
+                    onClick={() => handleApplyZone(zone)}
+                    className="w-full text-left px-2 py-1 text-xs rounded-md hover:bg-zinc-800"
+                  >
+                    <div className="font-medium text-zinc-100">{zone.name}</div>
+                    {zone.zoneType && (
+                      <div className="text-[10px] text-zinc-400">
+                        {zone.zoneType}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
 
       {/* Camera View */}
       <div className="border border-zinc-700/80 rounded-lg px-3 py-2 space-y-2 bg-zinc-900/60">
@@ -1405,52 +1806,52 @@ function IconLibraryView() {
     title: string;
     items: { id: string; icon: string; label: string }[];
   }[] = [
-    {
-      title: "Travel & Movement",
-      items: [
-        { id: "plane", icon: "mdi:airplane", label: "Plane" },
-        { id: "car", icon: "mdi:car", label: "Car" },
-        { id: "bus", icon: "mdi:bus", label: "Bus" },
-        { id: "train", icon: "mdi:train", label: "Train" },
-        { id: "ship", icon: "mdi:ferry", label: "Ship" },
-        { id: "bike", icon: "mdi:bike", label: "Bike" },
-        { id: "walk", icon: "mdi:walk", label: "Walk" },
-        { id: "route", icon: "mdi:routes", label: "Route" },
-        { id: "from", icon: "mdi:map-marker-radius", label: "From" },
-        { id: "to", icon: "mdi:map-marker-check", label: "To" },
-      ],
-    },
-    {
-      title: "Places & POI",
-      items: [
-        { id: "home", icon: "mdi:home-outline", label: "Home" },
-        { id: "office", icon: "mdi:office-building-outline", label: "Office" },
-        { id: "school", icon: "mdi:school-outline", label: "School" },
-        { id: "hospital", icon: "mdi:hospital-building", label: "Hospital" },
-        { id: "restaurant", icon: "mdi:silverware-fork-knife", label: "Food" },
-        { id: "coffee", icon: "mdi:coffee-outline", label: "Coffee" },
-        { id: "shop", icon: "mdi:storefront-outline", label: "Shop" },
-        { id: "park", icon: "mdi:tree-outline", label: "Park" },
-        { id: "museum", icon: "mdi:bank-outline", label: "Museum" },
-        { id: "hotel", icon: "mdi:bed-outline", label: "Hotel" },
-      ],
-    },
-    {
-      title: "People & Events",
-      items: [
-        { id: "person", icon: "mdi:account", label: "Person" },
-        { id: "group", icon: "mdi:account-group", label: "Group" },
-        { id: "info", icon: "mdi:information-outline", label: "Info" },
-        { id: "warning", icon: "mdi:alert-outline", label: "Warning" },
-        { id: "danger", icon: "mdi:alert-octagon-outline", label: "Danger" },
-        { id: "star", icon: "mdi:star-outline", label: "Highlight" },
-        { id: "photo", icon: "mdi:image-outline", label: "Photo spot" },
-        { id: "camera", icon: "mdi:camera-outline", label: "Camera" },
-        { id: "note", icon: "mdi:note-text-outline", label: "Note" },
-        { id: "chat", icon: "mdi:chat-outline", label: "Comment" },
-      ],
-    },
-  ];
+      {
+        title: "Travel & Movement",
+        items: [
+          { id: "plane", icon: "mdi:airplane", label: "Plane" },
+          { id: "car", icon: "mdi:car", label: "Car" },
+          { id: "bus", icon: "mdi:bus", label: "Bus" },
+          { id: "train", icon: "mdi:train", label: "Train" },
+          { id: "ship", icon: "mdi:ferry", label: "Ship" },
+          { id: "bike", icon: "mdi:bike", label: "Bike" },
+          { id: "walk", icon: "mdi:walk", label: "Walk" },
+          { id: "route", icon: "mdi:routes", label: "Route" },
+          { id: "from", icon: "mdi:map-marker-radius", label: "From" },
+          { id: "to", icon: "mdi:map-marker-check", label: "To" },
+        ],
+      },
+      {
+        title: "Places & POI",
+        items: [
+          { id: "home", icon: "mdi:home-outline", label: "Home" },
+          { id: "office", icon: "mdi:office-building-outline", label: "Office" },
+          { id: "school", icon: "mdi:school-outline", label: "School" },
+          { id: "hospital", icon: "mdi:hospital-building", label: "Hospital" },
+          { id: "restaurant", icon: "mdi:silverware-fork-knife", label: "Food" },
+          { id: "coffee", icon: "mdi:coffee-outline", label: "Coffee" },
+          { id: "shop", icon: "mdi:storefront-outline", label: "Shop" },
+          { id: "park", icon: "mdi:tree-outline", label: "Park" },
+          { id: "museum", icon: "mdi:bank-outline", label: "Museum" },
+          { id: "hotel", icon: "mdi:bed-outline", label: "Hotel" },
+        ],
+      },
+      {
+        title: "People & Events",
+        items: [
+          { id: "person", icon: "mdi:account", label: "Person" },
+          { id: "group", icon: "mdi:account-group", label: "Group" },
+          { id: "info", icon: "mdi:information-outline", label: "Info" },
+          { id: "warning", icon: "mdi:alert-outline", label: "Warning" },
+          { id: "danger", icon: "mdi:alert-octagon-outline", label: "Danger" },
+          { id: "star", icon: "mdi:star-outline", label: "Highlight" },
+          { id: "photo", icon: "mdi:image-outline", label: "Photo spot" },
+          { id: "camera", icon: "mdi:camera-outline", label: "Camera" },
+          { id: "note", icon: "mdi:note-text-outline", label: "Note" },
+          { id: "chat", icon: "mdi:chat-outline", label: "Comment" },
+        ],
+      },
+    ];
 
   return (
     <div className="p-3 space-y-4 text-xs">

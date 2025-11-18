@@ -11,39 +11,13 @@ export type CameraState = {
   pitch?: number;
 };
 
-// ===== Story Content cho Segment =====
-
-export type TravelStoryContent = {
-  type: "travel";
-  mode: "plane" | "car";
-  pathType: "straight" | "route";
-
-  from: {
-    kind: "location" | "zone";
-    locationId: string;
-    zoneId?: string | null;
-  };
-
-  to: {
-    kind: "location" | "zone";
-    locationId: string;
-    zoneId?: string | null;
-  };
-};
-
-export type BasicStoryContent = {
-  type: "basic";
-};
-
-export type StoryContent = TravelStoryContent | BasicStoryContent | null;
-
 // Segment (Slide trong StoryMap)
 export type Segment = {
   segmentId: string;
   mapId: string;
   name: string;
   description?: string;
-  // storyContent?: string;
+  storyContent?: string;
   displayOrder: number;
   cameraState: CameraState; // JSON stringify của CameraState
   autoAdvance: boolean;
@@ -52,28 +26,27 @@ export type Segment = {
   zones: SegmentZone[]; // Backend already includes these
   layers: SegmentLayer[]; // Backend already includes these
   locations: Location[]; // Backend already includes these (PoiDto)
-  storyContent?: StoryContent | string | null;
 };
 
 export type CreateSegmentRequest = {
   mapId?: string; // Will be enriched by endpoint
   name: string;
   description?: string;
+  storyContent?: string;
   displayOrder?: number;
   cameraState?: string; // JSON stringified CameraState
   autoAdvance?: boolean;
   durationMs?: number;
   requireUserAction?: boolean;
   playbackMode?: "Auto" | "Manual" | "Timed";
-  storyContent?: string | null;
 };
 
 export type UpdateSegmentRequest = {
   name: string;
   description?: string;
-  storyContent?: string | null;
+  storyContent?: string;
   displayOrder?: number;
-  cameraState?: string;
+  cameraState?: string; // JSON stringified CameraState
   autoAdvance?: boolean;
   durationMs?: number;
   requireUserAction?: boolean;
@@ -108,7 +81,7 @@ export type SegmentZone = {
   displayOrder: number;
   isVisible: boolean;
   zIndex: number;
-
+  
   // Highlight config
   highlightBoundary: boolean;
   boundaryColor?: string;
@@ -119,7 +92,7 @@ export type SegmentZone = {
   showLabel: boolean;
   labelOverride?: string;
   labelStyle?: string;
-
+  
   // Animation
   entryDelayMs?: number;
   entryDurationMs?: number;
@@ -127,7 +100,7 @@ export type SegmentZone = {
   exitDurationMs?: number;
   entryEffect?: string;
   exitEffect?: string;
-
+  
   fitBoundsOnEntry: boolean;
   cameraOverride?: string;
   createdAt: string;
@@ -357,7 +330,7 @@ export async function getZones(): Promise<Zone[]> {
 }
 
 export async function getZonesByParent(parentZoneId?: string): Promise<Zone[]> {
-  const url = parentZoneId
+  const url = parentZoneId 
     ? `/storymaps/zones/parent/${parentZoneId}`
     : `/storymaps/zones`;
   return await getJson<Zone[]>(url);
@@ -386,6 +359,27 @@ export async function createZoneFromOsm(data: {
   return await postJson<any, Zone>(`/storymaps/zones/from-osm`, data);
 }
 
+// ================== ZONE APIs (Master Data) ==================
+
+export type SyncZonesFromOsmRequest = {
+  adminLevel: string;
+  countryCode?: string;
+  updateExisting: boolean;
+};
+
+export type SyncZonesFromOsmResponse = {
+  syncedCount: number;
+};
+
+export async function syncZonesFromOsm(
+  data: SyncZonesFromOsmRequest
+): Promise<SyncZonesFromOsmResponse> {
+  return await postJson<SyncZonesFromOsmRequest, SyncZonesFromOsmResponse>(
+    `/storymaps/zones/sync-osm`,
+    data
+  );
+}
+
 // ================== SEGMENT ZONE APIs ==================
 
 export async function getSegmentZones(mapId: string, segmentId: string): Promise<SegmentZone[]> {
@@ -394,8 +388,8 @@ export async function getSegmentZones(mapId: string, segmentId: string): Promise
 }
 
 export async function createSegmentZone(
-  mapId: string,
-  segmentId: string,
+  mapId: string, 
+  segmentId: string, 
   data: CreateSegmentZoneRequest
 ): Promise<SegmentZone> {
   return await postJson<CreateSegmentZoneRequest, SegmentZone>(`/storymaps/${mapId}/segments/${segmentId}/zones`, data);
@@ -477,6 +471,36 @@ export async function createLocation(
   data: CreateLocationRequest
 ): Promise<Location> {
   return await postJson<CreateLocationRequest, Location>(`/storymaps/${mapId}/segments/${segmentId}/locations`, data);
+}
+
+export async function searchLocations(name: string): Promise<Location[]> {
+  const searchName = name ?? "";
+  return await getJson<Location[]>(
+    `/storymaps/locations/search?name=${encodeURIComponent(searchName)}`
+  );
+}
+
+export type RouteSearchResult = {
+  routeId?: string;
+  fromName?: string;
+  toName?: string;
+  distanceMeters?: number;
+  durationSeconds?: number;
+  geometry?: string; // GeoJSON / polyline
+  [key: string]: unknown;
+};
+
+export async function searchRoutes(
+  from: string,
+  to: string
+): Promise<RouteSearchResult[]> {
+  const params = new URLSearchParams();
+  if (from) params.append("from", from);
+  if (to) params.append("to", to);
+
+  return await getJson<RouteSearchResult[]>(
+    `/storymaps/routes/search?${params.toString()}`
+  );
 }
 
 export async function updateLocation(
@@ -593,7 +617,7 @@ export function getCurrentCameraState(map: any): CameraState {
   if (!map || typeof map.getCenter !== 'function' || typeof map.getZoom !== 'function') {
     throw new Error('Invalid map instance: missing required methods');
   }
-
+  
   return {
     center: [map.getCenter().lng, map.getCenter().lat],
     zoom: map.getZoom(),
@@ -602,13 +626,61 @@ export function getCurrentCameraState(map: any): CameraState {
   };
 }
 
-export function applyCameraState(map: any, cameraState: CameraState, options?: any) {
-  map.flyTo({
-    center: cameraState.center,
-    zoom: cameraState.zoom,
-    bearing: cameraState.bearing || 0,
-    pitch: cameraState.pitch || 0,
-    ...options,
-  });
-}
+export function applyCameraState(
+  map: any,
+  cameraState: CameraState | null | undefined,
+  options?: any
+) {
+  if (!map || typeof map.flyTo !== "function") {
+    console.warn("applyCameraState: invalid map instance");
+    return;
+  }
 
+  if (!cameraState || !cameraState.center) {
+    console.warn(
+      "applyCameraState: missing cameraState or center",
+      cameraState
+    );
+    return;
+  }
+
+  const rawCenter: any = cameraState.center as any;
+  let lng: number | undefined;
+  let lat: number | undefined;
+
+  if (Array.isArray(rawCenter) && rawCenter.length >= 2) {
+    lng = Number(rawCenter[0]);
+    lat = Number(rawCenter[1]);
+  }
+  else if (typeof rawCenter === "object" && rawCenter !== null) {
+    lng = Number(rawCenter.lng ?? rawCenter.lon);
+    lat = Number(rawCenter.lat);
+  }
+
+  if (
+    lng == null ||
+    lat == null ||
+    Number.isNaN(lng) ||
+    Number.isNaN(lat)
+  ) {
+    console.warn("applyCameraState: invalid center coordinates", rawCenter);
+    return;
+  }
+
+  const centerObj = { lng, lat };
+
+  try {
+    map.flyTo({
+      center: centerObj,
+      zoom: cameraState.zoom,
+      bearing: cameraState.bearing || 0,
+      pitch: cameraState.pitch || 0,
+      ...options,
+    });
+  } catch (error) {
+    console.error("applyCameraState: map.flyTo failed", error, {
+      centerObj,
+      cameraState,
+    });
+  }
+}
