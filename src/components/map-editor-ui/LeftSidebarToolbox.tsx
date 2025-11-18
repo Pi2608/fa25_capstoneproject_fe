@@ -28,8 +28,9 @@ import ZoneSelectionDialog from "@/components/storymap/ZoneSelectionDialog";
 import LayerAttachDialog from "@/components/storymap/LayerAttachDialog";
 
 interface LeftSidebarToolboxProps {
-  activeView: "explorer" | "segments" | "transitions" | null;
-  onViewChange: (view: "explorer" | "segments" | "transitions" | null) => void;
+  activeView: "explorer" | "segments" | "transitions" | "icons" | null;
+  onViewChange: (view: "explorer" | "segments" | "transitions" | "icons" | null) => void;
+
 
   features: FeatureData[];
   layers: LayerDTO[];
@@ -61,7 +62,7 @@ interface LeftSidebarToolboxProps {
   onAddLayer?: (data: AttachLayerRequest) => Promise<void>;
 }
 
-type ViewType = "explorer" | "segments" | "transitions";
+type ViewType = "explorer" | "segments" | "transitions" | "icons";
 type FormMode = "list" | "create" | "edit";
 
 export function LeftSidebarToolbox({
@@ -181,7 +182,7 @@ export function LeftSidebarToolbox({
   // Handlers for adding location, zone, and layer
   const handleAddLocation = useCallback(async (data: CreateLocationRequest) => {
     if (!editingSegment?.segmentId) return;
-    
+
     const locationData = {
       ...data,
       segmentId: editingSegment.segmentId,
@@ -194,14 +195,14 @@ export function LeftSidebarToolbox({
       const { createLocation } = await import("@/lib/api-storymap");
       await createLocation(mapId, editingSegment.segmentId, locationData);
     }
-    
+
     setShowLocationDialog(false);
     setWaitingForLocation(false);
   }, [editingSegment, onAddLocation, mapId]);
 
   const handleAddZone = useCallback(async (data: CreateSegmentZoneRequest) => {
     if (!editingSegment?.segmentId) return;
-    
+
     const zoneData = {
       ...data,
       segmentId: editingSegment.segmentId,
@@ -214,7 +215,7 @@ export function LeftSidebarToolbox({
       const { createSegmentZone } = await import("@/lib/api-storymap");
       await createSegmentZone(mapId, editingSegment.segmentId, zoneData);
     }
-    
+
     setShowZoneDialog(false);
   }, [editingSegment, onAddZone, mapId]);
 
@@ -228,7 +229,7 @@ export function LeftSidebarToolbox({
       const { attachLayerToSegment } = await import("@/lib/api-storymap");
       await attachLayerToSegment(mapId, editingSegment.segmentId, data);
     }
-    
+
     setShowLayerDialog(false);
   }, [editingSegment, onAddLayer, mapId]);
 
@@ -254,7 +255,14 @@ export function LeftSidebarToolbox({
           isActive={activeView === "transitions"}
           onClick={() => handleIconClick("transitions")}
         />
+        <IconButton
+          icon="mdi:toolbox-outline"
+          label="Icon Library"
+          isActive={activeView === "icons"}
+          onClick={() => handleIconClick("icons")}
+        />
       </div>
+
 
       {/* Content Panel (slides in/out) */}
       <div
@@ -269,36 +277,38 @@ export function LeftSidebarToolbox({
               {activeView === "explorer" && "Data Layers"}
               {activeView === "segments" && (segmentFormMode === "list" ? "Segments" : segmentFormMode === "create" ? "Create Segment" : "Edit Segment")}
               {activeView === "transitions" && (transitionFormMode === "list" ? "Transitions" : transitionFormMode === "create" ? "Create Transition" : "Edit Transition")}
+              {activeView === "icons" && "Icon Library"}
             </span>
 
             <div className="flex items-center gap-1">
               {/* Back button for forms */}
               {((activeView === "segments" && segmentFormMode !== "list") ||
                 (activeView === "transitions" && transitionFormMode !== "list")) && (
-                <button
-                  onClick={() => {
-                    if (activeView === "segments") handleCancelSegmentForm();
-                    if (activeView === "transitions") handleCancelTransitionForm();
-                  }}
-                  className="p-1 hover:bg-zinc-800 rounded transition-colors"
-                  title="Back to list"
-                >
-                  <Icon icon="mdi:arrow-left" className="w-4 h-4 text-zinc-400" />
-                </button>
-              )}
+                  <button
+                    onClick={() => {
+                      if (activeView === "segments") handleCancelSegmentForm();
+                      if (activeView === "transitions") handleCancelTransitionForm();
+                    }}
+                    className="p-1 hover:bg-zinc-800 rounded transition-colors"
+                    title="Back to list"
+                  >
+                    <Icon icon="mdi:arrow-left" className="w-4 h-4 text-zinc-400" />
+                  </button>
+                )}
 
               {/* Close panel button (only show when in list mode) */}
               {((activeView === "segments" && segmentFormMode === "list") ||
                 (activeView === "transitions" && transitionFormMode === "list") ||
-                activeView === "explorer") && (
-                <button
-                  onClick={() => onViewChange(null)}
-                  className="p-1 hover:bg-zinc-800 rounded transition-colors"
-                  title="Close panel"
-                >
-                  <Icon icon="mdi:close" className="w-4 h-4 text-zinc-400" />
-                </button>
-              )}
+                activeView === "explorer" ||
+                activeView === "icons") && (
+                  <button
+                    onClick={() => onViewChange(null)}
+                    className="p-1 hover:bg-zinc-800 rounded transition-colors"
+                    title="Close panel"
+                  >
+                    <Icon icon="mdi:close" className="w-4 h-4 text-zinc-400" />
+                  </button>
+                )}
             </div>
           </div>
 
@@ -381,6 +391,8 @@ export function LeftSidebarToolbox({
                 onSave={handleSaveTransitionForm}
               />
             )}
+            {activeView === "icons" && <IconLibraryView />}
+
           </div>
         </div>
       </div>
@@ -708,7 +720,7 @@ function SegmentsView({
                   </span>
                 )}
               </div>
-              
+
               {/* Quick action buttons for adding location/zone/layer */}
               {mapId && (onAddLocation || onAddZone || onAddLayer) && (
                 <div className="mt-2 pt-2 border-t border-zinc-700/50 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1371,6 +1383,125 @@ function TransitionFormView({
     </div>
   );
 }
+
+function IconLibraryView() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const startIconPlacement = (iconKey: string) => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("icon:startPlacement", {
+        detail: { iconKey },
+      })
+    );
+  };
+
+  const stopIconPlacement = () => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(new CustomEvent("icon:stopPlacement"));
+  };
+
+  const categories: {
+    title: string;
+    items: { id: string; icon: string; label: string }[];
+  }[] = [
+    {
+      title: "Travel & Movement",
+      items: [
+        { id: "plane", icon: "mdi:airplane", label: "Plane" },
+        { id: "car", icon: "mdi:car", label: "Car" },
+        { id: "bus", icon: "mdi:bus", label: "Bus" },
+        { id: "train", icon: "mdi:train", label: "Train" },
+        { id: "ship", icon: "mdi:ferry", label: "Ship" },
+        { id: "bike", icon: "mdi:bike", label: "Bike" },
+        { id: "walk", icon: "mdi:walk", label: "Walk" },
+        { id: "route", icon: "mdi:routes", label: "Route" },
+        { id: "from", icon: "mdi:map-marker-radius", label: "From" },
+        { id: "to", icon: "mdi:map-marker-check", label: "To" },
+      ],
+    },
+    {
+      title: "Places & POI",
+      items: [
+        { id: "home", icon: "mdi:home-outline", label: "Home" },
+        { id: "office", icon: "mdi:office-building-outline", label: "Office" },
+        { id: "school", icon: "mdi:school-outline", label: "School" },
+        { id: "hospital", icon: "mdi:hospital-building", label: "Hospital" },
+        { id: "restaurant", icon: "mdi:silverware-fork-knife", label: "Food" },
+        { id: "coffee", icon: "mdi:coffee-outline", label: "Coffee" },
+        { id: "shop", icon: "mdi:storefront-outline", label: "Shop" },
+        { id: "park", icon: "mdi:tree-outline", label: "Park" },
+        { id: "museum", icon: "mdi:bank-outline", label: "Museum" },
+        { id: "hotel", icon: "mdi:bed-outline", label: "Hotel" },
+      ],
+    },
+    {
+      title: "People & Events",
+      items: [
+        { id: "person", icon: "mdi:account", label: "Person" },
+        { id: "group", icon: "mdi:account-group", label: "Group" },
+        { id: "info", icon: "mdi:information-outline", label: "Info" },
+        { id: "warning", icon: "mdi:alert-outline", label: "Warning" },
+        { id: "danger", icon: "mdi:alert-octagon-outline", label: "Danger" },
+        { id: "star", icon: "mdi:star-outline", label: "Highlight" },
+        { id: "photo", icon: "mdi:image-outline", label: "Photo spot" },
+        { id: "camera", icon: "mdi:camera-outline", label: "Camera" },
+        { id: "note", icon: "mdi:note-text-outline", label: "Note" },
+        { id: "chat", icon: "mdi:chat-outline", label: "Comment" },
+      ],
+    },
+  ];
+
+  return (
+    <div className="p-3 space-y-4 text-xs">
+      <p className="text-zinc-400 text-[11px]">
+        Thư viện icon – hiện tại chỉ là UI chọn icon, chưa gắn logic tool hay map.
+      </p>
+
+      {categories.map((cat) => (
+        <div key={cat.title} className="space-y-2">
+          <h4 className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wide">
+            {cat.title}
+          </h4>
+          <div className="grid grid-cols-5 gap-2">
+            {cat.items.map((item) => {
+              const isActive = selectedId === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setSelectedId((prev) => {
+                      const next = prev === item.id ? null : item.id;
+                      if (next) {
+                        startIconPlacement(next);
+                      } else {
+                        stopIconPlacement();
+                      }
+                      return next;
+                    });
+                  }}
+                  className={cn(
+                    "flex flex-col items-center justify-center gap-1 rounded-md border px-1 py-2 transition-all text-[10px]",
+                    isActive
+                      ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
+                      : "border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800"
+                  )}
+                  title={item.label}
+                >
+                  <Icon icon={item.icon} className="w-4 h-4" />
+                  <span className="truncate w-full text-center">
+                    {item.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function getFeatureIcon(type: string): string {
   const typeMap: Record<string, string> = {

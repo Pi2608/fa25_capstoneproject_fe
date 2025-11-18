@@ -91,9 +91,24 @@ export const messages = {
             sampleGettingStartedPresetName: "Bắt đầu",
         },
         settings_members: {
+            remove: "Xóa",
+
+            unknown_member: "thành viên này",
+
+            confirm_transfer_full:
+                "Bạn sắp chuyển quyền sở hữu tổ chức này cho {{name}}.\n\n" +
+                "Sau khi chuyển, bạn sẽ không còn là Owner nữa và một số thao tác quản trị sẽ bị hạn chế.\n\n" +
+                "Bạn có chắc chắn muốn tiếp tục?",
+
+            transfer_success_to:
+                "Đã chuyển quyền sở hữu tổ chức thành công cho {{name}}.",
+
+            transfer_failed_with_reason:
+                "Không thể chuyển quyền sở hữu. Lý do: {{reason}}",
             title: "Thành viên",
             org_label: "Tổ chức",
-
+            invite_quota_exceeded:
+                "Tổ chức này đã đạt số thành viên tối đa của gói hiện tại. Hãy xóa bớt thành viên hoặc nâng cấp gói để mời thêm.",
             stat_members: "{count} thành viên trong số {limit}",
             stat_editors: "{count} người chỉnh sửa trong số {limit}",
 
@@ -1985,9 +2000,22 @@ export const messages = {
             longitude: "Longitude",
         },
         settings_members: {
+            unknown_member: "this member",
+            remove: "Delete",
+            confirm_transfer_full:
+                "You are about to transfer ownership of this organization to {{name}}.\n\n" +
+                "After the transfer, you will no longer be the Owner and some admin actions will be limited.\n\n" +
+                "Are you sure you want to continue?",
+
+            transfer_success_to:
+                "Ownership has been successfully transferred to {{name}}.",
+
+            transfer_failed_with_reason:
+                "Could not transfer ownership. Reason: {{reason}}",
             title: "Members",
             org_label: "Organization",
-
+            invite_quota_exceeded:
+                "This organization has reached the maximum number of members allowed for the current plan. Remove a member or upgrade your plan to invite more people.",
             stat_members: "{count} members of {limit}",
             stat_editors: "{count} editors of {limit}",
 
