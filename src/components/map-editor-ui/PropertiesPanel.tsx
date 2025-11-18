@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { FeatureData } from "@/utils/mapUtils";
 import type { LayerDTO } from "@/lib/api-maps";
 import type { Segment } from "@/lib/api-storymap";
+import { FeatureStyleEditor } from "./FeatureStyleEditor";
 
 type SelectedEntity = {
   type: "feature" | "layer" | "segment";
@@ -83,8 +84,8 @@ export function PropertiesPanel({
 
       {/* Content */}
       <div className="p-4">
-        {selectedItem.type === "feature" && (
-          <FeaturePropertiesContent
+        {selectedItem.type === "feature" && onUpdate && (
+          <FeatureStyleEditor
             feature={selectedItem.data as FeatureData}
             onUpdate={onUpdate}
           />
@@ -101,44 +102,6 @@ export function PropertiesPanel({
             onUpdate={onUpdate}
           />
         )}
-      </div>
-    </div>
-  );
-}
-
-function FeaturePropertiesContent({
-  feature,
-  onUpdate,
-}: {
-  feature: FeatureData;
-  onUpdate?: (updates: any) => Promise<void>;
-}) {
-  return (
-    <div className="space-y-4">
-      <div>
-        <h4 className="text-sm font-medium text-zinc-300 mb-2">Feature Info</h4>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Name:</span>
-            <span className="text-zinc-200">{feature.name}</span>
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Type:</span>
-            <span className="text-zinc-200 capitalize">{feature.type}</span>
-          </div>
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Visible:</span>
-            <span className={cn("text-sm", feature.isVisible ? "text-emerald-500" : "text-zinc-500")}>
-              {feature.isVisible ? "Yes" : "No"}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="border-t border-zinc-800 pt-4">
-        <p className="text-xs text-zinc-500 italic">
-          Full style and attribute editing will be available in the next update.
-        </p>
       </div>
     </div>
   );
