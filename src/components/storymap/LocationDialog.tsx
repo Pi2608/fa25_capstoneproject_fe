@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CreateLocationRequest } from "@/lib/api-storymap";
+import { CreateLocationRequest, Location } from "@/lib/api-storymap";
 import { LocationType } from "@/types/location-poi";
 import { Button } from "@/components/ui/button";
 import InputField from "@/components/ui/InputField";
@@ -13,6 +13,7 @@ interface LocationDialogProps {
   segmentId: string;
   currentMap?: any; // Leaflet map instance
   initialCoordinates?: [number, number] | null; // Pre-picked coordinates
+  initialLocation?: Location | null; // For editing existing location
   waitingForLocation?: boolean;
   setWaitingForLocation?: (waiting: boolean) => void;
 }
@@ -24,6 +25,7 @@ export default function LocationDialog({
   segmentId,
   currentMap,
   initialCoordinates,
+  initialLocation,
   waitingForLocation,
   setWaitingForLocation,
 }: LocationDialogProps) {
@@ -53,29 +55,63 @@ export default function LocationDialog({
 
   const [saving, setSaving] = useState(false);
 
-  // Reset form when dialog opens
+  // Reset form when dialog opens or load initial location for editing
   useEffect(() => {
     if (isOpen) {
-      setTitle("");
-      setSubtitle("");
-      setDescription("");
-      setLocationType("PointOfInterest");
-      // Use initialCoordinates if provided, otherwise null
-      setCoordinates(initialCoordinates || null);
-      setIconType("📍");
-      setIconUrl("");
-      setIconColor("#FF0000");
-      setIconSize(32);
-      setShowTooltip(true);
-      setTooltipContent("");
-      setOpenPopupOnClick(true);
-      setPopupContent("");
-      setMediaUrls("");
-      setPlayAudioOnClick(false);
-      setAudioUrl("");
-      setExternalUrl("");
+      if (initialLocation) {
+        // Edit mode: load existing location data
+        setTitle(initialLocation.title || "");
+        setSubtitle(initialLocation.subtitle || "");
+        setDescription(initialLocation.description || "");
+        setLocationType(initialLocation.locationType || "PointOfInterest");
+        
+        // Parse marker geometry for coordinates
+        if (initialLocation.markerGeometry) {
+          try {
+            const geoJson = JSON.parse(initialLocation.markerGeometry);
+            if (geoJson.type === "Point" && geoJson.coordinates) {
+              setCoordinates(geoJson.coordinates as [number, number]);
+            }
+          } catch (e) {
+            console.error("Failed to parse marker geometry:", e);
+          }
+        }
+        
+        setIconType(initialLocation.iconType || "📍");
+        setIconUrl(initialLocation.iconUrl || "");
+        setIconColor(initialLocation.iconColor || "#FF0000");
+        setIconSize(initialLocation.iconSize || 32);
+        setShowTooltip(initialLocation.showTooltip ?? true);
+        setTooltipContent(initialLocation.tooltipContent || "");
+        setOpenPopupOnClick(initialLocation.openPopupOnClick ?? false);
+        setPopupContent(initialLocation.popupContent || "");
+        setMediaUrls(initialLocation.mediaUrls || "");
+        setPlayAudioOnClick(initialLocation.playAudioOnClick ?? false);
+        setAudioUrl(initialLocation.audioUrl || "");
+        setExternalUrl(initialLocation.externalUrl || "");
+      } else {
+        // Create mode: reset form
+        setTitle("");
+        setSubtitle("");
+        setDescription("");
+        setLocationType("PointOfInterest");
+        // Use initialCoordinates if provided, otherwise null
+        setCoordinates(initialCoordinates || null);
+        setIconType("📍");
+        setIconUrl("");
+        setIconColor("#FF0000");
+        setIconSize(32);
+        setShowTooltip(true);
+        setTooltipContent("");
+        setOpenPopupOnClick(true);
+        setPopupContent("");
+        setMediaUrls("");
+        setPlayAudioOnClick(false);
+        setAudioUrl("");
+        setExternalUrl("");
+      }
     }
-  }, [isOpen, initialCoordinates]);
+  }, [isOpen, initialCoordinates, initialLocation]);
 
   // Show temporary marker when coordinates are set
   useEffect(() => {
@@ -170,7 +206,9 @@ export default function LocationDialog({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800/80">
           <div>
-            <h3 className="text-lg font-semibold text-white">Add Location/POI</h3>
+            <h3 className="text-lg font-semibold text-white">
+              {initialLocation ? "Edit Location/POI" : "Add Location/POI"}
+            </h3>
             <p className="text-sm text-zinc-400 mt-1">
               Add a point of interest or marker to this segment
             </p>
@@ -409,7 +447,7 @@ export default function LocationDialog({
               type="submit"
               disabled={saving || !title.trim() || !coordinates}
             >
-              {saving ? "Adding..." : "Add Location"}
+              {saving ? (initialLocation ? "Saving..." : "Adding...") : (initialLocation ? "Save Changes" : "Add Location")}
             </Button>
           </div>
         </form>
