@@ -12,6 +12,7 @@ interface LocationDialogProps {
   onSave: (data: CreateLocationRequest) => Promise<void>;
   segmentId: string;
   currentMap?: any; // Leaflet map instance
+  initialCoordinates?: [number, number] | null; // Pre-picked coordinates
   waitingForLocation?: boolean;
   setWaitingForLocation?: (waiting: boolean) => void;
 }
@@ -22,6 +23,7 @@ export default function LocationDialog({
   onSave,
   segmentId,
   currentMap,
+  initialCoordinates,
   waitingForLocation,
   setWaitingForLocation,
 }: LocationDialogProps) {
@@ -58,7 +60,8 @@ export default function LocationDialog({
       setSubtitle("");
       setDescription("");
       setLocationType("PointOfInterest");
-      setCoordinates(null);
+      // Use initialCoordinates if provided, otherwise null
+      setCoordinates(initialCoordinates || null);
       setIconType("📍");
       setIconUrl("");
       setIconColor("#FF0000");
@@ -72,51 +75,30 @@ export default function LocationDialog({
       setAudioUrl("");
       setExternalUrl("");
     }
-  }, [isOpen]);
+  }, [isOpen, initialCoordinates]);
 
-  // Handle map click for location selection
+  // Show temporary marker when coordinates are set
   useEffect(() => {
-    if (!currentMap || !waitingForLocation) return;
+    if (!currentMap || !isOpen || !coordinates) return;
 
-    const handleMapClick = (e: any) => {
-      const { lat, lng } = e.latlng;
-      setCoordinates([lng, lat]); // [longitude, latitude]
-      setWaitingForLocation?.(false);
+    const L = (window as any).L;
+    if (!L) return;
 
-      // Show temporary marker
-      const L = (window as any).L;
-      if (L) {
-        const tempMarker = L.marker([lat, lng], {
-          icon: L.divIcon({
-            className: 'temp-location-marker',
-            html: '<div style="font-size: 32px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">📍</div>',
-            iconSize: [32, 32],
-            iconAnchor: [16, 32],
-          }),
-        });
-        tempMarker.addTo(currentMap);
-
-        // Remove marker when dialog closes
-        const cleanup = () => {
-          currentMap.removeLayer(tempMarker);
-        };
-
-        // Store cleanup function
-        (tempMarker as any).cleanup = cleanup;
-      }
-    };
-
-    currentMap.on('click', handleMapClick);
+    const [lng, lat] = coordinates;
+    const tempMarker = L.marker([lat, lng], {
+      icon: L.divIcon({
+        className: 'temp-location-marker',
+        html: '<div style="font-size: 32px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">📍</div>',
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+      }),
+    });
+    tempMarker.addTo(currentMap);
 
     return () => {
-      currentMap.off('click', handleMapClick);
+      currentMap.removeLayer(tempMarker);
     };
-  }, [currentMap, waitingForLocation, setWaitingForLocation]);
-
-  const handleClickOnMap = () => {
-    setWaitingForLocation?.(true);
-    alert("Click on the map to place the location marker");
-  };
+  }, [currentMap, isOpen, coordinates]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,27 +237,16 @@ export default function LocationDialog({
 
             {/* Coordinates */}
             <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-medium text-zinc-300">
-                  Location Coordinates *
-                </label>
-                <Button
-                  type="button"
-                  onClick={handleClickOnMap}
-                  size="sm"
-                  variant="outline"
-                  disabled={!currentMap || waitingForLocation}
-                >
-                  {waitingForLocation ? "📍 Click on map..." : "📍 Pick on Map"}
-                </Button>
-              </div>
+              <label className="block text-sm font-medium text-zinc-300 mb-2">
+                Location Coordinates *
+              </label>
               {coordinates ? (
                 <div className="text-xs text-zinc-400 font-mono bg-zinc-900 rounded px-3 py-2">
                   Lng: {coordinates[0].toFixed(6)}, Lat: {coordinates[1].toFixed(6)}
                 </div>
               ) : (
-                <p className="text-xs text-zinc-500">
-                  Click "Pick on Map" and then click on the map to set location
+                <p className="text-xs text-zinc-500 italic">
+                  No coordinates selected. Please pick a location on the map first.
                 </p>
               )}
             </div>

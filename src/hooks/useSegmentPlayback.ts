@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Segment, TimelineTransition } from "@/lib/api-storymap";
+import { Segment, TimelineTransition, RouteAnimation, getRouteAnimationsBySegment } from "@/lib/api-storymap";
 import { getTimelineTransitions } from "@/lib/api-storymap";
 
 type UseSegmentPlaybackProps = {
@@ -28,6 +28,9 @@ export function useSegmentPlayback({
   const [transitions, setTransitions] = useState<TimelineTransition[]>([]);
   const [waitingForUserAction, setWaitingForUserAction] = useState(false);
   const [currentTransition, setCurrentTransition] = useState<TimelineTransition | null>(null);
+  const [routeAnimations, setRouteAnimations] = useState<RouteAnimation[]>([]);
+  const [segmentStartTime, setSegmentStartTime] = useState<number>(0);
+  const [isRouteAnimationOnly, setIsRouteAnimationOnly] = useState(false); // Flag to skip playback loop
 
   useEffect(() => {
     let cancelled = false;
@@ -48,12 +51,48 @@ export function useSegmentPlayback({
     durationMs?: number;
     cameraAnimationType?: "Jump" | "Ease" | "Fly";
     cameraAnimationDurationMs?: number;
+    skipCameraState?: boolean; // Skip applying camera state
   };
 
   const findTransition = useCallback((fromId?: string | null, toId?: string | null) => {
     if (!fromId || !toId) return undefined as TimelineTransition | undefined;
     return transitions.find(t => t.fromSegmentId === fromId && t.toSegmentId === toId);
   }, [transitions]);
+
+  // Load route animations for current segment
+  useEffect(() => {
+    if (!isPlaying || segments.length === 0 || currentPlayIndex >= segments.length) {
+      // Clear route animations when not playing
+      if (!isPlaying) {
+        setRouteAnimations([]);
+        setSegmentStartTime(0);
+      }
+      return;
+    }
+    
+    const currentSegment = segments[currentPlayIndex];
+    if (!currentSegment?.segmentId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const animations = await getRouteAnimationsBySegment(mapId, currentSegment.segmentId);
+        if (!cancelled) {
+          setRouteAnimations(animations || []);
+          // Reset start time when segment changes
+          setSegmentStartTime(Date.now());
+        }
+      } catch (e) {
+        console.warn("Failed to load route animations:", e);
+        if (!cancelled) {
+          setRouteAnimations([]);
+          setSegmentStartTime(0);
+        }
+      }
+    })();
+    
+    return () => { cancelled = true; };
+  }, [mapId, isPlaying, currentPlayIndex, segments]);
 
   // ==================== VIEW SEGMENT ON MAP ====================
   const handleViewSegment = useCallback(async (segment: Segment, opts?: TransitionOptions) => {
@@ -373,7 +412,8 @@ export function useSegmentPlayback({
       }
 
       // ==================== CAMERA STATE ====================
-      if (segment.cameraState) {
+      // Skip camera state if option is set
+      if (segment.cameraState && !opts?.skipCameraState) {
         let parsedCamera;
         if (typeof segment.cameraState === 'string') {
           try {
@@ -510,6 +550,9 @@ export function useSegmentPlayback({
 
   // ==================== AUTO-PLAY EFFECT ====================
   useEffect(() => {
+    // Skip playback loop if only playing route animation
+    if (isRouteAnimationOnly) return;
+    
     if (!isPlaying || segments.length === 0) return;
 
     let timeoutId: NodeJS.Timeout;
@@ -588,11 +631,50 @@ export function useSegmentPlayback({
     setIsPlaying(true);
   };
 
+  // Play route animation only (without camera state)
+  const handlePlayRouteAnimation = useCallback(async (segmentId?: string) => {
+    if (!currentMap) {
+      console.warn("⚠️ No map instance available");
+      return;
+    }
+
+    const targetSegmentId = segmentId || segments[currentPlayIndex]?.segmentId;
+    if (!targetSegmentId) {
+      console.warn("⚠️ No segment selected");
+      return;
+    }
+
+    try {
+      // Load route animations for the segment
+      const animations = await getRouteAnimationsBySegment(mapId, targetSegmentId);
+      if (animations && animations.length > 0) {
+        setRouteAnimations(animations);
+        setSegmentStartTime(Date.now());
+        setIsRouteAnimationOnly(true); // Set flag to skip playback loop
+        setIsPlaying(true);
+        console.log(`🎬 Playing ${animations.length} route animation(s) for segment ${targetSegmentId} (without camera state)`);
+      } else {
+        console.warn("⚠️ No route animations found for this segment");
+      }
+    } catch (e) {
+      console.error("Failed to play route animation:", e);
+    }
+  }, [currentMap, mapId, segments, currentPlayIndex]);
+
   const handleStopPreview = () => {
+    const wasRouteAnimationOnly = isRouteAnimationOnly;
     setIsPlaying(false);
     setCurrentPlayIndex(0);
     setWaitingForUserAction(false);
     setCurrentTransition(null);
+    setRouteAnimations([]);
+    setSegmentStartTime(0);
+    setIsRouteAnimationOnly(false); // Reset flag
+    
+    // Dispatch event to notify UI components
+    if (typeof window !== 'undefined' && wasRouteAnimationOnly) {
+      window.dispatchEvent(new CustomEvent('routeAnimationStopped'));
+    }
   };
 
   const handleClearMap = () => {
@@ -625,8 +707,11 @@ export function useSegmentPlayback({
     currentPlayIndex,
     waitingForUserAction,
     currentTransition,
+    routeAnimations,
+    segmentStartTime,
     handleViewSegment,
     handlePlayPreview,
+    handlePlayRouteAnimation,
     handleStopPreview,
     handleClearMap,
     handleContinueAfterUserAction,

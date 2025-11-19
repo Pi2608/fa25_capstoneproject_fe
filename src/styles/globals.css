@@ -28,7 +28,10 @@
   }
 }
 
-html, body { height: 100%; }
+html,
+body {
+  height: 100%;
+}
 
 body {
   background: var(--background);
@@ -40,6 +43,7 @@ body {
     transform: translateX(100%);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;
@@ -57,7 +61,6 @@ body {
   box-shadow: none !important;
 }
 
-/* Location title tooltip styling - always visible during playback */
 .location-title-tooltip {
   background: linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.95) 100%) !important;
   border: 2px solid rgba(255, 255, 255, 0.3) !important;
@@ -74,4 +77,18 @@ body {
 
 .location-title-tooltip::before {
   border-top-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.leaflet-container .marker-emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+
+  transform: scale(var(--marker-scale, 1));
+  transform-origin: center center;
+}
+
+.leaflet-container .marker-emoji-lg {
+  font-size: 32px;
 }

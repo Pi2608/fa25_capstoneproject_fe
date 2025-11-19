@@ -11,13 +11,39 @@ export type CameraState = {
   pitch?: number;
 };
 
+// ===== Story Content cho Segment =====
+
+export type TravelStoryContent = {
+  type: "travel";
+  mode: "plane" | "car";
+  pathType: "straight" | "route";
+
+  from: {
+    kind: "location" | "zone";
+    locationId: string;
+    zoneId?: string | null;
+  };
+
+  to: {
+    kind: "location" | "zone";
+    locationId: string;
+    zoneId?: string | null;
+  };
+};
+
+export type BasicStoryContent = {
+  type: "basic";
+};
+
+export type StoryContent = TravelStoryContent | BasicStoryContent | null;
+
 // Segment (Slide trong StoryMap)
 export type Segment = {
   segmentId: string;
   mapId: string;
   name: string;
   description?: string;
-  storyContent?: string;
+  // storyContent?: string;
   displayOrder: number;
   cameraState: CameraState; // JSON stringify của CameraState
   autoAdvance: boolean;
@@ -26,27 +52,28 @@ export type Segment = {
   zones: SegmentZone[]; // Backend already includes these
   layers: SegmentLayer[]; // Backend already includes these
   locations: Location[]; // Backend already includes these (PoiDto)
+  storyContent?: StoryContent | string | null;
 };
 
 export type CreateSegmentRequest = {
   mapId?: string; // Will be enriched by endpoint
   name: string;
   description?: string;
-  storyContent?: string;
   displayOrder?: number;
   cameraState?: string; // JSON stringified CameraState
   autoAdvance?: boolean;
   durationMs?: number;
   requireUserAction?: boolean;
   playbackMode?: "Auto" | "Manual" | "Timed";
+  storyContent?: string | null;
 };
 
 export type UpdateSegmentRequest = {
   name: string;
   description?: string;
-  storyContent?: string;
+  storyContent?: string | null;
   displayOrder?: number;
-  cameraState?: string; // JSON stringified CameraState
+  cameraState?: string;
   autoAdvance?: boolean;
   durationMs?: number;
   requireUserAction?: boolean;
@@ -81,7 +108,7 @@ export type SegmentZone = {
   displayOrder: number;
   isVisible: boolean;
   zIndex: number;
-  
+
   // Highlight config
   highlightBoundary: boolean;
   boundaryColor?: string;
@@ -92,7 +119,7 @@ export type SegmentZone = {
   showLabel: boolean;
   labelOverride?: string;
   labelStyle?: string;
-  
+
   // Animation
   entryDelayMs?: number;
   entryDurationMs?: number;
@@ -100,7 +127,7 @@ export type SegmentZone = {
   exitDurationMs?: number;
   entryEffect?: string;
   exitEffect?: string;
-  
+
   fitBoundsOnEntry: boolean;
   cameraOverride?: string;
   createdAt: string;
@@ -233,6 +260,82 @@ export type CreateTransitionRequest = {
   requireUserAction?: boolean;
 };
 
+// RouteAnimation (Route animation between two locations)
+export type RouteAnimation = {
+  routeAnimationId: string;
+  segmentId: string;
+  mapId: string;
+  
+  // Route information (matching backend DTO structure)
+  fromLat: number;
+  fromLng: number;
+  fromName?: string;
+  toLat: number;
+  toLng: number;
+  toName?: string;
+  routePath: string; // GeoJSON LineString as string
+  
+  // Icon configuration
+  iconType: "car" | "walking" | "bike" | "plane" | "custom";
+  iconUrl?: string;
+  iconWidth: number;
+  iconHeight: number;
+  
+  // Route styling
+  routeColor: string; // Color for unvisited route
+  visitedColor: string; // Color for visited route
+  routeWidth: number;
+  
+  // Animation settings
+  durationMs: number;
+  startDelayMs?: number;
+  easing: "linear" | "ease-in" | "ease-out" | "ease-in-out";
+  autoPlay: boolean;
+  loop: boolean;
+  
+  // Display settings
+  isVisible: boolean;
+  zIndex: number;
+  displayOrder: number;
+  
+  // Timing relative to segment
+  startTimeMs?: number;
+  endTimeMs?: number;
+  
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type CreateRouteAnimationRequest = {
+  segmentId: string;
+  fromLat: number;
+  fromLng: number;
+  fromName?: string;
+  toLat: number;
+  toLng: number;
+  toName?: string;
+  routePath: string; // GeoJSON LineString
+  iconType: "car" | "walking" | "bike" | "plane" | "custom";
+  iconUrl?: string;
+  iconWidth?: number;
+  iconHeight?: number;
+  routeColor?: string;
+  visitedColor?: string;
+  routeWidth?: number;
+  durationMs: number;
+  startDelayMs?: number;
+  easing?: "linear" | "ease-in" | "ease-out" | "ease-in-out";
+  autoPlay?: boolean;
+  loop?: boolean;
+  isVisible?: boolean;
+  zIndex?: number;
+  displayOrder?: number;
+  startTimeMs?: number;
+  endTimeMs?: number;
+};
+
+export type UpdateRouteAnimationRequest = Partial<CreateRouteAnimationRequest>;
+
 // AnimatedLayer (GIF/Video overlays)
 export type AnimatedLayer = {
   animatedLayerId: string;
@@ -330,7 +433,7 @@ export async function getZones(): Promise<Zone[]> {
 }
 
 export async function getZonesByParent(parentZoneId?: string): Promise<Zone[]> {
-  const url = parentZoneId 
+  const url = parentZoneId
     ? `/storymaps/zones/parent/${parentZoneId}`
     : `/storymaps/zones`;
   return await getJson<Zone[]>(url);
@@ -338,6 +441,20 @@ export async function getZonesByParent(parentZoneId?: string): Promise<Zone[]> {
 
 export async function searchZones(searchTerm: string): Promise<Zone[]> {
   return await getJson<Zone[]>(`/storymaps/zones/search?name=${encodeURIComponent(searchTerm)}`);
+}
+
+export async function searchRoutes(from: string, to: string): Promise<Zone[]> {
+  return await getJson<Zone[]>(`/storymaps/routes/search?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+}
+
+export async function searchRouteBetweenLocations(
+  fromLocationId: string,
+  toLocationId: string,
+  routeType: "road" | "straight" = "road"
+): Promise<{ routePath: string }> {
+  return await getJson<{ routePath: string }>(
+    `/storymaps/routes/between-locations?fromLocationId=${fromLocationId}&toLocationId=${toLocationId}&routeType=${routeType}`
+  );
 }
 
 export async function createZone(data: any): Promise<Zone> {
@@ -367,8 +484,8 @@ export async function getSegmentZones(mapId: string, segmentId: string): Promise
 }
 
 export async function createSegmentZone(
-  mapId: string, 
-  segmentId: string, 
+  mapId: string,
+  segmentId: string,
   data: CreateSegmentZoneRequest
 ): Promise<SegmentZone> {
   return await postJson<CreateSegmentZoneRequest, SegmentZone>(`/storymaps/${mapId}/segments/${segmentId}/zones`, data);
@@ -522,6 +639,50 @@ export async function deleteAnimatedLayer(layerId: string): Promise<void> {
   await delJson<void>(`/animated-layers/${layerId}`);
 }
 
+// ================== ROUTE ANIMATION APIs ==================
+
+export async function getRouteAnimationsBySegment(
+  mapId: string,
+  segmentId: string
+): Promise<RouteAnimation[]> {
+  return await getJson<RouteAnimation[]>(
+    `/storymaps/${mapId}/segments/${segmentId}/route-animations`
+  );
+}
+
+export async function createRouteAnimation(
+  mapId: string,
+  segmentId: string,
+  data: CreateRouteAnimationRequest
+): Promise<RouteAnimation> {
+  return await postJson<CreateRouteAnimationRequest, RouteAnimation>(
+    `/storymaps/${mapId}/segments/${segmentId}/route-animations`,
+    { ...data, segmentId }
+  );
+}
+
+export async function updateRouteAnimation(
+  mapId: string,
+  segmentId: string,
+  routeAnimationId: string,
+  data: UpdateRouteAnimationRequest
+): Promise<RouteAnimation> {
+  return await putJson<UpdateRouteAnimationRequest, RouteAnimation>(
+    `/storymaps/${mapId}/segments/${segmentId}/route-animations/${routeAnimationId}`,
+    data
+  );
+}
+
+export async function deleteRouteAnimation(
+  mapId: string,
+  segmentId: string,
+  routeAnimationId: string
+): Promise<void> {
+  await delJson<void>(
+    `/storymaps/${mapId}/segments/${segmentId}/route-animations/${routeAnimationId}`
+  );
+}
+
 // ================== ANIMATED LAYER PRESET APIs ==================
 
 export async function getAnimatedLayerPresets(): Promise<AnimatedLayerPreset[]> {
@@ -566,7 +727,7 @@ export function getCurrentCameraState(map: any): CameraState {
   if (!map || typeof map.getCenter !== 'function' || typeof map.getZoom !== 'function') {
     throw new Error('Invalid map instance: missing required methods');
   }
-  
+
   return {
     center: [map.getCenter().lng, map.getCenter().lat],
     zoom: map.getZoom(),
@@ -576,11 +737,37 @@ export function getCurrentCameraState(map: any): CameraState {
 }
 
 export function applyCameraState(map: any, cameraState: CameraState, options?: any) {
-  map.flyTo({
-    center: cameraState.center,
-    zoom: cameraState.zoom,
-    bearing: cameraState.bearing || 0,
-    pitch: cameraState.pitch || 0,
-    ...options,
-  });
+  if (!map || !cameraState) {
+    console.error("applyCameraState: map or cameraState is null/undefined");
+    return;
+  }
+
+  if (!cameraState.center || !Array.isArray(cameraState.center) || cameraState.center.length < 2) {
+    console.error("applyCameraState: invalid cameraState.center", cameraState.center);
+    return;
+  }
+
+  // CameraState.center is [lng, lat], but Leaflet needs [lat, lng]
+  const [lng, lat] = cameraState.center;
+  const center: [number, number] = [lat, lng];
+  const zoom = cameraState.zoom || 10;
+
+  // Use flyTo if available (from Leaflet plugins), otherwise use setView
+  if (typeof map.flyTo === 'function') {
+    const flyOptions: any = {
+      duration: options?.duration || 1.0,
+    };
+    map.flyTo(center, zoom, flyOptions);
+  } else if (typeof map.setView === 'function') {
+    const viewOptions: any = {
+      animate: options?.duration ? true : false,
+    };
+    if (options?.duration) {
+      viewOptions.duration = options.duration;
+    }
+    map.setView(center, zoom, viewOptions);
+  } else {
+    console.error("applyCameraState: map does not have flyTo or setView method");
+  }
 }
+
