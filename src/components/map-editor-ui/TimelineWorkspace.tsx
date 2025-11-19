@@ -22,6 +22,7 @@ interface TimelineWorkspaceProps {
   onPlay: () => void;
   onStop: () => void;
   onSegmentClick: (segmentId: string) => void;
+  onRefreshSegments?: () => void;
 }
 
 export function TimelineWorkspace({
@@ -38,6 +39,7 @@ export function TimelineWorkspace({
   onPlay,
   onStop,
   onSegmentClick,
+  onRefreshSegments,
 }: TimelineWorkspaceProps) {
   const [height, setHeight] = useState(200); // Default height
   const [zoomLevel, setZoomLevel] = useState(1); // 1 = 100%
@@ -112,7 +114,7 @@ export function TimelineWorkspace({
   return (
     <div
       ref={workspaceRef}
-      className="fixed bottom-0 right-0 bg-zinc-950/98 backdrop-blur-lg border-t border-zinc-800 z-[1500] transition-all duration-300"
+      className="fixed bottom-0 right-0 bg-zinc-950/98 backdrop-blur-lg border-t border-zinc-800 z-[2500] transition-all duration-300"
       style={{ height: `${height}px`, left: `${leftOffset}px` }}
     >
       {/* Resize Handle */}
@@ -218,6 +220,7 @@ export function TimelineWorkspace({
           mapId={mapId}
           onReorder={onReorder}
           onSegmentClick={onSegmentClick}
+          onRefreshSegments={onRefreshSegments}
         />
       </div>
     </div>

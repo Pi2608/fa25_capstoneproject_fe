@@ -78,7 +78,20 @@ export function useSegmentPlayback({
       try {
         const animations = await getRouteAnimationsBySegment(mapId, currentSegment.segmentId);
         if (!cancelled) {
-          setRouteAnimations(animations || []);
+          // Sort routes by displayOrder for sequential playback
+          const sortedAnimations = (animations || []).sort((a, b) => {
+            // First sort by displayOrder
+            if (a.displayOrder !== b.displayOrder) {
+              return a.displayOrder - b.displayOrder;
+            }
+            // Then by startTimeMs if available
+            if (a.startTimeMs !== undefined && b.startTimeMs !== undefined) {
+              return a.startTimeMs - b.startTimeMs;
+            }
+            // Finally by creation time
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          });
+          setRouteAnimations(sortedAnimations);
           // Reset start time when segment changes
           setSegmentStartTime(Date.now());
         }

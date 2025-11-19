@@ -139,7 +139,7 @@ export function LeftSidebarToolbox({
   useEffect(() => {
     if (panelRef.current) {
       gsap.to(panelRef.current, {
-        x: activeView ? 0 : -280,
+        x: activeView ? 0 : -320,
         duration: 0.3,
         ease: "power2.out",
       });
@@ -265,50 +265,67 @@ export function LeftSidebarToolbox({
 
   return (
     <>
-      {/* Icon Bar */}
-      <div className="fixed left-0 top-10 bottom-0 w-12 bg-zinc-950 border-r border-zinc-800 z-[2000] flex flex-col">
-        <IconButton
-          icon="mdi:layers-triple"
-          label="Data Layers"
-          isActive={activeView === "explorer"}
-          onClick={() => handleIconClick("explorer")}
-        />
-        <IconButton
-          icon="mdi:filmstrip"
-          label="Segments"
-          isActive={activeView === "segments"}
-          onClick={() => handleIconClick("segments")}
-        />
-        <IconButton
-          icon="mdi:transition"
-          label="Transitions"
-          isActive={activeView === "transitions"}
-          onClick={() => handleIconClick("transitions")}
-        />
-        <IconButton
-          icon="mdi:toolbox-outline"
-          label="Icon Library"
-          isActive={activeView === "icons"}
-          onClick={() => handleIconClick("icons")}
-        />
+      {/* Icon Bar - Video Editor Style */}
+      <div className="fixed left-0 top-10 bottom-0 w-14 bg-zinc-950/98 backdrop-blur-sm border-r border-zinc-800/80 z-[2000] flex flex-col shadow-lg">
+        <div className="h-12 border-b border-zinc-800/80 flex items-center justify-center">
+          <Icon icon="mdi:video-box" className="w-6 h-6 text-emerald-500" />
+        </div>
+        <div className="flex-1 flex flex-col py-2">
+          <IconButton
+            icon="mdi:layers-triple"
+            label="Project"
+            isActive={activeView === "explorer"}
+            onClick={() => handleIconClick("explorer")}
+          />
+          <IconButton
+            icon="mdi:filmstrip"
+            label="Segments"
+            isActive={activeView === "segments"}
+            onClick={() => handleIconClick("segments")}
+          />
+          <IconButton
+            icon="mdi:transition"
+            label="Transitions"
+            isActive={activeView === "transitions"}
+            onClick={() => handleIconClick("transitions")}
+          />
+          <IconButton
+            icon="mdi:toolbox-outline"
+            label="Assets"
+            isActive={activeView === "icons"}
+            onClick={() => handleIconClick("icons")}
+          />
+        </div>
       </div>
 
 
-      {/* Content Panel (slides in/out) */}
+      {/* Content Panel (slides in/out) - Video Editor Style */}
       <div
         ref={panelRef}
-        className="fixed left-12 top-10 bottom-0 w-[280px] bg-zinc-900/95 backdrop-blur-lg border-r border-zinc-800 z-[1999] overflow-hidden"
-        style={{ transform: "translateX(-280px)" }}
+        className="fixed left-14 top-10 bottom-0 w-[320px] bg-zinc-900/98 backdrop-blur-sm border-r border-zinc-800/80 z-[1999] overflow-hidden shadow-xl"
+        style={{ transform: "translateX(-320px)" }}
       >
         <div className="h-full flex flex-col">
-          {/* Panel Header */}
-          <div className="h-12 border-b border-zinc-800 flex items-center justify-between px-4">
-            <span className="font-semibold text-sm text-zinc-200 uppercase">
-              {activeView === "explorer" && "Data Layers"}
-              {activeView === "segments" && (segmentFormMode === "list" ? "Segments" : segmentFormMode === "create" ? "Create Segment" : "Edit Segment")}
-              {activeView === "transitions" && (transitionFormMode === "list" ? "Transitions" : transitionFormMode === "create" ? "Create Transition" : "Edit Transition")}
-              {activeView === "icons" && "Icon Library"}
-            </span>
+          {/* Panel Header - Video Editor Style */}
+          <div className="h-11 border-b border-zinc-800/80 bg-zinc-950/50 flex items-center justify-between px-3">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-xs text-zinc-300 uppercase tracking-wider">
+                {activeView === "explorer" && "PROJECT"}
+                {activeView === "segments" && (segmentFormMode === "list" ? "SEGMENTS" : segmentFormMode === "create" ? "NEW SEGMENT" : "EDIT SEGMENT")}
+                {activeView === "transitions" && (transitionFormMode === "list" ? "TRANSITIONS" : transitionFormMode === "create" ? "NEW TRANSITION" : "EDIT TRANSITION")}
+                {activeView === "icons" && "ASSETS"}
+              </span>
+              {activeView === "explorer" && (
+                <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] rounded">
+                  {features.length + layers.length}
+                </span>
+              )}
+              {activeView === "segments" && segmentFormMode === "list" && (
+                <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] rounded">
+                  {segments.length}
+                </span>
+              )}
+            </div>
 
             <div className="flex items-center gap-1">
               {/* Back button for forms */}
@@ -518,18 +535,22 @@ function IconButton({
     <button
       onClick={onClick}
       className={cn(
-        "w-12 h-12 flex items-center justify-center border-l-2 transition-all group relative",
+        "w-full h-12 flex flex-col items-center justify-center gap-1 transition-all group relative",
+        "border-l-2 border-transparent",
         isActive
-          ? "border-emerald-500 bg-zinc-800/50 text-emerald-500"
-          : "border-transparent text-zinc-400 hover:bg-zinc-800/30 hover:text-zinc-200"
+          ? "border-emerald-500 bg-emerald-500/10 text-emerald-400"
+          : "text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-300 hover:border-zinc-700"
       )}
       title={label}
     >
-      <Icon icon={icon} className="w-6 h-6" />
-      {/* Tooltip */}
-      <div className="absolute left-14 px-2 py-1 bg-zinc-700 text-zinc-100 text-xs rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
+      <Icon icon={icon} className="w-5 h-5" />
+      <span className="text-[9px] font-medium uppercase tracking-wider">
         {label}
-      </div>
+      </span>
+      {/* Active indicator */}
+      {isActive && (
+        <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-emerald-500" />
+      )}
     </button>
   );
 }
@@ -555,8 +576,32 @@ function ExplorerView({
   onLayerVisibilityChange: (layerId: string, isVisible: boolean) => void;
   onDeleteFeature: (featureId: string) => void;
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredFeatures = features.filter(f => 
+    f.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  const filteredLayers = layers.filter(l => 
+    l.layerName.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div className="p-3 space-y-4">
+    <div className="h-full flex flex-col">
+      {/* Search Bar */}
+      <div className="p-2 border-b border-zinc-800/80">
+        <div className="relative">
+          <Icon icon="mdi:magnify" className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search..."
+            className="w-full pl-8 pr-2 py-1.5 bg-zinc-800/50 border border-zinc-700/50 rounded text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/50"
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-2 space-y-3">
       {/* Base Layer Selection */}
       <div className="space-y-2">
         <h4 className="text-xs font-semibold text-zinc-400 uppercase">
@@ -602,28 +647,33 @@ function ExplorerView({
         </div>
       </div>
 
-      {/* Layers List */}
-      <div className="space-y-1">
-        <div className="flex items-center justify-between">
-          <h4 className="text-xs font-semibold text-zinc-400 uppercase">
-            Layers ({layers.length})
+      {/* Layers List - Video Editor Style */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between px-1">
+          <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+            Layers
           </h4>
+          <span className="text-[10px] text-zinc-600">{filteredLayers.length}</span>
         </div>
-        {layers.length === 0 ? (
-          <p className="text-xs text-zinc-500 italic py-2">No layers</p>
+        {filteredLayers.length === 0 ? (
+          <div className="px-2 py-4 text-center">
+            <p className="text-xs text-zinc-500 italic">No layers</p>
+          </div>
         ) : (
-          <div className="space-y-1">
-            {layers.map((layer) => (
+          <div className="space-y-0.5">
+            {filteredLayers.map((layer) => (
               <div
                 key={layer.id}
-                className="flex items-center gap-2 p-2 rounded-md hover:bg-zinc-800/50 cursor-pointer group"
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800/60 cursor-pointer group/item transition-colors"
                 onClick={() => onSelectLayer(layer)}
               >
-                <Icon
-                  icon="mdi:folder-outline"
-                  className="w-4 h-4 text-zinc-400"
-                />
-                <span className="flex-1 text-sm text-zinc-300 truncate">
+                <div className="w-6 h-6 rounded bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                  <Icon
+                    icon="mdi:folder-outline"
+                    className="w-3.5 h-3.5 text-blue-400"
+                  />
+                </div>
+                <span className="flex-1 text-xs text-zinc-300 truncate font-medium">
                   {layer.layerName}
                 </span>
                 <button
@@ -631,13 +681,13 @@ function ExplorerView({
                     e.stopPropagation();
                     onLayerVisibilityChange(layer.id, !layer.isPublic);
                   }}
-                  className="opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="opacity-0 group-hover/item:opacity-100 transition-opacity p-0.5 hover:bg-zinc-700 rounded"
                 >
                   <Icon
                     icon={layer.isPublic ? "mdi:eye" : "mdi:eye-off"}
                     className={cn(
-                      "w-4 h-4",
-                      layer.isPublic ? "text-emerald-500" : "text-zinc-500"
+                      "w-3.5 h-3.5",
+                      layer.isPublic ? "text-emerald-400" : "text-zinc-600"
                     )}
                   />
                 </button>
@@ -647,29 +697,36 @@ function ExplorerView({
         )}
       </div>
 
-      {/* Features List */}
-      <div className="space-y-1">
-        <h4 className="text-xs font-semibold text-zinc-400 uppercase">
-          Features ({features.length})
-        </h4>
-        {features.length === 0 ? (
-          <p className="text-xs text-zinc-500 italic py-2">No features</p>
+      {/* Features List - Video Editor Style */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between px-1">
+          <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+            Features
+          </h4>
+          <span className="text-[10px] text-zinc-600">{filteredFeatures.length}</span>
+        </div>
+        {filteredFeatures.length === 0 ? (
+          <div className="px-2 py-4 text-center">
+            <p className="text-xs text-zinc-500 italic">No features</p>
+          </div>
         ) : (
-          <div className="space-y-1">
-            {features.map((feature) => (
+          <div className="space-y-0.5">
+            {filteredFeatures.map((feature) => (
               <div
                 key={feature.id}
-                className="flex items-center gap-2 p-2 rounded-md hover:bg-zinc-800/50 cursor-pointer group"
+                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800/60 cursor-pointer group/item transition-colors"
                 onClick={() => onSelectFeature(feature)}
               >
-                <Icon
-                  icon={getFeatureIcon(feature.type)}
-                  className="w-4 h-4 text-zinc-400"
-                />
-                <span className="flex-1 text-sm text-zinc-300 truncate">
+                <div className="w-6 h-6 rounded bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+                  <Icon
+                    icon={getFeatureIcon(feature.type)}
+                    className="w-3.5 h-3.5 text-emerald-400"
+                  />
+                </div>
+                <span className="flex-1 text-xs text-zinc-300 truncate font-medium">
                   {feature.name}
                 </span>
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -678,14 +735,15 @@ function ExplorerView({
                         !feature.isVisible
                       );
                     }}
+                    className="p-0.5 hover:bg-zinc-700 rounded"
                   >
                     <Icon
                       icon={feature.isVisible ? "mdi:eye" : "mdi:eye-off"}
                       className={cn(
-                        "w-4 h-4",
+                        "w-3.5 h-3.5",
                         feature.isVisible
-                          ? "text-emerald-500"
-                          : "text-zinc-500"
+                          ? "text-emerald-400"
+                          : "text-zinc-600"
                       )}
                     />
                   </button>
@@ -694,10 +752,11 @@ function ExplorerView({
                       e.stopPropagation();
                       onDeleteFeature(feature.featureId || feature.id);
                     }}
+                    className="p-0.5 hover:bg-zinc-700 rounded"
                   >
                     <Icon
                       icon="mdi:delete-outline"
-                      className="w-4 h-4 text-red-500 hover:text-red-400"
+                      className="w-3.5 h-3.5 text-red-400 hover:text-red-300"
                     />
                   </button>
                 </div>
@@ -705,6 +764,7 @@ function ExplorerView({
             ))}
           </div>
         )}
+      </div>
       </div>
     </div>
   );
@@ -733,170 +793,200 @@ function SegmentsView({
   onAddRouteAnimation?: (segmentId: string) => void;
   mapId?: string;
 }) {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredSegments = segments.filter(s => 
+    s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    s.description?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div className="p-3 space-y-2">
-      {segments.length === 0 ? (
-        <p className="text-xs text-zinc-500 italic py-2">No segments</p>
-      ) : (
-        <div className="space-y-2">
-          {segments.map((segment) => (
-            <div
-              key={segment.segmentId}
-              className="p-3 rounded-lg border border-zinc-700 hover:border-zinc-600 transition-all group"
-            >
+    <div className="h-full flex flex-col">
+      {/* Search Bar */}
+      <div className="p-2 border-b border-zinc-800/80">
+        <div className="relative">
+          <Icon icon="mdi:magnify" className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search segments..."
+            className="w-full pl-8 pr-2 py-1.5 bg-zinc-800/50 border border-zinc-700/50 rounded text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/50"
+          />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-2">
+        {filteredSegments.length === 0 ? (
+          <div className="px-2 py-8 text-center">
+            <Icon icon="mdi:filmstrip-off" className="w-12 h-12 mx-auto mb-2 text-zinc-600" />
+            <p className="text-xs text-zinc-500 italic">No segments</p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {filteredSegments.map((segment) => (
               <div
-                className="flex items-center gap-2 cursor-pointer"
+                key={segment.segmentId}
+                className="group/item p-2.5 rounded-lg border border-zinc-800/50 hover:border-zinc-700/80 hover:bg-zinc-800/30 transition-all cursor-pointer"
                 onClick={() => onSegmentClick(segment.segmentId)}
               >
-                <Icon
-                  icon="mdi:filmstrip-box"
-                  className="w-4 h-4 text-emerald-500"
-                />
-                <span className="flex-1 font-medium text-sm text-zinc-200">
-                  {segment.name}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditSegment(segment);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-all"
-                  title="Edit segment"
-                >
-                  <Icon icon="mdi:pencil" className="w-4 h-4 text-blue-400" />
-                </button>
-                {onDeleteSegment && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (window.confirm(`Delete segment "${segment.name}"?`)) {
-                        onDeleteSegment(segment.segmentId);
-                      }
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-all"
-                    title="Delete segment"
-                  >
-                    <Icon icon="mdi:delete-outline" className="w-4 h-4 text-red-400" />
-                  </button>
-                )}
-              </div>
-              <div className="mt-1 text-xs text-zinc-400 flex items-center gap-3">
-                <span>
-                  <Icon icon="mdi:clock-outline" className="inline w-3 h-3 mr-1" />
-                  {(segment.durationMs / 1000).toFixed(1)}s
-                </span>
-                {segment.description && (
-                  <span className="text-zinc-500 italic truncate">
-                    {segment.description}
-                  </span>
-                )}
-              </div>
-
-              {/* Display attached items */}
-              {(segment.zones?.length > 0 || segment.locations?.length > 0 || segment.layers?.length > 0) && (
-                <div className="mt-2 pt-2 border-t border-zinc-700/50 flex gap-2 flex-wrap">
-                  {segment.locations && segment.locations.length > 0 && (
-                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/20 rounded text-[10px] text-emerald-400">
-                      <Icon icon="mdi:map-marker" className="w-3 h-3" />
-                      <span>{segment.locations.length}</span>
-                    </div>
-                  )}
-                  {segment.zones && segment.zones.length > 0 && (
-                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/20 rounded text-[10px] text-blue-400">
-                      <Icon icon="mdi:shape" className="w-3 h-3" />
-                      <span>{segment.zones.length}</span>
-                    </div>
-                  )}
-                  {segment.layers && segment.layers.length > 0 && (
-                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-purple-500/20 rounded text-[10px] text-purple-400">
-                      <Icon icon="mdi:layers" className="w-3 h-3" />
-                      <span>{segment.layers.length}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Quick action buttons for adding location/zone/layer/route and play route */}
-              {mapId && (onAddLocation || onAddZone || onAddLayer || onAddRouteAnimation) && (
-                <div className="mt-2 pt-2 border-t border-zinc-700/50 flex items-center gap-1.5 flex-wrap">
-                  {onAddLocation && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddLocation(segment.segmentId);
-                      }}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 hover:text-emerald-300 transition-all group/btn"
-                      title="Add location"
-                    >
-                      <Icon icon="mdi:plus-circle" className="w-3 h-3" />
-                      <Icon icon="mdi:map-marker" className="w-3 h-3" />
-                      <span className="text-[10px] font-medium">Location</span>
-                    </button>
-                  )}
-                  {onAddZone && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddZone(segment.segmentId);
-                      }}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 hover:border-blue-500/50 text-blue-400 hover:text-blue-300 transition-all group/btn"
-                      title="Add zone"
-                    >
-                      <Icon icon="mdi:plus-circle" className="w-3 h-3" />
-                      <Icon icon="mdi:shape" className="w-3 h-3" />
-                      <span className="text-[10px] font-medium">Zone</span>
-                    </button>
-                  )}
-                  {onAddLayer && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddLayer(segment.segmentId);
-                      }}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 hover:border-purple-500/50 text-purple-400 hover:text-purple-300 transition-all group/btn"
-                      title="Attach layer"
-                    >
-                      <Icon icon="mdi:plus-circle" className="w-3 h-3" />
-                      <Icon icon="mdi:layers" className="w-3 h-3" />
-                      <span className="text-[10px] font-medium">Layer</span>
-                    </button>
-                  )}
-                  {onAddRouteAnimation && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddRouteAnimation(segment.segmentId);
-                      }}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 hover:border-orange-500/50 text-orange-400 hover:text-orange-300 transition-all group/btn"
-                      title="Add route animation"
-                    >
-                      <Icon icon="mdi:plus-circle" className="w-3 h-3" />
-                      <Icon icon="mdi:route" className="w-3 h-3" />
-                      <span className="text-[10px] font-medium">Route</span>
-                    </button>
-                  )}
-                  {mapId && (
-                    <PlayRouteButton
-                      segmentId={segment.segmentId}
-                      mapId={mapId}
-                      compact={true}
+                <div className="flex items-start gap-2">
+                  <div className="w-8 h-8 rounded bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Icon
+                      icon="mdi:filmstrip-box"
+                      className="w-4 h-4 text-emerald-400"
                     />
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-xs text-zinc-200 truncate">
+                        {segment.name}
+                      </span>
+                      <div className="flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity flex-shrink-0">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditSegment(segment);
+                          }}
+                          className="p-1 hover:bg-zinc-700 rounded"
+                          title="Edit segment"
+                        >
+                          <Icon icon="mdi:pencil" className="w-3.5 h-3.5 text-blue-400" />
+                        </button>
+                        {onDeleteSegment && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (window.confirm(`Delete segment "${segment.name}"?`)) {
+                                onDeleteSegment(segment.segmentId);
+                              }
+                            }}
+                            className="p-1 hover:bg-zinc-700 rounded"
+                            title="Delete segment"
+                          >
+                            <Icon icon="mdi:delete-outline" className="w-3.5 h-3.5 text-red-400" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-[10px] text-zinc-500">
+                      <span className="flex items-center gap-1">
+                        <Icon icon="mdi:clock-outline" className="w-3 h-3" />
+                        {(segment.durationMs / 1000).toFixed(1)}s
+                      </span>
+                      {segment.description && (
+                        <span className="truncate italic">
+                          {segment.description}
+                        </span>
+                      )}
+                    </div>
 
-      {/* Add Segment Button */}
-      <button
-        onClick={onAddSegment}
-        className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-700 rounded-md flex items-center justify-center gap-2 transition-colors"
-      >
-        <Icon icon="mdi:plus-circle-outline" className="w-5 h-5" />
-        <span className="text-sm font-medium">Add Segment</span>
-      </button>
+                    {/* Display attached items - Compact badges */}
+                    {(segment.zones?.length > 0 || segment.locations?.length > 0 || segment.layers?.length > 0) && (
+                      <div className="mt-1.5 flex items-center gap-1 flex-wrap">
+                        {segment.locations && segment.locations.length > 0 && (
+                          <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-emerald-500/15 rounded text-[9px] text-emerald-400 border border-emerald-500/20">
+                            <Icon icon="mdi:map-marker" className="w-2.5 h-2.5" />
+                            <span className="font-medium">{segment.locations.length}</span>
+                          </div>
+                        )}
+                        {segment.zones && segment.zones.length > 0 && (
+                          <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-500/15 rounded text-[9px] text-blue-400 border border-blue-500/20">
+                            <Icon icon="mdi:shape" className="w-2.5 h-2.5" />
+                            <span className="font-medium">{segment.zones.length}</span>
+                          </div>
+                        )}
+                        {segment.layers && segment.layers.length > 0 && (
+                          <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-purple-500/15 rounded text-[9px] text-purple-400 border border-purple-500/20">
+                            <Icon icon="mdi:layers" className="w-2.5 h-2.5" />
+                            <span className="font-medium">{segment.layers.length}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Quick action buttons - Compact style */}
+                    {mapId && (onAddLocation || onAddZone || onAddLayer || onAddRouteAnimation) && (
+                      <div className="mt-1.5 pt-1.5 border-t border-zinc-800/50 flex items-center gap-1 flex-wrap">
+                        {onAddLocation && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAddLocation(segment.segmentId);
+                            }}
+                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:border-emerald-500/40 text-emerald-400 hover:text-emerald-300 transition-all text-[9px] font-medium"
+                            title="Add location"
+                          >
+                            <Icon icon="mdi:plus" className="w-2.5 h-2.5" />
+                            <Icon icon="mdi:map-marker" className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                        {onAddZone && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAddZone(segment.segmentId);
+                            }}
+                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 hover:text-blue-300 transition-all text-[9px] font-medium"
+                            title="Add zone"
+                          >
+                            <Icon icon="mdi:plus" className="w-2.5 h-2.5" />
+                            <Icon icon="mdi:shape" className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                        {onAddLayer && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAddLayer(segment.segmentId);
+                            }}
+                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 hover:border-purple-500/40 text-purple-400 hover:text-purple-300 transition-all text-[9px] font-medium"
+                            title="Attach layer"
+                          >
+                            <Icon icon="mdi:plus" className="w-2.5 h-2.5" />
+                            <Icon icon="mdi:layers" className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                        {onAddRouteAnimation && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAddRouteAnimation(segment.segmentId);
+                            }}
+                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 hover:border-orange-500/40 text-orange-400 hover:text-orange-300 transition-all text-[9px] font-medium"
+                            title="Add route"
+                          >
+                            <Icon icon="mdi:plus" className="w-2.5 h-2.5" />
+                            <Icon icon="mdi:route" className="w-2.5 h-2.5" />
+                          </button>
+                        )}
+                        {mapId && (
+                          <PlayRouteButton
+                            segmentId={segment.segmentId}
+                            mapId={mapId}
+                            compact={true}
+                          />
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add Segment Button - Fixed at bottom */}
+      <div className="p-2 border-t border-zinc-800/80 bg-zinc-950/30">
+        <button
+          onClick={onAddSegment}
+          className="w-full py-2 px-3 bg-emerald-600/90 hover:bg-emerald-600 rounded-md flex items-center justify-center gap-2 transition-colors text-sm font-medium text-white"
+        >
+          <Icon icon="mdi:plus-circle-outline" className="w-4 h-4" />
+          <span>New Segment</span>
+        </button>
+      </div>
     </div>
   );
 }
@@ -1117,7 +1207,7 @@ export function SegmentItemsList({
                     <div className="flex items-center gap-2 mb-0.5">
                       <Icon icon="mdi:layers" className="w-3 h-3 text-purple-400 flex-shrink-0" />
                       <span className="text-xs font-medium text-white truncate">
-                        {segmentLayer.layerId.title || "Unnamed Layer"}
+                        {segmentLayer.layerId?.title || "Unnamed Layer"}
                       </span>
                     </div>
                   </div>
