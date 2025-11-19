@@ -233,6 +233,82 @@ export type CreateTransitionRequest = {
   requireUserAction?: boolean;
 };
 
+// RouteAnimation (Route animation between two locations)
+export type RouteAnimation = {
+  routeAnimationId: string;
+  segmentId: string;
+  mapId: string;
+  
+  // Route information (matching backend DTO structure)
+  fromLat: number;
+  fromLng: number;
+  fromName?: string;
+  toLat: number;
+  toLng: number;
+  toName?: string;
+  routePath: string; // GeoJSON LineString as string
+  
+  // Icon configuration
+  iconType: "car" | "walking" | "bike" | "plane" | "custom";
+  iconUrl?: string;
+  iconWidth: number;
+  iconHeight: number;
+  
+  // Route styling
+  routeColor: string; // Color for unvisited route
+  visitedColor: string; // Color for visited route
+  routeWidth: number;
+  
+  // Animation settings
+  durationMs: number;
+  startDelayMs?: number;
+  easing: "linear" | "ease-in" | "ease-out" | "ease-in-out";
+  autoPlay: boolean;
+  loop: boolean;
+  
+  // Display settings
+  isVisible: boolean;
+  zIndex: number;
+  displayOrder: number;
+  
+  // Timing relative to segment
+  startTimeMs?: number;
+  endTimeMs?: number;
+  
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type CreateRouteAnimationRequest = {
+  segmentId: string;
+  fromLat: number;
+  fromLng: number;
+  fromName?: string;
+  toLat: number;
+  toLng: number;
+  toName?: string;
+  routePath: string; // GeoJSON LineString
+  iconType: "car" | "walking" | "bike" | "plane" | "custom";
+  iconUrl?: string;
+  iconWidth?: number;
+  iconHeight?: number;
+  routeColor?: string;
+  visitedColor?: string;
+  routeWidth?: number;
+  durationMs: number;
+  startDelayMs?: number;
+  easing?: "linear" | "ease-in" | "ease-out" | "ease-in-out";
+  autoPlay?: boolean;
+  loop?: boolean;
+  isVisible?: boolean;
+  zIndex?: number;
+  displayOrder?: number;
+  startTimeMs?: number;
+  endTimeMs?: number;
+};
+
+export type UpdateRouteAnimationRequest = Partial<CreateRouteAnimationRequest>;
+
 // AnimatedLayer (GIF/Video overlays)
 export type AnimatedLayer = {
   animatedLayerId: string;
@@ -338,6 +414,20 @@ export async function getZonesByParent(parentZoneId?: string): Promise<Zone[]> {
 
 export async function searchZones(searchTerm: string): Promise<Zone[]> {
   return await getJson<Zone[]>(`/storymaps/zones/search?name=${encodeURIComponent(searchTerm)}`);
+}
+
+export async function searchRoutes(from: string, to: string): Promise<Zone[]> {
+  return await getJson<Zone[]>(`/storymaps/routes/search?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+}
+
+export async function searchRouteBetweenLocations(
+  fromLocationId: string,
+  toLocationId: string,
+  routeType: "road" | "straight" = "road"
+): Promise<{ routePath: string }> {
+  return await getJson<{ routePath: string }>(
+    `/storymaps/routes/between-locations?fromLocationId=${fromLocationId}&toLocationId=${toLocationId}&routeType=${routeType}`
+  );
 }
 
 export async function createZone(data: any): Promise<Zone> {
@@ -573,6 +663,50 @@ export async function deleteAnimatedLayer(layerId: string): Promise<void> {
   await delJson<void>(`/animated-layers/${layerId}`);
 }
 
+// ================== ROUTE ANIMATION APIs ==================
+
+export async function getRouteAnimationsBySegment(
+  mapId: string,
+  segmentId: string
+): Promise<RouteAnimation[]> {
+  return await getJson<RouteAnimation[]>(
+    `/storymaps/${mapId}/segments/${segmentId}/route-animations`
+  );
+}
+
+export async function createRouteAnimation(
+  mapId: string,
+  segmentId: string,
+  data: CreateRouteAnimationRequest
+): Promise<RouteAnimation> {
+  return await postJson<CreateRouteAnimationRequest, RouteAnimation>(
+    `/storymaps/${mapId}/segments/${segmentId}/route-animations`,
+    { ...data, segmentId }
+  );
+}
+
+export async function updateRouteAnimation(
+  mapId: string,
+  segmentId: string,
+  routeAnimationId: string,
+  data: UpdateRouteAnimationRequest
+): Promise<RouteAnimation> {
+  return await putJson<UpdateRouteAnimationRequest, RouteAnimation>(
+    `/storymaps/${mapId}/segments/${segmentId}/route-animations/${routeAnimationId}`,
+    data
+  );
+}
+
+export async function deleteRouteAnimation(
+  mapId: string,
+  segmentId: string,
+  routeAnimationId: string
+): Promise<void> {
+  await delJson<void>(
+    `/storymaps/${mapId}/segments/${segmentId}/route-animations/${routeAnimationId}`
+  );
+}
+
 // ================== ANIMATED LAYER PRESET APIs ==================
 
 export async function getAnimatedLayerPresets(): Promise<AnimatedLayerPreset[]> {
@@ -626,61 +760,38 @@ export function getCurrentCameraState(map: any): CameraState {
   };
 }
 
-export function applyCameraState(
-  map: any,
-  cameraState: CameraState | null | undefined,
-  options?: any
-) {
-  if (!map || typeof map.flyTo !== "function") {
-    console.warn("applyCameraState: invalid map instance");
+export function applyCameraState(map: any, cameraState: CameraState, options?: any) {
+  if (!map || !cameraState) {
+    console.error("applyCameraState: map or cameraState is null/undefined");
     return;
   }
 
-  if (!cameraState || !cameraState.center) {
-    console.warn(
-      "applyCameraState: missing cameraState or center",
-      cameraState
-    );
+  if (!cameraState.center || !Array.isArray(cameraState.center) || cameraState.center.length < 2) {
+    console.error("applyCameraState: invalid cameraState.center", cameraState.center);
     return;
   }
 
-  const rawCenter: any = cameraState.center as any;
-  let lng: number | undefined;
-  let lat: number | undefined;
+  // CameraState.center is [lng, lat], but Leaflet needs [lat, lng]
+  const [lng, lat] = cameraState.center;
+  const center: [number, number] = [lat, lng];
+  const zoom = cameraState.zoom || 10;
 
-  if (Array.isArray(rawCenter) && rawCenter.length >= 2) {
-    lng = Number(rawCenter[0]);
-    lat = Number(rawCenter[1]);
-  }
-  else if (typeof rawCenter === "object" && rawCenter !== null) {
-    lng = Number(rawCenter.lng ?? rawCenter.lon);
-    lat = Number(rawCenter.lat);
-  }
-
-  if (
-    lng == null ||
-    lat == null ||
-    Number.isNaN(lng) ||
-    Number.isNaN(lat)
-  ) {
-    console.warn("applyCameraState: invalid center coordinates", rawCenter);
-    return;
-  }
-
-  const centerObj = { lng, lat };
-
-  try {
-    map.flyTo({
-      center: centerObj,
-      zoom: cameraState.zoom,
-      bearing: cameraState.bearing || 0,
-      pitch: cameraState.pitch || 0,
-      ...options,
-    });
-  } catch (error) {
-    console.error("applyCameraState: map.flyTo failed", error, {
-      centerObj,
-      cameraState,
-    });
+  // Use flyTo if available (from Leaflet plugins), otherwise use setView
+  if (typeof map.flyTo === 'function') {
+    const flyOptions: any = {
+      duration: options?.duration || 1.0,
+    };
+    map.flyTo(center, zoom, flyOptions);
+  } else if (typeof map.setView === 'function') {
+    const viewOptions: any = {
+      animate: options?.duration ? true : false,
+    };
+    if (options?.duration) {
+      viewOptions.duration = options.duration;
+    }
+    map.setView(center, zoom, viewOptions);
+  } else {
+    console.error("applyCameraState: map does not have flyTo or setView method");
   }
 }
+

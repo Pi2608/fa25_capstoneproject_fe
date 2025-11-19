@@ -21,12 +21,14 @@ import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "../Icon";
 import { cn } from "@/lib/utils";
 import type { Segment, TimelineTransition } from "@/lib/api-storymap";
+import { SegmentItemsList } from "../LeftSidebarToolbox";
 
 interface TimelineTrackProps {
   segments: Segment[];
   transitions: TimelineTransition[];
   activeSegmentId: string | null;
   zoomLevel: number;
+  mapId?: string;
   onReorder: (newOrder: Segment[]) => void;
   onSegmentClick: (segmentId: string) => void;
 }
@@ -36,6 +38,7 @@ export function TimelineTrack({
   transitions,
   activeSegmentId,
   zoomLevel,
+  mapId,
   onReorder,
   onSegmentClick,
 }: TimelineTrackProps) {
@@ -95,7 +98,7 @@ export function TimelineTrack({
         strategy={horizontalListSortingStrategy}
       >
         <div
-          className="flex items-center p-4 h-full"
+          className="flex items-start p-4 h-full"
           style={{ minWidth: `${totalWidth}px` }}
         >
           {segments.map((segment, index) => (
@@ -104,6 +107,7 @@ export function TimelineTrack({
                 segment={segment}
                 isActive={segment.segmentId === activeSegmentId}
                 zoomLevel={zoomLevel}
+                mapId={mapId}
                 onClick={() => onSegmentClick(segment.segmentId)}
               />
 
@@ -128,11 +132,13 @@ function SortableSegmentBlock({
   segment,
   isActive,
   zoomLevel,
+  mapId,
   onClick,
 }: {
   segment: Segment;
   isActive: boolean;
   zoomLevel: number;
+  mapId?: string;
   onClick: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -155,10 +161,10 @@ function SortableSegmentBlock({
       ref={setNodeRef}
       style={style}
       className={cn(
-        "h-20 rounded-lg border-2 cursor-pointer relative group flex-shrink-0",
+        "rounded-lg border-2 cursor-pointer relative group flex-shrink-0 overflow-hidden",
         isActive
-          ? "border-emerald-500 bg-emerald-500/20"
-          : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600",
+          ? "border-emerald-500 bg-emerald-500/20 h-auto min-h-[80px] max-h-[400px]"
+          : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600 h-20",
         isDragging && "opacity-60 ring-2 ring-emerald-500/70"
       )}
       onClick={onClick}
@@ -167,39 +173,59 @@ function SortableSegmentBlock({
       <div
         {...attributes}
         {...listeners}
-        className="absolute left-1 top-1 p-1 rounded cursor-grab active:cursor-grabbing hover:bg-zinc-700/50 transition-colors"
+        className="absolute left-1 top-1 p-1 rounded cursor-grab active:cursor-grabbing hover:bg-zinc-700/50 transition-colors z-10"
       >
         <Icon icon="mdi:drag-vertical" className="w-3 h-3 text-zinc-400" />
       </div>
 
       {/* Segment Info */}
-      <div className="p-2 pt-7 h-full flex flex-col">
-        <div className="font-medium text-xs truncate text-zinc-200">
+      <div className={cn(
+        "p-2 pt-7 flex flex-col w-full",
+        isActive ? "h-full" : "h-full"
+      )}>
+        <div className="font-medium text-xs truncate text-zinc-200 mb-1">
           {segment.name}
         </div>
-        <div className="text-[10px] text-zinc-400 mt-auto flex items-center gap-1">
+        <div className="text-[10px] text-zinc-400 flex items-center gap-1 mb-2">
           <Icon icon="mdi:clock-outline" className="w-3 h-3" />
           {(segment.durationMs / 1000).toFixed(1)}s
         </div>
 
-        {/* Segment metadata badges */}
-        <div className="flex gap-1 mt-1">
-          {segment.zones && segment.zones.length > 0 && (
-            <span className="px-1 py-0.5 bg-purple-500/20 text-purple-300 text-[9px] rounded">
-              {segment.zones.length}Z
-            </span>
-          )}
-          {segment.layers && segment.layers.length > 0 && (
-            <span className="px-1 py-0.5 bg-blue-500/20 text-blue-300 text-[9px] rounded">
-              {segment.layers.length}L
-            </span>
-          )}
-          {segment.locations && segment.locations.length > 0 && (
-            <span className="px-1 py-0.5 bg-green-500/20 text-green-300 text-[9px] rounded">
-              {segment.locations.length}P
-            </span>
-          )}
-        </div>
+        {/* Segment Items List - Only show when active */}
+        {isActive && mapId && (
+          <div className="flex-1 overflow-y-auto min-h-0 border-t border-zinc-700/50 pt-2 mt-2 max-h-[300px]">
+            <SegmentItemsList
+              segmentId={segment.segmentId}
+              mapId={mapId}
+              segment={segment}
+              onAddLocation={() => {}}
+              onAddZone={() => {}}
+              onAddLayer={() => {}}
+              onAddRouteAnimation={undefined}
+            />
+          </div>
+        )}
+
+        {/* Segment metadata badges - Only show when not active */}
+        {!isActive && (
+          <div className="flex gap-1 mt-auto">
+            {segment.zones && segment.zones.length > 0 && (
+              <span className="px-1 py-0.5 bg-purple-500/20 text-purple-300 text-[9px] rounded">
+                {segment.zones.length}Z
+              </span>
+            )}
+            {segment.layers && segment.layers.length > 0 && (
+              <span className="px-1 py-0.5 bg-blue-500/20 text-blue-300 text-[9px] rounded">
+                {segment.layers.length}L
+              </span>
+            )}
+            {segment.locations && segment.locations.length > 0 && (
+              <span className="px-1 py-0.5 bg-green-500/20 text-green-300 text-[9px] rounded">
+                {segment.locations.length}P
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

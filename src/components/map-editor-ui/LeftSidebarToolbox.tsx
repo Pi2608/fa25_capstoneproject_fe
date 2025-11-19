@@ -24,13 +24,21 @@ import {
   stringifyCameraState,
   getCurrentCameraState,
   applyCameraState,
-  searchLocations,
-  searchZones,
+  getRouteAnimationsBySegment,
+  deleteSegmentZone,
+  deleteLocation,
+  detachLayerFromSegment,
+  deleteRouteAnimation,
+  type SegmentZone,
+  type Location,
+  type SegmentLayer,
+  type RouteAnimation,
 } from "@/lib/api-storymap";
 
 import LocationDialog from "@/components/storymap/LocationDialog";
 import ZoneSelectionDialog from "@/components/storymap/ZoneSelectionDialog";
 import LayerAttachDialog from "@/components/storymap/LayerAttachDialog";
+import RouteAnimationDialog from "@/components/storymap/RouteAnimationDialog";
 
 interface LeftSidebarToolboxProps {
   activeView: "explorer" | "segments" | "transitions" | "icons" | null;
@@ -109,7 +117,27 @@ export function LeftSidebarToolbox({
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [showZoneDialog, setShowZoneDialog] = useState(false);
   const [showLayerDialog, setShowLayerDialog] = useState(false);
+  const [showRouteAnimationDialog, setShowRouteAnimationDialog] = useState(false);
   const [waitingForLocation, setWaitingForLocation] = useState(false);
+  const [pickedCoordinates, setPickedCoordinates] = useState<[number, number] | null>(null);
+
+  // Handle map click when waiting for location
+  useEffect(() => {
+    if (!currentMap || !waitingForLocation || !editingSegment) return;
+
+    const handleMapClick = (e: any) => {
+      const { lat, lng } = e.latlng;
+      setPickedCoordinates([lng, lat]); // [longitude, latitude]
+      setWaitingForLocation(false);
+      setShowLocationDialog(true);
+    };
+
+    currentMap.on('click', handleMapClick);
+
+    return () => {
+      currentMap.off('click', handleMapClick);
+    };
+  }, [currentMap, waitingForLocation, editingSegment]);
 
   useEffect(() => {
     if (panelRef.current) {
@@ -343,9 +371,16 @@ export function LeftSidebarToolbox({
                 onDeleteSegment={onDeleteSegment}
                 onAddLocation={(segmentId: string) => {
                   const segment = segments.find(s => s.segmentId === segmentId);
-                  if (segment) {
+                  if (segment && currentMap) {
                     setEditingSegment(segment);
-                    setShowLocationDialog(true);
+                    setWaitingForLocation(true);
+                    setPickedCoordinates(null);
+                    // Show instruction message
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('showMapInstruction', {
+                        detail: { message: 'Click on the map to place the location marker' }
+                      }));
+                    }
                   }
                 }}
                 onAddZone={(segmentId: string) => {
@@ -362,6 +397,13 @@ export function LeftSidebarToolbox({
                     setShowLayerDialog(true);
                   }
                 }}
+                onAddRouteAnimation={(segmentId: string) => {
+                  const segment = segments.find(s => s.segmentId === segmentId);
+                  if (segment) {
+                    setEditingSegment(segment);
+                    setShowRouteAnimationDialog(true);
+                  }
+                }}
                 mapId={mapId}
               />
             )}
@@ -373,9 +415,21 @@ export function LeftSidebarToolbox({
                 mapId={mapId}
                 onCancel={handleCancelSegmentForm}
                 onSave={handleSaveSegmentForm}
-                onAddLocation={() => setShowLocationDialog(true)}
+                onAddLocation={() => {
+                  if (currentMap) {
+                    setWaitingForLocation(true);
+                    setPickedCoordinates(null);
+                    // Show instruction message
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('showMapInstruction', {
+                        detail: { message: 'Click on the map to place the location marker' }
+                      }));
+                    }
+                  }
+                }}
                 onAddZone={() => setShowZoneDialog(true)}
                 onAddLayer={() => setShowLayerDialog(true)}
+                onAddRouteAnimation={() => setShowRouteAnimationDialog(true)}
               />
             )}
 
@@ -411,12 +465,12 @@ export function LeftSidebarToolbox({
             onClose={() => {
               setShowLocationDialog(false);
               setWaitingForLocation(false);
+              setPickedCoordinates(null);
             }}
             onSave={handleAddLocation}
             segmentId={editingSegment.segmentId}
             currentMap={currentMap}
-            waitingForLocation={waitingForLocation}
-            setWaitingForLocation={setWaitingForLocation}
+            initialCoordinates={pickedCoordinates}
           />
 
           <ZoneSelectionDialog
@@ -433,6 +487,19 @@ export function LeftSidebarToolbox({
             mapId={mapId}
             segmentId={editingSegment.segmentId}
             attachedLayerIds={editingSegment.layers?.map(l => l.layerId) || []}
+          />
+
+          <RouteAnimationDialog
+            mapId={mapId}
+            segmentId={editingSegment.segmentId}
+            currentMap={currentMap}
+            routeAnimation={null}
+            isOpen={showRouteAnimationDialog}
+            onClose={() => setShowRouteAnimationDialog(false)}
+            onSave={async () => {
+              // Refresh segments if needed
+              window.location.reload();
+            }}
           />
         </>
       )}
@@ -769,6 +836,7 @@ function SegmentsView({
   onAddLocation,
   onAddZone,
   onAddLayer,
+  onAddRouteAnimation,
   mapId,
 }: {
   segments: Segment[];
@@ -779,6 +847,7 @@ function SegmentsView({
   onAddLocation?: (segmentId: string) => void;
   onAddZone?: (segmentId: string) => void;
   onAddLayer?: (segmentId: string) => void;
+  onAddRouteAnimation?: (segmentId: string) => void;
   mapId?: string;
 }) {
   return (
@@ -840,20 +909,45 @@ function SegmentsView({
                 )}
               </div>
 
-              {/* Quick action buttons for adding location/zone/layer */}
-              {mapId && (onAddLocation || onAddZone || onAddLayer) && (
-                <div className="mt-2 pt-2 border-t border-zinc-700/50 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {/* Display attached items */}
+              {(segment.zones?.length > 0 || segment.locations?.length > 0 || segment.layers?.length > 0) && (
+                <div className="mt-2 pt-2 border-t border-zinc-700/50 flex gap-2 flex-wrap">
+                  {segment.locations && segment.locations.length > 0 && (
+                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/20 rounded text-[10px] text-emerald-400">
+                      <Icon icon="mdi:map-marker" className="w-3 h-3" />
+                      <span>{segment.locations.length}</span>
+                    </div>
+                  )}
+                  {segment.zones && segment.zones.length > 0 && (
+                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/20 rounded text-[10px] text-blue-400">
+                      <Icon icon="mdi:shape" className="w-3 h-3" />
+                      <span>{segment.zones.length}</span>
+                    </div>
+                  )}
+                  {segment.layers && segment.layers.length > 0 && (
+                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-purple-500/20 rounded text-[10px] text-purple-400">
+                      <Icon icon="mdi:layers" className="w-3 h-3" />
+                      <span>{segment.layers.length}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Quick action buttons for adding location/zone/layer/route and play route */}
+              {mapId && (onAddLocation || onAddZone || onAddLayer || onAddRouteAnimation) && (
+                <div className="mt-2 pt-2 border-t border-zinc-700/50 flex items-center gap-1.5 flex-wrap">
                   {onAddLocation && (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onAddLocation(segment.segmentId);
                       }}
-                      className="flex-1 px-2 py-1 text-[10px] rounded bg-emerald-600/80 hover:bg-emerald-600 text-white flex items-center justify-center gap-1"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 hover:border-emerald-500/50 text-emerald-400 hover:text-emerald-300 transition-all group/btn"
                       title="Add location"
                     >
+                      <Icon icon="mdi:plus-circle" className="w-3 h-3" />
                       <Icon icon="mdi:map-marker" className="w-3 h-3" />
-                      <span>Location</span>
+                      <span className="text-[10px] font-medium">Location</span>
                     </button>
                   )}
                   {onAddZone && (
@@ -862,11 +956,12 @@ function SegmentsView({
                         e.stopPropagation();
                         onAddZone(segment.segmentId);
                       }}
-                      className="flex-1 px-2 py-1 text-[10px] rounded bg-blue-600/80 hover:bg-blue-600 text-white flex items-center justify-center gap-1"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 hover:border-blue-500/50 text-blue-400 hover:text-blue-300 transition-all group/btn"
                       title="Add zone"
                     >
+                      <Icon icon="mdi:plus-circle" className="w-3 h-3" />
                       <Icon icon="mdi:shape" className="w-3 h-3" />
-                      <span>Zone</span>
+                      <span className="text-[10px] font-medium">Zone</span>
                     </button>
                   )}
                   {onAddLayer && (
@@ -875,12 +970,34 @@ function SegmentsView({
                         e.stopPropagation();
                         onAddLayer(segment.segmentId);
                       }}
-                      className="flex-1 px-2 py-1 text-[10px] rounded bg-purple-600/80 hover:bg-purple-600 text-white flex items-center justify-center gap-1"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 hover:border-purple-500/50 text-purple-400 hover:text-purple-300 transition-all group/btn"
                       title="Attach layer"
                     >
+                      <Icon icon="mdi:plus-circle" className="w-3 h-3" />
                       <Icon icon="mdi:layers" className="w-3 h-3" />
-                      <span>Layer</span>
+                      <span className="text-[10px] font-medium">Layer</span>
                     </button>
+                  )}
+                  {onAddRouteAnimation && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddRouteAnimation(segment.segmentId);
+                      }}
+                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/30 hover:border-orange-500/50 text-orange-400 hover:text-orange-300 transition-all group/btn"
+                      title="Add route animation"
+                    >
+                      <Icon icon="mdi:plus-circle" className="w-3 h-3" />
+                      <Icon icon="mdi:route" className="w-3 h-3" />
+                      <span className="text-[10px] font-medium">Route</span>
+                    </button>
+                  )}
+                  {mapId && (
+                    <PlayRouteButton
+                      segmentId={segment.segmentId}
+                      mapId={mapId}
+                      compact={true}
+                    />
                   )}
                 </div>
               )}
@@ -901,6 +1018,367 @@ function SegmentsView({
   );
 }
 
+// Component to display and manage segment items (zones, locations, layers, routes)
+export function SegmentItemsList({
+  segmentId,
+  mapId,
+  segment,
+  onAddLocation,
+  onAddZone,
+  onAddLayer,
+  onAddRouteAnimation,
+}: {
+  segmentId: string;
+  mapId: string;
+  segment: Segment;
+  onAddLocation: () => void;
+  onAddZone: () => void;
+  onAddLayer: () => void;
+  onAddRouteAnimation?: () => void;
+}) {
+  const [routeAnimations, setRouteAnimations] = useState<RouteAnimation[]>([]);
+  const [isLoadingRoutes, setIsLoadingRoutes] = useState(false);
+
+  // Load route animations on mount or when segmentId changes
+  useEffect(() => {
+    let cancelled = false;
+    
+    setIsLoadingRoutes(true);
+    setRouteAnimations([]); // Reset when segment changes
+    
+    getRouteAnimationsBySegment(mapId, segmentId)
+      .then((routes) => {
+        if (!cancelled) {
+          setRouteAnimations(routes || []);
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          console.error("Failed to load route animations:", e);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingRoutes(false);
+        }
+      });
+    
+    return () => {
+      cancelled = true;
+    };
+  }, [mapId, segmentId]); // Only depend on mapId and segmentId
+
+  const handleDeleteZone = async (segmentZoneId: string) => {
+    if (!window.confirm("Remove this zone from segment?")) return;
+    try {
+      await deleteSegmentZone(mapId, segmentId, segmentZoneId);
+      window.location.reload();
+    } catch (e) {
+      console.error("Failed to delete zone:", e);
+      alert("Failed to remove zone");
+    }
+  };
+
+  const handleDeleteLocation = async (locationId: string) => {
+    if (!window.confirm("Remove this location from segment?")) return;
+    try {
+      await deleteLocation(mapId, segmentId, locationId);
+      window.location.reload();
+    } catch (e) {
+      console.error("Failed to delete location:", e);
+      alert("Failed to remove location");
+    }
+  };
+
+  const handleDeleteLayer = async (layerId: string) => {
+    if (!window.confirm("Remove this layer from segment?")) return;
+    try {
+      await detachLayerFromSegment(mapId, segmentId, layerId);
+      window.location.reload();
+    } catch (e) {
+      console.error("Failed to delete layer:", e);
+      alert("Failed to remove layer");
+    }
+  };
+
+  const handleDeleteRoute = async (routeAnimationId: string) => {
+    if (!window.confirm("Delete this route animation?")) return;
+    try {
+      await deleteRouteAnimation(mapId, segmentId, routeAnimationId);
+      setRouteAnimations(prev => prev.filter(r => r.routeAnimationId !== routeAnimationId));
+    } catch (e) {
+      console.error("Failed to delete route:", e);
+      alert("Failed to delete route animation");
+    }
+  };
+
+  const zones = segment.zones || [];
+  const locations = segment.locations || [];
+  const layers = segment.layers || [];
+
+  return (
+    <div className="p-3 space-y-3 overflow-y-auto">
+      {/* Locations */}
+      {locations.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Icon icon="mdi:map-marker" className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs font-semibold text-zinc-300">Locations</span>
+            <span className="px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-[10px]">
+              {locations.length}
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {locations.map((location) => (
+              <div
+                key={location.locationId}
+                className="p-2 rounded-lg border border-zinc-700/80 hover:border-zinc-600 group bg-zinc-800/50"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <Icon icon="mdi:map-marker" className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                      <span className="text-xs font-medium text-white truncate">
+                        {location.title || "Unnamed Location"}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteLocation(location.locationId || "")}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
+                    title="Remove location"
+                  >
+                    <Icon icon="mdi:delete-outline" className="w-3 h-3 text-red-400" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Zones */}
+      {zones.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Icon icon="mdi:shape" className="w-4 h-4 text-blue-400" />
+            <span className="text-xs font-semibold text-zinc-300">Zones</span>
+            <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded text-[10px]">
+              {zones.length}
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {zones.map((segmentZone) => (
+              <div
+                key={segmentZone.segmentZoneId}
+                className="p-2 rounded-lg border border-zinc-700/80 hover:border-zinc-600 group bg-zinc-800/50"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <Icon icon="mdi:shape" className="w-3 h-3 text-blue-400 flex-shrink-0" />
+                      <span className="text-xs font-medium text-white truncate">
+                        {segmentZone.zone?.name || "Unnamed Zone"}
+                      </span>
+                    </div>
+                    <div className="flex gap-1 flex-wrap ml-5">
+                      {segmentZone.fillZone && (
+                        <span className="px-1 py-0.5 bg-blue-500/20 text-blue-300 text-[10px] rounded">
+                          Fill
+                        </span>
+                      )}
+                      {segmentZone.highlightBoundary && (
+                        <span className="px-1 py-0.5 bg-blue-500/20 text-blue-300 text-[10px] rounded">
+                          Boundary
+                        </span>
+                      )}
+                      {segmentZone.showLabel && (
+                        <span className="px-1 py-0.5 bg-blue-500/20 text-blue-300 text-[10px] rounded">
+                          Label
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteZone(segmentZone.segmentZoneId)}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
+                    title="Remove zone"
+                  >
+                    <Icon icon="mdi:delete-outline" className="w-3 h-3 text-red-400" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Layers */}
+      {layers.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Icon icon="mdi:layers" className="w-4 h-4 text-purple-400" />
+            <span className="text-xs font-semibold text-zinc-300">Layers</span>
+            <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-400 rounded text-[10px]">
+              {layers.length}
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {layers.map((segmentLayer: SegmentLayer) => (
+              <div
+                key={segmentLayer.segmentLayerId}
+                className="p-2 rounded-lg border border-zinc-700/80 hover:border-zinc-600 group bg-zinc-800/50"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <Icon icon="mdi:layers" className="w-3 h-3 text-purple-400 flex-shrink-0" />
+                      <span className="text-xs font-medium text-white truncate">
+                        {segmentLayer.layerId.title || "Unnamed Layer"}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteLayer(segmentLayer.layerId)}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
+                    title="Remove layer"
+                  >
+                    <Icon icon="mdi:delete-outline" className="w-3 h-3 text-red-400" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Routes */}
+      {isLoadingRoutes ? (
+        <div className="text-center py-4">
+          <p className="text-xs text-zinc-500">Loading routes...</p>
+        </div>
+      ) : routeAnimations.length > 0 && (
+        <div>
+          <div className="flex items-center gap-2 mb-2">
+            <Icon icon="mdi:route" className="w-4 h-4 text-orange-400" />
+            <span className="text-xs font-semibold text-zinc-300">Routes</span>
+            <span className="px-1.5 py-0.5 bg-orange-500/20 text-orange-400 rounded text-[10px]">
+              {routeAnimations.length}
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {routeAnimations.map((route) => (
+              <div
+                key={route.routeAnimationId}
+                className="p-2 rounded-lg border border-zinc-700/80 hover:border-zinc-600 group bg-zinc-800/50"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <Icon icon="mdi:route" className="w-3 h-3 text-orange-400 flex-shrink-0" />
+                      <span className="text-xs font-medium text-white truncate">
+                        {route.fromName || "From"} → {route.toName || "To"}
+                      </span>
+                    </div>
+                    <div className="flex gap-1 flex-wrap ml-5">
+                      <span className="px-1 py-0.5 bg-orange-500/20 text-orange-300 text-[10px] rounded">
+                        {(route.durationMs / 1000).toFixed(1)}s
+                      </span>
+                      <span className="px-1 py-0.5 bg-orange-500/20 text-orange-300 text-[10px] rounded">
+                        {route.iconType}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteRoute(route.routeAnimationId)}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-zinc-700 rounded transition-opacity"
+                    title="Delete route"
+                  >
+                    <Icon icon="mdi:delete-outline" className="w-3 h-3 text-red-400" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {locations.length === 0 && zones.length === 0 && layers.length === 0 && !isLoadingRoutes && routeAnimations.length === 0 && (
+        <div className="text-center py-8">
+          <Icon icon="mdi:inbox-outline" className="w-8 h-8 text-zinc-600 mx-auto mb-2" />
+          <p className="text-xs text-zinc-500">No items attached</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Component to play route animation without camera state
+function PlayRouteButton({ 
+  segmentId, 
+  mapId,
+  compact = false 
+}: { 
+  segmentId: string; 
+  mapId: string;
+  compact?: boolean;
+}) {
+  const [isPlayingRoute, setIsPlayingRoute] = useState(false);
+
+  useEffect(() => {
+    // Listen for stop events
+    const handleStop = () => {
+      setIsPlayingRoute(false);
+    };
+
+    window.addEventListener('routeAnimationStopped', handleStop);
+    return () => {
+      window.removeEventListener('routeAnimationStopped', handleStop);
+    };
+  }, []);
+
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        if (isPlayingRoute) {
+          setIsPlayingRoute(false);
+          // Stop animation by dispatching stop event
+          window.dispatchEvent(new CustomEvent('stopRouteAnimation'));
+        } else {
+          try {
+            setIsPlayingRoute(true);
+            const animations = await getRouteAnimationsBySegment(mapId, segmentId);
+            if (animations && animations.length > 0) {
+              // Trigger route animation playback
+              window.dispatchEvent(new CustomEvent('playRouteAnimation', { 
+                detail: { segmentId, animations } 
+              }));
+            } else {
+              alert("Không có route animation nào trong segment này");
+              setIsPlayingRoute(false);
+            }
+          } catch (e) {
+            console.error("Failed to play route animation:", e);
+            alert("Lỗi khi play route animation");
+            setIsPlayingRoute(false);
+          }
+        }
+      }}
+      className={compact 
+        ? "flex items-center gap-1 px-2 py-1 rounded-md bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 hover:border-green-500/50 text-green-400 hover:text-green-300 transition-all"
+        : "px-2 py-1.5 text-xs rounded-lg bg-green-600 hover:bg-green-500 text-white font-medium flex items-center justify-center gap-1"
+      }
+      title="Play route animation (không zoom camera)"
+    >
+      <Icon icon={isPlayingRoute ? "mdi:stop" : "mdi:play"} className={compact ? "w-3 h-3" : "w-4 h-4"} />
+      {compact && <span className="text-[10px] font-medium">{isPlayingRoute ? "Stop" : "Play"}</span>}
+      {!compact && <span>{isPlayingRoute ? "Stop" : "Play Route"}</span>}
+    </button>
+  );
+}
+
 function SegmentFormView({
   editing,
   currentMap,
@@ -910,6 +1388,7 @@ function SegmentFormView({
   onAddLocation,
   onAddZone,
   onAddLayer,
+  onAddRouteAnimation,
 }: {
   editing: Segment | null;
   currentMap?: any;
@@ -919,6 +1398,7 @@ function SegmentFormView({
   onAddLocation: () => void;
   onAddZone: () => void;
   onAddLayer: () => void;
+  onAddRouteAnimation?: () => void;
 }) {
   const [name, setName] = useState(editing?.name || "");
   const [description, setDescription] = useState(editing?.description || "");
@@ -964,156 +1444,50 @@ function SegmentFormView({
   const [durationMs, setDurationMs] = useState(editing?.durationMs || 6000);
   const [isSaving, setIsSaving] = useState(false);
 
-  const handleCaptureView = () => {
-    if (!currentMap) {
-      console.warn("No map instance available for capture");
-      return;
-    }
+  // Automatically capture camera state when component mounts or map changes
+  // Only auto-capture if not editing an existing segment (to preserve existing camera state)
+  useEffect(() => {
+    if (!currentMap) return;
     if (typeof currentMap.getCenter !== "function" || typeof currentMap.getZoom !== "function") {
-      console.error("Invalid map instance - missing required methods");
       return;
     }
-    try {
-      const captured = getCurrentCameraState(currentMap);
-      if (captured) {
-        setCameraState(captured);
+
+    // If editing an existing segment with camera state, don't auto-capture
+    if (editing?.cameraState) {
+      return;
+    }
+
+    // Capture initial camera state
+    const captureCamera = () => {
+      try {
+        const captured = getCurrentCameraState(currentMap);
+        if (captured) {
+          setCameraState(captured);
+        }
+      } catch (error) {
+        console.error("Failed to capture camera state:", error);
       }
-    } catch (error) {
-      console.error("Failed to capture camera state:", error);
-    }
-  };
-
-  const handlePreviewCamera = () => {
-    if (currentMap) {
-      applyCameraState(currentMap, cameraState, { duration: 1000 });
-    }
-  };
-
-  const handleSearchLocation = async () => {
-    const query = locationQuery.trim();
-    if (!query) {
-      setLocationResults([]);
-      return;
-    }
-
-    setIsSearchingLocation(true);
-    try {
-      const results = await searchLocations(query);
-      setLocationResults(results || []);
-    } catch (error) {
-      console.error("Failed to search locations:", error);
-      setLocationResults([]);
-    } finally {
-      setIsSearchingLocation(false);
-    }
-  };
-
-  const handleApplyLocation = (loc: Location) => {
-    const center = getCenterFromMarkerGeometry(loc.markerGeometry);
-
-    if (!center || center.length !== 2) {
-      console.warn("handleApplyLocation: cannot compute center from geometry", loc);
-      return;
-    }
-
-    const lng = Number(center[0]);
-    const lat = Number(center[1]);
-
-    if (Number.isNaN(lng) || Number.isNaN(lat)) {
-      console.warn("handleApplyLocation: invalid center coordinates", center, loc);
-      return;
-    }
-
-    const updatedCamera: CameraState = {
-      ...cameraState,
-      center: [lng, lat],
     };
 
-    setCameraState(updatedCamera);
+    // Capture immediately
+    captureCamera();
 
-    if (currentMap) {
-      const m: any = currentMap;
-
-      if (typeof m.setCenter === "function") {
-        m.setCenter([lng, lat]);
-      }
-
-      if (typeof m.setZoom === "function" && typeof updatedCamera.zoom === "number") {
-        m.setZoom(updatedCamera.zoom);
-      }
-
-      if (typeof m.setBearing === "function" && typeof updatedCamera.bearing === "number") {
-        m.setBearing(updatedCamera.bearing);
-      }
-
-      if (typeof m.setPitch === "function" && typeof updatedCamera.pitch === "number") {
-        m.setPitch(updatedCamera.pitch);
-      }
-    }
-  };
-
-  const handleSearchZone = async () => {
-    const query = zoneSearchQuery.trim();
-    if (!query) {
-      setZoneResults([]);
-      return;
-    }
-
-    setIsSearchingZone(true);
-    try {
-      const results = await searchZones(query);
-      setZoneResults(results || []);
-    } catch (error) {
-      console.error("Failed to search zones:", error);
-      setZoneResults([]);
-    } finally {
-      setIsSearchingZone(false);
-    }
-  };
-
-  const handleApplyZone = (zone: Zone) => {
-    const center = getZoneCenter(zone);
-
-    if (!center || center.length !== 2) {
-      console.warn("handleApplyZone: cannot compute center from zone", zone);
-      return;
-    }
-
-    const lng = Number(center[0]);
-    const lat = Number(center[1]);
-
-    if (Number.isNaN(lng) || Number.isNaN(lat)) {
-      console.warn("handleApplyZone: invalid center coordinates", center, zone);
-      return;
-    }
-
-    const updatedCamera: CameraState = {
-      ...cameraState,
-      center: [lng, lat],
+    // Also capture when map moves/zooms
+    const handleMapMove = () => {
+      captureCamera();
     };
 
-    setCameraState(updatedCamera);
+    currentMap.on("moveend", handleMapMove);
+    currentMap.on("zoomend", handleMapMove);
 
-    if (currentMap) {
-      const m: any = currentMap;
-
-      if (typeof m.setCenter === "function") {
-        m.setCenter([lng, lat]);
+    return () => {
+      if (currentMap) {
+        currentMap.off("moveend", handleMapMove);
+        currentMap.off("zoomend", handleMapMove);
       }
+    };
+  }, [currentMap, editing?.cameraState]);
 
-      if (typeof m.setZoom === "function" && typeof updatedCamera.zoom === "number") {
-        m.setZoom(updatedCamera.zoom);
-      }
-
-      if (typeof m.setBearing === "function" && typeof updatedCamera.bearing === "number") {
-        m.setBearing(updatedCamera.bearing);
-      }
-
-      if (typeof m.setPitch === "function" && typeof updatedCamera.pitch === "number") {
-        m.setPitch(updatedCamera.pitch);
-      }
-    }
-  };
 
   const handleSubmit = async () => {
     if (!name.trim()) return;
@@ -1159,175 +1533,10 @@ function SegmentFormView({
         />
       </div>
 
-      <div className="border border-zinc-700/80 rounded-lg px-3 py-2 space-y-2 bg-zinc-900/40">
-        <div className="flex items-center justify-between">
-          <div>
-            <h4 className="text-xs font-semibold text-white">Find place</h4>
-            <p className="text-[10px] text-zinc-400">
-              Search a location or zone and apply it to this segment&apos;s camera.
-            </p>
-          </div>
-
-          {/* Toggle Location / Zone */}
-          <div className="inline-flex text-[10px] rounded-full bg-zinc-800 p-0.5">
-            <button
-              type="button"
-              onClick={() => setSearchMode("location")}
-              className={cn(
-                "px-2 py-0.5 rounded-full",
-                searchMode === "location"
-                  ? "bg-emerald-600 text-white"
-                  : "text-zinc-300"
-              )}
-            >
-              Location
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchMode("zone")}
-              className={cn(
-                "px-2 py-0.5 rounded-full",
-                searchMode === "zone"
-                  ? "bg-emerald-600 text-white"
-                  : "text-zinc-300"
-              )}
-            >
-              Zone
-            </button>
-          </div>
-        </div>
-
-        {/* ----- LOCATION SEARCH UI ----- */}
-        {searchMode === "location" && (
-          <>
-            <div className="flex gap-2">
-              <input
-                className="flex-1 px-2 py-1.5 text-xs rounded-lg bg-zinc-950 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                placeholder="e.g. Hà Nội, Đà Nẵng..."
-                value={locationQuery}
-                onChange={(e) => setLocationQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleSearchLocation();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleSearchLocation}
-                disabled={!locationQuery.trim() || isSearchingLocation}
-                className="px-3 py-1.5 text-xs rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 font-medium"
-              >
-                {isSearchingLocation ? "Searching..." : "Search"}
-              </button>
-            </div>
-
-            {locationResults.length > 0 && (
-              <div className="mt-2 max-h-32 overflow-y-auto space-y-1 -mx-1">
-                {locationResults.map((loc, index) => {
-                  const safeKey =
-                    loc.poiId &&
-                      loc.poiId !== "00000000-0000-0000-0000-000000000000"
-                      ? loc.poiId
-                      : `${loc.title}-${index}`;
-
-                  return (
-                    <button
-                      key={safeKey}
-                      type="button"
-                      onClick={() => handleApplyLocation(loc)}
-                      className="w-full text-left px-2 py-1 text-xs rounded-md hover:bg-zinc-800"
-                    >
-                      <div className="font-medium text-zinc-100">{loc.title}</div>
-                      {loc.subtitle && (
-                        <div className="text-[10px] text-zinc-400 truncate">
-                          {loc.subtitle}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </>
-        )}
-
-        {/* ----- ZONE SEARCH UI ----- */}
-        {searchMode === "zone" && (
-          <>
-            <div className="flex gap-2">
-              <input
-                className="flex-1 px-2 py-1.5 text-xs rounded-lg bg-zinc-950 border border-zinc-700 text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                placeholder="e.g. Hà Nội, Hồ Chí Minh..."
-                value={zoneSearchQuery}
-                onChange={(e) => setZoneSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleSearchZone();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleSearchZone}
-                disabled={!zoneSearchQuery.trim() || isSearchingZone}
-                className="px-3 py-1.5 text-xs rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-100 font-medium"
-              >
-                {isSearchingZone ? "Searching..." : "Search"}
-              </button>
-            </div>
-
-            {zoneResults.length > 0 && (
-              <div className="mt-2 max-h-32 overflow-y-auto space-y-1 -mx-1">
-                {zoneResults.map((zone, index) => (
-                  <button
-                    key={zone.zoneId || `${zone.name}-${index}`}
-                    type="button"
-                    onClick={() => handleApplyZone(zone)}
-                    className="w-full text-left px-2 py-1 text-xs rounded-md hover:bg-zinc-800"
-                  >
-                    <div className="font-medium text-zinc-100">{zone.name}</div>
-                    {zone.zoneType && (
-                      <div className="text-[10px] text-zinc-400">
-                        {zone.zoneType}
-                      </div>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-
-
       {/* Camera View */}
       <div className="border border-zinc-700/80 rounded-lg px-3 py-2 space-y-2 bg-zinc-900/60">
         <div>
           <h4 className="text-xs font-semibold text-white">Camera view</h4>
-          <p className="text-[10px] text-zinc-400">
-            Use current map position as segment start.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={handleCaptureView}
-            className="flex-1 px-2 py-1.5 text-xs rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-medium flex items-center justify-center gap-1"
-          >
-            <span>📷</span>
-            <span>Capture</span>
-          </button>
-          <button
-            type="button"
-            onClick={handlePreviewCamera}
-            className="flex-1 px-2 py-1.5 text-xs rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-100 flex items-center justify-center gap-1"
-          >
-            <span>👁️</span>
-            <span>Preview</span>
-          </button>
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1382,46 +1591,6 @@ function SegmentFormView({
         )}
       </div>
 
-      {/* Attach Location, Zone, or Layer - Only show when editing an existing segment */}
-      {editing && editing.segmentId && (
-        <div className="border border-zinc-700/80 rounded-lg px-3 py-2 space-y-2 bg-zinc-900/60">
-          <div>
-            <h4 className="text-xs font-semibold text-white">Attach to Segment</h4>
-            <p className="text-[10px] text-zinc-400">
-              Add locations, zones, or layers to this segment
-            </p>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            <button
-              type="button"
-              onClick={onAddLocation}
-              className="px-2 py-1.5 text-xs rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-medium flex items-center justify-center gap-1"
-              title="Add location/POI marker"
-            >
-              <Icon icon="mdi:map-marker" className="w-4 h-4" />
-              <span>Location</span>
-            </button>
-            <button
-              type="button"
-              onClick={onAddZone}
-              className="px-2 py-1.5 text-xs rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium flex items-center justify-center gap-1"
-              title="Add zone"
-            >
-              <Icon icon="mdi:shape" className="w-4 h-4" />
-              <span>Zone</span>
-            </button>
-            <button
-              type="button"
-              onClick={onAddLayer}
-              className="px-2 py-1.5 text-xs rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-medium flex items-center justify-center gap-1"
-              title="Attach layer"
-            >
-              <Icon icon="mdi:layers" className="w-4 h-4" />
-              <span>Layer</span>
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Actions */}
       <div className="flex items-center gap-2 pt-2 border-t border-zinc-800">

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Segment, TimelineTransition } from "@/lib/api-storymap";
+import { Segment, TimelineTransition, RouteAnimation, getRouteAnimationsBySegment } from "@/lib/api-storymap";
 import { getTimelineTransitions } from "@/lib/api-storymap";
 
 function getFirstLocationLatLng(
@@ -111,6 +111,9 @@ export function useSegmentPlayback({
   const [transitions, setTransitions] = useState<TimelineTransition[]>([]);
   const [waitingForUserAction, setWaitingForUserAction] = useState(false);
   const [currentTransition, setCurrentTransition] = useState<TimelineTransition | null>(null);
+  const [routeAnimations, setRouteAnimations] = useState<RouteAnimation[]>([]);
+  const [segmentStartTime, setSegmentStartTime] = useState<number>(0);
+  const [isRouteAnimationOnly, setIsRouteAnimationOnly] = useState(false); // Flag to skip playback loop
 
   useEffect(() => {
     let cancelled = false;
@@ -131,8 +134,7 @@ export function useSegmentPlayback({
     durationMs?: number;
     cameraAnimationType?: "Jump" | "Ease" | "Fly";
     cameraAnimationDurationMs?: number;
-
-    fromSegment?: Segment;
+    skipCameraState?: boolean; // Skip applying camera state
   };
 
 
@@ -140,6 +142,41 @@ export function useSegmentPlayback({
     if (!fromId || !toId) return undefined as TimelineTransition | undefined;
     return transitions.find(t => t.fromSegmentId === fromId && t.toSegmentId === toId);
   }, [transitions]);
+
+  // Load route animations for current segment
+  useEffect(() => {
+    if (!isPlaying || segments.length === 0 || currentPlayIndex >= segments.length) {
+      // Clear route animations when not playing
+      if (!isPlaying) {
+        setRouteAnimations([]);
+        setSegmentStartTime(0);
+      }
+      return;
+    }
+    
+    const currentSegment = segments[currentPlayIndex];
+    if (!currentSegment?.segmentId) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const animations = await getRouteAnimationsBySegment(mapId, currentSegment.segmentId);
+        if (!cancelled) {
+          setRouteAnimations(animations || []);
+          // Reset start time when segment changes
+          setSegmentStartTime(Date.now());
+        }
+      } catch (e) {
+        console.warn("Failed to load route animations:", e);
+        if (!cancelled) {
+          setRouteAnimations([]);
+          setSegmentStartTime(0);
+        }
+      }
+    })();
+    
+    return () => { cancelled = true; };
+  }, [mapId, isPlaying, currentPlayIndex, segments]);
 
   // ==================== VIEW SEGMENT ON MAP ====================
   const handleViewSegment = useCallback(async (segment: Segment, opts?: TransitionOptions) => {
@@ -652,131 +689,29 @@ export function useSegmentPlayback({
         console.log(`✅ Rendered ${segment.locations.length} locations`);
       }
 
-            // ==================== RENDER LOCATIONS ====================
-      if (segment.locations && segment.locations.length > 0) {
-        // ... code cũ, giữ nguyên ...
-        console.log(`✅ Rendered ${segment.locations.length} locations`);
-      }
-
-      // ==================== TRAVEL LINE + PLANE (Fly) ====================
-      if (opts?.cameraAnimationType === "Fly" && opts.fromSegment) {
-        try {
-          const fromCenter = getLocationCenter(L, opts.fromSegment);
-          const toCenter = getLocationCenter(L, segment);
-
-          if (fromCenter && toCenter) {
-            // Vẽ đường thẳng giữa 2 điểm
-            const routeLine = L.polyline([fromCenter, toCenter], {
-              color: "#38bdf8",
-              weight: 3,
-              dashArray: "6,4",
-              opacity: 0.9,
-            }).addTo(currentMap);
-            newLayers.push(routeLine);
-
-            // Icon máy bay
-            const planeIcon = L.divIcon({
-              className: "travel-plane-icon",
-              html: `<div style="
-                font-size: 24px;
-                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
-              ">✈️</div>`,
-              iconSize: [32, 32],
-              iconAnchor: [16, 16],
-            });
-
-            const planeMarker = L.marker(fromCenter, {
-              icon: planeIcon,
-              zIndexOffset: 2000,
-            }).addTo(currentMap);
-            newLayers.push(planeMarker);
-
-            const totalMs = opts.cameraAnimationDurationMs ?? 4000;
-            const startTime = performance.now();
-
-            const animatePlane = () => {
-              const now = performance.now();
-              const tRaw = (now - startTime) / Math.max(1, totalMs);
-              const t = Math.max(0, Math.min(1, tRaw));
-
-              const lat =
-                fromCenter.lat + (toCenter.lat - fromCenter.lat) * t;
-              const lng =
-                fromCenter.lng + (toCenter.lng - fromCenter.lng) * t;
-
-              planeMarker.setLatLng([lat, lng]);
-
-              if (t < 1) {
-                requestAnimationFrame(animatePlane);
-              }
-            };
-
-            requestAnimationFrame(animatePlane);
-          } else {
-            console.warn(
-              "Travel animation: cannot determine from/to centers",
-              { fromCenter, toCenter }
-            );
-          }
-        } catch (e) {
-          console.error("Travel animation failed:", e);
-        }
-      }
-
-      // ==================== CAMERA STATE / FLIGHT BETWEEN SEGMENTS ====================
-      let usedFlightAnimation = false;
-
-      // Nếu transition đang dùng cameraAnimationType = "Fly" và có fromSegment
-      if (opts?.cameraAnimationType === "Fly" && opts.fromSegment) {
-        const fromCenter = getSegmentFirstLocationCenter(opts.fromSegment);
-        const toCenter = getSegmentFirstLocationCenter(segment);
-
-        if (fromCenter && toCenter) {
-          usedFlightAnimation = true;
-          const flightDurationMs =
-            opts.cameraAnimationDurationMs ?? opts.durationMs ?? 3000;
-
-          console.log(
-            "✈️ Flight animation between segments:",
-            opts.fromSegment.segmentId,
-            "→",
-            segment.segmentId,
-            "duration:",
-            flightDurationMs
-          );
-
-          playFlightAnimation(fromCenter, toCenter, flightDurationMs);
-        }
-      }
-
-      // Nếu đã dùng flight animation thì bỏ qua xử lý cameraState mặc định
-      if (!usedFlightAnimation) {
-        if (segment.cameraState) {
-          let parsedCamera;
-          if (typeof segment.cameraState === "string") {
-            try {
-              parsedCamera = JSON.parse(segment.cameraState);
-            } catch (e) {
-              console.error("❌ Failed to parse camera state:", e);
-              return;
-            }
-          } else {
-            parsedCamera = segment.cameraState;
-          }
-
-          if (
-            !parsedCamera ||
-            !parsedCamera.center ||
-            !Array.isArray(parsedCamera.center) ||
-            parsedCamera.center.length < 2
-          ) {
-            console.error("❌ Invalid camera state structure:", parsedCamera);
+      // ==================== CAMERA STATE ====================
+      // Skip camera state if option is set
+      if (segment.cameraState && !opts?.skipCameraState) {
+        let parsedCamera;
+        if (typeof segment.cameraState === 'string') {
+          try {
+            parsedCamera = JSON.parse(segment.cameraState);
+          } catch (e) {
+            console.error("❌ Failed to parse camera state:", e);
             return;
           }
-
-          const currentZoom = currentMap.getZoom();
-          const targetZoom = parsedCamera.zoom || 10;
-          const targetCenter = parsedCamera.center;
+        } else {
+          parsedCamera = segment.cameraState;
+        }
+        
+        if (!parsedCamera || !parsedCamera.center || !Array.isArray(parsedCamera.center) || parsedCamera.center.length < 2) {
+          console.error("❌ Invalid camera state structure:", parsedCamera);
+          return;
+        }
+        
+        const currentZoom = currentMap.getZoom();
+        const targetZoom = parsedCamera.zoom || 10;
+        const targetCenter = parsedCamera.center;
 
           const camType = opts?.cameraAnimationType || "Fly";
           const camDurationSec = (opts?.cameraAnimationDurationMs ?? 1500) / 1000;
@@ -924,6 +859,9 @@ export function useSegmentPlayback({
 
   // ==================== AUTO-PLAY EFFECT ====================
   useEffect(() => {
+    // Skip playback loop if only playing route animation
+    if (isRouteAnimationOnly) return;
+    
     if (!isPlaying || segments.length === 0) return;
 
     let timeoutId: NodeJS.Timeout;
@@ -1010,11 +948,50 @@ export function useSegmentPlayback({
     setIsPlaying(true);
   };
 
+  // Play route animation only (without camera state)
+  const handlePlayRouteAnimation = useCallback(async (segmentId?: string) => {
+    if (!currentMap) {
+      console.warn("⚠️ No map instance available");
+      return;
+    }
+
+    const targetSegmentId = segmentId || segments[currentPlayIndex]?.segmentId;
+    if (!targetSegmentId) {
+      console.warn("⚠️ No segment selected");
+      return;
+    }
+
+    try {
+      // Load route animations for the segment
+      const animations = await getRouteAnimationsBySegment(mapId, targetSegmentId);
+      if (animations && animations.length > 0) {
+        setRouteAnimations(animations);
+        setSegmentStartTime(Date.now());
+        setIsRouteAnimationOnly(true); // Set flag to skip playback loop
+        setIsPlaying(true);
+        console.log(`🎬 Playing ${animations.length} route animation(s) for segment ${targetSegmentId} (without camera state)`);
+      } else {
+        console.warn("⚠️ No route animations found for this segment");
+      }
+    } catch (e) {
+      console.error("Failed to play route animation:", e);
+    }
+  }, [currentMap, mapId, segments, currentPlayIndex]);
+
   const handleStopPreview = () => {
+    const wasRouteAnimationOnly = isRouteAnimationOnly;
     setIsPlaying(false);
     setCurrentPlayIndex(0);
     setWaitingForUserAction(false);
     setCurrentTransition(null);
+    setRouteAnimations([]);
+    setSegmentStartTime(0);
+    setIsRouteAnimationOnly(false); // Reset flag
+    
+    // Dispatch event to notify UI components
+    if (typeof window !== 'undefined' && wasRouteAnimationOnly) {
+      window.dispatchEvent(new CustomEvent('routeAnimationStopped'));
+    }
   };
 
   const handleClearMap = () => {
@@ -1047,8 +1024,11 @@ export function useSegmentPlayback({
     currentPlayIndex,
     waitingForUserAction,
     currentTransition,
+    routeAnimations,
+    segmentStartTime,
     handleViewSegment,
     handlePlayPreview,
+    handlePlayRouteAnimation,
     handleStopPreview,
     handleClearMap,
     handleContinueAfterUserAction,

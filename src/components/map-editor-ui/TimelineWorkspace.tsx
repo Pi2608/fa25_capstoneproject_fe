@@ -16,6 +16,7 @@ interface TimelineWorkspaceProps {
   currentTime?: number;
   leftOffset?: number; // Offset from left for VSCode-style sidebar
   isOpen?: boolean;
+  mapId?: string;
   onToggle?: () => void;
   onReorder: (newOrder: Segment[]) => void;
   onPlay: () => void;
@@ -31,6 +32,7 @@ export function TimelineWorkspace({
   currentTime = 0,
   leftOffset = 0,
   isOpen = true,
+  mapId,
   onToggle,
   onReorder,
   onPlay,
@@ -213,6 +215,7 @@ export function TimelineWorkspace({
           transitions={transitions}
           activeSegmentId={activeSegmentId}
           zoomLevel={zoomLevel}
+          mapId={mapId}
           onReorder={onReorder}
           onSegmentClick={onSegmentClick}
         />
