@@ -16,10 +16,6 @@ export default function DraftsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
 
-  const publishingEnabled =
-    (process.env.NEXT_PUBLIC_PUBLISHING_ENABLED || "").toLowerCase() === "1" ||
-    (process.env.NEXT_PUBLIC_PUBLISHING_ENABLED || "").toLowerCase() === "true";
-
   const loadDrafts = useCallback(async () => {
     setLoading(true);
     setErr(null);
@@ -122,17 +118,15 @@ export default function DraftsPage() {
                   >
                     {t("drafts.btn_open")}
                   </button>
-                  {publishingEnabled ? (
-                    <button
-                      className="text-xs px-2 py-1 rounded bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400 disabled:opacity-60"
-                      disabled={publishingId === m.id}
-                      onClick={() => onPublish(m.id)}
-                    >
-                      {publishingId === m.id
-                        ? t("drafts.publishing")
-                        : t("drafts.btn_publish")}
-                    </button>
-                  ) : null}
+                  <button
+                    className="text-xs px-2 py-1 rounded bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400 disabled:opacity-60"
+                    disabled={publishingId === m.id}
+                    onClick={() => onPublish(m.id)}
+                  >
+                    {publishingId === m.id
+                      ? t("drafts.publishing")
+                      : t("drafts.btn_publish")}
+                  </button>
                 </div>
               </div>
             </li>

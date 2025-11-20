@@ -143,6 +143,18 @@ function SequentialRoutePlaybackWrapper({
   );
 }
 
+const normalizeMapStatus = (status: unknown): MapStatus => {
+  if (typeof status === "string") {
+    const normalized = status.toLowerCase();
+    if (normalized === "published") return "Published";
+    if (normalized === "archived") return "Archived";
+    if (normalized === "draft") return "Draft";
+  }
+  if (status === 1) return "Published";
+  if (status === 2) return "Archived";
+  return "Draft";
+};
+
 export default function EditMapPage() {
   const params = useParams<{ mapId: string }>();
   const sp = useSearchParams();
@@ -1046,7 +1058,7 @@ export default function EditMapPage() {
         setDetail(m);
         setName(m.name ?? "");
         setBaseKey(m.baseLayer === "Satellite" ? "sat" : m.baseLayer === "Dark" ? "dark" : "osm");
-        setMapStatus(m.status || "Draft");
+        setMapStatus(normalizeMapStatus(m.status));
       } catch (e) {
         if (!alive) return;
         setErr(e instanceof Error ? e.message : "Không tải được bản đồ");
