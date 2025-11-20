@@ -8,7 +8,9 @@ import {
   updateRouteAnimation,
   deleteRouteAnimation,
   searchRouteBetweenLocations,
+  searchRouteWithMultipleLocations,
   getSegmentLocations,
+  getMapLocations,
   Location,
 } from "@/lib/api-storymap";
 import { Icon } from "@/components/map-editor-ui/Icon";
@@ -57,6 +59,7 @@ export default function RouteAnimationDialog({
   const [locations, setLocations] = useState<Location[]>([]);
   const [fromLocationId, setFromLocationId] = useState<string>("");
   const [toLocationId, setToLocationId] = useState<string>("");
+  const [waypointLocationIds, setWaypointLocationIds] = useState<string[]>([]); // Points between start and end
   const [fromCoords, setFromCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [toCoords, setToCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [routePath, setRoutePath] = useState<[number, number][]>([]);
@@ -70,12 +73,18 @@ export default function RouteAnimationDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [isSearchingRoute, setIsSearchingRoute] = useState(false);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
+  
+  // New fields for enhanced route animation
+  const [showLocationInfoOnArrival, setShowLocationInfoOnArrival] = useState(true);
+  const [locationInfoDisplayDurationMs, setLocationInfoDisplayDurationMs] = useState<number | undefined>(undefined);
+  const [cameraStateBefore, setCameraStateBefore] = useState<string>("");
+  const [cameraStateAfter, setCameraStateAfter] = useState<string>("");
 
-  // Load locations from segment
+  // Load locations from entire map (to support multi-segment routes)
   useEffect(() => {
-    if (isOpen && segmentId) {
+    if (isOpen && mapId) {
       setIsLoadingLocations(true);
-      getSegmentLocations(mapId, segmentId)
+      getMapLocations(mapId)
         .then((locs) => {
           setLocations(locs || []);
         })
@@ -87,7 +96,7 @@ export default function RouteAnimationDialog({
           setIsLoadingLocations(false);
         });
     }
-  }, [isOpen, segmentId, mapId]);
+  }, [isOpen, mapId]);
 
   useEffect(() => {
     if (routeAnimation) {
@@ -101,6 +110,15 @@ export default function RouteAnimationDialog({
       setVisitedColor(routeAnimation.visitedColor);
       setRouteWidth(routeAnimation.routeWidth);
       setDurationMs(routeAnimation.durationMs);
+      
+      // Load new fields
+      if (routeAnimation.toLocationId) {
+        setToLocationId(routeAnimation.toLocationId);
+      }
+      setShowLocationInfoOnArrival(routeAnimation.showLocationInfoOnArrival ?? true);
+      setLocationInfoDisplayDurationMs(routeAnimation.locationInfoDisplayDurationMs);
+      setCameraStateBefore(routeAnimation.cameraStateBefore || "");
+      setCameraStateAfter(routeAnimation.cameraStateAfter || "");
       
       // Parse route path from GeoJSON
       try {
@@ -121,6 +139,7 @@ export default function RouteAnimationDialog({
       // Reset form
       setFromLocationId("");
       setToLocationId("");
+      setWaypointLocationIds([]);
       setFromCoords(null);
       setToCoords(null);
       setRoutePath([]);
@@ -131,6 +150,12 @@ export default function RouteAnimationDialog({
       setVisitedColor("#3b82f6");
       setRouteWidth(4);
       setDurationMs(5000);
+      
+      // Reset new fields
+      setShowLocationInfoOnArrival(true);
+      setLocationInfoDisplayDurationMs(undefined);
+      setCameraStateBefore("");
+      setCameraStateAfter("");
     }
   }, [routeAnimation, isOpen]);
 
@@ -169,14 +194,21 @@ export default function RouteAnimationDialog({
       return;
     }
 
-    if (fromLocationId === toLocationId) {
-      alert("Điểm xuất phát và điểm đến phải khác nhau");
+    // Build list of location IDs: [from, ...waypoints, to]
+    const allLocationIds = [
+      fromLocationId,
+      ...waypointLocationIds,
+      toLocationId
+    ].filter((id, index, arr) => arr.indexOf(id) === index); // Remove duplicates
+
+    if (allLocationIds.length < 2) {
+      alert("Cần ít nhất 2 điểm để tạo route");
       return;
     }
 
     setIsSearchingRoute(true);
     try {
-      const result = await searchRouteBetweenLocations(fromLocationId, toLocationId, routeType);
+      const result = await searchRouteWithMultipleLocations(allLocationIds, routeType);
       if (result?.routePath) {
         try {
           const geoJson = typeof result.routePath === "string"
@@ -193,13 +225,41 @@ export default function RouteAnimationDialog({
           alert("Lỗi khi parse đường đi");
         }
       } else {
-        alert("Không tìm thấy đường đi giữa hai điểm này");
+        alert("Không tìm thấy đường đi giữa các điểm này");
       }
     } catch (error: any) {
       console.error("Failed to search route:", error);
       alert(error?.message || "Lỗi khi tìm đường đi");
     } finally {
       setIsSearchingRoute(false);
+    }
+  };
+
+  const handleAddWaypoint = () => {
+    // This will be triggered by a button to add a waypoint
+    // For now, we'll add an empty slot that user can select
+    setWaypointLocationIds([...waypointLocationIds, ""]);
+  };
+
+  const handleRemoveWaypoint = (index: number) => {
+    setWaypointLocationIds(waypointLocationIds.filter((_, i) => i !== index));
+  };
+
+  const handleWaypointChange = (index: number, locationId: string) => {
+    const newWaypoints = [...waypointLocationIds];
+    newWaypoints[index] = locationId;
+    setWaypointLocationIds(newWaypoints);
+  };
+
+  const handleMoveWaypoint = (index: number, direction: "up" | "down") => {
+    if (direction === "up" && index > 0) {
+      const newWaypoints = [...waypointLocationIds];
+      [newWaypoints[index - 1], newWaypoints[index]] = [newWaypoints[index], newWaypoints[index - 1]];
+      setWaypointLocationIds(newWaypoints);
+    } else if (direction === "down" && index < waypointLocationIds.length - 1) {
+      const newWaypoints = [...waypointLocationIds];
+      [newWaypoints[index], newWaypoints[index + 1]] = [newWaypoints[index + 1], newWaypoints[index]];
+      setWaypointLocationIds(newWaypoints);
     }
   };
 
@@ -219,6 +279,25 @@ export default function RouteAnimationDialog({
       const fromLocation = locations.find(l => (l.locationId || l.poiId) === fromLocationId);
       const toLocation = locations.find(l => (l.locationId || l.poiId) === toLocationId);
 
+      // Build waypoints JSON if there are waypoints
+      let waypointsJson: string | undefined = undefined;
+      const validWaypoints = waypointLocationIds.filter(id => id);
+      
+      if (validWaypoints.length > 0) {
+        const waypoints = validWaypoints.map(locId => {
+          const loc = locations.find(l => (l.locationId || l.poiId) === locId);
+          const coords = loc ? parseLocationCoords(loc) : null;
+          return {
+            locationId: locId,
+            lat: coords?.lat || 0,
+            lng: coords?.lng || 0,
+            name: loc?.title || loc?.subtitle || "Unnamed",
+            segmentId: segmentId
+          };
+        });
+        waypointsJson = JSON.stringify(waypoints);
+      }
+
       const data: CreateRouteAnimationRequest = {
         segmentId,
         fromLat: fromCoords.lat,
@@ -228,6 +307,7 @@ export default function RouteAnimationDialog({
         toLng: toCoords.lng,
         toName: toLocation?.title || undefined,
         routePath: JSON.stringify(geoJson),
+        waypoints: waypointsJson,
         iconType,
         iconUrl: iconUrl || undefined,
         iconWidth: 32,
@@ -241,6 +321,11 @@ export default function RouteAnimationDialog({
         isVisible: true,
         zIndex: 1000,
         displayOrder: 0,
+        toLocationId: toLocationId || undefined,
+        showLocationInfoOnArrival,
+        locationInfoDisplayDurationMs: locationInfoDisplayDurationMs || undefined,
+        cameraStateBefore: cameraStateBefore || undefined,
+        cameraStateAfter: cameraStateAfter || undefined,
       };
 
       if (routeAnimation) {
@@ -277,8 +362,8 @@ export default function RouteAnimationDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-zinc-900 rounded-lg border border-zinc-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div className="bg-zinc-900 rounded-lg border border-zinc-700 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="p-4 border-b border-zinc-700 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-white">
             {routeAnimation ? "Chỉnh sửa Route Animation" : "Thêm Route Animation"}
@@ -338,6 +423,83 @@ export default function RouteAnimationDialog({
                 </select>
               )}
             </div>
+          </div>
+
+          {/* Waypoints Section */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs text-zinc-400">Điểm ở giữa (Waypoints)</label>
+              <button
+                type="button"
+                onClick={handleAddWaypoint}
+                className="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded transition-colors"
+              >
+                + Thêm điểm
+              </button>
+            </div>
+            
+            {waypointLocationIds.length === 0 ? (
+              <div className="text-xs text-zinc-500 italic py-2">
+                Chưa có điểm ở giữa. Click "Thêm điểm" để thêm.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {waypointLocationIds.map((waypointId, index) => (
+                  <div key={index} className="flex items-center gap-2 bg-zinc-800 rounded-lg p-2">
+                    <div className="flex-shrink-0 text-xs text-zinc-400 w-6 text-center">
+                      {index + 1}
+                    </div>
+                    <select
+                      value={waypointId}
+                      onChange={(e) => handleWaypointChange(index, e.target.value)}
+                      className="flex-1 bg-zinc-700 text-white rounded px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-emerald-500/80"
+                    >
+                      <option value="">-- Chọn location --</option>
+                      {locations
+                        .filter(loc => {
+                          const locId = loc.locationId || loc.poiId;
+                          return locId !== fromLocationId && 
+                                 locId !== toLocationId && 
+                                 !waypointLocationIds.includes(locId) || locId === waypointId;
+                        })
+                        .map((loc) => (
+                          <option key={loc.locationId || loc.poiId} value={loc.locationId || loc.poiId}>
+                            {loc.title || loc.subtitle || "Unnamed Location"}
+                          </option>
+                        ))}
+                    </select>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handleMoveWaypoint(index, "up")}
+                        disabled={index === 0}
+                        className="px-2 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded transition-colors"
+                        title="Di chuyển lên"
+                      >
+                        ↑
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleMoveWaypoint(index, "down")}
+                        disabled={index === waypointLocationIds.length - 1}
+                        className="px-2 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 disabled:bg-zinc-800 disabled:text-zinc-600 text-white rounded transition-colors"
+                        title="Di chuyển xuống"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveWaypoint(index)}
+                        className="px-2 py-1 text-xs bg-red-600 hover:bg-red-500 text-white rounded transition-colors"
+                        title="Xóa"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Route Type Selection */}
@@ -511,6 +673,77 @@ export default function RouteAnimationDialog({
                 onChange={(e) => setDurationMs(Number(e.target.value))}
                 className="w-full"
               />
+            </div>
+          </div>
+
+          {/* Location Info Display Settings */}
+          <div className="pt-4 border-t border-zinc-700 space-y-3">
+            <h4 className="text-sm font-semibold text-zinc-300">Hiển thị thông tin địa điểm</h4>
+            
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="showLocationInfo"
+                checked={showLocationInfoOnArrival}
+                onChange={(e) => setShowLocationInfoOnArrival(e.target.checked)}
+                className="w-4 h-4 rounded bg-zinc-800 border-zinc-600 text-emerald-600 focus:ring-emerald-500"
+              />
+              <label htmlFor="showLocationInfo" className="text-sm text-zinc-300 cursor-pointer">
+                Tự động hiển thị popup thông tin khi đến đích
+              </label>
+            </div>
+
+            {showLocationInfoOnArrival && (
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">
+                  Thời gian hiển thị (ms) - Để trống = hiển thị đến khi đóng
+                </label>
+                <input
+                  type="number"
+                  value={locationInfoDisplayDurationMs || ""}
+                  onChange={(e) => setLocationInfoDisplayDurationMs(e.target.value ? Number(e.target.value) : undefined)}
+                  className="w-full bg-zinc-800 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/80"
+                  placeholder="Ví dụ: 5000"
+                  min="0"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Camera State Transitions */}
+          <div className="pt-4 border-t border-zinc-700 space-y-3">
+            <h4 className="text-sm font-semibold text-zinc-300">Camera Transitions</h4>
+            
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">
+                Camera State Trước Route (JSON) - Zoom out để bao quát
+              </label>
+              <textarea
+                value={cameraStateBefore}
+                onChange={(e) => setCameraStateBefore(e.target.value)}
+                className="w-full bg-zinc-800 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/80 font-mono"
+                rows={2}
+                placeholder='{"center": [lng, lat], "zoom": 10}'
+              />
+              <p className="text-xs text-zinc-500 mt-1">
+                Format: JSON với center [lng, lat] và zoom. Để trống = không thay đổi camera trước route.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs text-zinc-400 mb-1">
+                Camera State Sau Route (JSON) - Zoom in vào điểm đến
+              </label>
+              <textarea
+                value={cameraStateAfter}
+                onChange={(e) => setCameraStateAfter(e.target.value)}
+                className="w-full bg-zinc-800 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/80 font-mono"
+                rows={2}
+                placeholder='{"center": [lng, lat], "zoom": 15}'
+              />
+              <p className="text-xs text-zinc-500 mt-1">
+                Format: JSON với center [lng, lat] và zoom. Để trống = không thay đổi camera sau route.
+              </p>
             </div>
           </div>
 

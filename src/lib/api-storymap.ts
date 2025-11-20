@@ -273,6 +273,7 @@ export type RouteAnimation = {
   toLat: number;
   toLng: number;
   toName?: string;
+  toLocationId?: string; // Link to Location at destination point
   routePath: string; // GeoJSON LineString as string
   
   // Icon configuration
@@ -302,6 +303,14 @@ export type RouteAnimation = {
   startTimeMs?: number;
   endTimeMs?: number;
   
+  // Camera state transitions (JSON stringified CameraState)
+  cameraStateBefore?: string; // Camera state before route starts
+  cameraStateAfter?: string; // Camera state after route completes
+  
+  // Location info display settings
+  showLocationInfoOnArrival: boolean; // Auto-show location popup when route completes
+  locationInfoDisplayDurationMs?: number; // Duration to show location info popup
+  
   createdAt: string;
   updatedAt?: string;
 };
@@ -314,7 +323,9 @@ export type CreateRouteAnimationRequest = {
   toLat: number;
   toLng: number;
   toName?: string;
+  toLocationId?: string; // Link to Location at destination point
   routePath: string; // GeoJSON LineString
+  waypoints?: string; // JSON array of waypoints
   iconType: "car" | "walking" | "bike" | "plane" | "custom";
   iconUrl?: string;
   iconWidth?: number;
@@ -332,6 +343,10 @@ export type CreateRouteAnimationRequest = {
   displayOrder?: number;
   startTimeMs?: number;
   endTimeMs?: number;
+  cameraStateBefore?: string; // Camera state before route starts (JSON)
+  cameraStateAfter?: string; // Camera state after route completes (JSON)
+  showLocationInfoOnArrival?: boolean; // Auto-show location popup when route completes
+  locationInfoDisplayDurationMs?: number; // Duration to show location info popup
 };
 
 export type UpdateRouteAnimationRequest = Partial<CreateRouteAnimationRequest>;
@@ -426,6 +441,54 @@ export async function reorderSegments(mapId: string, segmentIds: string[]): Prom
   return await postJson<string[], Segment[]>(`/storymaps/${mapId}/segments/reorder`, segmentIds);
 }
 
+export async function moveLocationToSegment(
+  mapId: string,
+  fromSegmentId: string,
+  locationId: string,
+  toSegmentId: string
+): Promise<void> {
+  await postJson<{}, { success: boolean; message: string }>(
+    `/storymaps/${mapId}/segments/${fromSegmentId}/locations/${locationId}/move-to/${toSegmentId}`,
+    {}
+  );
+}
+
+export async function moveZoneToSegment(
+  mapId: string,
+  fromSegmentId: string,
+  segmentZoneId: string,
+  toSegmentId: string
+): Promise<void> {
+  await postJson<{}, { success: boolean; message: string }>(
+    `/storymaps/${mapId}/segments/${fromSegmentId}/zones/${segmentZoneId}/move-to/${toSegmentId}`,
+    {}
+  );
+}
+
+export async function moveLayerToSegment(
+  mapId: string,
+  fromSegmentId: string,
+  segmentLayerId: string,
+  toSegmentId: string
+): Promise<void> {
+  await postJson<{}, { success: boolean; message: string }>(
+    `/storymaps/${mapId}/segments/${fromSegmentId}/layers/${segmentLayerId}/move-to/${toSegmentId}`,
+    {}
+  );
+}
+
+export async function moveRouteToSegment(
+  mapId: string,
+  fromSegmentId: string,
+  routeAnimationId: string,
+  toSegmentId: string
+): Promise<void> {
+  await postJson<{}, { success: boolean; message: string }>(
+    `/storymaps/${mapId}/segments/${fromSegmentId}/route-animations/${routeAnimationId}/move-to/${toSegmentId}`,
+    {}
+  );
+}
+
 // ================== ZONE APIs (Master Data) ==================
 
 export async function getZones(): Promise<Zone[]> {
@@ -454,6 +517,16 @@ export async function searchRouteBetweenLocations(
 ): Promise<{ routePath: string }> {
   return await getJson<{ routePath: string }>(
     `/storymaps/routes/between-locations?fromLocationId=${fromLocationId}&toLocationId=${toLocationId}&routeType=${routeType}`
+  );
+}
+
+export async function searchRouteWithMultipleLocations(
+  locationIds: string[],
+  routeType: "road" | "straight" = "road"
+): Promise<{ routePath: string }> {
+  return await postJson<{ locationIds: string[]; routeType?: string }, { routePath: string }>(
+    `/storymaps/routes/multiple-locations`,
+    { locationIds, routeType }
   );
 }
 
@@ -558,6 +631,11 @@ export type CreateLocationRequest = {
 
 export async function getSegmentLocations(mapId: string, segmentId: string): Promise<Location[]> {
   const response = await getJson<Location[]>(`/storymaps/${mapId}/segments/${segmentId}/locations`);
+  return response || [];
+}
+
+export async function getMapLocations(mapId: string): Promise<Location[]> {
+  const response = await getJson<Location[]>(`/storymaps/${mapId}/locations`);
   return response || [];
 }
 
