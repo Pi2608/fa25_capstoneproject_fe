@@ -64,10 +64,12 @@ import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons"
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
 import { getMapPois, type MapPoi } from "@/lib/api-poi";
-import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions } from "@/lib/api-storymap";
+import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions, getRouteAnimationsBySegment } from "@/lib/api-storymap";
 import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator } from "@/components/map-editor-ui";
 import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
+import { useSequentialRoutePlayback } from "@/hooks/useSequentialRoutePlayback";
 import RouteAnimation from "@/components/storymap/RouteAnimation";
+import type { Location, RouteAnimation as RouteAnimationType } from "@/lib/api-storymap";
 import { useMapCollaboration, type MapSelection } from "@/hooks/useMapCollaboration";
 import { useLayerStyles } from "@/hooks/useLayerStyles";
 import { useCollaborationVisualization } from "@/hooks/useCollaborationVisualization";
@@ -79,7 +81,67 @@ import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geo
 import * as mapHelpers from "@/utils/mapHelpers";
 import PublishButton from "@/components/map-editor/PublishButton";
 
+// Sequential Route Playback Component
+function SequentialRoutePlaybackWrapper({
+  map,
+  routeAnimations,
+  isPlaying,
+  segmentStartTime,
+  onLocationClick,
+}: {
+  map: any;
+  routeAnimations: RouteAnimationType[];
+  isPlaying: boolean;
+  segmentStartTime: number;
+  onLocationClick?: (location: Location) => void;
+}) {
+  const sequentialPlayback = useSequentialRoutePlayback({
+    map,
+    routeAnimations,
+    isPlaying,
+    segmentStartTime,
+    onLocationClick,
+  });
 
+  return (
+    <>
+      {routeAnimations.map((anim, index) => {
+        try {
+          const geoJson = typeof anim.routePath === "string" 
+            ? JSON.parse(anim.routePath) 
+            : anim.routePath;
+          
+          if (geoJson.type !== "LineString" || !geoJson.coordinates) {
+            return null;
+          }
+
+          const routePath = geoJson.coordinates as [number, number][];
+          const isRoutePlaying = sequentialPlayback.getRoutePlayState(index);
+
+          return (
+            <RouteAnimation
+              key={anim.routeAnimationId}
+              map={map}
+              routePath={routePath}
+              fromLocation={{ lat: anim.fromLat, lng: anim.fromLng }}
+              toLocation={{ lat: anim.toLat, lng: anim.toLng }}
+              iconType={anim.iconType}
+              iconUrl={anim.iconUrl}
+              routeColor={anim.routeColor}
+              visitedColor={anim.visitedColor}
+              routeWidth={anim.routeWidth}
+              durationMs={anim.durationMs}
+              isPlaying={isRoutePlaying}
+            />
+          );
+        } catch (e) {
+          console.error("Failed to render route animation:", e);
+          return null;
+        }
+      })}
+    </>
+  );
+}
 
 export default function EditMapPage() {
   const params = useParams<{ mapId: string }>();
@@ -115,12 +177,13 @@ export default function EditMapPage() {
     content?: string;
     x?: number;
     y?: number;
+    poi?: Location;
   }>({
     isOpen: false,
   });
 
   // New VSCode-style UI state
-  const [leftSidebarView, setLeftSidebarView] = useState<"explorer" | "segments" | "transitions" | null>("explorer");
+  const [leftSidebarView, setLeftSidebarView] = useState<"explorer" | "segments" | "transitions" | "icons" | null>("explorer");
   const [isPropertiesPanelOpen, setIsPropertiesPanelOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<{
     type: "feature" | "layer" | "segment";
@@ -2293,10 +2356,15 @@ export default function EditMapPage() {
       playback.handleStopPreview();
     };
 
-    window.addEventListener('playRouteAnimation', handlePlayRouteAnimation as EventListener);
+    const playHandler = (event: Event) => {
+      const customEvent = event as CustomEvent<{ segmentId: string }>;
+      handlePlayRouteAnimation(customEvent);
+    };
+    
+    window.addEventListener('playRouteAnimation', playHandler);
     window.addEventListener('stopRouteAnimation', handleStopRouteAnimation);
     return () => {
-      window.removeEventListener('playRouteAnimation', handlePlayRouteAnimation as EventListener);
+      window.removeEventListener('playRouteAnimation', playHandler);
       window.removeEventListener('stopRouteAnimation', handleStopRouteAnimation);
     };
   }, [playback]);
@@ -2649,7 +2717,7 @@ export default function EditMapPage() {
         ref={mapEl}
         className="absolute inset-0 transition-all duration-300"
         style={{
-          left: leftSidebarView ? "332px" : "48px", // Icon bar (48px) + panel (280px) when open
+          left: leftSidebarView ? "376px" : "56px", // Icon bar (56px) + panel (320px) when open
           right: isPropertiesPanelOpen ? "360px" : "0",
           // top: "60px",
           bottom: "200px", // Space for timeline workspace
@@ -2696,7 +2764,7 @@ export default function EditMapPage() {
         mapId={mapId}
         isPlaying={isPlayingTimeline}
         currentTime={currentPlaybackTime}
-        leftOffset={leftSidebarView ? 332 : 48}
+        leftOffset={leftSidebarView ? 376 : 56}
         isOpen={isTimelineOpen}
         onToggle={() => setIsTimelineOpen((prev) => !prev)}
         onReorder={handleTimelineReorder}
@@ -2705,6 +2773,40 @@ export default function EditMapPage() {
         // onSkipForward={handleSkipForward}
         // onSkipBackward={handleSkipBackward}
         onSegmentClick={handleSegmentClick}
+        onRefreshSegments={async () => {
+          try {
+            // Reload segments with enhanced details (includes locations, routes, zones, layers)
+            const [segmentsData, transitionsData] = await Promise.all([
+              getSegments(mapId),
+              getTimelineTransitions(mapId),
+            ]);
+            
+            // Load route animations for each segment (GetSegmentsAsync doesn't include routes)
+            const segmentsWithRoutes = await Promise.all(
+              segmentsData.map(async (segment) => {
+                try {
+                  // Fetch route animations for this segment
+                  const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
+                  return {
+                    ...segment,
+                    routeAnimations: routes || []
+                  };
+                } catch (e) {
+                  return {
+                    ...segment,
+                    routeAnimations: segment.routeAnimations || []
+                  };
+                }
+              })
+            );
+            
+            // Force new array reference to ensure React re-renders
+            setSegments([...segmentsWithRoutes]);
+            setTransitions([...transitionsData]);
+          } catch (error) {
+            console.error("Failed to refresh segments:", error);
+          }
+        }}
       />
 
       <MapControls
@@ -2714,53 +2816,20 @@ export default function EditMapPage() {
         currentZoom={currentZoom}
       />
 
-      {/* Route Animations */}
+      {/* Route Animations with Sequential Playback */}
       {playback.routeAnimations && playback.routeAnimations.length > 0 && mapRef.current && (
-        <>
-          {playback.routeAnimations.map((anim) => {
-            try {
-              const geoJson = typeof anim.routePath === "string" 
-                ? JSON.parse(anim.routePath) 
-                : anim.routePath;
-              
-              if (geoJson.type !== "LineString" || !geoJson.coordinates) {
-                return null;
-              }
-
-              const routePath = geoJson.coordinates as [number, number][];
-              
-              // Calculate if animation should be playing
-              // If segmentStartTime is 0, animation hasn't started yet
-              const segmentElapsed = playback.segmentStartTime > 0 
-                ? Date.now() - playback.segmentStartTime 
-                : 0;
-              
-              const isPlaying = playback.isPlaying && playback.segmentStartTime > 0 &&
-                (!anim.startTimeMs || segmentElapsed >= (anim.startTimeMs || 0)) &&
-                (!anim.endTimeMs || segmentElapsed < anim.endTimeMs);
-
-              return (
-                <RouteAnimation
-                  key={anim.routeAnimationId}
-                  map={mapRef.current}
-                  routePath={routePath}
-                  fromLocation={{ lat: anim.fromLat, lng: anim.fromLng }}
-                  toLocation={{ lat: anim.toLat, lng: anim.toLng }}
-                  iconType={anim.iconType}
-                  iconUrl={anim.iconUrl}
-                  routeColor={anim.routeColor}
-                  visitedColor={anim.visitedColor}
-                  routeWidth={anim.routeWidth}
-                  durationMs={anim.durationMs}
-                  isPlaying={isPlaying}
-                />
-              );
-            } catch (e) {
-              console.error("Failed to render route animation:", e);
-              return null;
-            }
-          })}
-        </>
+        <SequentialRoutePlaybackWrapper
+          map={mapRef.current}
+          routeAnimations={playback.routeAnimations}
+          isPlaying={playback.isPlaying}
+          segmentStartTime={playback.segmentStartTime}
+          onLocationClick={(location) => {
+            setPoiTooltipModal({
+              isOpen: true,
+              poi: location,
+            });
+          }}
+        />
       )}
 
       <ZoneContextMenu
