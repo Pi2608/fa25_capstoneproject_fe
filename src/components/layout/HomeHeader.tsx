@@ -116,6 +116,11 @@ export default function HomeHeader() {
   const router = useRouter();
   const { isLoggedIn, clear } = useAuthStatus();
   const { t } = useI18n();
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   const onLogout = () => {
     clear();
@@ -177,36 +182,53 @@ export default function HomeHeader() {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
-          {!isLoggedIn ? (
+          {!isHydrated ? (
             <>
-              <Link
-                href="/login"
-                className="rounded-lg px-3 py-2 font-semibold text-gray-700 hover:text-emerald-600 dark:text-gray-200 dark:hover:text-emerald-400 transition"
-              >
-                {t("header", "login")}
-              </Link>
-              <Link
-                href="/register"
-                className="rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white shadow hover:bg-emerald-400 transition"
-              >
-                {t("header", "getStarted")}
-              </Link>
+              <div className="h-10 min-w-[70px] rounded-lg dark:border-gray-600 flex items-center justify-center gap-1">
+                <div className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+              <div className="h-10 min-w-[100px] rounded-lg bg-emerald-500/60 dark:bg-emerald-500/40 shadow flex items-center justify-center gap-1">
+                <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
             </>
           ) : (
-            <>
-              <Link
-                href="/profile/information"
-                className="rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white shadow hover:bg-emerald-400 transition"
-              >
-                {t("header", "profile")}
-              </Link>
-              <button
-                onClick={onLogout}
-                className="rounded-lg px-3 py-2 font-semibold text-gray-700 hover:text-red-500 dark:text-gray-200 dark:hover:text-red-400 transition"
-              >
-                {t("header", "logout")}
-              </button>
-            </>
+            <div className="flex items-center gap-3 animate-in fade-in duration-500">
+              {!isLoggedIn ? (
+                <>
+                  <Link
+                    href="/login"
+                    className="min-w-[70px] text-center rounded-lg px-3 py-2 font-semibold text-gray-700 hover:text-emerald-600 dark:text-gray-200 dark:hover:text-emerald-400 transition"
+                  >
+                    {t("header", "login")}
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="min-w-[100px] text-center rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white shadow hover:bg-emerald-400 transition"
+                  >
+                    {t("header", "getStarted")}
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/profile/information"
+                    className="min-w-[70px] text-center rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white shadow hover:bg-emerald-400 transition"
+                  >
+                    {t("header", "profile")}
+                  </Link>
+                  <button
+                    onClick={onLogout}
+                    className="min-w-[70px] text-center rounded-lg px-3 py-2 font-semibold text-gray-700 hover:text-red-500 dark:text-gray-200 dark:hover:text-red-400 transition"
+                  >
+                    {t("header", "logout")}
+                  </button>
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>
