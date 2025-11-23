@@ -91,9 +91,8 @@ export const messages = {
             sampleGettingStartedPresetName: "Bắt đầu",
         },
         settings_members: {
-            remove: "Xóa",
-
             unknown_member: "thành viên này",
+            invite_success_toast: "Đã gửi lời mời thành công",
 
             confirm_transfer_full:
                 "Bạn sắp chuyển quyền sở hữu tổ chức này cho {{name}}.\n\n" +
@@ -2002,6 +2001,8 @@ export const messages = {
         settings_members: {
             unknown_member: "this member",
             remove: "Delete",
+            invite_success_toast:"Invitation sent successfully",
+
             confirm_transfer_full:
                 "You are about to transfer ownership of this organization to {{name}}.\n\n" +
                 "After the transfer, you will no longer be the Owner and some admin actions will be limited.\n\n" +
@@ -2055,7 +2056,6 @@ export const messages = {
             role_change_owner_locked: "Owner role cannot be changed",
             role_change: "Change role",
 
-            remove: "Remove",
             remove_member_title: "Remove member",
             remove_only_owner: "Only owner can remove members",
             remove_confirm: "Remove {name} from this organization?",

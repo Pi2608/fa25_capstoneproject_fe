@@ -1,14 +1,43 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { getSegments, Segment } from "@/lib/api-storymap";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { getSegments, type Segment } from "@/lib/api-storymap";
 import { getMapDetail } from "@/lib/api-maps";
+import {
+  startSession,
+  pauseSession,
+  resumeSession,
+  endSession,
+  getSessionLeaderboard,
+  getQuestionsOfQuestionBank,
+  goToNextQuestion,
+  skipCurrentQuestion,
+  extendCurrentQuestion,
+  type SessionDto,
+  type LeaderboardEntryDto,
+  type QuestionDto
+} from "@/lib/api-ques";
+
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
+
+type QuestionBankMeta = {
+  id?: string;
+  bankName?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  totalQuestions?: number | null;
+  workspaceName?: string;
+  mapName?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
 
 export default function StoryMapControlPage() {
   const params = useParams<{ mapId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const mapId = params?.mapId ?? "";
 
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -17,25 +46,41 @@ export default function StoryMapControlPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
+  const [session, setSession] = useState<SessionDto | null>(null);
+  const [changingStatus, setChangingStatus] = useState(false);
+
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntryDto[]>([]);
+  const [questionControlLoading, setQuestionControlLoading] = useState(false);
+
+  const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
+
+  const [questions, setQuestions] = useState<QuestionDto[]>([]);
+  const [loadingQuestions, setLoadingQuestions] = useState(false);
+
+  const [questionBankMeta, setQuestionBankMeta] =
+    useState<QuestionBankMeta | null>(null);
+
   const broadcastRef = useRef<BroadcastChannel | null>(null);
 
-  // Initialize broadcast channel
+  // ================== Broadcast channel ==================
   useEffect(() => {
-    if (typeof window === 'undefined' || !mapId) return;
+    if (typeof window === "undefined" || !mapId) return;
 
     broadcastRef.current = new BroadcastChannel(`storymap-${mapId}`);
-    console.log('[Control] Broadcasting on:', `storymap-${mapId}`);
+    console.log("[Control] Broadcasting on:", `storymap-${mapId}`);
 
     return () => broadcastRef.current?.close();
   }, [mapId]);
 
-  // Load data
+  // ================== Load map + segments ==================
   useEffect(() => {
     if (!mapId) return;
 
     (async () => {
       try {
         setLoading(true);
+        setError(null);
+
         const [detail, segs] = await Promise.all([
           getMapDetail(mapId),
           getSegments(mapId),
@@ -49,30 +94,248 @@ export default function StoryMapControlPage() {
         setMapDetail(detail);
         setSegments(segs);
       } catch (e: any) {
-        setError(e.message || "Failed to load storymap");
+        console.error("Load control page failed:", e);
+        setError(e?.message || "Failed to load storymap");
       } finally {
         setLoading(false);
       }
     })();
   }, [mapId]);
 
-  // Broadcast segment changes
+  // ================== Read session + question bank from URL ==================
+  useEffect(() => {
+    if (!searchParams) return;
+
+    const sessionId = searchParams.get("sessionId");
+    const sessionCode = searchParams.get("sessionCode");
+    const questionBankId = searchParams.get("questionBankId");
+
+    if (!sessionId && !sessionCode) {
+      setSession(null);
+    } else {
+      setSession((prev) => ({
+        id: sessionId ?? prev?.id ?? "",
+        mapId,
+        questionBankId: questionBankId ?? prev?.questionBankId ?? null,
+        sessionCode: sessionCode ?? prev?.sessionCode ?? "",
+        status: prev?.status ?? "Pending",
+        createdAt: prev?.createdAt ?? null,
+        startedAt: prev?.startedAt ?? null,
+        endedAt: prev?.endedAt ?? null,
+        totalParticipants: prev?.totalParticipants ?? null,
+      }));
+    }
+
+    const bankName = searchParams.get("bankName") ?? undefined;
+    const description = searchParams.get("bankDescription") ?? undefined;
+    const category = searchParams.get("category") ?? undefined;
+    const tagsStr = searchParams.get("tags") ?? "";
+    const totalQuestionsStr = searchParams.get("totalQuestions") ?? "";
+    const workspaceName = searchParams.get("workspaceName") ?? undefined;
+    const mapNameFromParam = searchParams.get("mapName") ?? undefined;
+    const createdAt = searchParams.get("createdAt") ?? undefined;
+    const updatedAt = searchParams.get("updatedAt") ?? undefined;
+
+    if (
+      !questionBankId &&
+      !bankName &&
+      !description &&
+      !category &&
+      !tagsStr &&
+      !totalQuestionsStr
+    ) {
+      setQuestionBankMeta(null);
+    } else {
+      setQuestionBankMeta({
+        id: questionBankId ?? undefined,
+        bankName,
+        description,
+        category,
+        tags: tagsStr
+          ? tagsStr
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean)
+          : [],
+        totalQuestions: totalQuestionsStr
+          ? Number(totalQuestionsStr)
+          : undefined,
+        workspaceName,
+        mapName: mapNameFromParam,
+        createdAt,
+        updatedAt,
+      });
+    }
+  }, [searchParams, mapId]);
+
+  useEffect(() => {
+    const qbId = questionBankMeta?.id;
+    if (!qbId) {
+      setQuestions([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setLoadingQuestions(true);
+        const data = await getQuestionsOfQuestionBank(qbId);
+
+        if (cancelled) return;
+
+        const ordered = Array.isArray(data)
+          ? [...data].sort(
+            (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
+          )
+          : [];
+
+        setQuestions(ordered);
+      } catch (e) {
+        console.error("Load question bank questions failed:", e);
+        if (!cancelled) setQuestions([]);
+      } finally {
+        if (!cancelled) setLoadingQuestions(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [questionBankMeta?.id]);
+
+  // ================== Segment broadcast ==================
   const handleSegmentChange = (segment: Segment, index: number) => {
     setCurrentIndex(index);
     broadcastRef.current?.postMessage({
-      type: 'segment-change',
+      type: "segment-change",
       segmentIndex: index,
       segment,
       timestamp: Date.now(),
     });
-    console.log('[Control] Broadcasted segment:', index);
+    console.log("[Control] Broadcasted segment:", index);
   };
 
+  const goToSegment = (index: number) => {
+    if (index < 0 || index >= segments.length) return;
+    const seg = segments[index];
+    if (!seg) return;
+    handleSegmentChange(seg, index);
+  };
+
+  // ================== Session status handlers ==================
+  const handleChangeStatus = async (
+    action: "start" | "pause" | "resume" | "end"
+  ) => {
+    if (!session || changingStatus) return;
+
+    try {
+      setChangingStatus(true);
+      if (action === "start") await startSession(session.id);
+      if (action === "pause") await pauseSession(session.id);
+      if (action === "resume") await resumeSession(session.id);
+      if (action === "end") await endSession(session.id);
+
+      setSession((prev) =>
+        prev
+          ? {
+            ...prev,
+            status:
+              action === "start"
+                ? "Running"
+                : action === "pause"
+                  ? "Paused"
+                  : action === "resume"
+                    ? "Running"
+                    : "Ended",
+          }
+          : prev
+      );
+    } catch (e: any) {
+      console.error("Change session status failed:", e);
+      setError(e?.message || "Không thay đổi được trạng thái session");
+    } finally {
+      setChangingStatus(false);
+    }
+  };
+
+  const handleLoadLeaderboard = async () => {
+    if (!session || loadingLeaderboard) return;
+    try {
+      setLoadingLeaderboard(true);
+
+      const data = await getSessionLeaderboard(session.id, 10);
+
+      setLeaderboard(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      console.error("Load leaderboard failed:", e);
+      setLeaderboard([]);
+      setError(e?.message || "Không tải được bảng xếp hạng");
+    } finally {
+      setLoadingLeaderboard(false);
+    }
+  };
+
+  const handleNextQuestion = async () => {
+    if (!session || questionControlLoading) return;
+
+    try {
+      setQuestionControlLoading(true);
+      await goToNextQuestion(session.id);
+    } catch (e: any) {
+      console.error("Next question failed:", e);
+      setError(e?.message || "Không chuyển được sang câu tiếp theo");
+    } finally {
+      setQuestionControlLoading(false);
+    }
+  };
+
+  const handleSkipQuestion = async () => {
+    if (!session || questionControlLoading) return;
+
+    try {
+      setQuestionControlLoading(true);
+      await skipCurrentQuestion(session.id);
+    } catch (e: any) {
+      console.error("Skip question failed:", e);
+      setError(e?.message || "Không bỏ qua được câu hỏi");
+    } finally {
+      setQuestionControlLoading(false);
+    }
+  };
+
+  const handleExtendQuestion = async () => {
+    if (!session || questionControlLoading) return;
+
+    const sessionQuestionId = window.prompt(
+      "Nhập sessionQuestionId của câu hỏi đang chạy:"
+    );
+    if (!sessionQuestionId) return;
+
+    const secondsStr = window.prompt(
+      "Gia hạn thêm bao nhiêu giây?",
+      "10"
+    );
+    const seconds = secondsStr ? parseInt(secondsStr, 10) : NaN;
+    if (!seconds || Number.isNaN(seconds) || seconds <= 0) return;
+
+    try {
+      setQuestionControlLoading(true);
+      await extendCurrentQuestion(sessionQuestionId, seconds);
+    } catch (e: any) {
+      console.error("Extend question failed:", e);
+      setError(e?.message || "Không gia hạn được thời gian cho câu hỏi");
+    } finally {
+      setQuestionControlLoading(false);
+    }
+  };
+
+  // ================== Render states ==================
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-zinc-900">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4" />
           <div className="text-white text-xl">Loading Control Panel...</div>
         </div>
       </div>
@@ -82,7 +345,7 @@ export default function StoryMapControlPage() {
   if (error) {
     return (
       <div className="h-screen flex items-center justify-center bg-zinc-900">
-        <div className="text-center">
+        <div className="text-center max-w-md px-4">
           <div className="text-red-400 text-2xl mb-4">⚠️ {error}</div>
           <button
             onClick={() => router.back()}
@@ -95,101 +358,467 @@ export default function StoryMapControlPage() {
     );
   }
 
-  const center: [number, number] = mapDetail?.center 
+  const center: [number, number] = mapDetail?.center
     ? [mapDetail.center.latitude, mapDetail.center.longitude]
     : [10.8231, 106.6297];
 
+  // ================== Main layout ==================
   return (
-    <div className="h-screen flex">
-      {/* Control Panel - Left Sidebar */}
-      <div className="w-96 bg-zinc-900 border-r border-zinc-800 flex flex-col">
-        {/* Header */}
-        <div className="p-6 border-b border-zinc-800">
-          <h1 className="text-white text-2xl font-bold mb-2">Control Panel</h1>
-          <p className="text-zinc-400 text-sm">
-            {mapDetail?.name || "Story Map"}
-          </p>
-          <div className="mt-3 px-3 py-2 bg-zinc-800 rounded text-zinc-400 text-xs">
-            📡 Broadcasting: storymap-{mapId.slice(0, 8)}...
-          </div>
-        </div>
+    <div className="h-screen flex flex-col bg-zinc-900">
+      {/* MAIN: left panel + map */}
+      <div className="flex flex-1 min-h-0">
+        <div className="w-[360px] border-r border-zinc-800 bg-zinc-950/95 flex flex-col">
+          {/* HEADER */}
+          <div className="px-5 pt-5 pb-4 border-b border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950">
+            <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 font-medium">
+              Control Panel
+            </p>
+            <h1 className="mt-1 text-lg font-semibold text-white truncate">
+              {mapDetail?.name || "Bản đồ chưa đặt tên"}
+            </h1>
 
-        {/* Segments List */}
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="space-y-2">
-            {segments.map((segment, index) => (
-              <button
-                key={segment.segmentId}
-                onClick={() => handleSegmentChange(segment, index)}
-                className={`w-full text-left px-4 py-4 rounded-lg transition-all transform ${
-                  index === currentIndex
-                    ? 'bg-blue-600 text-white shadow-lg scale-105'
-                    : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700 hover:scale-102'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono bg-black/30 px-2 py-0.5 rounded">
-                        {index + 1}
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+                <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Broadcasting: storymap-{mapId.slice(0, 8)}…</span>
+              </div>
+
+              {session && (
+                <span
+                  className={
+                    "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold border " +
+                    (session.status === "Running"
+                      ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
+                      : session.status === "Paused"
+                        ? "border-amber-400/60 bg-amber-500/10 text-amber-200"
+                        : session.status === "Ended"
+                          ? "border-rose-500/70 bg-rose-600/10 text-rose-300"
+                          : "border-sky-400/60 bg-sky-500/10 text-sky-200")
+                  }
+                >
+                  ● {session.status}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* BODY: SESSION + QUESTION BANK */}
+          <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3 space-y-4">
+            {/* SESSION CARD */}
+            <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium">
+                    Phiên tương tác
+                  </p>
+                  <p className="text-xs text-zinc-400">Quản lý mã tham gia & trạng thái</p>
+                </div>
+
+                {session && (
+                  <span className="inline-flex items-center rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-300 border border-zinc-700">
+                    ID: {session.id.slice(0, 6)}…
+                  </span>
+                )}
+              </div>
+
+              {/* MÃ CODE */}
+              {session ? (
+                <div className="rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2.5 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] text-zinc-400">Code cho học sinh</p>
+                    <p className="font-mono text-xl font-semibold tracking-[0.18em] text-emerald-400">
+                      {session.sessionCode}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigator.clipboard.writeText(session.sessionCode)}
+                    className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-zinc-800 px-2.5 py-1.5 text-[11px] text-zinc-100 hover:bg-zinc-700 border border-zinc-700"
+                  >
+                    <span>Copy</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
+                  Chưa có session cho bản đồ này. Hãy quay lại workspace và tạo session
+                  từ đó.
+                </div>
+              )}
+
+              {/* TRẠNG THÁI + NÚT ĐIỀU KHIỂN */}
+              {session && (
+                <>
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                    <span>
+                      Trạng thái:{" "}
+                      <span className="font-semibold text-zinc-100">{session.status}</span>
+                    </span>
+                    {questionBankMeta?.bankName && (
+                      <span>
+                        Bộ câu hỏi:&nbsp;
+                        <span className="font-semibold text-emerald-300">
+                          {questionBankMeta.bankName}
+                        </span>
                       </span>
-                      <span className="font-semibold">{segment.name}</span>
-                    </div>
-                    {segment.description && (
-                      <div className="text-sm opacity-80 mt-2 line-clamp-2">
-                        {segment.description}
-                      </div>
                     )}
-                    <div className="flex items-center gap-3 mt-2 text-xs opacity-70">
-                      {segment.zones && segment.zones.length > 0 && (
-                        <span>🗺️ {segment.zones.length} zones</span>
-                      )}
-                      {segment.locations && segment.locations.length > 0 && (
-                        <span>📍 {segment.locations.length} locations</span>
-                      )}
-                      {segment.layers && segment.layers.length > 0 && (
-                        <span>🔲 {segment.layers.length} layers</span>
-                      )}
+                  </div>
+
+                  <div className="grid grid-cols-4 gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleChangeStatus("start")}
+                      disabled={changingStatus || session.status === "Running"}
+                      className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-emerald-500/60 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Start
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleChangeStatus("pause")}
+                      disabled={changingStatus || session.status !== "Running"}
+                      className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-amber-400/70 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Pause
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleChangeStatus("resume")}
+                      disabled={changingStatus || session.status !== "Paused"}
+                      className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-sky-400/70 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Resume
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleChangeStatus("end")}
+                      disabled={changingStatus || session.status === "Ended"}
+                      className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-rose-500/70 bg-rose-600/10 text-rose-100 hover:bg-rose-600/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      End
+                    </button>
+                  </div>
+
+                  <div className="mt-2 border-t border-zinc-800 pt-2">
+                    <p className="text-[11px] text-zinc-500 mb-1">
+                      Điều khiển câu hỏi (giáo viên)
+                    </p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleNextQuestion}
+                        disabled={
+                          !session ||
+                          questionControlLoading ||
+                          session.status !== "Running"
+                        }
+                        className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-sky-400/70 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Câu tiếp
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSkipQuestion}
+                        disabled={
+                          !session ||
+                          questionControlLoading ||
+                          session.status !== "Running"
+                        }
+                        className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-amber-400/70 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Bỏ qua
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleExtendQuestion}
+                        disabled={
+                          !session ||
+                          questionControlLoading ||
+                          session.status !== "Running"
+                        }
+                        className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-emerald-500/70 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        + thời gian
+                      </button>
                     </div>
                   </div>
-                  {index === currentIndex && (
-                    <div className="ml-2">
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
+                  <div className="flex items-center justify-between pt-1">
+                    <p className="text-[11px] text-zinc-500">
+                      HS truy cập link lớp học rồi nhập code ở trên.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleLoadLeaderboard}
+                      className="text-[11px] text-sky-300 hover:text-sky-200 underline-offset-2 hover:underline"
+                    >
+                      Xem bảng xếp hạng
+                    </button>
+                  </div>
+
+                  {session && (
+                    <div className="mt-2 max-h-32 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 space-y-1">
+                      {loadingLeaderboard && (
+                        <p className="text-[11px] text-zinc-500">
+                          Đang tải bảng xếp hạng...
+                        </p>
+                      )}
+
+                      {!loadingLeaderboard && leaderboard.length === 0 && (
+                        <p className="text-[11px] text-zinc-500">
+                          Chưa có dữ liệu bảng xếp hạng.
+                        </p>
+                      )}
+
+                      {!loadingLeaderboard &&
+                        leaderboard.length > 0 &&
+                        leaderboard.map((p, idx) => (
+                          <div
+                            key={p.participantId ?? idx}
+                            className="flex items-center justify-between text-[11px] text-zinc-200"
+                          >
+                            <span>
+                              #{p.rank ?? idx + 1} {p.displayName}
+                            </span>
+                            <span className="font-semibold">{p.score}</span>
+                          </div>
+                        ))}
                     </div>
                   )}
+
+                </>
+              )}
+            </section>
+
+            {/* QUESTION BANK CARD */}
+            <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium">
+                    Bộ câu hỏi của session này
+                  </p>
                 </div>
-              </button>
-            ))}
+                {typeof questionBankMeta?.totalQuestions === "number" && (
+                  <div className="text-right text-[11px] text-zinc-300">
+                    <div className="font-semibold">
+                      {questionBankMeta.totalQuestions}
+                    </div>
+                    <div className="text-zinc-500">câu hỏi</div>
+                  </div>
+                )}
+              </div>
+
+              {!questionBankMeta ? (
+                <div className="mt-1 rounded-xl border border-zinc-800 bg-zinc-950/80 px-3 py-2 text-[11px] text-zinc-400">
+                  Session hiện tại chưa gắn bộ câu hỏi hoặc thông tin chưa được truyền
+                  sang.
+                </div>
+              ) : (
+                <div className="mt-1 space-y-2">
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      {questionBankMeta.bankName || "Bộ câu hỏi"}
+                    </p>
+                    {questionBankMeta.category && (
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        Chủ đề: {questionBankMeta.category}
+                      </p>
+                    )}
+                  </div>
+
+                  {(questionBankMeta.mapName || questionBankMeta.workspaceName) && (
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
+                      {questionBankMeta.mapName && (
+                        <span>Map: {questionBankMeta.mapName}</span>
+                      )}
+                      {questionBankMeta.workspaceName && (
+                        <span>Workspace: {questionBankMeta.workspaceName}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {questionBankMeta.tags && questionBankMeta.tags.length > 0 && (
+                    <div className="pt-1">
+                      <p className="text-[11px] text-zinc-400 mb-1">Tags:</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {questionBankMeta.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="px-2 py-0.5 rounded-full border border-zinc-700 bg-zinc-900 text-[11px] text-zinc-100"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {questionBankMeta.description && (
+                    <div className="pt-1">
+                      <p className="text-[11px] text-zinc-400 mb-1">Mô tả:</p>
+                      <p className="max-h-20 overflow-y-auto text-[11px] text-zinc-200 whitespace-pre-wrap">
+                        {questionBankMeta.description}
+                      </p>
+                    </div>
+                  )}
+
+                  {(questionBankMeta.createdAt || questionBankMeta.updatedAt) && (
+                    <div className="pt-1 border-t border-zinc-800 mt-1 text-[11px] text-zinc-500 space-y-0.5">
+                      {questionBankMeta.createdAt && (
+                        <p>Tạo lúc: {questionBankMeta.createdAt}</p>
+                      )}
+                      {questionBankMeta.updatedAt && (
+                        <p>Cập nhật: {questionBankMeta.updatedAt}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* DANH SÁCH CÂU HỎI */}
+                  <div className="pt-2 border-t border-zinc-800 mt-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-500 font-medium">
+                        Danh sách câu hỏi
+                      </p>
+                      {typeof questionBankMeta.totalQuestions === "number" && (
+                        <span className="text-[11px] text-zinc-400">
+                          {questionBankMeta.totalQuestions} câu
+                        </span>
+                      )}
+                    </div>
+
+                    {loadingQuestions ? (
+                      <p className="text-[11px] text-zinc-500">
+                        Đang tải danh sách câu hỏi...
+                      </p>
+                    ) : questions.length === 0 ? (
+                      <p className="text-[11px] text-zinc-500">
+                        Chưa có câu hỏi nào trong bộ này.
+                      </p>
+                    ) : (
+                      <div className="max-h-52 overflow-y-auto space-y-2 mt-1">
+                        {questions.map((q, idx) => (
+                          <div
+                            key={q.id}
+                            className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 space-y-1"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-[11px] text-zinc-100">
+                                <span className="font-semibold">
+                                  Câu {q.displayOrder || idx + 1}:
+                                </span>{" "}
+                                {q.questionText}
+                              </p>
+                              <span className="text-[10px] text-zinc-400 whitespace-nowrap">
+                                {q.points} điểm · {q.timeLimit ?? 0}s
+                              </span>
+                            </div>
+
+                            {q.options && q.options.length > 0 && (
+                              <ul className="mt-1 space-y-0.5">
+                                {[...q.options]
+                                  .sort(
+                                    (a, b) =>
+                                      (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
+                                  )
+                                  .map((opt) => (
+                                    <li
+                                      key={opt.id ?? opt.optionText}
+                                      className="flex items-start gap-2 text-[11px]"
+                                    >
+                                      <span className="mt-[3px] inline-block h-1.5 w-1.5 rounded-full bg-zinc-500" />
+                                      <span
+                                        className={
+                                          opt.isCorrect
+                                            ? "text-emerald-300 font-medium"
+                                            : "text-zinc-300"
+                                        }
+                                      >
+                                        {opt.optionText || "(Không có nội dung)"}
+                                      </span>
+                                      {opt.isCorrect && (
+                                        <span className="ml-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 px-1.5 py-[1px] text-[10px] text-emerald-300">
+                                          Đáp án
+                                        </span>
+                                      )}
+                                    </li>
+                                  ))}
+                              </ul>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+
+                </div>
+              )}
+            </section>
           </div>
         </div>
 
-        {/* Footer Stats */}
-        <div className="p-4 border-t border-zinc-800 bg-zinc-900/50">
-          <div className="grid grid-cols-2 gap-2 text-center">
-            <div className="bg-zinc-800 rounded p-2">
-              <div className="text-zinc-400 text-xs">Current</div>
-              <div className="text-white font-bold">{currentIndex + 1}</div>
-            </div>
-            <div className="bg-zinc-800 rounded p-2">
-              <div className="text-zinc-400 text-xs">Total</div>
-              <div className="text-white font-bold">{segments.length}</div>
-            </div>
-          </div>
+        {/* RIGHT: Map Viewer */}
+        <div className="flex-1 min-h-0">
+          <StoryMapViewer
+            mapId={mapId}
+            segments={segments}
+            baseMapProvider={mapDetail?.baseMapProvider}
+            initialCenter={center}
+            initialZoom={mapDetail?.defaultZoom || 10}
+            onSegmentChange={handleSegmentChange}
+          />
         </div>
       </div>
 
-      {/* Map Viewer - Right Side */}
-      <div className="flex-1">
-        <StoryMapViewer
-          mapId={mapId}
-          segments={segments}
-          baseMapProvider={mapDetail?.baseMapProvider}
-          initialCenter={center}
-          initialZoom={mapDetail?.defaultZoom || 10}
-          onSegmentChange={handleSegmentChange}
-        />
+      {/* BOTTOM: Timeline panel */}
+      <div className="h-24 border-t border-zinc-800 bg-zinc-900/95 px-6 flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => goToSegment(currentIndex - 1)}
+            disabled={segments.length === 0 || currentIndex === 0}
+            className="px-3 py-2 rounded-lg bg-zinc-800 text-zinc-100 text-xs disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700"
+          >
+            ◀ Trước
+          </button>
+          <button
+            onClick={() => goToSegment(currentIndex + 1)}
+            disabled={
+              segments.length === 0 || currentIndex >= segments.length - 1
+            }
+            className="px-3 py-2 rounded-lg bg-zinc-800 text-zinc-100 text-xs disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700"
+          >
+            Sau ▶
+          </button>
+        </div>
+
+        <div className="text-xs text-zinc-300 min-w-[110px]">
+          Segment{" "}
+          <span className="font-semibold text-white">
+            {segments.length === 0 ? 0 : currentIndex + 1}
+          </span>{" "}
+          / <span className="font-semibold text-white">{segments.length}</span>
+        </div>
+
+        <div className="flex-1 overflow-x-auto">
+          <div className="flex items-center gap-2">
+            {segments.map((seg, index) => (
+              <button
+                key={seg.segmentId}
+                onClick={() => goToSegment(index)}
+                className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition ${index === currentIndex
+                  ? "bg-blue-500 text-white border-blue-400"
+                  : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700"
+                  }`}
+              >
+                {index + 1}. {seg.name || "Untitled"}
+              </button>
+            ))}
+
+            {segments.length === 0 && (
+              <div className="text-xs text-zinc-500">
+                No segments – please add segments in the editor.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
