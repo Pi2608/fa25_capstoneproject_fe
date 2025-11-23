@@ -6,9 +6,14 @@ import { useToast } from "@/contexts/ToastContext";
 import { Workspace } from "@/types/workspace";
 import { formatDate } from "@/utils/formatUtils";
 import { getOrganizationById, OrganizationDetailDto } from "@/lib/api-organizations";
-import { createDefaultMap, deleteMap } from "@/lib/api-maps";
+import { createDefaultMap, deleteMap, getMapDetail } from "@/lib/api-maps";
 import { getWorkspaceById, getWorkspaceMaps, removeMapFromWorkspace } from "@/lib/api-workspaces";
 import { useI18n } from "@/i18n/I18nProvider";
+import {
+  QuestionBankDto,
+  getMyQuestionBanks,
+  createSession,
+} from "@/lib/api-ques";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name" | "author";
@@ -33,6 +38,7 @@ export default function WorkspaceDetailPage() {
   const [org, setOrg] = useState<OrganizationDetailDto | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [maps, setMaps] = useState<any[]>([]);
+  const [publishedMaps, setPublishedMaps] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -46,6 +52,18 @@ export default function WorkspaceDetailPage() {
     mapName?: string;
   }>({ open: false });
   const [deleteMapLoading, setDeleteMapLoading] = useState(false);
+
+  // -------- Modal chọn bộ câu hỏi & tạo session ----------
+  const [createSessionOpen, setCreateSessionOpen] = useState<{
+    open: boolean;
+    mapId?: string;
+    mapName?: string;
+  }>({ open: false });
+
+  const [questionBanks, setQuestionBanks] = useState<QuestionBankDto[]>([]);
+  const [loadingQuestionBanks, setLoadingQuestionBanks] = useState(false);
+  const [selectedQuestionBankId, setSelectedQuestionBankId] = useState<string>("");
+  const [creatingSession, setCreatingSession] = useState(false);
 
   const handleCreateMap = useCallback(async () => {
     try {
@@ -70,6 +88,7 @@ export default function WorkspaceDetailPage() {
       ]);
       setOrg(orgRes.organization);
       setWorkspace(workspaceRes);
+
       const mapsArray = Array.isArray(mapsRes) ? mapsRes : ((mapsRes as any)?.maps || []);
       const normalized = mapsArray.map((m: any) => ({
         id: m.id ?? m.mapId ?? m.map_id,
@@ -78,6 +97,26 @@ export default function WorkspaceDetailPage() {
         ownerId: m.ownerId ?? m.userId ?? m.user_id ?? "",
       }));
       setMaps(normalized);
+
+      const detailList = await Promise.all(
+        normalized.map(async (m) => {
+          try {
+            const detail = await getMapDetail(m.id);
+            return detail;
+          } catch {
+            return null;
+          }
+        })
+      );
+
+      const published = detailList
+        .filter((d): d is any => !!d && (!!(d as any).PublishedAt || !!(d as any).publishedAt))
+        .map((d: any) => ({
+          id: d.mapId ?? d.id ?? d.map_id,
+          name: d.name ?? d.mapName ?? d.map_name ?? "",
+          publishedAt: d.PublishedAt ?? d.publishedAt ?? d.updatedAt ?? d.createdAt ?? null,
+        }));
+      setPublishedMaps(published);
     } catch (e) {
       setErr(safeMessage(e, t("workspace_detail.request_failed")));
     } finally {
@@ -135,12 +174,132 @@ export default function WorkspaceDetailPage() {
     [workspaceId, showToast, loadData, t]
   );
 
+  // --------- mở modal chọn bộ câu hỏi cho map ----------
+  const handleOpenCreateSession = useCallback(
+    async (mapId: string, mapName?: string) => {
+      setCreateSessionOpen({ open: true, mapId, mapName });
+      setSelectedQuestionBankId(""); // default: không dùng bộ câu hỏi
+      setLoadingQuestionBanks(true);
+      try {
+        const allBanks = await getMyQuestionBanks();
+        const filtered = allBanks.filter((b) => b.mapId === mapId);
+        setQuestionBanks(filtered);
+      } catch (e) {
+        setQuestionBanks([]);
+        showToast("error", safeMessage(e, t("workspace_detail.request_failed")));
+      } finally {
+        setLoadingQuestionBanks(false);
+      }
+    },
+    [showToast, t]
+  );
+
+  const handleCreateSessionForMap = useCallback(
+    async () => {
+      if (!createSessionOpen.mapId) return;
+
+      const mapIdForSession = createSessionOpen.mapId;
+
+      const selectedBank =
+        questionBanks.find((qb) => qb.id === selectedQuestionBankId) ?? null;
+
+      setCreatingSession(true);
+      try {
+        const nowIso = new Date().toISOString();
+
+        const session = await createSession({
+          mapId: mapIdForSession,
+          questionBankId: selectedQuestionBankId || null,
+          sessionName: createSessionOpen.mapName
+            ? `Session - ${createSessionOpen.mapName}`
+            : "New session",
+          description: null,
+          sessionType: "live",
+          maxParticipants: 0,
+          allowLateJoin: true,
+          showLeaderboard: true,
+          showCorrectAnswers: true,
+          shuffleQuestions: true,
+          shuffleOptions: true,
+          enableHints: true,
+          pointsForSpeed: true,
+          scheduledStartTime: nowIso,
+        });
+
+        showToast("success", "Tạo session thành công");
+
+        const params = new URLSearchParams();
+        params.set("sessionId", session.id);
+        params.set("sessionCode", session.sessionCode);
+
+        // ✅ DÙNG ID CỦA BỘ CÂU HỎI ĐANG CHỌN, KHÔNG DÙNG session.questionBankId nữa
+        if (selectedBank?.id) {
+          params.set("questionBankId", selectedBank.id);
+        }
+
+        if (selectedBank) {
+          if (selectedBank.bankName) {
+            params.set("bankName", selectedBank.bankName);
+          }
+          if (selectedBank.description) {
+            params.set("bankDescription", selectedBank.description);
+          }
+          if (selectedBank.category) {
+            params.set("category", selectedBank.category);
+          }
+          if (Array.isArray(selectedBank.tags) && selectedBank.tags.length > 0) {
+            params.set("tags", selectedBank.tags.join(","));
+          }
+          if (
+            typeof selectedBank.totalQuestions === "number" &&
+            !Number.isNaN(selectedBank.totalQuestions)
+          ) {
+            params.set("totalQuestions", String(selectedBank.totalQuestions));
+          }
+          if (selectedBank.workspaceName) {
+            params.set("workspaceName", selectedBank.workspaceName);
+          }
+          if (selectedBank.mapName) {
+            params.set("mapName", selectedBank.mapName);
+          }
+          if (selectedBank.createdAt) {
+            params.set("createdAt", selectedBank.createdAt);
+          }
+          if (selectedBank.updatedAt) {
+            params.set("updatedAt", selectedBank.updatedAt);
+          }
+        }
+
+        setCreateSessionOpen({
+          open: false,
+          mapId: undefined,
+          mapName: undefined,
+        });
+
+        router.push(`/storymap/control/${mapIdForSession}?${params.toString()}`);
+
+      } catch (e) {
+        showToast("error", safeMessage(e, t("workspace_detail.request_failed")));
+      } finally {
+        setCreatingSession(false);
+      }
+    },
+    [
+      createSessionOpen,
+      questionBanks,
+      selectedQuestionBankId,
+      router,
+      showToast,
+      t,
+    ]
+  );
+
+
   if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">{t("workspace_detail.loading")}</div>;
   if (err || !org || !workspace) return <div className="max-w-3xl px-4 text-red-400">{err ?? t("workspace_detail.not_found")}</div>;
 
   return (
     <div className="min-w-0 relative px-4">
-      {/* Header */}
       <div className="flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-2">
           <button
@@ -167,7 +326,6 @@ export default function WorkspaceDetailPage() {
         </div>
       </div>
 
-      {/* View Controls */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="flex rounded-lg border border-white/10 overflow-hidden">
@@ -208,7 +366,6 @@ export default function WorkspaceDetailPage() {
         </div>
       </div>
 
-      {/* Maps List */}
       {sortedMaps.length === 0 && (
         <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-800 flex items-center justify-center">
@@ -216,7 +373,7 @@ export default function WorkspaceDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-zinc-2 00 mb-2">{t("workspace_detail.empty_title")}</h3>
+          <h3 className="text-lg font-semibold text-zinc-200 mb-2">{t("workspace_detail.empty_title")}</h3>
           <p className="text-zinc-400 mb-4">{t("workspace_detail.empty_desc")}</p>
           <button
             onClick={() => void handleCreateMap()}
@@ -234,7 +391,7 @@ export default function WorkspaceDetailPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {sortedMaps.map((map) => (
             <div key={map.id} className="group rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4">
-              <div className="h-32 w-full rounded-lg bg-gradient-to-br from-zinc-8 00 to-zinc-900 border border-white/5 mb-3 grid place-items-center text-zinc-400 text-xs">
+              <div className="h-32 w-full rounded-lg bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/5 mb-3 grid place-items-center text-zinc-400 text-xs">
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                 </svg>
@@ -343,7 +500,147 @@ export default function WorkspaceDetailPage() {
         </div>
       )}
 
-      {/* Delete Map Modal */}
+      {publishedMaps.length > 0 && (
+        <div className="mt-10">
+          <h2 className="text-lg font-semibold mb-4">Bản đồ đã publish</h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {publishedMaps.map((map) => (
+              <div key={map.id} className="rounded-xl border border-emerald-500/40 bg-zinc-900/70 p-4">
+                <div className="h-24 w-full rounded-lg bg-gradient-to-br from-emerald-500/20 via-emerald-400/10 to-zinc-900 border border-emerald-400/40 mb-3 grid place-items-center text-emerald-300 text-xs">
+                  Đã publish
+                </div>
+                <div className="min-w-0 mb-2">
+                  <div className="truncate font-semibold text-white">{map.name || t("workspace_detail.unnamed")}</div>
+                  <div className="text-xs text-zinc-400">
+                    {map.publishedAt ? `Publish: ${formatDate(map.publishedAt)}` : "Publish: —"}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => router.push(`/maps/${map.id}`)}
+                    className="w-full px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                  >
+                    {t("workspace_detail.open_map")}
+                  </button>
+                  <button
+                    onClick={() =>
+                      void handleOpenCreateSession(
+                        map.id,
+                        map.name || t("workspace_detail.unnamed")
+                      )
+                    }
+                    className="w-full px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
+                  >
+                    Tạo session
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {publishedMaps.length === 0 && (
+        <div className="mt-10 text-sm text-zinc-500">
+          Chưa có bản đồ nào đã publish trong workspace này.
+        </div>
+      )}
+
+      {/* Modal chọn bộ câu hỏi + tạo session */}
+      {createSessionOpen.open && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
+          <div className="w-[34rem] max-w-[95vw] rounded-xl border border-emerald-500/40 bg-zinc-900 p-6 shadow-2xl">
+            <h2 className="text-xl font-semibold text-white mb-2">
+              Chọn bộ câu hỏi (tuỳ chọn)
+            </h2>
+            <p className="text-sm text-zinc-300 mb-4">
+              Bản đồ:&nbsp;
+              <span className="font-semibold text-emerald-300">
+                {createSessionOpen.mapName}
+              </span>
+            </p>
+
+            <div className="mb-6 max-h-64 overflow-y-auto">
+              {loadingQuestionBanks ? (
+                <div className="text-sm text-zinc-400">
+                  Đang tải danh sách bộ câu hỏi...
+                </div>
+              ) : questionBanks.length === 0 ? (
+                <div className="text-sm text-zinc-500">
+                  Chưa có bộ câu hỏi nào gắn với bản đồ này.
+                  <br />
+                  Bạn vẫn có thể tạo session không có câu hỏi.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-sm text-zinc-200">
+                    <input
+                      type="radio"
+                      name="questionBank"
+                      value=""
+                      checked={selectedQuestionBankId === ""}
+                      onChange={() => setSelectedQuestionBankId("")}
+                      className="accent-emerald-500"
+                    />
+                    <span>Không dùng bộ câu hỏi</span>
+                  </label>
+
+                  <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
+                    {questionBanks.map((qb) => (
+                      <label
+                        key={qb.id}
+                        className="flex items-start gap-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-2 text-sm cursor-pointer"
+                      >
+                        <input
+                          type="radio"
+                          name="questionBank"
+                          value={qb.id}
+                          checked={selectedQuestionBankId === qb.id}
+                          onChange={() => setSelectedQuestionBankId(qb.id)}
+                          className="mt-1 accent-emerald-500"
+                        />
+                        <div className="min-w-0">
+                          <div className="font-semibold text-zinc-100 truncate">
+                            {qb.bankName}
+                          </div>
+                          {typeof qb.totalQuestions === "number" && (
+                            <div className="text-xs text-zinc-400">
+                              {qb.totalQuestions} câu hỏi
+                            </div>
+                          )}
+                          {qb.mapName && (
+                            <div className="text-xs text-zinc-500">
+                              Map: {qb.mapName}
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                onClick={() => setCreateSessionOpen({ open: false })}
+                disabled={creatingSession}
+              >
+                Hủy
+              </button>
+              <button
+                onClick={() => void handleCreateSessionForMap()}
+                disabled={creatingSession || loadingQuestionBanks}
+                className="px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
+              >
+                {creatingSession ? "Đang tạo session..." : "Xác nhận tạo session"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {deleteMapOpen.open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">

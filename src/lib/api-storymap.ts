@@ -848,4 +848,3 @@ export function applyCameraState(map: any, cameraState: CameraState, options?: a
     console.error("applyCameraState: map does not have flyTo or setView method");
   }
 }
-

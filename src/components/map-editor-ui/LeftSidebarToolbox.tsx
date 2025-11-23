@@ -16,6 +16,8 @@ import type {
   CreateLocationRequest,
   CreateSegmentZoneRequest,
   AttachLayerRequest,
+  Location,
+  Zone,
 } from "@/lib/api-storymap";
 import {
   parseCameraState,
@@ -32,6 +34,7 @@ import {
   type SegmentLayer,
   type RouteAnimation,
 } from "@/lib/api-storymap";
+
 import LocationDialog from "@/components/storymap/LocationDialog";
 import ZoneSelectionDialog from "@/components/storymap/ZoneSelectionDialog";
 import LayerAttachDialog from "@/components/storymap/LayerAttachDialog";
@@ -166,6 +169,7 @@ export function LeftSidebarToolbox({
     setEditingSegment(segment);
     setSegmentFormMode("edit");
   }, []);
+
 
   const handleCancelSegmentForm = useCallback(() => {
     setSegmentFormMode("list");
@@ -518,6 +522,119 @@ export function LeftSidebarToolbox({
       )}
     </>
   );
+}
+
+function getZoneCenter(zone: Zone): [number, number] | null {
+  if (zone.centroid) {
+    const str = zone.centroid.trim();
+
+    // TH1: centroid lưu dạng GeoJSON Point
+    if (str.startsWith("{")) {
+      try {
+        const gj = JSON.parse(str);
+        if (
+          gj &&
+          gj.type === "Point" &&
+          Array.isArray(gj.coordinates) &&
+          gj.coordinates.length >= 2
+        ) {
+          const lng = Number(gj.coordinates[0]);
+          const lat = Number(gj.coordinates[1]);
+          if (!Number.isNaN(lng) && !Number.isNaN(lat)) {
+            return [lng, lat];
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // TH2: centroid dạng "lat,lon" hoặc "lat lon"
+    const parts = str.split(/[,\s]+/).filter(Boolean);
+    if (parts.length >= 2) {
+      const a = Number(parts[0]); // lat
+      const b = Number(parts[1]); // lon
+      if (!Number.isNaN(a) && !Number.isNaN(b)) {
+        return [b, a]; // [lng, lat]
+      }
+    }
+  }
+
+  // Nếu không có centroid thì fallback sang boundingBox
+  if (zone.boundingBox) {
+    try {
+      const bb = JSON.parse(zone.boundingBox);
+      if (Array.isArray(bb) && bb.length >= 4) {
+        const south = Number(bb[0]);
+        const north = Number(bb[1]);
+        const west = Number(bb[2]);
+        const east = Number(bb[3]);
+
+        if (
+          !Number.isNaN(south) &&
+          !Number.isNaN(north) &&
+          !Number.isNaN(west) &&
+          !Number.isNaN(east)
+        ) {
+          const lat = (south + north) / 2;
+          const lng = (west + east) / 2;
+          return [lng, lat];
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
+
+function getCenterFromMarkerGeometry(
+  markerGeometry?: string | null
+): [number, number] | null {
+  if (!markerGeometry) return null;
+
+  try {
+    const geo = JSON.parse(markerGeometry);
+
+    // Point: [lng, lat]
+    if (geo.type === "Point" && Array.isArray(geo.coordinates)) {
+      const lng = Number(geo.coordinates[0]);
+      const lat = Number(geo.coordinates[1]);
+      if (!Number.isNaN(lng) && !Number.isNaN(lat)) {
+        return [lng, lat];
+      }
+      return null;
+    }
+
+    if (
+      geo.type === "Polygon" &&
+      Array.isArray(geo.coordinates) &&
+      Array.isArray(geo.coordinates[0])
+    ) {
+      const ring = geo.coordinates[0];
+      let sumLng = 0;
+      let sumLat = 0;
+      let count = 0;
+
+      for (const coord of ring) {
+        if (!Array.isArray(coord) || coord.length < 2) continue;
+        const lng = Number(coord[0]);
+        const lat = Number(coord[1]);
+        if (Number.isNaN(lng) || Number.isNaN(lat)) continue;
+        sumLng += lng;
+        sumLat += lat;
+        count++;
+      }
+
+      if (count === 0) return null;
+      return [sumLng / count, sumLat / count];
+    }
+  } catch (err) {
+    console.error("getCenterFromMarkerGeometry error", err);
+  }
+
+  return null;
 }
 
 function IconButton({
@@ -1376,6 +1493,18 @@ function SegmentFormView({
   const [name, setName] = useState(editing?.name || "");
   const [description, setDescription] = useState(editing?.description || "");
 
+  const [locationQuery, setLocationQuery] = useState("");
+  const [locationResults, setLocationResults] = useState<Location[]>([]);
+  const [isSearchingLocation, setIsSearchingLocation] = useState(false);
+
+  type SearchMode = "location" | "zone";
+
+  const [searchMode, setSearchMode] = useState<SearchMode>("location");
+
+  const [zoneSearchQuery, setZoneSearchQuery] = useState("");
+  const [zoneResults, setZoneResults] = useState<Zone[]>([]);
+  const [isSearchingZone, setIsSearchingZone] = useState(false);
+
   const [cameraState, setCameraState] = useState<CameraState>(() => {
     if (editing?.cameraState) {
       if (typeof editing.cameraState === "string") {
@@ -1936,52 +2065,52 @@ function IconLibraryView() {
     title: string;
     items: { id: string; icon: string; label: string }[];
   }[] = [
-    {
-      title: "Travel & Movement",
-      items: [
-        { id: "plane", icon: "mdi:airplane", label: "Plane" },
-        { id: "car", icon: "mdi:car", label: "Car" },
-        { id: "bus", icon: "mdi:bus", label: "Bus" },
-        { id: "train", icon: "mdi:train", label: "Train" },
-        { id: "ship", icon: "mdi:ferry", label: "Ship" },
-        { id: "bike", icon: "mdi:bike", label: "Bike" },
-        { id: "walk", icon: "mdi:walk", label: "Walk" },
-        { id: "route", icon: "mdi:routes", label: "Route" },
-        { id: "from", icon: "mdi:map-marker-radius", label: "From" },
-        { id: "to", icon: "mdi:map-marker-check", label: "To" },
-      ],
-    },
-    {
-      title: "Places & POI",
-      items: [
-        { id: "home", icon: "mdi:home-outline", label: "Home" },
-        { id: "office", icon: "mdi:office-building-outline", label: "Office" },
-        { id: "school", icon: "mdi:school-outline", label: "School" },
-        { id: "hospital", icon: "mdi:hospital-building", label: "Hospital" },
-        { id: "restaurant", icon: "mdi:silverware-fork-knife", label: "Food" },
-        { id: "coffee", icon: "mdi:coffee-outline", label: "Coffee" },
-        { id: "shop", icon: "mdi:storefront-outline", label: "Shop" },
-        { id: "park", icon: "mdi:tree-outline", label: "Park" },
-        { id: "museum", icon: "mdi:bank-outline", label: "Museum" },
-        { id: "hotel", icon: "mdi:bed-outline", label: "Hotel" },
-      ],
-    },
-    {
-      title: "People & Events",
-      items: [
-        { id: "person", icon: "mdi:account", label: "Person" },
-        { id: "group", icon: "mdi:account-group", label: "Group" },
-        { id: "info", icon: "mdi:information-outline", label: "Info" },
-        { id: "warning", icon: "mdi:alert-outline", label: "Warning" },
-        { id: "danger", icon: "mdi:alert-octagon-outline", label: "Danger" },
-        { id: "star", icon: "mdi:star-outline", label: "Highlight" },
-        { id: "photo", icon: "mdi:image-outline", label: "Photo spot" },
-        { id: "camera", icon: "mdi:camera-outline", label: "Camera" },
-        { id: "note", icon: "mdi:note-text-outline", label: "Note" },
-        { id: "chat", icon: "mdi:chat-outline", label: "Comment" },
-      ],
-    },
-  ];
+      {
+        title: "Travel & Movement",
+        items: [
+          { id: "plane", icon: "mdi:airplane", label: "Plane" },
+          { id: "car", icon: "mdi:car", label: "Car" },
+          { id: "bus", icon: "mdi:bus", label: "Bus" },
+          { id: "train", icon: "mdi:train", label: "Train" },
+          { id: "ship", icon: "mdi:ferry", label: "Ship" },
+          { id: "bike", icon: "mdi:bike", label: "Bike" },
+          { id: "walk", icon: "mdi:walk", label: "Walk" },
+          { id: "route", icon: "mdi:routes", label: "Route" },
+          { id: "from", icon: "mdi:map-marker-radius", label: "From" },
+          { id: "to", icon: "mdi:map-marker-check", label: "To" },
+        ],
+      },
+      {
+        title: "Places & POI",
+        items: [
+          { id: "home", icon: "mdi:home-outline", label: "Home" },
+          { id: "office", icon: "mdi:office-building-outline", label: "Office" },
+          { id: "school", icon: "mdi:school-outline", label: "School" },
+          { id: "hospital", icon: "mdi:hospital-building", label: "Hospital" },
+          { id: "restaurant", icon: "mdi:silverware-fork-knife", label: "Food" },
+          { id: "coffee", icon: "mdi:coffee-outline", label: "Coffee" },
+          { id: "shop", icon: "mdi:storefront-outline", label: "Shop" },
+          { id: "park", icon: "mdi:tree-outline", label: "Park" },
+          { id: "museum", icon: "mdi:bank-outline", label: "Museum" },
+          { id: "hotel", icon: "mdi:bed-outline", label: "Hotel" },
+        ],
+      },
+      {
+        title: "People & Events",
+        items: [
+          { id: "person", icon: "mdi:account", label: "Person" },
+          { id: "group", icon: "mdi:account-group", label: "Group" },
+          { id: "info", icon: "mdi:information-outline", label: "Info" },
+          { id: "warning", icon: "mdi:alert-outline", label: "Warning" },
+          { id: "danger", icon: "mdi:alert-octagon-outline", label: "Danger" },
+          { id: "star", icon: "mdi:star-outline", label: "Highlight" },
+          { id: "photo", icon: "mdi:image-outline", label: "Photo spot" },
+          { id: "camera", icon: "mdi:camera-outline", label: "Camera" },
+          { id: "note", icon: "mdi:note-text-outline", label: "Note" },
+          { id: "chat", icon: "mdi:chat-outline", label: "Comment" },
+        ],
+      },
+    ];
 
   return (
     <div className="p-3 space-y-4 text-xs">

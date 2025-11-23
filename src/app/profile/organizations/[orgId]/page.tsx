@@ -2,11 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Image from "next/image";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Workspace } from "@/types/workspace";
-import { getOrganizationMaps } from "@/lib/api-maps";
 import {
   deleteOrganization,
   getOrganizationById,
@@ -22,10 +20,9 @@ import {
 } from "@/lib/api-organizations";
 import { CurrentMembershipDto, getMyMembership } from "@/lib/api-membership";
 import { getProjectsByOrganization } from "@/lib/api-workspaces";
+import { joinSession, type ParticipantDto } from "@/lib/api-ques";
 import ManageWorkspaces from "@/components/ManageWorkspaces";
 import { useI18n } from "@/i18n/I18nProvider";
-
-type MapRow = Awaited<ReturnType<typeof getOrganizationMaps>>[number];
 
 function isValidEmail(s: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
@@ -208,6 +205,11 @@ export default function OrgDetailPage() {
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<BulkCreateStudentsRes | null>(null);
 
+  const [joinCode, setJoinCode] = useState("");
+  const [joinBusy, setJoinBusy] = useState(false);
+  const [joinMsg, setJoinMsg] = useState<string | null>(null);
+  const [joinErr, setJoinErr] = useState<string | null>(null);
+
   const { userId: myId, userEmail: myEmail } = useAuth();
 
   const isOwner = useMemo(() => {
@@ -237,6 +239,36 @@ export default function OrgDetailPage() {
     });
   }, [members, myId, myEmail]);
 
+  const isViewerOnly = useMemo(() => {
+    const list = asMemberArray(members?.members ?? []);
+    return list.some((m) => {
+      const role = (m.role ?? m.memberType ?? "").toLowerCase();
+      if (role !== "viewer") return false;
+
+      const matchById =
+        myId && typeof m.memberId === "string" && m.memberId.toLowerCase() === myId.toLowerCase();
+      const matchByEmail =
+        myEmail && typeof m.email === "string" && m.email.toLowerCase() === myEmail.toLowerCase();
+
+      return Boolean(matchById || matchByEmail);
+    });
+  }, [members, myId, myEmail]);
+
+  const canAccessQuestionBanks = useMemo(() => {
+    const list = asMemberArray(members?.members ?? []);
+    return list.some((m) => {
+      const role = (m.role ?? m.memberType ?? "").toLowerCase();
+      // chỉ Owner / Admin / Member
+      if (role !== "owner" && role !== "admin" && role !== "member") return false;
+
+      const matchById =
+        myId && typeof m.memberId === "string" && m.memberId.toLowerCase() === myId.toLowerCase();
+      const matchByEmail =
+        myEmail && typeof m.email === "string" && m.email.toLowerCase() === myEmail.toLowerCase();
+
+      return Boolean(matchById || matchByEmail);
+    });
+  }, [members, myId, myEmail]);
   const planAllows = [2, 3].includes(Number(membership?.planId ?? 0));
 
   const disabledImport = !(isAdminOrOwner && planAllows);
@@ -399,7 +431,8 @@ export default function OrgDetailPage() {
     setDeleteErr(null);
     try {
       await deleteOrganization(org.orgId);
-      if (typeof window !== "undefined") {
+      if (typeof window === "undefined") {
+      } else {
         window.dispatchEvent(new Event("auth-changed"));
       }
       router.push("/profile");
@@ -533,10 +566,104 @@ export default function OrgDetailPage() {
     void navigator.clipboard.writeText(String(orgId));
   }, [orgId]);
 
+    const handleJoinLesson = useCallback(async () => {
+    const code = joinCode.trim();
+    if (!code) {
+      setJoinErr("Vui lòng nhập mã tiết học.");
+      setJoinMsg(null);
+      return;
+    }
+
+    try {
+      setJoinBusy(true);
+      setJoinErr(null);
+      setJoinMsg(null);
+
+      const participant: ParticipantDto = await joinSession({
+        sessionCode: code,
+        displayName: myEmail || "Học sinh",
+      });
+
+      setJoinMsg("Tham gia tiết học thành công!");
+
+      router.push(
+        `/storymap/view/live?sessionId=${encodeURIComponent(
+          participant.sessionId
+        )}&participantId=${encodeURIComponent(
+          participant.id
+        )}&sessionCode=${encodeURIComponent(code)}`
+      );
+    } catch (e) {
+      console.error("join session failed", e);
+      setJoinErr("Không tham gia được tiết học. Vui lòng kiểm tra mã và thử lại.");
+      setJoinMsg(null);
+    } finally {
+      setJoinBusy(false);
+    }
+  }, [joinCode, myEmail, router]);
+
   if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">{t("org_detail.loading")}</div>;
+
   if (err || !org) return <div className="max-w-3xl px-4 text-red-400">{err ?? t("org_detail.not_found")}</div>;
 
   const memberRows: MemberLike[] = asMemberArray(members?.members ?? []);
+
+  if (isViewerOnly) {
+    return (
+      <div className="min-w-0 relative px-4">
+        <div className="flex items-center justify-between gap-3 mb-6">
+          <h1 className="text-2xl sm:text-3xl font-semibold">{org.orgName}</h1>
+        </div>
+
+        <section className="mb-8 grid gap-4 lg:grid-cols-3">
+          <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-4 lg:col-span-2">
+            <h2 className="text-base font-semibold text-emerald-200 mb-1">
+              Tham gia tiết học
+            </h2>
+            <p className="text-xs text-emerald-100/80 mb-3">
+              Nhập mã tiết học do giáo viên cung cấp để tham gia phiên tương tác.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                placeholder="VD: 123456"
+                className="flex-1 rounded-md bg-zinc-950 border border-emerald-400/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+              />
+              <button
+                type="button"
+                onClick={() => void handleJoinLesson()}
+                disabled={joinBusy}
+                className="inline-flex items-center justify-center rounded-md bg-emerald-500 text-zinc-900 font-semibold text-sm px-4 py-2 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {joinBusy ? "Đang tham gia..." : "Tham gia tiết học"}
+              </button>
+            </div>
+
+            {(joinErr || joinMsg) && (
+              <p
+                className={`mt-2 text-xs ${joinErr ? "text-red-300" : "text-emerald-300"
+                  }`}
+              >
+                {joinErr || joinMsg}
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
+            <div className="text-2xl font-bold text-emerald-300">
+              {memberRows.length}
+            </div>
+            <div className="text-sm text-zinc-400">
+              {t("org_detail.stat_members")}
+            </div>
+          </div>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="min-w-0 relative px-4">
@@ -689,12 +816,21 @@ export default function OrgDetailPage() {
         </div>
       </div>
 
-      {/* Workspaces Section */}
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{t("org_detail.section_ws")}</h2>
           <div className="flex items-center gap-2">
             <ManageWorkspaces orgId={orgId} canManage={isAdminOrOwner} />
+
+            {canAccessQuestionBanks && (
+              <button
+                onClick={() => router.push(`/profile/organizations/${orgId}/question-banks`)}
+                className="px-3 py-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 text-sm text-emerald-300 hover:bg-emerald-500/20 hover:shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
+              >
+                Bộ câu hỏi
+              </button>
+            )}
+
 
             {isOwner && (
               <span className="relative inline-block group">
@@ -779,7 +915,6 @@ export default function OrgDetailPage() {
         )}
       </section>
 
-      {/* Workspace Overview */}
       <section className="mb-8">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-semibold">{t("org_detail.section_overview")}</h2>
@@ -861,10 +996,10 @@ export default function OrgDetailPage() {
                         roleLabel === "Owner"
                           ? "org_detail.role_owner"
                           : roleLabel === "Admin"
-                          ? "org_detail.role_admin"
-                          : roleLabel === "Viewer"
-                          ? "org_detail.role_viewer"
-                          : "org_detail.role_member"
+                            ? "org_detail.role_admin"
+                            : roleLabel === "Viewer"
+                              ? "org_detail.role_viewer"
+                              : "org_detail.role_member"
                       )}{" "}
                       <span aria-hidden>▾</span>
                     </button>
@@ -886,10 +1021,10 @@ export default function OrgDetailPage() {
                                 r === "Owner"
                                   ? "org_detail.role_owner"
                                   : r === "Admin"
-                                  ? "org_detail.role_admin"
-                                  : r === "Viewer"
-                                  ? "org_detail.role_viewer"
-                                  : "org_detail.role_member"
+                                    ? "org_detail.role_admin"
+                                    : r === "Viewer"
+                                      ? "org_detail.role_viewer"
+                                      : "org_detail.role_member"
                               )}
                             </option>
                           ))}
