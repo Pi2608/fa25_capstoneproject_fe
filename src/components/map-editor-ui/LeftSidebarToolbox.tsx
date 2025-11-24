@@ -7,32 +7,27 @@ import { cn } from "@/lib/utils";
 import type { BaseKey } from "@/types";
 import type { FeatureData } from "@/utils/mapUtils";
 import type { LayerDTO } from "@/lib/api-maps";
-import type {
-  Segment,
-  TimelineTransition,
-  CameraState,
-  CreateSegmentRequest,
-  CreateTransitionRequest,
-  CreateLocationRequest,
-  CreateSegmentZoneRequest,
-  AttachLayerRequest,
-  Location,
-  Zone,
-} from "@/lib/api-storymap";
 import {
-  parseCameraState,
-  stringifyCameraState,
-  getCurrentCameraState,
-  applyCameraState,
-  getRouteAnimationsBySegment,
+  type Segment,
+  type TimelineTransition,
+  type CameraState,
+  type CreateSegmentRequest,
+  type CreateTransitionRequest,
+  type CreateLocationRequest,
+  type CreateSegmentZoneRequest,
+  type AttachLayerRequest,
+  type Location,
+  type Zone,
   deleteSegmentZone,
   deleteLocation,
   detachLayerFromSegment,
   deleteRouteAnimation,
-  type SegmentZone,
-  type Location,
-  type SegmentLayer,
-  type RouteAnimation,
+  SegmentLayer,
+  getRouteAnimationsBySegment,
+  parseCameraState,
+  getCurrentCameraState,
+  stringifyCameraState,
+  RouteAnimation,
 } from "@/lib/api-storymap";
 
 import LocationDialog from "@/components/storymap/LocationDialog";
@@ -724,43 +719,33 @@ function ExplorerView({
         <h4 className="text-xs font-semibold text-zinc-400 uppercase">
           Base Layer
         </h4>
-        <div className="flex gap-2">
-          <button
-            onClick={() => onBaseLayerChange("osm")}
-            className={cn(
-              "flex-1 py-2 px-2 rounded-md text-xs flex flex-col items-center justify-center gap-1 border transition-all",
-              baseLayer === "osm"
-                ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
-                : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600"
-            )}
-          >
-            <Icon icon="mdi:map-outline" className="w-4 h-4" />
-            <span>OSM</span>
-          </button>
-          <button
-            onClick={() => onBaseLayerChange("sat")}
-            className={cn(
-              "flex-1 py-2 px-2 rounded-md text-xs flex flex-col items-center justify-center gap-1 border transition-all",
-              baseLayer === "sat"
-                ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
-                : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600"
-            )}
-          >
-            <Icon icon="mdi:satellite-variant" className="w-4 h-4" />
-            <span>Satellite</span>
-          </button>
-          <button
-            onClick={() => onBaseLayerChange("dark")}
-            className={cn(
-              "flex-1 py-2 px-2 rounded-md text-xs flex flex-col items-center justify-center gap-1 border transition-all",
-              baseLayer === "dark"
-                ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
-                : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600"
-            )}
-          >
-            <Icon icon="mdi:moon-waning-crescent" className="w-4 h-4" />
-            <span>Dark</span>
-          </button>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { key: "osm" as BaseKey, label: "OSM", icon: "mdi:map-outline" },
+            { key: "sat" as BaseKey, label: "Satellite", icon: "mdi:satellite-variant" },
+            { key: "dark" as BaseKey, label: "Dark", icon: "mdi:moon-waning-crescent" },
+            { key: "positron" as BaseKey, label: "Light", icon: "mdi:brightness-7" },
+            { key: "dark-matter" as BaseKey, label: "Dark Matter", icon: "mdi:weather-night" },
+            { key: "terrain" as BaseKey, label: "Terrain", icon: "mdi:terrain" },
+            { key: "toner" as BaseKey, label: "Toner", icon: "mdi:circle-outline" },
+            { key: "watercolor" as BaseKey, label: "Watercolor", icon: "mdi:palette" },
+            { key: "topo" as BaseKey, label: "Topo", icon: "mdi:map-marker-radius" },
+          ].map(({ key, label, icon }) => (
+            <button
+              key={key}
+              onClick={() => onBaseLayerChange(key)}
+              className={cn(
+                "py-2 px-2 rounded-md text-xs flex flex-col items-center justify-center gap-1 border transition-all",
+                baseLayer === key
+                  ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
+                  : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:border-zinc-600"
+              )}
+              title={label}
+            >
+              <Icon icon={icon} className="w-4 h-4" />
+              <span className="text-[10px] leading-tight">{label}</span>
+            </button>
+          ))}
         </div>
       </div>
 

@@ -823,12 +823,20 @@ export default function OrgDetailPage() {
             <ManageWorkspaces orgId={orgId} canManage={isAdminOrOwner} />
 
             {canAccessQuestionBanks && (
-              <button
-                onClick={() => router.push(`/profile/organizations/${orgId}/question-banks`)}
-                className="px-3 py-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 text-sm text-emerald-300 hover:bg-emerald-500/20 hover:shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
-              >
-                Bộ câu hỏi
-              </button>
+              <>
+                <button
+                  onClick={() => router.push(`/profile/organizations/${orgId}/question-banks`)}
+                  className="px-3 py-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 text-sm text-emerald-300 hover:bg-emerald-500/20 hover:shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
+                >
+                  Bộ câu hỏi
+                </button>
+                <button
+                  onClick={() => router.push(`/profile/organizations/${orgId}/sessions/create`)}
+                  className="px-3 py-2 rounded-lg border border-sky-400/30 bg-sky-500/10 text-sm text-sky-200 hover:bg-sky-500/20 hover:shadow-[0_0_0_2px_rgba(56,189,248,0.25)]"
+                >
+                  Tạo session
+                </button>
+              </>
             )}
 
 

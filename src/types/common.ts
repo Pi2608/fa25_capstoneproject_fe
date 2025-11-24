@@ -1,6 +1,15 @@
 // Common types used across multiple components/modules
 
-export type BaseKey = "osm" | "sat" | "dark";
+export type BaseKey = 
+  | "osm"           // OpenStreetMap (default)
+  | "sat"           // Satellite/Imagery
+  | "dark"          // CartoDB Dark
+  | "positron"      // CartoDB Positron (light)
+  | "dark-matter"   // CartoDB Dark Matter
+  | "terrain"       // Stamen Terrain
+  | "toner"         // Stamen Toner
+  | "watercolor"    // Stamen Watercolor
+  | "topo";         // OpenTopoMap
 
 export type ViewMode = "grid" | "list";
 

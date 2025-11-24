@@ -43,7 +43,6 @@ export type Segment = {
   mapId: string;
   name: string;
   description?: string;
-  // storyContent?: string;
   displayOrder: number;
   cameraState: CameraState; // JSON stringify của CameraState
   autoAdvance: boolean;
