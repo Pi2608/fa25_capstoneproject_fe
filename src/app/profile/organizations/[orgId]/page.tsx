@@ -20,7 +20,7 @@ import {
 } from "@/lib/api-organizations";
 import { CurrentMembershipDto, getMyMembership } from "@/lib/api-membership";
 import { getProjectsByOrganization } from "@/lib/api-workspaces";
-import { joinSession, type ParticipantDto } from "@/lib/api-ques";
+import { joinSession, getSession, type ParticipantDto } from "@/lib/api-ques";
 import ManageWorkspaces from "@/components/ManageWorkspaces";
 import { useI18n } from "@/i18n/I18nProvider";
 
@@ -206,6 +206,8 @@ export default function OrgDetailPage() {
   const [importResult, setImportResult] = useState<BulkCreateStudentsRes | null>(null);
 
   const [joinCode, setJoinCode] = useState("");
+  const [joinName, setJoinName] = useState("");
+  const [joinDevice, setJoinDevice] = useState("");
   const [joinBusy, setJoinBusy] = useState(false);
   const [joinMsg, setJoinMsg] = useState<string | null>(null);
   const [joinErr, setJoinErr] = useState<string | null>(null);
@@ -566,14 +568,18 @@ export default function OrgDetailPage() {
     void navigator.clipboard.writeText(String(orgId));
   }, [orgId]);
 
-    const handleJoinLesson = useCallback(async () => {
+  const handleJoinLesson = useCallback(async () => {
     const code = joinCode.trim();
-    if (!code) {
-      setJoinErr("Vui lòng nhập mã tiết học.");
+    const name = joinName.trim();
+    const device = joinDevice.trim();
+
+    if (!code || !name || !device) {
+      setJoinErr(
+        "Vui lòng nhập đầy đủ mã tiết học, tên hiển thị và thông tin thiết bị."
+      );
       setJoinMsg(null);
       return;
     }
-
     try {
       setJoinBusy(true);
       setJoinErr(null);
@@ -581,26 +587,42 @@ export default function OrgDetailPage() {
 
       const participant: ParticipantDto = await joinSession({
         sessionCode: code,
-        displayName: myEmail || "Học sinh",
+        displayName: name,
+        deviceInfo: device,
       });
+
+      const session = await getSession(participant.sessionId);
+
+      if (!session.mapId) {
+        throw new Error(
+          "Session không có mapId, không thể mở bản đồ cho học sinh."
+        );
+      }
+
+      // Lưu thông tin student + participant vào sessionStorage
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem("imos_student_name", name);
+        window.sessionStorage.setItem("imos_session_code", code);
+        window.sessionStorage.setItem("imos_participant_id", participant.id);
+      }
 
       setJoinMsg("Tham gia tiết học thành công!");
 
       router.push(
-        `/storymap/view/live?sessionId=${encodeURIComponent(
-          participant.sessionId
-        )}&participantId=${encodeURIComponent(
-          participant.id
-        )}&sessionCode=${encodeURIComponent(code)}`
+        `/storymap/view/${session.mapId}?sessionId=${participant.sessionId}`
       );
+
     } catch (e) {
       console.error("join session failed", e);
-      setJoinErr("Không tham gia được tiết học. Vui lòng kiểm tra mã và thử lại.");
+      setJoinErr(
+        "Không tham gia được tiết học. Vui lòng kiểm tra thông tin và thử lại."
+      );
       setJoinMsg(null);
     } finally {
       setJoinBusy(false);
     }
-  }, [joinCode, myEmail, router]);
+
+  }, [joinCode, joinName, joinDevice, router]);
 
   if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">{t("org_detail.loading")}</div>;
 
@@ -623,24 +645,41 @@ export default function OrgDetailPage() {
             <p className="text-xs text-emerald-100/80 mb-3">
               Nhập mã tiết học do giáo viên cung cấp để tham gia phiên tương tác.
             </p>
-
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-col gap-2">
               <input
                 type="text"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="VD: 123456"
-                className="flex-1 rounded-md bg-zinc-950 border border-emerald-400/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+                placeholder="Mã tiết học (VD: 331809)"
+                className="rounded-md bg-zinc-950 border border-emerald-400/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
               />
+
+              <input
+                type="text"
+                value={joinName}
+                onChange={(e) => setJoinName(e.target.value)}
+                placeholder="Tên hiển thị của bạn"
+                className="rounded-md bg-zinc-950 border border-emerald-400/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+              />
+
+              <input
+                type="text"
+                value={joinDevice}
+                onChange={(e) => setJoinDevice(e.target.value)}
+                placeholder="Thông tin thiết bị (VD: Laptop phòng máy 01)"
+                className="rounded-md bg-zinc-950 border border-emerald-400/40 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+              />
+
               <button
                 type="button"
                 onClick={() => void handleJoinLesson()}
                 disabled={joinBusy}
-                className="inline-flex items-center justify-center rounded-md bg-emerald-500 text-zinc-900 font-semibold text-sm px-4 py-2 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="mt-1 inline-flex items-center justify-center rounded-md bg-emerald-500 text-zinc-900 font-semibold text-sm px-4 py-2 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {joinBusy ? "Đang tham gia..." : "Tham gia tiết học"}
               </button>
             </div>
+
 
             {(joinErr || joinMsg) && (
               <p

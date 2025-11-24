@@ -290,61 +290,34 @@ export async function updateQuestion(
 // Trạng thái session
 export type SessionStatus = "Pending" | "Running" | "Paused" | "Ended" | string;
 
-// DTO session theo response backend
 export interface SessionDto {
   id: string;
+
+  // Map & question bank
   mapId?: string | null;
+  mapName?: string | null;
   questionBankId?: string | null;
+  questionBankName?: string | null;
+
+  // Thông tin session
   sessionCode: string;
+  sessionName?: string | null;
+  description?: string | null;
+  sessionType?: string;
+
   status: SessionStatus;
+
+  // Thời gian & thống kê
   createdAt?: string | null;
   startedAt?: string | null;
   endedAt?: string | null;
   totalParticipants?: number | null;
 }
 
-type SessionsEnvelope = { sessions: any[] };
-
-function normalizeSession(raw: any): SessionDto {
-  if (!raw) {
-    return {
-      id: "",
-      mapId: null,
-      questionBankId: null,
-      sessionCode: "",
-      status: "Pending",
-      createdAt: null,
-      startedAt: null,
-      endedAt: null,
-      totalParticipants: 0,
-    };
-  }
-
-  return {
-    id: raw.id ?? raw.sessionId ?? raw.SessionId ?? "",
-    mapId: raw.mapId ?? raw.MapId ?? null,
-    questionBankId: raw.questionBankId ?? raw.QuestionBankId ?? null,
-    sessionCode: raw.sessionCode ?? raw.code ?? raw.SessionCode ?? "",
-    status: (raw.status ?? raw.Status ?? "Pending") as SessionStatus,
-    createdAt: raw.createdAt ?? raw.CreatedAt ?? null,
-    startedAt: raw.startedAt ?? raw.StartedAt ?? null,
-    endedAt: raw.endedAt ?? raw.EndedAt ?? null,
-    totalParticipants:
-      raw.totalParticipants ??
-      raw.TotalParticipants ??
-      raw.participantCount ??
-      null,
-  };
-}
-
-function asSessions(res: SessionsEnvelope | any[]): SessionDto[] {
-  const list = Array.isArray(res) ? res : res.sessions ?? [];
-  return list.map(normalizeSession);
-}
 
 export interface CreateSessionRequest {
   mapId: string;
-  questionBankId?: string | null;
+  questionBankId?: string;
   sessionName?: string;
   description?: string | null;
   sessionType?: "live" | "practice" | string;
@@ -364,9 +337,8 @@ export async function createSession(
 ): Promise<SessionDto> {
   const nowIso = new Date().toISOString();
 
-  const body = {
+  const baseBody = {
     mapId: req.mapId,
-    questionBankId: req.questionBankId ?? null,
     sessionName: req.sessionName ?? "New session",
     description: req.description ?? null,
     sessionType: req.sessionType ?? "live",
@@ -381,14 +353,14 @@ export async function createSession(
     scheduledStartTime: req.scheduledStartTime ?? nowIso,
   };
 
-  const res = await postJson<typeof body, SessionDto>("/sessions", body);
-  return normalizeSession(res as any);
+  const res = await postJson<typeof baseBody, SessionDto>("/sessions", baseBody);
+  return res;
 }
 
 
 export async function getSession(sessionId: string): Promise<SessionDto> {
   const res = await getJson<SessionDto>(`/sessions/${sessionId}`);
-  return normalizeSession(res as any);
+  return res;
 }
 
 export async function deleteSession(sessionId: string) {
@@ -396,8 +368,8 @@ export async function deleteSession(sessionId: string) {
 }
 
 export async function getMySessions(): Promise<SessionDto[]> {
-  const res = await getJson<SessionsEnvelope | any[]>("/sessions/my");
-  return asSessions(res as any);
+  const res = await getJson<SessionDto[]>("/sessions/my");
+  return res;
 }
 
 export async function getSessionByCode(
@@ -406,7 +378,7 @@ export async function getSessionByCode(
   const res = await getJson<SessionDto>(
     `/sessions/code/${encodeURIComponent(sessionCode)}`
   );
-  return normalizeSession(res as any);
+  return res;
 }
 
 // ---------- Thông tin người tham gia & join / leave ----------
@@ -416,6 +388,49 @@ export interface ParticipantDto {
   sessionId: string;
   displayName: string;
   score?: number;
+}
+
+function normalizeParticipant(raw: any): ParticipantDto {
+  if (!raw) {
+    return {
+      id: "",
+      sessionId: "",
+      displayName: "",
+      score: 0,
+    };
+  }
+
+  const sessionId =
+    raw.sessionId ??
+    raw.SessionId ??
+    raw.sessionID ??
+    raw.session?.id ??
+    "";
+
+  return {
+    id:
+      raw.id ??
+      raw.participantId ??
+      raw.ParticipantId ??
+      raw.participantID ??
+      "",
+
+    sessionId,
+
+    displayName:
+      raw.displayName ??
+      raw.DisplayName ??
+      raw.name ??
+      raw.Name ??
+      "",
+
+    score:
+      raw.score ??
+      raw.Score ??
+      raw.totalScore ??
+      raw.TotalScore ??
+      undefined,
+  };
 }
 
 export interface JoinSessionRequest {
@@ -550,6 +565,48 @@ export async function extendQuestionTime(
     `/sessions/questions/${sessionQuestionId}/extend?additionalSeconds=${additionalSeconds}`,
     {}
   );
+}
+
+// ---------- Câu hỏi đang hiển thị cho học sinh ----------
+
+export interface SessionRunningQuestionDto {
+  sessionId: string;
+  sessionQuestionId: string;
+  questionId: string;
+  questionType: string;
+  questionText: string;
+  questionImageUrl?: string | null;
+  questionAudioUrl?: string | null;
+  points?: number;
+  timeLimit?: number | null;
+  secondsRemaining?: number | null;
+  options: QuestionOptionDto[];
+}
+
+export async function getCurrentQuestionForParticipant(
+  participantId: string
+): Promise<SessionRunningQuestionDto | null> {
+  const res = await getJson<SessionRunningQuestionDto | null>(
+    `/api/sessions/participants/${participantId}/current-question`
+  );
+
+  if (!res) return null;
+
+  const opts = Array.isArray((res as any).options)
+    ? (res as any).options.map((o: any, idx: number): QuestionOptionDto => ({
+        questionOptionId: o.questionOptionId ?? o.QuestionOptionId ?? "",
+        questionId: o.questionId ?? o.QuestionId ?? "",
+        optionText: o.optionText ?? o.text ?? "",
+        optionImageUrl: o.optionImageUrl ?? o.imageUrl ?? null,
+        isCorrect: !!(o.isCorrect ?? o.correct ?? false),
+        displayOrder: o.displayOrder ?? idx + 1,
+      }))
+    : [];
+
+  return {
+    ...res,
+    options: opts,
+  };
 }
 
 // ---------- Học sinh gửi đáp án ----------

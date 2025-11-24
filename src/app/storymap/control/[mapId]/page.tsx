@@ -14,9 +14,10 @@ import {
   activateNextQuestion,
   skipCurrentQuestion,
   extendQuestionTime,
+  getMySessions,      
   type SessionDto,
   type LeaderboardEntryDto,
-  type QuestionDto
+  type QuestionDto,
 } from "@/lib/api-ques";
 
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
@@ -51,17 +52,19 @@ export default function StoryMapControlPage() {
   const [changingStatus, setChangingStatus] = useState(false);
 
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntryDto[]>([]);
-  const [questionControlLoading, setQuestionControlLoading] = useState(false);
-
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
 
   const [questions, setQuestions] = useState<QuestionDto[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
 
+  const [questionControlLoading, setQuestionControlLoading] = useState(false);
+
   const [questionBankMeta, setQuestionBankMeta] =
     useState<QuestionBankMeta | null>(null);
 
   const [showShareModal, setShowShareModal] = useState(false);
+  const [currentQuestionIndex, setCurrentQuestionIndex] =
+    useState<number | null>(null);
 
   const broadcastRef = useRef<BroadcastChannel | null>(null);
 
@@ -105,76 +108,82 @@ export default function StoryMapControlPage() {
     })();
   }, [mapId]);
 
-  // ================== Read session + question bank from URL ==================
+  // ================== Read session + question bank (by sessionId) ==================
   useEffect(() => {
     if (!searchParams) return;
 
     const sessionId = searchParams.get("sessionId");
-    const sessionCode = searchParams.get("sessionCode");
-    const questionBankId = searchParams.get("questionBankId");
 
-    if (!sessionId && !sessionCode) {
+    // Không có sessionId => không có session
+    if (!sessionId) {
       setSession(null);
-    } else {
-      setSession((prev) => ({
-        id: sessionId ?? prev?.id ?? "",
-        mapId,
-        questionBankId: questionBankId ?? prev?.questionBankId ?? null,
-        sessionCode: sessionCode ?? prev?.sessionCode ?? "",
-        status: prev?.status ?? "Pending",
-        createdAt: prev?.createdAt ?? null,
-        startedAt: prev?.startedAt ?? null,
-        endedAt: prev?.endedAt ?? null,
-        totalParticipants: prev?.totalParticipants ?? null,
-      }));
-    }
-
-    const bankName = searchParams.get("bankName") ?? undefined;
-    const description = searchParams.get("bankDescription") ?? undefined;
-    const category = searchParams.get("category") ?? undefined;
-    const tagsStr = searchParams.get("tags") ?? "";
-    const totalQuestionsStr = searchParams.get("totalQuestions") ?? "";
-    const workspaceName = searchParams.get("workspaceName") ?? undefined;
-    const mapNameFromParam = searchParams.get("mapName") ?? undefined;
-    const createdAt = searchParams.get("createdAt") ?? undefined;
-    const updatedAt = searchParams.get("updatedAt") ?? undefined;
-
-    if (
-      !questionBankId &&
-      !bankName &&
-      !description &&
-      !category &&
-      !tagsStr &&
-      !totalQuestionsStr
-    ) {
       setQuestionBankMeta(null);
-    } else {
-      setQuestionBankMeta({
-        id: questionBankId ?? undefined,
-        bankName,
-        description,
-        category,
-        tags: tagsStr
-          ? tagsStr
-            .split(",")
-            .map((t) => t.trim())
-            .filter(Boolean)
-          : [],
-        totalQuestions: totalQuestionsStr
-          ? Number(totalQuestionsStr)
-          : undefined,
-        workspaceName,
-        mapName: mapNameFromParam,
-        createdAt,
-        updatedAt,
-      });
+      return;
     }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        // Lấy tất cả session mà mình là host rồi tìm đúng session theo id
+        const list = await getMySessions();
+        if (cancelled) return;
+
+        const found = list.find(
+          (s) => s.id === sessionId || s.id === sessionId
+        );
+
+        if (!found) {
+          console.warn("Session not found in getMySessions for id:", sessionId);
+          setSession(null);
+          setQuestionBankMeta(null);
+          setError("Không tìm thấy session này trong danh sách của bạn");
+          return;
+        }
+
+        // Lưu session (dùng cho panel bên trái)
+        setSession({
+          ...found,
+          mapId: found.mapId ?? mapId, // fallback
+        });
+
+        // Lưu meta bộ câu hỏi (dùng cho panel bên phải)
+        if (found.questionBankId) {
+          setQuestionBankMeta({
+            id: found.questionBankId ?? undefined,
+            bankName: (found as any).questionBankName ?? undefined,
+            description: (found as any).description ?? undefined,
+            category: undefined,
+            tags: [],
+            totalQuestions: null,
+            workspaceName: undefined,
+            mapName: (found as any).mapName ?? undefined,
+            createdAt: found.createdAt ?? undefined,
+            updatedAt: undefined,
+          });
+        } else {
+          setQuestionBankMeta(null);
+        }
+      } catch (e: any) {
+        if (cancelled) return;
+        console.error("Load session by sessionId failed:", e);
+        setSession(null);
+        setQuestionBankMeta(null);
+        setError(e?.message || "Không tải được thông tin session");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [searchParams, mapId]);
 
+  // ================== Load questions of question bank ==================
   useEffect(() => {
     const qbId = questionBankMeta?.id;
     if (!qbId) {
       setQuestions([]);
+      setCurrentQuestionIndex(null);
       return;
     }
 
@@ -189,16 +198,20 @@ export default function StoryMapControlPage() {
 
         const ordered = Array.isArray(data)
           ? [...data].sort(
-            (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
-          )
+              (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
+            )
           : [];
-
+        setCurrentQuestionIndex(null);
         setQuestions(ordered);
       } catch (e) {
         console.error("Load question bank questions failed:", e);
-        if (!cancelled) setQuestions([]);
+        if (!cancelled) {
+          setQuestions([]);
+        }
       } finally {
-        if (!cancelled) setLoadingQuestions(false);
+        if (!cancelled) {
+          setLoadingQuestions(false);
+        }
       }
     })();
 
@@ -242,16 +255,16 @@ export default function StoryMapControlPage() {
       setSession((prev) =>
         prev
           ? {
-            ...prev,
-            status:
-              action === "start"
-                ? "Running"
-                : action === "pause"
+              ...prev,
+              status:
+                action === "start"
+                  ? "Running"
+                  : action === "pause"
                   ? "Paused"
                   : action === "resume"
-                    ? "Running"
-                    : "Ended",
-          }
+                  ? "Running"
+                  : "Ended",
+            }
           : prev
       );
     } catch (e: any) {
@@ -279,12 +292,20 @@ export default function StoryMapControlPage() {
     }
   };
 
+  // ================== Question control handlers ==================
   const handleNextQuestion = async () => {
     if (!session || questionControlLoading) return;
 
     try {
       setQuestionControlLoading(true);
       await activateNextQuestion(session.id);
+
+      setCurrentQuestionIndex((prev) => {
+        if (!questions.length) return prev;
+        if (prev == null) return 0;
+        const next = Math.min(prev + 1, questions.length - 1);
+        return next;
+      });
     } catch (e: any) {
       console.error("Next question failed:", e);
       setError(e?.message || "Không chuyển được sang câu tiếp theo");
@@ -299,6 +320,13 @@ export default function StoryMapControlPage() {
     try {
       setQuestionControlLoading(true);
       await skipCurrentQuestion(session.id);
+
+      setCurrentQuestionIndex((prev) => {
+        if (!questions.length) return prev;
+        if (prev == null) return 0;
+        const next = Math.min(prev + 1, questions.length - 1);
+        return next;
+      });
     } catch (e: any) {
       console.error("Skip question failed:", e);
       setError(e?.message || "Không bỏ qua được câu hỏi");
@@ -315,10 +343,7 @@ export default function StoryMapControlPage() {
     );
     if (!sessionQuestionId) return;
 
-    const secondsStr = window.prompt(
-      "Gia hạn thêm bao nhiêu giây?",
-      "10"
-    );
+    const secondsStr = window.prompt("Gia hạn thêm bao nhiêu giây?", "10");
     const seconds = secondsStr ? parseInt(secondsStr, 10) : NaN;
     if (!seconds || Number.isNaN(seconds) || seconds <= 0) return;
 
@@ -393,10 +418,10 @@ export default function StoryMapControlPage() {
                     (session.status === "Running"
                       ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
                       : session.status === "Paused"
-                        ? "border-amber-400/60 bg-amber-500/10 text-amber-200"
-                        : session.status === "Ended"
-                          ? "border-rose-500/70 bg-rose-600/10 text-rose-300"
-                          : "border-sky-400/60 bg-sky-500/10 text-sky-200")
+                      ? "border-amber-400/60 bg-amber-500/10 text-amber-200"
+                      : session.status === "Ended"
+                      ? "border-rose-500/70 bg-rose-600/10 text-rose-300"
+                      : "border-sky-400/60 bg-sky-500/10 text-sky-200")
                   }
                 >
                   ● {session.status}
@@ -405,7 +430,7 @@ export default function StoryMapControlPage() {
             </div>
           </div>
 
-          {/* BODY: SESSION + QUESTION BANK */}
+          {/* BODY: SESSION + LEADERBOARD */}
           <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3 space-y-4">
             {/* SESSION CARD */}
             <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3 space-y-3">
@@ -414,7 +439,9 @@ export default function StoryMapControlPage() {
                   <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium">
                     Phiên tương tác
                   </p>
-                  <p className="text-xs text-zinc-400">Quản lý mã tham gia & trạng thái</p>
+                  <p className="text-xs text-zinc-400">
+                    Quản lý mã tham gia & trạng thái
+                  </p>
                 </div>
 
                 {session && (
@@ -454,22 +481,24 @@ export default function StoryMapControlPage() {
                         <span>Copy</span>
                       </button>
                     </div>
-                  </div>
+                    </div>
                 </div>
               ) : (
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
-                  Chưa có session cho bản đồ này. Hãy quay lại workspace và tạo session
-                  từ đó.
+                  Chưa có session cho bản đồ này. Hãy quay lại workspace và tạo
+                  session từ đó.
                 </div>
               )}
 
-              {/* TRẠNG THÁI + NÚT ĐIỀU KHIỂN */}
+              {/* TRẠNG THÁI + NÚT ĐIỀU KHIỂN SESSION */}
               {session && (
                 <>
                   <div className="flex items-center justify-between text-[11px] text-zinc-400">
                     <span>
                       Trạng thái:{" "}
-                      <span className="font-semibold text-zinc-100">{session.status}</span>
+                      <span className="font-semibold text-zinc-100">
+                        {session.status}
+                      </span>
                     </span>
                     {questionBankMeta?.bankName && (
                       <span>
@@ -516,7 +545,97 @@ export default function StoryMapControlPage() {
                     </button>
                   </div>
 
-                  <div className="mt-2 border-t border-zinc-800 pt-2">
+                  <div className="flex items-center justify-between pt-2">
+                    <p className="text-[11px] text-zinc-500">
+                      HS truy cập link lớp học rồi nhập code ở trên.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleLoadLeaderboard}
+                      className="text-[11px] text-sky-300 hover:text-sky-200 underline-offset-2 hover:underline"
+                    >
+                      Xem bảng xếp hạng
+                    </button>
+                  </div>
+
+                  {session && (
+                    <div className="mt-2 max-h-32 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 space-y-1">
+                      {loadingLeaderboard && (
+                        <p className="text-[11px] text-zinc-500">
+                          Đang tải bảng xếp hạng...
+                        </p>
+                      )}
+
+                      {!loadingLeaderboard && leaderboard.length === 0 && (
+                        <p className="text-[11px] text-zinc-500">
+                          Chưa có dữ liệu bảng xếp hạng.
+                        </p>
+                      )}
+
+                      {!loadingLeaderboard &&
+                        leaderboard.length > 0 &&
+                        leaderboard.map((p, idx) => (
+                          <div
+                            key={p.participantId ?? idx}
+                            className="flex items-center justify-between text-[11px] text-zinc-200"
+                          >
+                            <span>
+                              #{p.rank ?? idx + 1} {p.displayName}
+                            </span>
+                            <span className="font-semibold">{p.score}</span>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+          </div>
+        </div>
+
+        {/* MIDDLE + RIGHT: Map + Question panel */}
+        <div className="flex-1 min-h-0 flex">
+          {/* MIDDLE: Map Viewer */}
+          <div className="flex-1 min-h-0">
+            <StoryMapViewer
+              mapId={mapId}
+              segments={segments}
+              baseMapProvider={mapDetail?.baseMapProvider}
+              initialCenter={center}
+              initialZoom={mapDetail?.defaultZoom || 10}
+              onSegmentChange={handleSegmentChange}
+            />
+          </div>
+
+          {/* RIGHT: Question control + question bank */}
+          <div className="w-[360px] border-l border-zinc-800 bg-zinc-950/95 flex flex-col">
+            <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3 space-y-3">
+              <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3 space-y-3">
+                {/* HEADER QUESTION PANEL */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium">
+                      Bộ câu hỏi của session này
+                    </p>
+                    <p className="text-xs text-zinc-400">
+                      {questionBankMeta?.bankName
+                        ? `Bộ: ${questionBankMeta.bankName}`
+                        : "Chưa gắn bộ câu hỏi cho session này."}
+                    </p>
+                  </div>
+                  {typeof questionBankMeta?.totalQuestions === "number" && (
+                    <div className="text-right text-[11px] text-zinc-300">
+                      <div className="font-semibold">
+                        {questionBankMeta.totalQuestions}
+                      </div>
+                      <div className="text-zinc-500">câu hỏi</div>
+                    </div>
+                  )}
+                </div>
+
+                {/* NÚT ĐIỀU KHIỂN CÂU HỎI */}
+                {session && (
+                  <div className="border-t border-zinc-800 pt-2">
                     <p className="text-[11px] text-zinc-500 mb-1">
                       Điều khiển câu hỏi (giáo viên)
                     </p>
@@ -559,230 +678,179 @@ export default function StoryMapControlPage() {
                       </button>
                     </div>
                   </div>
-                  <div className="flex items-center justify-between pt-1">
-                    <p className="text-[11px] text-zinc-500">
-                      HS truy cập link lớp học rồi nhập code ở trên.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleLoadLeaderboard}
-                      className="text-[11px] text-sky-300 hover:text-sky-200 underline-offset-2 hover:underline"
-                    >
-                      Xem bảng xếp hạng
-                    </button>
+                )}
+
+                {/* META BỘ CÂU HỎI + DANH SÁCH CÂU HỎI */}
+                {!questionBankMeta ? (
+                  <div className="mt-2 rounded-xl border border-zinc-800 bg-zinc-950/80 px-3 py-2 text-[11px] text-zinc-400">
+                    Session hiện tại chưa gắn bộ câu hỏi hoặc thông tin chưa được
+                    truyền sang.
                   </div>
-
-                  {session && (
-                    <div className="mt-2 max-h-32 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 space-y-1">
-                      {loadingLeaderboard && (
-                        <p className="text-[11px] text-zinc-500">
-                          Đang tải bảng xếp hạng...
+                ) : (
+                  <div className="mt-2 space-y-2">
+                    <div>
+                      <p className="text-sm font-semibold text-white">
+                        {questionBankMeta.bankName || "Bộ câu hỏi"}
+                      </p>
+                      {questionBankMeta.category && (
+                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                          Chủ đề: {questionBankMeta.category}
                         </p>
                       )}
+                    </div>
 
-                      {!loadingLeaderboard && leaderboard.length === 0 && (
-                        <p className="text-[11px] text-zinc-500">
-                          Chưa có dữ liệu bảng xếp hạng.
-                        </p>
-                      )}
+                    {(questionBankMeta.mapName ||
+                      questionBankMeta.workspaceName) && (
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
+                        {questionBankMeta.mapName && (
+                          <span>Map: {questionBankMeta.mapName}</span>
+                        )}
+                        {questionBankMeta.workspaceName && (
+                          <span>Workspace: {questionBankMeta.workspaceName}</span>
+                        )}
+                      </div>
+                    )}
 
-                      {!loadingLeaderboard &&
-                        leaderboard.length > 0 &&
-                        leaderboard.map((p, idx) => (
-                          <div
-                            key={p.participantId ?? idx}
-                            className="flex items-center justify-between text-[11px] text-zinc-200"
-                          >
-                            <span>
-                              #{p.rank ?? idx + 1} {p.displayName}
-                            </span>
-                            <span className="font-semibold">{p.score}</span>
+                    {questionBankMeta.tags &&
+                      questionBankMeta.tags.length > 0 && (
+                        <div className="pt-1">
+                          <p className="text-[11px] text-zinc-400 mb-1">
+                            Tags:
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {questionBankMeta.tags.map((tag) => (
+                              <span
+                                key={tag}
+                                className="px-2 py-0.5 rounded-full border border-zinc-700 bg-zinc-900 text-[11px] text-zinc-100"
+                              >
+                                {tag}
+                              </span>
+                            ))}
                           </div>
-                        ))}
-                    </div>
-                  )}
+                        </div>
+                      )}
 
-                </>
-              )}
-            </section>
+                    {questionBankMeta.description && (
+                      <div className="pt-1">
+                        <p className="text-[11px] text-zinc-400 mb-1">Mô tả:</p>
+                        <p className="max-h-20 overflow-y-auto text-[11px] text-zinc-200 whitespace-pre-wrap">
+                          {questionBankMeta.description}
+                        </p>
+                      </div>
+                    )}
 
-            {/* QUESTION BANK CARD */}
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium">
-                    Bộ câu hỏi của session này
-                  </p>
-                </div>
-                {typeof questionBankMeta?.totalQuestions === "number" && (
-                  <div className="text-right text-[11px] text-zinc-300">
-                    <div className="font-semibold">
-                      {questionBankMeta.totalQuestions}
+                    {(questionBankMeta.createdAt ||
+                      questionBankMeta.updatedAt) && (
+                      <div className="pt-1 border-t border-zinc-800 mt-1 text-[11px] text-zinc-500 space-y-0.5">
+                        {questionBankMeta.createdAt && (
+                          <p>Tạo lúc: {questionBankMeta.createdAt}</p>
+                        )}
+                        {questionBankMeta.updatedAt && (
+                          <p>Cập nhật: {questionBankMeta.updatedAt}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* DANH SÁCH CÂU HỎI */}
+                    <div className="pt-2 border-t border-zinc-800 mt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-500 font-medium">
+                          Danh sách câu hỏi
+                        </p>
+                        {typeof questionBankMeta.totalQuestions === "number" && (
+                          <span className="text-[11px] text-zinc-400">
+                            {questionBankMeta.totalQuestions} câu
+                          </span>
+                        )}
+                      </div>
+
+                      {loadingQuestions ? (
+                        <p className="text-[11px] text-zinc-500">
+                          Đang tải danh sách câu hỏi...
+                        </p>
+                      ) : questions.length === 0 ? (
+                        <p className="text-[11px] text-zinc-500">
+                          Chưa có câu hỏi nào trong bộ này.
+                        </p>
+                      ) : (
+                        <div className="max-h-52 overflow-y-auto space-y-2 mt-1">
+                          {questions.map((q, idx) => {
+                            const isActive = idx === currentQuestionIndex;
+
+                            return (
+                              <div
+                                key={q.questionId}
+                                className={
+                                  "rounded-lg px-3 py-2 space-y-1 border " +
+                                  (isActive
+                                    ? "border-emerald-500/80 bg-emerald-500/10"
+                                    : "border-zinc-800 bg-zinc-950/70")
+                                }
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-[11px] text-zinc-100">
+                                    <span className="font-semibold">
+                                      Câu {q.displayOrder || idx + 1}:
+                                    </span>{" "}
+                                    {q.questionText}
+                                  </p>
+
+                                  <div className="flex flex-col items-end gap-0.5">
+                                    <span className="text-[10px] text-zinc-400 whitespace-nowrap">
+                                      {q.points} điểm · {q.timeLimit ?? 0}s
+                                    </span>
+                                    {isActive && (
+                                      <span className="inline-flex items-center rounded-full bg-emerald-500/15 border border-emerald-400/60 px-1.5 py-[1px] text-[10px] text-emerald-200">
+                                        Đang phát cho HS
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {q.options && q.options.length > 0 && (
+                                  <ul className="mt-1 space-y-0.5">
+                                    {[...q.options]
+                                      .sort(
+                                        (a, b) =>
+                                          (a.displayOrder ?? 0) -
+                                          (b.displayOrder ?? 0)
+                                      )
+                                      .map((opt) => (
+                                        <li
+                                          key={opt.questionOptionId ?? opt.optionText}
+                                          className="flex items-start gap-2 text-[11px]"
+                                        >
+                                          <span className="mt-[3px] inline-block h-1.5 w-1.5 rounded-full bg-zinc-500" />
+                                          <span
+                                            className={
+                                              opt.isCorrect
+                                                ? "text-emerald-300 font-medium"
+                                                : "text-zinc-300"
+                                            }
+                                          >
+                                            {opt.optionText ||
+                                              "(Không có nội dung)"}
+                                          </span>
+                                          {opt.isCorrect && (
+                                            <span className="ml-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 px-1.5 py-[1px] text-[10px] text-emerald-300">
+                                              Đáp án
+                                            </span>
+                                          )}
+                                        </li>
+                                      ))}
+                                  </ul>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                    <div className="text-zinc-500">câu hỏi</div>
                   </div>
                 )}
-              </div>
-
-              {!questionBankMeta ? (
-                <div className="mt-1 rounded-xl border border-zinc-800 bg-zinc-950/80 px-3 py-2 text-[11px] text-zinc-400">
-                  Session hiện tại chưa gắn bộ câu hỏi hoặc thông tin chưa được truyền
-                  sang.
-                </div>
-              ) : (
-                <div className="mt-1 space-y-2">
-                  <div>
-                    <p className="text-sm font-semibold text-white">
-                      {questionBankMeta.bankName || "Bộ câu hỏi"}
-                    </p>
-                    {questionBankMeta.category && (
-                      <p className="text-[11px] text-zinc-400 mt-0.5">
-                        Chủ đề: {questionBankMeta.category}
-                      </p>
-                    )}
-                  </div>
-
-                  {(questionBankMeta.mapName || questionBankMeta.workspaceName) && (
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
-                      {questionBankMeta.mapName && (
-                        <span>Map: {questionBankMeta.mapName}</span>
-                      )}
-                      {questionBankMeta.workspaceName && (
-                        <span>Workspace: {questionBankMeta.workspaceName}</span>
-                      )}
-                    </div>
-                  )}
-
-                  {questionBankMeta.tags && questionBankMeta.tags.length > 0 && (
-                    <div className="pt-1">
-                      <p className="text-[11px] text-zinc-400 mb-1">Tags:</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {questionBankMeta.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className="px-2 py-0.5 rounded-full border border-zinc-700 bg-zinc-900 text-[11px] text-zinc-100"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {questionBankMeta.description && (
-                    <div className="pt-1">
-                      <p className="text-[11px] text-zinc-400 mb-1">Mô tả:</p>
-                      <p className="max-h-20 overflow-y-auto text-[11px] text-zinc-200 whitespace-pre-wrap">
-                        {questionBankMeta.description}
-                      </p>
-                    </div>
-                  )}
-
-                  {(questionBankMeta.createdAt || questionBankMeta.updatedAt) && (
-                    <div className="pt-1 border-t border-zinc-800 mt-1 text-[11px] text-zinc-500 space-y-0.5">
-                      {questionBankMeta.createdAt && (
-                        <p>Tạo lúc: {questionBankMeta.createdAt}</p>
-                      )}
-                      {questionBankMeta.updatedAt && (
-                        <p>Cập nhật: {questionBankMeta.updatedAt}</p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* DANH SÁCH CÂU HỎI */}
-                  <div className="pt-2 border-t border-zinc-800 mt-2">
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-500 font-medium">
-                        Danh sách câu hỏi
-                      </p>
-                      {typeof questionBankMeta.totalQuestions === "number" && (
-                        <span className="text-[11px] text-zinc-400">
-                          {questionBankMeta.totalQuestions} câu
-                        </span>
-                      )}
-                    </div>
-
-                    {loadingQuestions ? (
-                      <p className="text-[11px] text-zinc-500">
-                        Đang tải danh sách câu hỏi...
-                      </p>
-                    ) : questions.length === 0 ? (
-                      <p className="text-[11px] text-zinc-500">
-                        Chưa có câu hỏi nào trong bộ này.
-                      </p>
-                    ) : (
-                      <div className="max-h-52 overflow-y-auto space-y-2 mt-1">
-                        {questions.map((q, idx) => (
-                          <div
-                            key={q.id}
-                            className="rounded-lg border border-zinc-800 bg-zinc-950/70 px-3 py-2 space-y-1"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-[11px] text-zinc-100">
-                                <span className="font-semibold">
-                                  Câu {q.displayOrder || idx + 1}:
-                                </span>{" "}
-                                {q.questionText}
-                              </p>
-                              <span className="text-[10px] text-zinc-400 whitespace-nowrap">
-                                {q.points} điểm · {q.timeLimit ?? 0}s
-                              </span>
-                            </div>
-
-                            {q.options && q.options.length > 0 && (
-                              <ul className="mt-1 space-y-0.5">
-                                {[...q.options]
-                                  .sort(
-                                    (a, b) =>
-                                      (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
-                                  )
-                                  .map((opt) => (
-                                    <li
-                                      key={opt.id ?? opt.optionText}
-                                      className="flex items-start gap-2 text-[11px]"
-                                    >
-                                      <span className="mt-[3px] inline-block h-1.5 w-1.5 rounded-full bg-zinc-500" />
-                                      <span
-                                        className={
-                                          opt.isCorrect
-                                            ? "text-emerald-300 font-medium"
-                                            : "text-zinc-300"
-                                        }
-                                      >
-                                        {opt.optionText || "(Không có nội dung)"}
-                                      </span>
-                                      {opt.isCorrect && (
-                                        <span className="ml-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 px-1.5 py-[1px] text-[10px] text-emerald-300">
-                                          Đáp án
-                                        </span>
-                                      )}
-                                    </li>
-                                  ))}
-                              </ul>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-
-                </div>
-              )}
-            </section>
+              </section>
+            </div>
           </div>
-        </div>
-
-        {/* RIGHT: Map Viewer */}
-        <div className="flex-1 min-h-0">
-          <StoryMapViewer
-            mapId={mapId}
-            segments={segments}
-            baseMapProvider={mapDetail?.baseMapProvider}
-            initialCenter={center}
-            initialZoom={mapDetail?.defaultZoom || 10}
-            onSegmentChange={handleSegmentChange}
-          />
         </div>
       </div>
 
@@ -812,7 +880,8 @@ export default function StoryMapControlPage() {
           <span className="font-semibold text-white">
             {segments.length === 0 ? 0 : currentIndex + 1}
           </span>{" "}
-          / <span className="font-semibold text-white">{segments.length}</span>
+          /{" "}
+          <span className="font-semibold text-white">{segments.length}</span>
         </div>
 
         <div className="flex-1 overflow-x-auto">
@@ -821,10 +890,11 @@ export default function StoryMapControlPage() {
               <button
                 key={seg.segmentId}
                 onClick={() => goToSegment(index)}
-                className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition ${index === currentIndex
-                  ? "bg-blue-500 text-white border-blue-400"
-                  : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700"
-                  }`}
+                className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition ${
+                  index === currentIndex
+                    ? "bg-blue-500 text-white border-blue-400"
+                    : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700"
+                }`}
               >
                 {index + 1}. {seg.name || "Untitled"}
               </button>
