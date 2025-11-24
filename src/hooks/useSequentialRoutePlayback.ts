@@ -41,7 +41,7 @@ export function useSequentialRoutePlayback({
         if (!cancelled && locations) {
           const cache = new Map<string, Location>();
           locations.forEach((loc) => {
-            const id = loc.locationId || loc.poiId;
+            const id = loc.locationId;
             if (id) cache.set(id, loc);
           });
           locationsCacheRef.current = cache;

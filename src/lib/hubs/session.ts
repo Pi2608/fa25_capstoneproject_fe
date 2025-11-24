@@ -1,7 +1,7 @@
 import * as signalR from "@microsoft/signalr";
-import { getToken } from "./api-core";
+import { getToken } from "../api-core";
+import { isTokenValid, createBaseConnection, API_BASE_URL } from "./base";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 // ===================== SESSION SIGNALR TYPES =====================
 
@@ -115,33 +115,6 @@ export interface SessionEndedEvent {
 
 // ===================== CONNECTION SETUP =====================
 
-function isTokenValid(token: string): boolean {
-  if (!token || token.trim().length === 0) {
-    return false;
-  }
-
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) {
-      return false;
-    }
-
-    const payload = JSON.parse(
-      atob(parts[1].replace(/-/g, "+").replace(/_/g, "/"))
-    );
-    const exp = payload.exp;
-
-    if (!exp) {
-      return true;
-    }
-
-    const now = Math.floor(Date.now() / 1000);
-    return exp > now;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Create SignalR connection for session hub
  * This hub handles real-time session events (questions, responses, leaderboard, etc.)
@@ -165,58 +138,25 @@ export function createSessionConnection(
   }
 
   const baseUrl = API_BASE_URL.replace(/\/$/, "");
-  const hubUrl = `${baseUrl}/hubs/sessions`;
+  const hubUrl = `${baseUrl}/hubs/session`;
 
-  const connectionBuilder = new signalR.HubConnectionBuilder()
-    .withUrl(hubUrl, {
-      accessTokenFactory: async () => {
-        if (!authToken) {
-          // Guest mode - no token
-          return "";
-        }
-        const currentToken = getToken();
-        if (!currentToken) {
-          return authToken; // Fallback to provided token
-        }
-        if (!isTokenValid(currentToken)) {
-          throw new Error("Token is invalid or expired");
-        }
-        return currentToken;
-      },
-      withCredentials: true,
-      skipNegotiation: false,
-      transport:
-        signalR.HttpTransportType.WebSockets |
-        signalR.HttpTransportType.LongPolling,
-    })
-    .withAutomaticReconnect({
-      nextRetryDelayInMilliseconds: (retryContext) => {
-        if (retryContext.previousRetryCount === 0) return 0;
-        if (retryContext.previousRetryCount === 1) return 2000;
-        if (retryContext.previousRetryCount === 2) return 10000;
-        return 30000;
-      },
-    })
-    .configureLogging(signalR.LogLevel.Information)
-    .build();
-
-  connectionBuilder.onclose((error) => {
-    if (error) {
-      console.error("[SignalR Session] Connection closed with error:", error);
-    } else {
-      console.log("[SignalR Session] Connection closed");
-    }
+  return createBaseConnection(hubUrl, {
+    token: authToken || undefined,
+    allowGuest: true, // Session hub allows guest connections
+    onClose: (error) => {
+      if (error) {
+        console.error("[SignalR Session] Connection closed with error:", error);
+      } else {
+        console.log("[SignalR Session] Connection closed");
+      }
+    },
+    onReconnecting: (error) => {
+      console.warn("[SignalR Session] Reconnecting...", error);
+    },
+    onReconnected: (connectionId) => {
+      console.log("[SignalR Session] Reconnected:", connectionId);
+    },
   });
-
-  connectionBuilder.onreconnecting((error) => {
-    console.warn("[SignalR Session] Reconnecting...", error);
-  });
-
-  connectionBuilder.onreconnected((connectionId) => {
-    console.log("[SignalR Session] Reconnected:", connectionId);
-  });
-
-  return connectionBuilder;
 }
 
 export async function startSessionConnection(
@@ -374,24 +314,12 @@ export function unregisterSessionEventHandlers(
   connection.off("LeaderboardUpdate");
   connection.off("MapStateSync");
   connection.off("TeacherFocusChanged");
-  connection.off("MapStateSync"); // Backend event name
   connection.off("SessionEnded");
 
   console.log("[SignalR Session] Event handlers unregistered");
 }
 
 // ===================== TEACHER FOCUS (MAP SYNC) =====================
-
-export interface MapStateSyncEvent {
-  sessionId: string;
-  latitude: number;
-  longitude: number;
-  zoomLevel: number;
-  bearing?: number;
-  pitch?: number;
-  syncedBy?: string;
-  syncedAt?: string;
-}
 
 export interface MapStateSyncRequest {
   latitude: number;

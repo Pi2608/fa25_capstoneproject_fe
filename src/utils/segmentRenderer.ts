@@ -223,7 +223,7 @@ export async function renderSegmentLocations(
       }
 
       if (!location.markerGeometry) {
-        console.warn(`⚠️ Location ${location.poiId || location.locationId} has no geometry`);
+        console.warn(`⚠️ Location ${location.locationId} has no geometry`);
         continue;
       }
 
@@ -231,7 +231,7 @@ export async function renderSegmentLocations(
       try {
         geoJsonData = JSON.parse(location.markerGeometry);
       } catch (parseError) {
-        console.error(`❌ Failed to parse geometry for location ${location.poiId || location.locationId}:`, parseError);
+        console.error(`❌ Failed to parse geometry for location ${location.locationId}:`, parseError);
         continue;
       }
 
@@ -353,7 +353,7 @@ export async function renderSegmentLocations(
       
       bounds.push(L.latLngBounds([latLng, latLng]));
     } catch (error) {
-      console.error(`❌ Failed to render location ${location.poiId || location.locationId}:`, error);
+      console.error(`❌ Failed to render location ${location.locationId}:`, error);
     }
   }
 
