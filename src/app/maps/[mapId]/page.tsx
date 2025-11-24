@@ -381,7 +381,6 @@ export default function EditMapPage() {
     clearSelection?: (mapId: string) => Promise<void>;
   } | null>(null);
 
-  // Debounced map data changed handler for better performance
   const debouncedMapDataChanged = useMemo(
     () => debounce(async () => {
       if (handleMapDataChangedRef.current) {
@@ -391,7 +390,6 @@ export default function EditMapPage() {
     []
   );
 
-  // Batch updater for visibility changes
   const visibilityBatchUpdater = useMemo(
     () => new BatchUpdater<boolean>((updates) => {
       const newVisibility: Record<string, boolean> = {};
@@ -584,12 +582,10 @@ export default function EditMapPage() {
 
         const [lng, lat, radius] = circleCoords;
 
-        // Validate coordinates
         if (lng < -180 || lng > 180 || lat < -90 || lat > 90 || radius <= 0) {
           return;
         }
 
-        // Check if values actually changed before updating to avoid unnecessary re-render
         const currentLatLng = (layer as any)._latlng;
         const currentRadius = (layer as any)._mRadius;
 
@@ -598,11 +594,9 @@ export default function EditMapPage() {
           Math.abs(currentLatLng.lng - lng) > 0.000001;
         const hasRadiusChanged = currentRadius === undefined || Math.abs(currentRadius - radius) > 0.01;
 
-        // Only update if values changed
         if (hasPositionChanged || hasRadiusChanged) {
           const circleLayer = layer as any;
 
-          // Update both properties directly (Leaflet will batch the redraw internally)
           if (hasPositionChanged && 'setLatLng' in layer && typeof layer.setLatLng === 'function') {
             circleLayer.setLatLng([lat, lng]);
           }
@@ -612,13 +606,11 @@ export default function EditMapPage() {
         }
       }
 
-      // Update style if changed
       if (updatedFeature.style) {
         try {
           const storedStyle = JSON.parse(updatedFeature.style);
           const currentStyle = extractLayerStyle(layer);
 
-          // Only update if style actually changed
           if (JSON.stringify(storedStyle) !== JSON.stringify(currentStyle)) {
             applyLayerStyle(layer, storedStyle);
             storeOriginalStyle(layer);
@@ -628,7 +620,6 @@ export default function EditMapPage() {
         }
       }
 
-      // Update feature visibility if changed
       if (updatedFeature.isVisible !== existingFeature.isVisible) {
         if (updatedFeature.isVisible) {
           if (!sketchRef.current.hasLayer(layer)) {
@@ -646,7 +637,6 @@ export default function EditMapPage() {
         }));
       }
 
-      // Update feature in state
       setFeatures(prev => prev.map(f =>
         f.featureId === featureId
           ? { ...f, isVisible: updatedFeature.isVisible ?? true }
@@ -654,45 +644,35 @@ export default function EditMapPage() {
       ));
     } catch (error) {
       console.error("Failed to update feature:", error);
-      // Fallback to full reload on error
       if (handleMapDataChangedRef.current) {
         handleMapDataChangedRef.current();
       }
     }
   }, [detail?.id, isMapReady, features, storeOriginalStyle, extractLayerStyle, applyLayerStyle]);
 
-  // Add a single feature without reloading all features (smooth add)
   const handleFeatureCreated = useCallback(async (featureId: string) => {
     if (!detail?.id || !isMapReady || !mapRef.current || !sketchRef.current) return;
-
-    // Check if feature already exists (avoid duplicates)
-    const existingFeature = features.find(f => f.featureId === featureId);
-    if (existingFeature) {
-      // Feature already exists, skip
-      return;
-    }
 
     if (recentlyCreatedFeatureIdsRef.current.has(featureId)) {
       return;
     }
 
-    const alreadyInState = features.some(f => f.featureId === featureId);
-    if (alreadyInState) {
-      recentlyCreatedFeatureIdsRef.current.add(featureId);
-      setTimeout(() => {
-        recentlyCreatedFeatureIdsRef.current.delete(featureId);
-      }, 5000);
+    const existingFeature = features.find(f => f.featureId === featureId);
+    if (existingFeature) {
       return;
     }
 
     try {
-      // Fetch new feature from API
       const newFeature = await getMapFeatureById(detail.id, featureId);
       if (!newFeature) {
         return;
       }
 
-      // Parse coordinates
+      // Re-check if it was created locally while we were waiting for the API
+      if (recentlyCreatedFeatureIdsRef.current.has(featureId)) {
+        return;
+      }
+
       let coordinates: Position | Position[] | Position[][];
       try {
         const parsed = JSON.parse(newFeature.coordinates);
@@ -702,14 +682,12 @@ export default function EditMapPage() {
           coordinates = parsed;
         }
       } catch (error) {
-        // Don't fallback to reload, just return
         return;
       }
 
       const L = (await import("leaflet")).default;
       let layer: ExtendedLayer | null = null;
 
-      // Create layer based on geometry type (same logic as loadFeaturesToMap)
       if (newFeature.geometryType.toLowerCase() === "point") {
         const coords = coordinates as Position;
         if (newFeature.annotationType?.toLowerCase() === "text") {
@@ -742,17 +720,13 @@ export default function EditMapPage() {
         const [minLng, minLat, maxLng, maxLat] = rectCoords;
         layer = L.rectangle([[minLat, minLng], [maxLat, maxLng]]) as ExtendedLayer;
       } else if (newFeature.geometryType.toLowerCase() === "circle") {
-        // Handle circle coordinates - can be [lng, lat, radius] or array format
         let circleCoords: [number, number, number];
         if (Array.isArray(coordinates)) {
           if (coordinates.length === 3) {
-            // Simple [lng, lat, radius] format
             circleCoords = coordinates as [number, number, number];
           } else if (coordinates.length === 1 && Array.isArray(coordinates[0])) {
-            // GeoJSON Polygon format - extract center and calculate radius
             const polygonCoords = coordinates[0] as Position[];
             if (polygonCoords.length > 0) {
-              // Calculate center point (average of all coordinates)
               let sumLng = 0, sumLat = 0;
               for (const coord of polygonCoords) {
                 sumLng += coord[0];
@@ -761,12 +735,11 @@ export default function EditMapPage() {
               const centerLng = sumLng / polygonCoords.length;
               const centerLat = sumLat / polygonCoords.length;
 
-              // Calculate radius (distance from center to first point)
               const firstPoint = polygonCoords[0];
               const radius = Math.sqrt(
                 Math.pow(firstPoint[0] - centerLng, 2) +
                 Math.pow(firstPoint[1] - centerLat, 2)
-              ) * 111000; // Convert degrees to meters (approximate)
+              ) * 111000;
 
               circleCoords = [centerLng, centerLat, radius];
             } else {
@@ -783,13 +756,11 @@ export default function EditMapPage() {
         }
 
         const [lng, lat, radius] = circleCoords;
-        // Validate coordinates
         if (lng < -180 || lng > 180 || lat < -90 || lat > 90 || radius <= 0) {
           console.error("Circle coordinates out of valid range:", circleCoords);
           return;
         }
 
-        // Create circle normally
         layer = L.circle([lat, lng], { radius: radius }) as ExtendedLayer;
       }
 
@@ -898,23 +869,35 @@ export default function EditMapPage() {
         });
       }
 
-      // Add to features state
-      const featureType = getFeatureTypeUtil(layer);
-      const newFeatureData: FeatureData = {
-        id: `feature-${featureId}`,
-        name: newFeature.name || featureType,
-        type: featureType,
-        layer,
-        isVisible: newFeature.isVisible ?? true,
-        featureId,
-      };
+      setFeatures(prev => {
+        const alreadyExists = prev.some(f => f.featureId === featureId);
+        if (alreadyExists) {
+          // CRITICAL FIX: Remove the layer we just added because we are aborting
+          // This prevents "orphan" layers from persisting on the map
+          if (sketchRef.current && layer) {
+            sketchRef.current.removeLayer(layer);
+          }
+          return prev;
+        }
 
-      setFeatures(prev => [...prev, newFeatureData]);
-      setFeatureVisibility(prev => ({
-        ...prev,
-        [newFeatureData.id]: newFeature.isVisible ?? true,
-        [featureId]: newFeature.isVisible ?? true,
-      }));
+        const featureType = getFeatureTypeUtil(layer);
+        const newFeatureData: FeatureData = {
+          id: `feature-${featureId}`,
+          name: newFeature.name || featureType,
+          type: featureType,
+          layer,
+          isVisible: newFeature.isVisible ?? true,
+          featureId,
+        };
+
+        setFeatureVisibility(prevVisibility => ({
+          ...prevVisibility,
+          [newFeatureData.id]: newFeature.isVisible ?? true,
+          [featureId]: newFeature.isVisible ?? true,
+        }));
+
+        return [...prev, newFeatureData];
+      });
     } catch (error) {
       console.error("Failed to add feature:", error);
     }
@@ -1147,30 +1130,9 @@ export default function EditMapPage() {
     if (!detail || !mapEl.current || mapRef.current) return;
     let alive = true;
     const el = mapEl.current;
-    const handleContextMenu = (e: LeafletMouseEvent) => {
-      const mapInstance = mapRef.current;
-      if (!mapInstance || !mapInstance.pm) return;
-
-      const pm = mapInstance.pm as any;
-
-      const isDrawing = pm.globalDrawModeEnabled && pm.globalDrawModeEnabled();
-      const isEditing = pm.globalEditModeEnabled && pm.globalEditModeEnabled();
-      const isRemoving = pm.globalRemovalModeEnabled && pm.globalRemovalModeEnabled();
-
-      if (isDrawing || isEditing || isRemoving) {
-        if (e.originalEvent) {
-          e.originalEvent.preventDefault();
-          e.originalEvent.stopPropagation();
-        }
-
-        if (pm.disableDraw) pm.disableDraw();
-        if (pm.disableGlobalEditMode) pm.disableGlobalEditMode();
-        if (pm.disableGlobalRemovalMode) pm.disableGlobalRemovalMode();
-
-        const container = mapInstance.getContainer();
-        container.style.cursor = "";
-      }
-    };
+    let contextMenuHandler: ((e: LeafletMouseEvent) => void) | null = null;
+    let zoomEndHandler: (() => void) | null = null;
+    let zoomHandler: (() => void) | null = null;
 
     (async () => {
       const L = (await import("leaflet")).default;
@@ -1282,37 +1244,69 @@ export default function EditMapPage() {
         });
       }
 
-      map.on("contextmenu", handleContextMenu as any);
+      // Define context menu handler for Geoman drawing/editing modes
+      contextMenuHandler = (e: LeafletMouseEvent) => {
+        const mapInstance = mapRef.current;
+        if (!mapInstance || !mapInstance.pm) return;
+
+        const pm = mapInstance.pm as any;
+
+        const isDrawing = pm.globalDrawModeEnabled && pm.globalDrawModeEnabled();
+        const isEditing = pm.globalEditModeEnabled && pm.globalEditModeEnabled();
+        const isRemoving = pm.globalRemovalModeEnabled && pm.globalRemovalModeEnabled();
+
+        if (isRemoving) {
+          if (e.originalEvent) {
+            e.originalEvent.preventDefault();
+            e.originalEvent.stopPropagation();
+          }
+
+          if (pm.disableGlobalRemovalMode) pm.disableGlobalRemovalMode();
+
+          const container = mapInstance.getContainer();
+          container.style.cursor = "";
+        }
+      };
+
+      if (contextMenuHandler) {
+        map.on("contextmenu", contextMenuHandler);
+      }
 
       // Listen to zoom events to update currentZoom state
-      const updateZoom = () => {
+      zoomEndHandler = () => {
         if (map.getZoom) {
           setCurrentZoom(map.getZoom());
         }
       };
-      map.on("zoomend", updateZoom);
-      map.on("zoom", updateZoom);
+      zoomHandler = () => {
+        if (map.getZoom) {
+          setCurrentZoom(map.getZoom());
+        }
+      };
+      map.on("zoomend", zoomEndHandler);
+      map.on("zoom", zoomHandler);
 
-      // Handle feature creation - now managed by useFeatureManagement hook
-      map.on("pm:create", async (e: PMCreateEvent) => {
-        await handleFeatureCreate(e, customMarkerIcon as L.Icon | L.DivIcon | null, L, sketch);
-      });
-
-
-      // Handle sketch-level edit/drag/rotate events - now managed by useFeatureManagement hook
-      sketch.on("pm:edit", handleSketchEdit);
-      sketch.on("pm:dragend", handleSketchDragEnd);
-      sketch.on("pm:rotateend", handleSketchRotateEnd);
+      // Note: Event listeners for pm:create, pm:edit, pm:dragend, pm:rotateend
+      // will be registered in a separate useEffect after handlers are ready
 
     })();
     return () => {
       alive = false;
       if (mapRef.current) {
-        mapRef.current.off("contextmenu", handleContextMenu as any);
-        mapRef.current.off("zoomend");
-        mapRef.current.off("zoom");
+        if (contextMenuHandler) {
+          mapRef.current.off("contextmenu", contextMenuHandler);
+        }
+        if (zoomEndHandler) {
+          mapRef.current.off("zoomend", zoomEndHandler);
+        }
+        if (zoomHandler) {
+          mapRef.current.off("zoom", zoomHandler);
+        }
         mapRef.current.remove();
       }
+      contextMenuHandler = null;
+      zoomEndHandler = null;
+      zoomHandler = null;
       setIsMapReady(false);
     };
 
@@ -1427,6 +1421,37 @@ export default function EditMapPage() {
       alive = false;
     };
   }, [detail?.id, isMapReady]);
+
+  useEffect(() => {
+    if (!isMapReady || !mapRef.current || !sketchRef.current) return;
+    if (!handleFeatureCreate || !handleSketchEdit || !handleSketchDragEnd || !handleSketchRotateEnd) return;
+
+    const map = mapRef.current;
+    const sketch = sketchRef.current;
+
+    const createHandler = async (e: PMCreateEvent) => {
+      const L = (await import("leaflet")).default;
+      const customMarkerIcon = await getCustomMarkerIcon();
+      await handleFeatureCreate(e, customMarkerIcon as L.Icon | L.DivIcon | null, L, sketch);
+    };
+    map.on("pm:create", createHandler);
+
+    // Handle sketch-level edit/drag/rotate events
+    sketch.on("pm:edit", handleSketchEdit);
+    sketch.on("pm:dragend", handleSketchDragEnd);
+    sketch.on("pm:rotateend", handleSketchRotateEnd);
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.off("pm:create", createHandler);
+      }
+      if (sketchRef.current) {
+        sketchRef.current.off("pm:edit", handleSketchEdit);
+        sketchRef.current.off("pm:dragend", handleSketchDragEnd);
+        sketchRef.current.off("pm:rotateend", handleSketchRotateEnd);
+      }
+    };
+  }, [isMapReady, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd]);
 
   useEffect(() => {
     if (!mapRef.current || !detail?.layers || detail.layers.length === 0 || !isMapReady) return;
@@ -1994,7 +2019,7 @@ export default function EditMapPage() {
               coordinates: [e.latlng.lng, e.latlng.lat],
             });
 
-            const locationData = {  
+            const locationData = {
               title: iconLabel,
               locationType: "Custom" as LocationType,
               markerGeometry,
@@ -2014,18 +2039,18 @@ export default function EditMapPage() {
 
             const createdLocation = await createMapLocation(currentMapId, locationData);
             console.log("[Icon] ✅ Successfully created location:", createdLocation.locationId);
-            
+
             // Update marker metadata with locationId from API response
             const apiMarkerId = `icon-${createdLocation.locationId}`;
             const currentMarkerId = Array.from(iconMarkersRef.current.entries()).find(
               ([_, m]) => m === marker
             )?.[0];
-            
+
             if (currentMarkerId && currentMarkerId !== apiMarkerId) {
               // Move marker to new ID with locationId
               const existingMarker = iconMarkersRef.current.get(currentMarkerId);
               const existingMetadata = iconMetadataRef.current.get(currentMarkerId);
-              
+
               if (existingMarker && existingMetadata) {
                 iconMarkersRef.current.set(apiMarkerId, existingMarker);
                 iconMetadataRef.current.set(apiMarkerId, existingMetadata);
@@ -2033,7 +2058,7 @@ export default function EditMapPage() {
                 iconMetadataRef.current.delete(currentMarkerId);
               }
             }
-            
+
             // Store locationId on marker for deletion
             (marker as any)._locationId = createdLocation.locationId;
           } catch (err) {
@@ -2217,7 +2242,7 @@ export default function EditMapPage() {
               iconKey,
               timestamp: Date.now() - 10000, // Mark as existing (not recently added)
             });
-            
+
             // Store locationId on marker for deletion
             (marker as any)._locationId = location.locationId;
 

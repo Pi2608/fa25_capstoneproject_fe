@@ -81,7 +81,7 @@ export function useFeatureManagement({
 
       // Save to database
       try {
-        const savedFeature = await saveFeature(mapId, "", extLayer, features, setFeatures);
+        const savedFeature = await saveFeature(mapId, "", extLayer, features, setFeatures, sketch);
 
         if (savedFeature?.featureId) {
           // Track this feature as recently created by current user IMMEDIATELY
