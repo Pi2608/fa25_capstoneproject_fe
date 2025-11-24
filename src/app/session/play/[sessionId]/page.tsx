@@ -24,7 +24,7 @@ import type {
   SessionEndedEvent,
   TeacherFocusChangedEvent,
   MapStateSyncEvent,
-} from "@/lib/signalr-session";
+} from "@/lib/hubs/session";
 import { toast } from "react-toastify";
 
 type ViewState =

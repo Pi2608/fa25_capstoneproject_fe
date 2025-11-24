@@ -8,7 +8,7 @@ import {
   registerSessionEventHandlers,
   unregisterSessionEventHandlers,
   SessionEventHandlers,
-} from "@/lib/signalr-session";
+} from "@/lib/hubs/session";
 import { getToken } from "@/lib/api-core";
 
 interface UseSessionHubOptions {

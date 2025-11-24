@@ -183,8 +183,7 @@ export type AttachLayerRequest = {
 
 // Location (POI markers)
 export type Location = {
-  poiId: string; // Backend uses PoiId
-  locationId?: string; // Alias for backward compatibility
+  locationId: string;
   mapId: string;
   segmentId?: string;
   zoneId?: string;
@@ -201,7 +200,7 @@ export type Location = {
   effectType?: string;
   openSlideOnClick: boolean;
   slideContent?: string;
-  linkedPoiId?: string;
+  linkedLocationId?: string;
   playAudioOnClick: boolean;
   audioUrl?: string;
   externalUrl?: string;

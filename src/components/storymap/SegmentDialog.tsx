@@ -320,11 +320,11 @@ export default function SegmentDialog({
                 <div className="max-h-40 overflow-y-auto mt-2 space-y-1">
                   {locationResults.map((loc) => (
                     <button
-                      key={loc.poiId}
+                      key={loc.locationId}
                       type="button"
                       onClick={() => handleSelectLocation(loc)}
                       className={`w-full text-left px-3 py-2 rounded-md text-xs border ${
-                        selectedLocation?.poiId === loc.poiId
+                        selectedLocation?.locationId === loc.locationId
                           ? "bg-zinc-900 border-emerald-500"
                           : "bg-zinc-900 border-zinc-700 hover:bg-zinc-800"
                       }`}

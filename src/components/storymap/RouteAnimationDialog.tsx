@@ -162,7 +162,7 @@ export default function RouteAnimationDialog({
   // Update coordinates when location selection changes
   useEffect(() => {
     if (fromLocationId) {
-      const location = locations.find(l => (l.locationId || l.poiId) === fromLocationId);
+      const location = locations.find(l => l.locationId === fromLocationId);
       if (location) {
         const coords = parseLocationCoords(location);
         if (coords) {
@@ -176,7 +176,7 @@ export default function RouteAnimationDialog({
 
   useEffect(() => {
     if (toLocationId) {
-      const location = locations.find(l => (l.locationId || l.poiId) === toLocationId);
+      const location = locations.find(l => l.locationId === toLocationId);
       if (location) {
         const coords = parseLocationCoords(location);
         if (coords) {
@@ -276,8 +276,8 @@ export default function RouteAnimationDialog({
         coordinates: routePath,
       };
 
-      const fromLocation = locations.find(l => (l.locationId || l.poiId) === fromLocationId);
-      const toLocation = locations.find(l => (l.locationId || l.poiId) === toLocationId);
+      const fromLocation = locations.find(l => l.locationId === fromLocationId);
+      const toLocation = locations.find(l => l.locationId === toLocationId);
 
       // Build waypoints JSON if there are waypoints
       let waypointsJson: string | undefined = undefined;
@@ -285,7 +285,7 @@ export default function RouteAnimationDialog({
       
       if (validWaypoints.length > 0) {
         const waypoints = validWaypoints.map(locId => {
-          const loc = locations.find(l => (l.locationId || l.poiId) === locId);
+          const loc = locations.find(l => l.locationId === locId);
           const coords = loc ? parseLocationCoords(loc) : null;
           return {
             locationId: locId,
@@ -394,7 +394,7 @@ export default function RouteAnimationDialog({
                 >
                   <option value="">-- Chọn location --</option>
                   {locations.map((loc) => (
-                    <option key={loc.locationId || loc.poiId} value={loc.locationId || loc.poiId}>
+                    <option key={loc.locationId} value={loc.locationId}>
                       {loc.title || loc.subtitle || "Unnamed Location"}
                     </option>
                   ))}
@@ -416,7 +416,7 @@ export default function RouteAnimationDialog({
                 >
                   <option value="">-- Chọn location --</option>
                   {locations.map((loc) => (
-                    <option key={loc.locationId || loc.poiId} value={loc.locationId || loc.poiId}>
+                    <option key={loc.locationId} value={loc.locationId}>
                       {loc.title || loc.subtitle || "Unnamed Location"}
                     </option>
                   ))}
@@ -457,13 +457,13 @@ export default function RouteAnimationDialog({
                       <option value="">-- Chọn location --</option>
                       {locations
                         .filter(loc => {
-                          const locId = loc.locationId || loc.poiId;
+                          const locId = loc.locationId;
                           return locId !== fromLocationId && 
                                  locId !== toLocationId && 
-                                 !waypointLocationIds.includes(locId) || locId === waypointId;
+                                 !waypointLocationIds.includes(locId || "") || locId === waypointId;
                         })
                         .map((loc) => (
-                          <option key={loc.locationId || loc.poiId} value={loc.locationId || loc.poiId}>
+                          <option key={loc.locationId} value={loc.locationId || ""}>
                             {loc.title || loc.subtitle || "Unnamed Location"}
                           </option>
                         ))}

@@ -1309,7 +1309,7 @@ export function SegmentItemsList({
                     <div className="flex items-center gap-2 mb-0.5">
                       <Icon icon="mdi:layers" className="w-3 h-3 text-purple-400 flex-shrink-0" />
                       <span className="text-xs font-medium text-white truncate">
-                        {segmentLayer.layerId?.title || "Unnamed Layer"}
+                        {segmentLayer.layerId || "Unnamed Layer"}
                       </span>
                     </div>
                   </div>
@@ -2093,6 +2093,56 @@ function IconLibraryView() {
           { id: "camera", icon: "mdi:camera-outline", label: "Camera" },
           { id: "note", icon: "mdi:note-text-outline", label: "Note" },
           { id: "chat", icon: "mdi:chat-outline", label: "Comment" },
+        ],
+      },
+      {
+        title: "Minerals & Resources",
+        items: [
+          { id: "gold", icon: "mdi:gold", label: "Gold" },
+          { id: "silver", icon: "mdi:silverware-variant", label: "Silver" },
+          { id: "coal", icon: "mdi:fire", label: "Coal" },
+          { id: "oil", icon: "mdi:oil-lamp", label: "Oil" },
+          { id: "gas", icon: "mdi:gas-station", label: "Natural Gas" },
+          { id: "iron", icon: "mdi:anvil", label: "Iron" },
+          { id: "copper", icon: "mdi:pickaxe", label: "Copper" },
+          { id: "diamond", icon: "mdi:gem", label: "Diamond" },
+          { id: "stone", icon: "mdi:cube-outline", label: "Stone" },
+          { id: "mining", icon: "mdi:pickaxe", label: "Mining" },
+        ],
+      },
+      {
+        title: "Industries",
+        items: [
+          { id: "factory", icon: "mdi:factory", label: "Factory" },
+          { id: "power-plant", icon: "mdi:lightning-bolt-outline", label: "Power Plant" },
+          { id: "refinery", icon: "mdi:barrel", label: "Refinery" },
+          { id: "warehouse", icon: "mdi:warehouse", label: "Warehouse" },
+          { id: "construction", icon: "mdi:hard-hat", label: "Construction" },
+          { id: "shipyard", icon: "mdi:ship", label: "Shipyard" },
+          { id: "airport", icon: "mdi:airport", label: "Airport" },
+          { id: "port", icon: "mdi:anchor", label: "Port" },
+          { id: "textile", icon: "mdi:tshirt-crew-outline", label: "Textile" },
+          { id: "agriculture", icon: "mdi:sprout", label: "Agriculture" },
+        ],
+      },
+      {
+        title: "Geography & History",
+        items: [
+          { id: "mountain", icon: "mdi:terrain", label: "Mountain" },
+          { id: "river", icon: "mdi:water", label: "River" },
+          { id: "lake", icon: "mdi:water-circle", label: "Lake" },
+          { id: "forest", icon: "mdi:tree", label: "Forest" },
+          { id: "desert", icon: "mdi:weather-sunny", label: "Desert" },
+          { id: "volcano", icon: "mdi:volcano", label: "Volcano" },
+          { id: "island", icon: "mdi:island", label: "Island" },
+          { id: "beach", icon: "mdi:beach", label: "Beach" },
+          { id: "castle", icon: "mdi:castle", label: "Castle" },
+          { id: "temple", icon: "mdi:temple-hindu", label: "Temple" },
+          { id: "monument", icon: "mdi:monument", label: "Monument" },
+          { id: "tomb", icon: "mdi:tombstone", label: "Tomb" },
+          { id: "ruin", icon: "mdi:castle", label: "Ruin" },
+          { id: "battlefield", icon: "mdi:sword", label: "Battlefield" },
+          { id: "ancient-city", icon: "mdi:city-variant", label: "Ancient City" },
         ],
       },
     ];

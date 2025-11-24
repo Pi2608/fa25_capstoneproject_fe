@@ -221,7 +221,7 @@ export default function SegmentListPanel({
                             <div className="space-y-1">
                               {segment.locations.map((location) => (
                                 <div
-                                  key={location.poiId || location.locationId}
+                                  key={location.locationId}
                                   className="flex items-center justify-between p-2 bg-zinc-800/50 rounded text-xs"
                                 >
                                   <span className="text-zinc-300 truncate flex items-center gap-1">
@@ -303,7 +303,7 @@ export default function SegmentListPanel({
         onClose={() => setConfirmDeleteLocation(null)}
         onConfirm={() => {
           if (confirmDeleteLocation) {
-            onDeleteLocation(confirmDeleteLocation.poiId || confirmDeleteLocation.locationId || '');
+            onDeleteLocation(confirmDeleteLocation.locationId || '');
             setConfirmDeleteLocation(null);
           }
         }}

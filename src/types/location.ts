@@ -44,7 +44,6 @@ export type LocationPoiDialogForm = {
   externalUrl?: string;
   linkedSegmentId?: string; // For Location
   linkedLocationId?: string; // For Location
-  linkedPoiId?: string; // For POI
   
   // Animation effects
   entryEffect?: string;

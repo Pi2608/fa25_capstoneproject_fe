@@ -1,14 +1,14 @@
 import { getJson, postJson, putJson, delJson } from "./api-core";
 import type { LocationType } from "@/types";
 
-const POI_PREFIX = "/points-of-interest";
+const LOCATION_PREFIX = "/locations";
 
 
-// ===== POIs (Points of Interest) =====
+// ===== Locations =====
 // Re-export LocationType for convenience
 export type { LocationType };
 
-export type CreatePoiReq = {
+export type CreateLocationReq = {
   mapId?: string; // Optional, will be set from route if not provided
   segmentId?: string;
   zoneId?: string;
@@ -25,7 +25,7 @@ export type CreatePoiReq = {
   effectType?: string;
   openSlideOnClick?: boolean;
   slideContent?: string;
-  linkedPoiId?: string;
+  linkedLocationId?: string;
   playAudioOnClick?: boolean;
   audioUrl?: string;
   externalUrl?: string;
@@ -40,10 +40,10 @@ export type CreatePoiReq = {
   layerUrl?: string; // Maps to associatedLayerId
 };
 
-export type UpdatePoiReq = Partial<CreatePoiReq>;
+export type UpdateLocationReq = Partial<CreateLocationReq>;
 
-export type MapPoi = {
-  poiId: string;
+export type MapLocation = {
+  locationId: string;
   mapId: string;
   segmentId?: string;
   zoneId?: string;
@@ -85,7 +85,7 @@ export type MapPoi = {
   exitDurationMs?: number;
   
   // Links
-  linkedPoiId?: string;
+  linkedLocationId?: string;
   externalUrl?: string;
   
   // Other
@@ -102,17 +102,18 @@ export type MapPoi = {
   shouldPin?: boolean; // Maps to highlightOnEnter
 };
 
-export type SegmentPoi = MapPoi & {
+export type SegmentLocation = MapLocation & {
   segmentId: string;
 };
 
-export function getMapPois(mapId: string) {
-  return getJson<MapPoi[]>(`${POI_PREFIX}/${mapId}`);
+export function getMapLocations(mapId: string) {
+  return getJson<MapLocation[]>(`${LOCATION_PREFIX}/${mapId}`);
 }
 
-export function createMapPoi(mapId: string, body: CreatePoiReq) {
+
+export function createMapLocation(mapId: string, body: CreateLocationReq) {
   // Ensure LocationType is set (required by backend)
-  const payload: CreatePoiReq = {
+  const payload: CreateLocationReq = {
     ...body,
     mapId,
     locationType: body.locationType || "PointOfInterest",
@@ -126,16 +127,16 @@ export function createMapPoi(mapId: string, body: CreatePoiReq) {
   delete (payload as any).shouldPin;
   delete (payload as any).storyContext;
   delete (payload as any).layerUrl;
-  return postJson<CreatePoiReq, MapPoi>(`${POI_PREFIX}/${mapId}`, payload);
+  return postJson<CreateLocationReq, MapLocation>(`${LOCATION_PREFIX}/${mapId}`, payload);
 }
 
-export function getSegmentPois(mapId: string, segmentId: string) {
-  return getJson<SegmentPoi[]>(`${POI_PREFIX}/${mapId}/segments/${segmentId}`);
+export function getSegmentLocations(mapId: string, segmentId: string) {
+  return getJson<SegmentLocation[]>(`${LOCATION_PREFIX}/${mapId}/segments/${segmentId}`);
 }
 
-export function createSegmentPoi(mapId: string, segmentId: string, body: CreatePoiReq) {
+export function createSegmentLocation(mapId: string, segmentId: string, body: CreateLocationReq) {
   // Ensure LocationType is set (required by backend)
-  const payload: CreatePoiReq = {
+  const payload: CreateLocationReq = {
     ...body,
     mapId,
     segmentId,
@@ -150,37 +151,37 @@ export function createSegmentPoi(mapId: string, segmentId: string, body: CreateP
   delete (payload as any).shouldPin;
   delete (payload as any).storyContext;
   delete (payload as any).layerUrl;
-  return postJson<CreatePoiReq, SegmentPoi>(`${POI_PREFIX}/${mapId}/segments/${segmentId}`, payload);
+  return postJson<CreateLocationReq, SegmentLocation>(`${LOCATION_PREFIX}/${mapId}/segments/${segmentId}`, payload);
 }
 
-export function updatePoi(poiId: string, body: UpdatePoiReq) {
-  return putJson<UpdatePoiReq, MapPoi>(`${POI_PREFIX}/${poiId}`, body);
+export function updateLocation(locationId: string, body: UpdateLocationReq) {
+  return putJson<UpdateLocationReq, MapLocation>(`${LOCATION_PREFIX}/${locationId}`, body);
 }
 
-export function deletePoi(poiId: string) {
-  return delJson<void>(`${POI_PREFIX}/${poiId}`);
+export function deleteLocation(locationId: string) {
+  return delJson<void>(`${LOCATION_PREFIX}/${locationId}`);
 }
 
 // ===== POI Display / Interaction Config =====
-export type UpdatePoiDisplayConfigReq = {
+export type UpdateLocationDisplayConfigReq = {
   isVisible?: boolean;
   zIndex?: number;
   showTooltip?: boolean;
   tooltipContent?: string | null;
 };
 
-export type UpdatePoiInteractionConfigReq = {
+export type UpdateLocationInteractionConfigReq = {
   openSlideOnClick?: boolean;
   playAudioOnClick?: boolean;
   audioUrl?: string | null;
   externalUrl?: string | null;
 };
 
-export function updatePoiDisplayConfig(poiId: string, body: UpdatePoiDisplayConfigReq) {
-  return putJson<UpdatePoiDisplayConfigReq, MapPoi>(`${POI_PREFIX}/pois/${poiId}/display-config`, body);
+export function updateLocationDisplayConfig(locationId: string, body: UpdateLocationDisplayConfigReq) {
+  return putJson<UpdateLocationDisplayConfigReq, MapLocation>(`${LOCATION_PREFIX}/${locationId}/display-config`, body);
 }
 
-export function updatePoiInteractionConfig(poiId: string, body: UpdatePoiInteractionConfigReq) {
-  return putJson<UpdatePoiInteractionConfigReq, MapPoi>(`${POI_PREFIX}/pois/${poiId}/interaction-config`, body);
+export function updateLocationInteractionConfig(locationId: string, body: UpdateLocationInteractionConfigReq) {
+  return putJson<UpdateLocationInteractionConfigReq, MapLocation>(`${LOCATION_PREFIX}/${locationId}/interaction-config`, body);
 }
 

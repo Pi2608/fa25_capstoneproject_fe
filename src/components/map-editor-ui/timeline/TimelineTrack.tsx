@@ -152,7 +152,7 @@ export function TimelineTrack({
           if (confirmed) {
             setIsMoving(true);
             const itemName = draggedItem.type === "location" 
-              ? segments.find(s => s.segmentId === draggedItem.segmentId)?.locations?.find(l => (l.poiId || l.locationId) === draggedItem.id)?.title || "Location"
+              ? segments.find(s => s.segmentId === draggedItem.segmentId)?.locations?.find(l => l.locationId === draggedItem.id)?.title || "Location"
               : draggedItem.type === "route"
               ? segments.find(s => s.segmentId === draggedItem.segmentId)?.routeAnimations?.find(r => r.routeAnimationId === draggedItem.id)?.fromName || "Route"
               : draggedItem.type === "zone"
@@ -654,7 +654,7 @@ function LocationTrackItems({ segment, mapId, currentMap }: { segment: Segment; 
   };
 
   const handleSaveEdit = async (data: any) => {
-    const locationId = editingLocation?.poiId || editingLocation?.locationId;
+    const locationId = editingLocation?.locationId;
     if (!locationId) return;
     try {
       await updateLocation(mapId || "", segment.segmentId, locationId, data);
@@ -675,8 +675,7 @@ function LocationTrackItems({ segment, mapId, currentMap }: { segment: Segment; 
     <>
       <div className="flex flex-wrap gap-1.5 p-1">
         {locations.map((location, index) => {
-          // Use poiId as primary ID, fallback to locationId for backward compatibility
-          const locationId = location.poiId || location.locationId;
+          const locationId = location.locationId;
           
           return (
             <div

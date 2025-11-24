@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { CreateLocationRequest, Location } from "@/lib/api-storymap";
-import { LocationType } from "@/types/location-poi";
+import { LocationType } from "@/types/location";
 import { Button } from "@/components/ui/button";
 import InputField from "@/components/ui/InputField";
 

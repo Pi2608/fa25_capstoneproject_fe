@@ -20,4 +20,4 @@ export * from "./map";
 export * from "./components";
 
 // Re-export location/POI types
-export * from "./location-poi";
+export * from "./location";

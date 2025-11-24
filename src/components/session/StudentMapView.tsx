@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import type {
   TeacherFocusChangedEvent,
   MapStateSyncEvent,
-} from "@/lib/signalr-session";
+} from "@/lib/hubs/session";
 
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),

@@ -223,7 +223,7 @@ export function useSegmentHandlers({
   };
 
   const handleDeleteLocation = async (locationId: string) => {
-    const segment = segments.find(s => s.locations.some(l => (l.poiId || l.locationId) === locationId));
+    const segment = segments.find(s => s.locations.some(l => l.locationId === locationId));
     if (!segment) return;
 
     try {
@@ -233,7 +233,7 @@ export function useSegmentHandlers({
         if (seg.segmentId === segment.segmentId) {
           return {
             ...seg,
-            locations: seg.locations.filter(l => (l.poiId || l.locationId) !== locationId)
+            locations: seg.locations.filter(l => l.locationId !== locationId)
           };
         }
         return seg;
@@ -242,7 +242,7 @@ export function useSegmentHandlers({
       if (activeSegmentId === segment.segmentId) {
         await onViewSegment({
           ...segment,
-          locations: segment.locations.filter(l => (l.poiId || l.locationId) !== locationId)
+          locations: segment.locations.filter(l => l.locationId !== locationId)
         });
       }
     } catch (error) {

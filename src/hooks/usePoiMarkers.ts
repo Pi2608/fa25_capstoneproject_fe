@@ -1,13 +1,13 @@
 import { useEffect, useRef } from "react";
 import type L from "leaflet";
 import type { MapWithPM } from "@/types";
-import { getMapPois, type MapPoi } from "@/lib/api-poi";
+import { getMapLocations } from "@/lib/api-storymap";
+import { MapLocation } from "@/lib/api-location";
 
 interface UsePoiMarkersParams {
   mapId: string;
   mapRef: React.MutableRefObject<MapWithPM | null>;
   isMapReady: boolean;
-  showPoiPanel: boolean;
   setPoiTooltipModal: React.Dispatch<
     React.SetStateAction<{
       isOpen: boolean;
@@ -27,13 +27,12 @@ export function usePoiMarkers({
   mapId,
   mapRef,
   isMapReady,
-  showPoiPanel,
   setPoiTooltipModal,
 }: UsePoiMarkersParams) {
   const poiMarkersRef = useRef<L.Marker[]>([]);
 
   useEffect(() => {
-    if (!showPoiPanel || !mapRef.current || !mapId || !isMapReady) return;
+    if (!mapRef.current || !mapId || !isMapReady) return;
 
     let cancelled = false;
 
@@ -49,7 +48,7 @@ export function usePoiMarkers({
             }
             // Remove any existing tooltip modal
             const existingTooltip = document.querySelector(
-              `.poi-tooltip-modal[data-poi-id="${(marker as any)._poiId}"]`
+              `.poi-tooltip-modal[data-location-id="${(marker as any)._locationId}"]`
             );
             if (existingTooltip) {
               existingTooltip.remove();
@@ -60,7 +59,7 @@ export function usePoiMarkers({
         poiMarkersRef.current = [];
 
         // Load POIs
-        const pois = (await getMapPois(mapId)) as MapPoi[];
+        const pois = (await getMapLocations(mapId)) as MapLocation[];
 
         if (cancelled || !mapRef.current) {
           return;
@@ -82,7 +81,7 @@ export function usePoiMarkers({
             }
 
             if (!poi.markerGeometry) {
-              console.warn(`⚠️ POI ${poi.poiId} has no geometry`);
+              console.warn(`⚠️ POI ${poi.locationId} has no geometry`);
               continue;
             }
 
@@ -91,7 +90,7 @@ export function usePoiMarkers({
               geoJsonData = JSON.parse(poi.markerGeometry);
             } catch (parseError) {
               console.error(
-                `❌ Failed to parse geometry for POI ${poi.poiId}:`,
+                `❌ Failed to parse geometry for POI ${poi.locationId}:`,
                 parseError
               );
               continue;
@@ -168,7 +167,7 @@ export function usePoiMarkers({
             });
 
             // Store POI ID for cleanup
-            (marker as any)._poiId = poi.poiId;
+            (marker as any)._locationId = poi.locationId;
 
             // Add click handler to show tooltip modal if enabled
             if (poi.showTooltip !== false && poi.tooltipContent) {
@@ -263,11 +262,12 @@ export function usePoiMarkers({
 
               // Build external link button
               let linkHtml = "";
-              if (poi.externalLink && poi.externalLink.trim()) {
+              if (poi.storyContent && poi.storyContent.trim()) {
+                const storyContent = JSON.parse(poi.storyContent);
                 linkHtml = `
                   <div style="margin: 12px 0;">
-                    <a href="${poi.externalLink}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 14px;">
-                      Open Link
+                    <a href="${poi.storyContent}" target="_blank" rel="noopener noreferrer" style="display: inline-block; padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; font-size: 14px;">
+                      ${storyContent.title}
                     </a>
                   </div>
                 `;
@@ -297,7 +297,7 @@ export function usePoiMarkers({
             marker.addTo(mapRef.current);
             poiMarkersRef.current.push(marker);
           } catch (error) {
-            console.error(`❌ Failed to render POI ${poi.poiId}:`, error);
+            console.error(`❌ Failed to render POI ${poi.locationId}:`, error);
           }
         }
 
@@ -327,7 +327,7 @@ export function usePoiMarkers({
 
     // Listen for POI changes
     const handlePoiChange = () => {
-      if (!cancelled && mapRef.current && showPoiPanel) {
+      if (!cancelled && mapRef.current) {
         loadAndRenderPois();
       }
     };
@@ -348,7 +348,7 @@ export function usePoiMarkers({
       });
       poiMarkersRef.current = [];
     };
-  }, [showPoiPanel, mapId, isMapReady, mapRef, setPoiTooltipModal]);
+  }, [mapId, isMapReady, mapRef, setPoiTooltipModal]);
 
   return {
     poiMarkersRef,

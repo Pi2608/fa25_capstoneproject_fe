@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { toast } from "react-toastify";
 import * as signalR from "@microsoft/signalr";
-import { sendTeacherFocusViaSignalR } from "@/lib/signalr-session";
+import { sendTeacherFocusViaSignalR } from "@/lib/hubs/session";
 
 // Dynamically import Leaflet components
 const MapContainer = dynamic(
