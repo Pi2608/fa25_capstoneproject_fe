@@ -22,6 +22,8 @@ export const messages = {
             zone: "Vùng",
             latitude: "Vĩ độ",
             longitude: "Kinh độ",
+            loading: "Đang tải…",
+            not_found: "Không tìm thấy",
         },
         recents: {
             loading: "Đang tải…",
@@ -963,14 +965,10 @@ export const messages = {
             col_actions: "Hành động",
             remove: "Gỡ",
 
-            delete_map_title: "Xoá bản đồ",
-            delete_map_desc: "Bạn có chắc muốn xoá bản đồ “{name}” không? Hành động này không thể hoàn tác.",
-            cancel: "Huỷ",
-            deleting: "Đang xoá...",
-            delete_map_cta: "Xoá bản đồ",
-
-            toast_deleted: "Đã xoá bản đồ!",
-            toast_removed: "Đã gỡ bản đồ khỏi workspace!"
+            save_success: "Đã lưu bộ câu hỏi",
+            save_failed: "Không thể lưu bộ câu hỏi.",
+            delete_success: "Đã xoá bộ câu hỏi.",
+            delete_failed: "Không thể xoá bộ câu hỏi.",
         },
         qgis: {
             hero_eyebrow: "Tài nguyên / Plugin QGIS",
@@ -1997,11 +1995,12 @@ export const messages = {
             zone: "Zone",
             latitude: "Latitude",
             longitude: "Longitude",
+            loading: "Loading...",
         },
         settings_members: {
             unknown_member: "this member",
             remove: "Delete",
-            invite_success_toast:"Invitation sent successfully",
+            invite_success_toast: "Invitation sent successfully",
 
             confirm_transfer_full:
                 "You are about to transfer ownership of this organization to {{name}}.\n\n" +
@@ -2564,6 +2563,9 @@ export const messages = {
             sort_author: "Author",
             to_desc: "Switch to descending",
             to_asc: "Switch to ascending",
+
+            save_success: "Saved successfully",
+            save_failed: "Failed to save",
 
             empty_title: "No maps in this workspace yet",
             empty_desc: "Create your first map to get started",

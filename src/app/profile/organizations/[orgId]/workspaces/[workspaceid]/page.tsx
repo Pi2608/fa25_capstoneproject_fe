@@ -337,7 +337,7 @@ export default function WorkspaceDetailPage() {
       <div className="flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => router.push(`/profile/organizations/${orgId}/workspaces`)}
+            onClick={() => router.push(`/profile/organizations/${orgId}`)}
             className="p-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
             title={t("workspace_detail.back_to_list")}
           >

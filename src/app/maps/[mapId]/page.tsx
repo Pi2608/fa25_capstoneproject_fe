@@ -35,6 +35,7 @@ import {
   updateMapFeature,
   LayerDTO,
   getMapFeatureById,
+  type BaseLayer,
 } from "@/lib/api-maps";
 import {
   type FeatureData,
@@ -67,9 +68,8 @@ import { getMapPois, type MapPoi } from "@/lib/api-poi";
 import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions, getRouteAnimationsBySegment } from "@/lib/api-storymap";
 import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator } from "@/components/map-editor-ui";
 import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
-import { useSequentialRoutePlayback } from "@/hooks/useSequentialRoutePlayback";
-import RouteAnimation from "@/components/storymap/RouteAnimation";
-import type { Location, RouteAnimation as RouteAnimationType } from "@/lib/api-storymap";
+import SequentialRoutePlaybackWrapper from "@/components/storymap/SequentialRoutePlaybackWrapper";
+import type { Location } from "@/lib/api-storymap";
 import { useMapCollaboration, type MapSelection } from "@/hooks/useMapCollaboration";
 import { useLayerStyles } from "@/hooks/useLayerStyles";
 import { useCollaborationVisualization } from "@/hooks/useCollaborationVisualization";
@@ -80,68 +80,9 @@ import { useToast } from "@/contexts/ToastContext";
 import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geojson";
 import * as mapHelpers from "@/utils/mapHelpers";
 import PublishButton from "@/components/map-editor/PublishButton";
+import { createSession, type CreateSessionRequest, type SessionDto } from "@/lib/api-ques";
+import { SessionShareModal } from "@/components/session/SessionShareModal";
 
-// Sequential Route Playback Component
-function SequentialRoutePlaybackWrapper({
-  map,
-  routeAnimations,
-  isPlaying,
-  segmentStartTime,
-  onLocationClick,
-}: {
-  map: any;
-  routeAnimations: RouteAnimationType[];
-  isPlaying: boolean;
-  segmentStartTime: number;
-  onLocationClick?: (location: Location) => void;
-}) {
-  const sequentialPlayback = useSequentialRoutePlayback({
-    map,
-    routeAnimations,
-    isPlaying,
-    segmentStartTime,
-    onLocationClick,
-  });
-
-  return (
-    <>
-      {routeAnimations.map((anim, index) => {
-        try {
-          const geoJson = typeof anim.routePath === "string" 
-            ? JSON.parse(anim.routePath) 
-            : anim.routePath;
-          
-          if (geoJson.type !== "LineString" || !geoJson.coordinates) {
-            return null;
-          }
-
-          const routePath = geoJson.coordinates as [number, number][];
-          const isRoutePlaying = sequentialPlayback.getRoutePlayState(index);
-
-          return (
-            <RouteAnimation
-              key={anim.routeAnimationId}
-              map={map}
-              routePath={routePath}
-              fromLocation={{ lat: anim.fromLat, lng: anim.fromLng }}
-              toLocation={{ lat: anim.toLat, lng: anim.toLng }}
-              iconType={anim.iconType}
-              iconUrl={anim.iconUrl}
-              routeColor={anim.routeColor}
-              visitedColor={anim.visitedColor}
-              routeWidth={anim.routeWidth}
-              durationMs={anim.durationMs}
-              isPlaying={isRoutePlaying}
-            />
-          );
-        } catch (e) {
-          console.error("Failed to render route animation:", e);
-          return null;
-        }
-      })}
-    </>
-  );
-}
 
 const normalizeMapStatus = (status: unknown): MapStatus => {
   if (typeof status === "string") {
@@ -153,6 +94,43 @@ const normalizeMapStatus = (status: unknown): MapStatus => {
   if (status === 1) return "Published";
   if (status === 2) return "Archived";
   return "Draft";
+};
+
+const baseKeyToBackend = (key: BaseKey): BaseLayer => {
+  const mapping: Record<BaseKey, BaseLayer> = {
+    "osm": "OSM",
+    "sat": "Satellite",
+    "dark": "Dark",
+    "positron": "Positron",
+    "dark-matter": "DarkMatter",
+    "terrain": "Terrain",
+    "toner": "Toner",
+    "watercolor": "Watercolor",
+    "topo": "Topo"
+  };
+  return mapping[key] || "OSM";
+};
+
+const backendToBaseKey = (backendValue: string | null | undefined): BaseKey => {
+  if (!backendValue) return "osm";
+  const normalized = backendValue.toLowerCase();
+
+  const mapping: Record<string, BaseKey> = {
+    "osm": "osm",
+    "openstreetmap": "osm",
+    "satellite": "sat",
+    "dark": "dark",
+    "positron": "positron",
+    "darkmatter": "dark-matter",
+    "dark-matter": "dark-matter",
+    "terrain": "terrain",
+    "toner": "toner",
+    "watercolor": "watercolor",
+    "topo": "topo",
+    "opentopomap": "topo"
+  };
+
+  return mapping[normalized] || "osm";
 };
 
 export default function EditMapPage() {
@@ -169,6 +147,17 @@ export default function EditMapPage() {
   const [busySaveMeta, setBusySaveMeta] = useState<boolean>(false);
   const [busySaveView, setBusySaveView] = useState<boolean>(false);
   const { showToast } = useToast();
+
+  // Session state for control panel
+  const [isCreatingSession, setIsCreatingSession] = useState<boolean>(false);
+  const [sessionShareModal, setSessionShareModal] = useState<{
+    isOpen: boolean;
+    sessionCode: string;
+    sessionId?: string;
+  }>({
+    isOpen: false,
+    sessionCode: "",
+  });
 
   const [name, setName] = useState<string>("");
   const [baseKey, setBaseKey] = useState<BaseKey>("osm");
@@ -1026,13 +1015,84 @@ export default function EditMapPage() {
         const L = (await import("leaflet")).default;
         if (cancelled) return;
         let layer: TileLayer;
-        if (key === "sat") {
-          layer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 20, attribution: "Tiles © Esri" });
-        } else if (key === "dark") {
-          layer = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", { maxZoom: 20, attribution: "© OpenStreetMap contributors © CARTO" });
-        } else {
-          layer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 20, attribution: "© OpenStreetMap contributors" });
+
+        // Base layer tile URLs configuration
+        const baseLayers: Record<BaseKey, { url: string; attribution: string; maxZoom?: number; subdomains?: string[] }> = {
+          "osm": {
+            url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            attribution: "© OpenStreetMap contributors",
+            maxZoom: 19,
+            subdomains: ["a", "b", "c"]
+          },
+          "sat": {
+            url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            attribution: "Tiles © Esri",
+            maxZoom: 20
+          },
+          "dark": {
+            url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+            attribution: "© OpenStreetMap contributors © CARTO",
+            maxZoom: 20,
+            subdomains: ["a", "b", "c"]
+          },
+          "positron": {
+            url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+            attribution: "© OpenStreetMap contributors © CARTO",
+            maxZoom: 20,
+            subdomains: ["a", "b", "c"]
+          },
+          "dark-matter": {
+            url: "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
+            attribution: "© OpenStreetMap contributors © CARTO",
+            maxZoom: 20,
+            subdomains: ["a", "b", "c"]
+          },
+          "terrain": {
+            // Using Esri World Topographic Map for terrain view
+            url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+            attribution: "Tiles © Esri — Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community",
+            maxZoom: 20
+          },
+          "toner": {
+            // Using CartoDB Positron No Labels (black and white style) as alternative to Stamen Toner
+            url: "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
+            attribution: "© OpenStreetMap contributors © CARTO",
+            maxZoom: 20,
+            subdomains: ["a", "b", "c"]
+          },
+          "watercolor": {
+            // Using Wikimedia style as alternative to Stamen Watercolor
+            url: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png",
+            attribution: "© OpenStreetMap contributors, Tiles style by Wikimedia, under CC BY-SA",
+            maxZoom: 19,
+            subdomains: []
+          },
+          "topo": {
+            // Using multiple options for OpenTopoMap with proper subdomain handling
+            // Primary: OpenTopoMap (may have rate limits, but provides best topo view)
+            url: "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+            attribution: "Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)",
+            maxZoom: 17,
+            subdomains: []
+          }
+        };
+
+        const layerConfig = baseLayers[key] || baseLayers["osm"];
+        const tileLayerOptions: any = {
+          maxZoom: layerConfig.maxZoom || 20,
+          attribution: layerConfig.attribution,
+        };
+
+        // Only add subdomains if specified (not for Esri or other servers without subdomains)
+        if (layerConfig.subdomains !== undefined) {
+          tileLayerOptions.subdomains = layerConfig.subdomains;
+        } else if (!key.includes("sat") && !key.includes("terrain")) {
+          // Default subdomains for most tile servers
+          tileLayerOptions.subdomains = ["a", "b", "c"];
         }
+
+        layer = L.tileLayer(layerConfig.url, tileLayerOptions);
+
         if (!cancelled && mapRef.current) {
           layer.addTo(mapRef.current as any);
           baseRef.current = layer;
@@ -1057,7 +1117,7 @@ export default function EditMapPage() {
         if (!alive) return;
         setDetail(m);
         setName(m.name ?? "");
-        setBaseKey(m.baseLayer === "Satellite" ? "sat" : m.baseLayer === "Dark" ? "dark" : "osm");
+        setBaseKey(backendToBaseKey(m.baseLayer));
         setMapStatus(normalizeMapStatus(m.status));
       } catch (e) {
         if (!alive) return;
@@ -1170,7 +1230,7 @@ export default function EditMapPage() {
       setIsMapReady(true);
       setCurrentZoom(initialZoom);
 
-      applyBaseLayer(detail.baseLayer === "Satellite" ? "sat" : detail.baseLayer === "Dark" ? "dark" : "osm");
+      applyBaseLayer(backendToBaseKey(detail.baseLayer));
 
       const sketch = L.featureGroup().addTo(map as any);
       sketchRef.current = sketch;
@@ -1212,7 +1272,7 @@ export default function EditMapPage() {
       }
 
       map.on("contextmenu", handleContextMenu as any);
-      
+
       // Listen to zoom events to update currentZoom state
       const updateZoom = () => {
         if (map.getZoom) {
@@ -1221,7 +1281,7 @@ export default function EditMapPage() {
       };
       map.on("zoomend", updateZoom);
       map.on("zoom", updateZoom);
-      
+
       // Handle feature creation - now managed by useFeatureManagement hook
       map.on("pm:create", async (e: PMCreateEvent) => {
         await handleFeatureCreate(e, customMarkerIcon as L.Icon | L.DivIcon | null, L, sketch);
@@ -2372,7 +2432,7 @@ export default function EditMapPage() {
       const customEvent = event as CustomEvent<{ segmentId: string }>;
       handlePlayRouteAnimation(customEvent);
     };
-    
+
     window.addEventListener('playRouteAnimation', playHandler);
     window.addEventListener('stopRouteAnimation', handleStopRouteAnimation);
     return () => {
@@ -2546,7 +2606,7 @@ export default function EditMapPage() {
     try {
       const body: UpdateMapRequest = {
         name: (name ?? "").trim() || "Untitled Map",
-        baseLayer: baseKey === "osm" ? "OSM" : baseKey === "sat" ? "Satellite" : "Dark",
+        baseLayer: baseKeyToBackend(baseKey),
       };
       await updateMap(detail.id, body);
       showToast("success", "Đã lưu thông tin bản đồ.");
@@ -2684,14 +2744,61 @@ export default function EditMapPage() {
               {mapStatus === "Published" && (
                 <>
                   <button
-                    className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1"
-                    onClick={() => window.open(`/storymap/control/${mapId}`, '_blank')}
+                    className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
+                    onClick={async () => {
+                      if (isCreatingSession) return;
+
+                      setIsCreatingSession(true);
+                      try {
+                        // Create a new session for this map
+                        const newSession = await createSession({
+                          mapId,
+                          sessionName: `Session - ${detail?.name || "Untitled Map"}`,
+                          sessionType: "live",
+                          allowLateJoin: true,
+                          showLeaderboard: true,
+                          showCorrectAnswers: true,
+                          shuffleQuestions: false,
+                          shuffleOptions: false,
+                          enableHints: true,
+                          pointsForSpeed: true,
+                        } as CreateSessionRequest);
+
+                        // Open control panel with session info in URL
+                        const controlUrl = `/storymap/control/${mapId}?sessionId=${newSession.id}&sessionCode=${newSession.sessionCode}`;
+                        window.open(controlUrl, '_blank');
+
+                        // Show share modal
+                        setSessionShareModal({
+                          isOpen: true,
+                          sessionCode: newSession.sessionCode,
+                          sessionId: newSession.id,
+                        });
+
+                        showToast("success", "Session đã được tạo thành công!");
+                      } catch (error: any) {
+                        console.error("Failed to create session:", error);
+                        showToast("error", error?.message || "Không thể tạo session. Vui lòng thử lại.");
+                      } finally {
+                        setIsCreatingSession(false);
+                      }
+                    }}
+                    disabled={isCreatingSession}
                     title="Open control panel (presenter view)"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                    </svg>
-                    Control
+                    {isCreatingSession ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        Creating...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                        </svg>
+                        Control
+                      </>
+                    )}
                   </button>
                   <button
                     className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 flex items-center gap-1"
@@ -2792,7 +2899,7 @@ export default function EditMapPage() {
               getSegments(mapId),
               getTimelineTransitions(mapId),
             ]);
-            
+
             // Load route animations for each segment (GetSegmentsAsync doesn't include routes)
             const segmentsWithRoutes = await Promise.all(
               segmentsData.map(async (segment) => {
@@ -2804,14 +2911,11 @@ export default function EditMapPage() {
                     routeAnimations: routes || []
                   };
                 } catch (e) {
-                  return {
-                    ...segment,
-                    routeAnimations: segment.routeAnimations || []
-                  };
+                  return segment;
                 }
               })
             );
-            
+
             // Force new array reference to ensure React re-renders
             setSegments([...segmentsWithRoutes]);
             setTransitions([...transitionsData]);
@@ -2972,6 +3076,15 @@ export default function EditMapPage() {
           transform: scale(1.1);
         }
       `}</style>
+
+      {/* Session Share Modal */}
+      <SessionShareModal
+        isOpen={sessionShareModal.isOpen}
+        onClose={() => setSessionShareModal({ isOpen: false, sessionCode: "" })}
+        sessionCode={sessionShareModal.sessionCode}
+        sessionId={sessionShareModal.sessionId}
+        mapId={mapId}
+      />
     </main>
   );
 }

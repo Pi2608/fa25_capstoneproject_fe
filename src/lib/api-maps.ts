@@ -7,7 +7,16 @@ import { getJson, postJson, putJson, delJson, patchJson, apiFetch, getToken, Api
 
 // ===== TYPES =====
 export type ViewState = { center: [number, number]; zoom: number };
-export type BaseLayer = "OSM" | "Satellite" | "Dark";
+export type BaseLayer = 
+  | "OSM" 
+  | "Satellite" 
+  | "Dark"
+  | "Positron"
+  | "DarkMatter"
+  | "Terrain"
+  | "Toner"
+  | "Watercolor"
+  | "Topo";
 export type MapStatus = "Draft" | "Published" | "Archived";
 
 export type MapDto = {

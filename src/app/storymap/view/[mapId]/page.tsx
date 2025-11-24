@@ -284,9 +284,9 @@ export default function StoryMapViewPage() {
                       )
                       .map((opt) => (
                         <label
-                          key={opt.id ?? opt.optionText}
+                          key={opt.questionOptionId ?? opt.optionText}
                           className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer text-[13px] transition ${selectedOptionId ===
-                            (opt.id as string | undefined)
+                            (opt.questionOptionId as string | undefined)
                             ? "border-emerald-500 bg-emerald-500/10 text-emerald-50"
                             : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
                             }`}
@@ -294,13 +294,13 @@ export default function StoryMapViewPage() {
                           <input
                             type="radio"
                             name="answer"
-                            value={opt.id}
+                            value={opt.questionOptionId}
                             checked={
                               selectedOptionId ===
-                              (opt.id as string | undefined)
+                              (opt.questionOptionId as string | undefined)
                             }
                             onChange={() =>
-                              setSelectedOptionId(opt.id as string)
+                              setSelectedOptionId(opt.questionOptionId as string)
                             }
                             className="mt-[3px] h-3 w-3 accent-emerald-500"
                           />

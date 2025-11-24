@@ -5,7 +5,8 @@ import "leaflet/dist/leaflet.css";
 import type { TileLayer } from "leaflet";
 import type { MapWithPM } from "@/types";
 import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
-import { Segment } from "@/lib/api-storymap";
+import { Segment, type Location } from "@/lib/api-storymap";
+import SequentialRoutePlaybackWrapper from "@/components/storymap/SequentialRoutePlaybackWrapper";
 
 type StoryMapViewerProps = {
   mapId: string;
@@ -17,6 +18,7 @@ type StoryMapViewerProps = {
   controlledIndex?: number; // For control page synchronization
   controlledPlaying?: boolean;
   controlsEnabled?: boolean;
+  onLocationClick?: (location: Location) => void;
 };
 
 export default function StoryMapViewer({
@@ -29,6 +31,7 @@ export default function StoryMapViewer({
   controlledIndex,
   controlledPlaying,
   controlsEnabled = true,
+  onLocationClick,
 }: StoryMapViewerProps) {
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapWithPM | null>(null);
@@ -49,6 +52,7 @@ export default function StoryMapViewer({
       const index = segments.findIndex((s) => s.segmentId === segment.segmentId);
       onSegmentChange?.(segment, index);
     },
+    onLocationClick,
   });
 
   // Initialize Leaflet map
@@ -71,23 +75,96 @@ export default function StoryMapViewer({
 
       mapRef.current = map;
 
-      // Add base layer
-      const baseKey =
-        baseMapProvider === "Satellite"
-          ? "sat"
-          : baseMapProvider === "Dark"
-          ? "dark"
-          : "osm";
+      // Add base layer - support all base layer types
+      const baseLayerMap: Record<string, string> = {
+        "OSM": "osm",
+        "OpenStreetMap": "osm",
+        "Satellite": "sat",
+        "Dark": "dark",
+        "Positron": "positron",
+        "DarkMatter": "dark-matter",
+        "Terrain": "terrain",
+        "Toner": "toner",
+        "Watercolor": "watercolor",
+        "Topo": "topo",
+      };
+      
+      const baseKey = baseLayerMap[baseMapProvider || "OSM"] || "osm";
 
-      const tiles: Record<string, string> = {
-        osm: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        sat: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-        dark: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+      const baseLayerConfig: Record<string, { url: string; attribution: string; maxZoom?: number; subdomains?: string[] }> = {
+        osm: {
+          url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          attribution: "© OpenStreetMap contributors",
+          maxZoom: 19,
+          subdomains: ["a", "b", "c"],
+        },
+        sat: {
+          url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          attribution: "Tiles © Esri",
+          maxZoom: 20,
+        },
+        dark: {
+          url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
+          attribution: "© OpenStreetMap contributors © CARTO",
+          maxZoom: 20,
+          subdomains: ["a", "b", "c"],
+        },
+        positron: {
+          url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+          attribution: "© OpenStreetMap contributors © CARTO",
+          maxZoom: 20,
+          subdomains: ["a", "b", "c"],
+        },
+        "dark-matter": {
+          url: "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
+          attribution: "© OpenStreetMap contributors © CARTO",
+          maxZoom: 20,
+          subdomains: ["a", "b", "c"],
+        },
+        terrain: {
+          // Using Esri World Topographic Map for terrain view
+          url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+          attribution: "Tiles © Esri — Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community",
+          maxZoom: 20,
+        },
+        toner: {
+          // Using CartoDB Positron No Labels (black and white style) as alternative to Stamen Toner
+          url: "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
+          attribution: "© OpenStreetMap contributors © CARTO",
+          maxZoom: 20,
+          subdomains: ["a", "b", "c"],
+        },
+        watercolor: {
+          // Using Wikimedia style as alternative to Stamen Watercolor
+          url: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png",
+          attribution: "© OpenStreetMap contributors, Tiles style by Wikimedia, under CC BY-SA",
+          maxZoom: 19,
+          subdomains: [],
+        },
+        topo: {
+          // Using OpenTopoMap - single tile server without subdomains
+          url: "https://tile.opentopomap.org/{z}/{x}/{y}.png",
+          attribution: "Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)",
+          maxZoom: 17,
+          subdomains: [],
+        },
       };
 
-      baseRef.current = L.tileLayer(tiles[baseKey], {
-        attribution: "",
-      }).addTo(map);
+      const config = baseLayerConfig[baseKey] || baseLayerConfig["osm"];
+      const tileLayerOptions: any = {
+        attribution: config.attribution || "",
+        maxZoom: config.maxZoom || 20,
+      };
+      
+      // Only add subdomains if specified
+      if (config.subdomains !== undefined) {
+        tileLayerOptions.subdomains = config.subdomains;
+      } else if (baseKey !== "sat" && baseKey !== "terrain") {
+        // Default subdomains for most tile servers
+        tileLayerOptions.subdomains = ["a", "b", "c"];
+      }
+      
+      baseRef.current = L.tileLayer(config.url, tileLayerOptions).addTo(map);
     })();
 
     return () => {
@@ -145,6 +222,17 @@ export default function StoryMapViewer({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Route Animations with Sequential Playback - Same as edit page */}
+      {playback.routeAnimations && playback.routeAnimations.length > 0 && mapRef.current && (
+        <SequentialRoutePlaybackWrapper
+          map={mapRef.current}
+          routeAnimations={playback.routeAnimations}
+          isPlaying={playback.isPlaying}
+          segmentStartTime={playback.segmentStartTime}
+          onLocationClick={onLocationClick}
+        />
       )}
 
       {/* Playback Controls (hidden when controlsEnabled = false) */}

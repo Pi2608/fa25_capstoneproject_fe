@@ -11,9 +11,9 @@ import {
   endSession,
   getSessionLeaderboard,
   getQuestionsOfQuestionBank,
-  goToNextQuestion,
+  activateNextQuestion,
   skipCurrentQuestion,
-  extendCurrentQuestion,
+  extendQuestionTime,
   getMySessions,      
   type SessionDto,
   type LeaderboardEntryDto,
@@ -21,6 +21,7 @@ import {
 } from "@/lib/api-ques";
 
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
+import { SessionShareModal } from "@/components/session/SessionShareModal";
 
 type QuestionBankMeta = {
   id?: string;
@@ -61,6 +62,7 @@ export default function StoryMapControlPage() {
   const [questionBankMeta, setQuestionBankMeta] =
     useState<QuestionBankMeta | null>(null);
 
+  const [showShareModal, setShowShareModal] = useState(false);
   const [currentQuestionIndex, setCurrentQuestionIndex] =
     useState<number | null>(null);
 
@@ -296,7 +298,7 @@ export default function StoryMapControlPage() {
 
     try {
       setQuestionControlLoading(true);
-      await goToNextQuestion(session.id);
+      await activateNextQuestion(session.id);
 
       setCurrentQuestionIndex((prev) => {
         if (!questions.length) return prev;
@@ -347,7 +349,7 @@ export default function StoryMapControlPage() {
 
     try {
       setQuestionControlLoading(true);
-      await extendCurrentQuestion(sessionQuestionId, seconds);
+      await extendQuestionTime(sessionQuestionId, seconds);
     } catch (e: any) {
       console.error("Extend question failed:", e);
       setError(e?.message || "Không gia hạn được thời gian cho câu hỏi");
@@ -359,10 +361,10 @@ export default function StoryMapControlPage() {
   // ================== Render states ==================
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-zinc-900">
+      <div className="h-screen flex items-center justify-center bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4" />
-          <div className="text-white text-xl">Loading Control Panel...</div>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-emerald-500 mx-auto mb-4" />
+          <div className="text-zinc-900 dark:text-zinc-100 text-xl">Loading Control Panel...</div>
         </div>
       </div>
     );
@@ -370,12 +372,12 @@ export default function StoryMapControlPage() {
 
   if (error) {
     return (
-      <div className="h-screen flex items-center justify-center bg-zinc-900">
+      <div className="h-screen flex items-center justify-center bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
         <div className="text-center max-w-md px-4">
-          <div className="text-red-400 text-2xl mb-4">⚠️ {error}</div>
+          <div className="text-red-600 dark:text-red-400 text-2xl mb-4">⚠️ {error}</div>
           <button
             onClick={() => router.back()}
-            className="px-6 py-3 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg transition-colors"
+            className="px-6 py-3 bg-muted hover:bg-muted/80 text-zinc-900 dark:text-zinc-100 rounded-lg transition-colors"
           >
             ← Go Back
           </button>
@@ -390,13 +392,12 @@ export default function StoryMapControlPage() {
 
   // ================== Main layout ==================
   return (
-    <div className="h-screen flex flex-col bg-zinc-900">
-      {/* MAIN: left panel + map + right panel */}
+    <div className="h-screen flex flex-col bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
+      {/* MAIN: left panel + map */}
       <div className="flex flex-1 min-h-0">
-        {/* LEFT: Session panel */}
-        <div className="w-[360px] border-r border-zinc-800 bg-zinc-950/95 flex flex-col">
+        <div className="w-[360px] border-r border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex flex-col">
           {/* HEADER */}
-          <div className="px-5 pt-5 pb-4 border-b border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950">
+          <div className="px-5 pt-5 pb-4 border-b border-border bg-background/80">
             <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 font-medium">
               Control Panel
             </p>
@@ -452,22 +453,35 @@ export default function StoryMapControlPage() {
 
               {/* MÃ CODE */}
               {session ? (
-                <div className="rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2.5 flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[11px] text-zinc-400">Code cho học sinh</p>
-                    <p className="font-mono text-xl font-semibold tracking-[0.18em] text-emerald-400">
-                      {session.sessionCode}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigator.clipboard.writeText(session.sessionCode)
-                    }
-                    className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-zinc-800 px-2.5 py-1.5 text-[11px] text-zinc-100 hover:bg-zinc-700 border border-zinc-700"
-                  >
-                    <span>Copy</span>
-                  </button>
+                <div className="space-y-2">
+                  <div className="rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2.5 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] text-zinc-400">Code cho học sinh</p>
+                      <p className="font-mono text-xl font-semibold tracking-[0.18em] text-emerald-400">
+                        {session.sessionCode}
+                      </p>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setShowShareModal(true)}
+                        className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] text-zinc-100 hover:bg-blue-700 border border-blue-500"
+                        title="Chia sẻ link hoặc QR code"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        </svg>
+                        Share
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(session.sessionCode)}
+                        className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-zinc-800 px-2.5 py-1.5 text-[11px] text-zinc-100 hover:bg-zinc-700 border border-zinc-700"
+                      >
+                        <span>Copy</span>
+                      </button>
+                    </div>
+                    </div>
                 </div>
               ) : (
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
@@ -765,7 +779,7 @@ export default function StoryMapControlPage() {
 
                             return (
                               <div
-                                key={q.id}
+                                key={q.questionId}
                                 className={
                                   "rounded-lg px-3 py-2 space-y-1 border " +
                                   (isActive
@@ -803,7 +817,7 @@ export default function StoryMapControlPage() {
                                       )
                                       .map((opt) => (
                                         <li
-                                          key={opt.id ?? opt.optionText}
+                                          key={opt.questionOptionId ?? opt.optionText}
                                           className="flex items-start gap-2 text-[11px]"
                                         >
                                           <span className="mt-[3px] inline-block h-1.5 w-1.5 rounded-full bg-zinc-500" />
@@ -894,6 +908,17 @@ export default function StoryMapControlPage() {
           </div>
         </div>
       </div>
+
+      {/* Session Share Modal */}
+      {session && (
+        <SessionShareModal
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          sessionCode={session.sessionCode}
+          sessionId={session.id}
+          mapId={mapId}
+        />
+      )}
     </div>
   );
 }
