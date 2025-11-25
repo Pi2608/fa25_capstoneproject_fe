@@ -1,33 +1,54 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { toast } from "react-toastify";
 import {
-  createSession,
-  getMyQuestionBanks,
-  type QuestionBankDto,
-} from "@/lib/api-ques";
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { toast } from "react-toastify";
+import { createSession } from "@/lib/api-ques";
 import { getOrganizationById } from "@/lib/api-organizations";
 import {
   getProjectsByOrganization,
-  type Workspace,
+  getWorkspaceMaps,
 } from "@/lib/api-workspaces";
+import { MapDto } from "@/lib/api-maps";
+import { Workspace } from "@/types/workspace";
+
+function formatDateLabel(value?: string | null) {
+  if (!value) return "Chưa cập nhật";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Không rõ";
+  return date.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
 
 export default function OrganizationCreateSessionPage() {
   const params = useParams<{ orgId: string }>();
   const orgId = params?.orgId ?? "";
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  const [orgName, setOrgName] = useState<string>("");
-  const [questionBanks, setQuestionBanks] = useState<QuestionBankDto[]>([]);
-  const [allBanksCount, setAllBanksCount] = useState(0);
+  const presetWorkspaceId = searchParams?.get("workspaceId") ?? "";
+  const presetMapId = searchParams?.get("mapId") ?? "";
+
+  const [orgName, setOrgName] = useState("");
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [selectedBankId, setSelectedBankId] = useState<string>("");
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState("");
+  const [mapsByWorkspace, setMapsByWorkspace] = useState<Record<string, MapDto[]>>({});
+  const [mapsLoadingWorkspaceId, setMapsLoadingWorkspaceId] = useState<string | null>(null);
+  const [workspaceMapErrors, setWorkspaceMapErrors] = useState<Record<string, string>>({});
+  const [selectedMapId, setSelectedMapId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
 
-  // Session settings (reuse defaults from /session/create)
+  // Session settings
   const [sessionName, setSessionName] = useState("");
   const [description, setDescription] = useState("");
   const [sessionType, setSessionType] = useState<"live" | "practice">("live");
@@ -40,9 +61,73 @@ export default function OrganizationCreateSessionPage() {
   const [enableHints, setEnableHints] = useState(true);
   const [pointsForSpeed, setPointsForSpeed] = useState(true);
 
-  const selectedBank = useMemo(
-    () => questionBanks.find((b) => b.id === selectedBankId),
-    [questionBanks, selectedBankId]
+  const loadedWorkspaceIdsRef = useRef(new Set<string>());
+  const prefAppliedRef = useRef(false);
+
+  const selectedWorkspace = useMemo(
+    () =>
+      workspaces.find(
+        (workspace) => workspace.workspaceId === selectedWorkspaceId
+      ),
+    [workspaces, selectedWorkspaceId]
+  );
+
+  const mapsForSelectedWorkspace = useMemo(
+    () => mapsByWorkspace[selectedWorkspaceId] ?? [],
+    [mapsByWorkspace, selectedWorkspaceId]
+  );
+
+  const selectedMap = useMemo(
+    () =>
+      mapsForSelectedWorkspace.find((map) => map.mapId === selectedMapId) ?? null,
+    [mapsForSelectedWorkspace, selectedMapId]
+  );
+
+  const fetchMapsForWorkspace = useCallback(
+    async (workspaceId: string, options?: { force?: boolean }) => {
+      if (!workspaceId) return;
+
+      if (
+        !options?.force &&
+        loadedWorkspaceIdsRef.current.has(workspaceId)
+      ) {
+        return;
+      }
+
+      if (options?.force) {
+        loadedWorkspaceIdsRef.current.delete(workspaceId);
+      }
+
+      setMapsLoadingWorkspaceId(workspaceId);
+      setWorkspaceMapErrors((prev) => {
+        const next = { ...prev };
+        delete next[workspaceId];
+        return next;
+      });
+
+      try {
+        const rawMaps = await getWorkspaceMaps(workspaceId);
+
+        setMapsByWorkspace((prev) => ({
+          ...prev,
+          [workspaceId]: rawMaps,
+        }));
+        loadedWorkspaceIdsRef.current.add(workspaceId);
+      } catch (error) {
+        console.error("Failed to load maps for workspace:", error);
+        toast.error("Không tải được danh sách storymap của workspace");
+        setWorkspaceMapErrors((prev) => ({
+          ...prev,
+          [workspaceId]:
+            "Không thể tải danh sách storymap. Vui lòng thử lại.",
+        }));
+      } finally {
+        setMapsLoadingWorkspaceId((current) =>
+          current === workspaceId ? null : current
+        );
+      }
+    },
+    []
   );
 
   useEffect(() => {
@@ -51,60 +136,79 @@ export default function OrganizationCreateSessionPage() {
     const loadData = async () => {
       try {
         setIsLoading(true);
-        const [banks, ws, org] = await Promise.all([
-          getMyQuestionBanks(),
+        setWorkspaces([]);
+        setSelectedWorkspaceId("");
+        setSelectedMapId("");
+        setMapsByWorkspace({});
+        loadedWorkspaceIdsRef.current.clear();
+
+        const [ws, org] = await Promise.all([
           getProjectsByOrganization(orgId),
           getOrganizationById(orgId),
         ]);
 
         setOrgName(org?.organization?.orgName ?? "");
         setWorkspaces(ws);
-        setAllBanksCount(banks.length);
 
-        const workspaceIds = new Set(
-          ws
-            .map((w) => w.workspaceId || (w as any).id || "")
-            .filter(Boolean)
-        );
+        const matchedWorkspace = presetWorkspaceId
+          ? ws.find((workspace) => workspace.workspaceId === presetWorkspaceId)
+          : undefined;
+        const initialWorkspaceId =
+          matchedWorkspace?.workspaceId ??
+          (ws.length ? ws[0].workspaceId : "");
 
-        const shouldFilter = workspaceIds.size > 0;
-        const filteredBanks = shouldFilter
-          ? banks.filter((bank) =>
-              bank.workspaceId ? workspaceIds.has(bank.workspaceId) : false
-            )
-          : banks;
-
-        setQuestionBanks(filteredBanks);
+        if (initialWorkspaceId) {
+          setSelectedWorkspaceId(initialWorkspaceId);
+          await fetchMapsForWorkspace(initialWorkspaceId);
+        }
       } catch (error) {
-        console.error("Failed to load question banks for organization:", error);
-        toast.error("Không tải được danh sách bộ câu hỏi của tổ chức");
+        console.error(
+          "Failed to load organization workspaces for session creation:",
+          error
+        );
+        toast.error("Không tải được dữ liệu tổ chức");
       } finally {
         setIsLoading(false);
       }
     };
 
     void loadData();
-  }, [orgId]);
+  }, [orgId, fetchMapsForWorkspace, presetWorkspaceId]);
+
+  const handleSelectWorkspace = (workspaceId: string) => {
+    setSelectedWorkspaceId(workspaceId);
+    setSelectedMapId("");
+    void fetchMapsForWorkspace(workspaceId);
+  };
+
+  const handleSelectMap = (mapId: string) => {
+    setSelectedMapId(mapId);
+  };
+
+  const handleRefreshMaps = () => {
+    if (!selectedWorkspaceId) return;
+    void fetchMapsForWorkspace(selectedWorkspaceId, { force: true });
+  };
 
   const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!selectedBankId || !selectedBank) {
-      toast.error("Vui lòng chọn bộ câu hỏi");
+    if (!selectedWorkspaceId) {
+      toast.error("Vui lòng chọn workspace trước khi tạo session");
       return;
     }
 
-    if (!selectedBank.mapId) {
-      toast.error("Bộ câu hỏi phải gắn với một bản đồ trước khi tạo session");
+    if (!selectedMapId || !selectedMap) {
+      toast.error("Vui lòng chọn storymap cho session");
       return;
     }
 
     setIsCreating(true);
     try {
       const session = await createSession({
-        mapId: selectedBank.mapId,
-        questionBankId: selectedBankId,
-        sessionName: sessionName || `${selectedBank.bankName} Session`,
+        mapId: selectedMapId,
+        sessionName:
+          sessionName || `${selectedMap.mapName ?? "Storymap"} Session`,
         description,
         sessionType,
         maxParticipants: maxParticipants || undefined,
@@ -120,31 +224,15 @@ export default function OrganizationCreateSessionPage() {
       toast.success("Tạo session thành công!");
 
       const params = new URLSearchParams({
-        sessionId: session.id,
+        sessionId: session.sessionId,
         sessionCode: session.sessionCode,
-        questionBankId: selectedBankId,
       });
 
-      if (selectedBank.bankName) params.set("bankName", selectedBank.bankName);
-      if (selectedBank.description)
-        params.set("bankDescription", selectedBank.description);
-      if (selectedBank.category) params.set("category", selectedBank.category);
-      if (selectedBank.tags && Array.isArray(selectedBank.tags) && selectedBank.tags.length > 0) {
-        params.set("tags", selectedBank.tags.join(","));
-      }
-      if (
-        selectedBank.totalQuestions !== null &&
-        selectedBank.totalQuestions !== undefined
-      ) {
-        params.set("totalQuestions", selectedBank.totalQuestions.toString());
-      }
-      if (selectedBank.workspaceName)
-        params.set("workspaceName", selectedBank.workspaceName);
-      if (selectedBank.mapName) params.set("mapName", selectedBank.mapName);
-      if (selectedBank.createdAt) params.set("createdAt", selectedBank.createdAt);
-      if (selectedBank.updatedAt) params.set("updatedAt", selectedBank.updatedAt);
+      params.set("workspaceId", selectedWorkspaceId);
+      params.set("mapId", selectedMapId);
+      if (selectedMap.mapName) params.set("mapName", selectedMap.mapName);
 
-      router.push(`/storymap/control/${selectedBank.mapId}?${params.toString()}`);
+      router.push(`/storymap/control/${selectedMapId}?${params.toString()}`);
     } catch (error: any) {
       console.error("Failed to create session inside organization:", error);
       toast.error(error?.message || "Không thể tạo session");
@@ -153,9 +241,21 @@ export default function OrganizationCreateSessionPage() {
     }
   };
 
+  useEffect(() => {
+    if (!presetMapId || prefAppliedRef.current) return;
+    if (!selectedWorkspaceId) return;
+    const maps = mapsByWorkspace[selectedWorkspaceId];
+    if (!maps || maps.length === 0) return;
+    const exists = maps.some((map) => map.mapId === presetMapId);
+    if (exists) {
+      setSelectedMapId(presetMapId);
+      prefAppliedRef.current = true;
+    }
+  }, [presetMapId, selectedWorkspaceId, mapsByWorkspace]);
+
   if (!orgId) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e] flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-zinc-950">
         <div className="text-center text-zinc-600 dark:text-zinc-400">
           Organization not found.
         </div>
@@ -164,126 +264,232 @@ export default function OrganizationCreateSessionPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <div className="text-zinc-600 dark:text-zinc-400">
-            Đang tải dữ liệu tổ chức...
+    return <div className="min-h-[60vh] px-4 text-zinc-500 animate-pulse">Đang tải...</div>;
+  }
+
+  const mapsErrorMessage = selectedWorkspaceId
+    ? workspaceMapErrors[selectedWorkspaceId]
+    : null;
+
+  return (
+    <div className="min-w-0 px-4 pb-10">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => router.push(`/profile/organizations/${orgId}`)}
+            className="rounded-lg border border-zinc-200 px-2 py-2 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-100 dark:hover:bg-white/10"
+          >
+            ←
+          </button>
+          <div>
+            <h1 className="text-2xl font-semibold sm:text-3xl">Tạo session</h1>
           </div>
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div className="min-h-screen bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
-      <header className="bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b px-4 py-4 sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-zinc-500">
-              {orgName || "Organization"}
-            </p>
-            <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-              Tạo session mới
-            </h1>
-            <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Chọn bộ câu hỏi thuộc tổ chức để tạo session
-            </p>
-          </div>
-          <button
-            onClick={() => router.push(`/profile/organizations/${orgId}`)}
-            className="px-4 py-2 text-zinc-600 dark:text-zinc-200 hover:bg-muted rounded-lg transition-colors"
-          >
-            ← Quay lại tổ chức
-          </button>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto p-6">
+      <main className="mx-auto max-w-6xl p-6 pb-20">
         <form onSubmit={handleCreateSession} className="space-y-6">
-          <div className="bg-background/80 backdrop-blur rounded-xl border shadow-sm p-6">
-            <div className="flex items-center justify-between gap-4 mb-4">
-              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                1. Chọn bộ câu hỏi
-              </h2>
-              <span className="text-sm text-zinc-500 dark:text-zinc-400">
-                {questionBanks.length} bộ hiển thị (
-                {allBanksCount} tổng cộng)
+          <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  1. Chọn workspace
+                </h2>
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  Chỉ hiển thị workspace thuộc tổ chức này
+                </p>
+              </div>
+              <span className="rounded-full bg-zinc-100 px-3 py-1 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                {workspaces.length} workspace
               </span>
             </div>
 
-            {questionBanks.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="text-4xl mb-3">📚</div>
-                <div className="text-zinc-600 dark:text-zinc-400 mb-2">
-                  Tổ chức chưa có bộ câu hỏi nào
+            {workspaces.length === 0 ? (
+              <div className="py-8 text-center">
+                <div className="mb-3 text-4xl">🗂️</div>
+                <div className="mb-2 text-zinc-600 dark:text-zinc-400">
+                  Tổ chức chưa có workspace nào
                 </div>
-                <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-4">
-                  Vào trang Bộ câu hỏi trong tổ chức để tạo hoặc gắn bộ câu hỏi
-                  với workspace trước khi tạo session.
+                <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
+                  Tạo workspace mới hoặc gán workspace hiện có cho tổ chức này
+                  để quản lý session theo nhóm.
                 </p>
                 <button
                   type="button"
                   onClick={() =>
-                    router.push(`/profile/organizations/${orgId}/question-banks`)
+                    router.push(`/profile/organizations/${orgId}/workspaces`)
                   }
-                  className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
+                  className="rounded-lg bg-emerald-500 px-6 py-2 text-white hover:bg-emerald-600"
                 >
-                  Quản lý bộ câu hỏi
+                  Quản lý workspace
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {questionBanks.map((bank) => (
-                  <button
-                    key={bank.id}
-                    type="button"
-                    onClick={() => setSelectedBankId(bank.id)}
-                    className={`p-4 rounded-lg border-2 text-left transition-all ${
-                      selectedBankId === bank.id
-                        ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30"
-                        : "border-border hover:border-emerald-300"
-                    }`}
-                  >
-                    <div className="font-semibold text-lg mb-1">
-                      {bank.bankName}
-                    </div>
-                    <div className="text-sm text-zinc-600 dark:text-zinc-400 mb-2 line-clamp-2">
-                      {bank.description || "Không có mô tả"}
-                    </div>
-                    <div className="flex flex-wrap gap-3 text-xs text-zinc-500">
-                      <span>📝 {bank.totalQuestions || 0} câu hỏi</span>
-                      {bank.workspaceName && <span>💼 {bank.workspaceName}</span>}
-                      {bank.mapName && <span>🗺️ {bank.mapName}</span>}
-                    </div>
-                  </button>
-                ))}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {workspaces.map((workspace) => {
+                  const workspaceId = workspace.workspaceId;
+                  const isSelected = workspaceId === selectedWorkspaceId;
+                  return (
+                    <button
+                      key={workspaceId}
+                      type="button"
+                      onClick={() => handleSelectWorkspace(workspaceId)}
+                      className={`rounded-xl border-2 p-4 text-left transition-all ${isSelected
+                        ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
+                        : "border-zinc-100 hover:border-emerald-200 dark:border-zinc-800 dark:hover:border-emerald-800"
+                        }`}
+                    >
+                      <div className="mb-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                        {workspace.workspaceName}
+                      </div>
+                      <div className="mb-2 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
+                        {workspace.description || "Không có mô tả"}
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-xs text-zinc-500">
+                        <span>🗂️ {workspace.mapCount ?? 0} map</span>
+                        {workspace.orgName && (
+                          <span>🏢 {workspace.orgName}</span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
-          </div>
+          </section>
 
-          {questionBanks.length > 0 && selectedBankId && (
+          {selectedWorkspaceId && (
+            <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                    2. Chọn storymap
+                  </h2>
+                  {selectedWorkspace && (
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                      Workspace: {selectedWorkspace.workspaceName}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      router.push(
+                        `/profile/organizations/${orgId}/workspaces/${selectedWorkspaceId}`
+                      )
+                    }
+                    className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  >
+                    Quản lý workspace
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleRefreshMaps}
+                    className="rounded-lg border border-emerald-200 px-3 py-2 text-sm text-emerald-600 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-900/20"
+                  >
+                    Làm mới
+                  </button>
+                </div>
+              </div>
+
+              {mapsLoadingWorkspaceId === selectedWorkspaceId ? (
+                <div className="flex items-center justify-center py-10 text-sm text-zinc-500">
+                  <div className="mr-3 h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+                  Đang tải storymap của workspace...
+                </div>
+              ) : mapsErrorMessage ? (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400">
+                  {mapsErrorMessage}
+                </div>
+              ) : mapsForSelectedWorkspace.length === 0 ? (
+                <div className="py-8 text-center">
+                  <div className="mb-3 text-4xl">🗺️</div>
+                  <div className="mb-2 text-zinc-600 dark:text-zinc-400">
+                    Workspace này chưa có storymap nào
+                  </div>
+                  <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
+                    Tạo hoặc gắn storymap vào workspace để có thể mở session từ
+                    đây.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      router.push(
+                        `/profile/organizations/${orgId}/workspaces/${selectedWorkspaceId}`
+                      )
+                    }
+                    className="rounded-lg bg-sky-600 px-6 py-2 text-white hover:bg-sky-700"
+                  >
+                    Tạo storymap
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {mapsForSelectedWorkspace.map((map) => {
+                    const isSelected = map.mapId === selectedMapId;
+                    return (
+                      <button
+                        key={map.mapId}
+                        type="button"
+                        onClick={() => handleSelectMap(map.mapId)}
+                        className={`rounded-xl border-2 p-4 text-left transition-all ${isSelected
+                          ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
+                          : "border-zinc-100 hover:border-sky-200 dark:border-zinc-800 dark:hover:border-sky-800"
+                          }`}
+                      >
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                            {map.mapName}
+                          </div>
+                          {map.status && (
+                            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
+                              {map.status}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mb-2 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
+                          {map.description || "Không có mô tả"}
+                        </div>
+                        <div className="text-xs text-zinc-500">
+                          Cập nhật: {formatDateLabel(map.updatedAt ?? map.createdAt)}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
+          {selectedMapId && selectedMap && (
             <>
-              <div className="bg-background/80 backdrop-blur rounded-xl border shadow-sm p-6">
-                <h2 className="text-lg font-semibold mb-4 text-zinc-900 dark:text-zinc-100">
-                  2. Thông tin session
-                </h2>
+              <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                      3. Thông tin session
+                    </h2>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                      Storymap: {selectedMap.mapName}
+                    </p>
+                  </div>
+                </div>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium mb-1 text-zinc-900 dark:text-zinc-100">
+                    <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                       Tên session
                     </label>
                     <input
                       type="text"
                       value={sessionName}
                       onChange={(e) => setSessionName(e.target.value)}
-                      placeholder={`${selectedBank?.bankName ?? "Session"}`}
-                      className="w-full px-3 py-2 border border-border rounded-lg bg-background text-zinc-900 dark:text-zinc-100"
+                      placeholder={`${selectedMap?.mapName ?? "Session"}`}
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1 text-zinc-900 dark:text-zinc-100">
+                    <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                       Mô tả
                     </label>
                     <textarea
@@ -291,12 +497,12 @@ export default function OrganizationCreateSessionPage() {
                       onChange={(e) => setDescription(e.target.value)}
                       placeholder="Thêm mô tả cho session..."
                       rows={3}
-                      className="w-full px-3 py-2 border border-border rounded-lg bg-background text-zinc-900 dark:text-zinc-100"
+                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium mb-1 text-zinc-900 dark:text-zinc-100">
+                      <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                         Loại session
                       </label>
                       <select
@@ -304,14 +510,14 @@ export default function OrganizationCreateSessionPage() {
                         onChange={(e) =>
                           setSessionType(e.target.value as "live" | "practice")
                         }
-                        className="w-full px-3 py-2 border border-border rounded-lg bg-background text-zinc-900 dark:text-zinc-100"
+                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
                       >
                         <option value="live">Live</option>
                         <option value="practice">Practice</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-medium mb-1 text-zinc-900 dark:text-zinc-100">
+                      <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
                         Số người tối đa (0 = không giới hạn)
                       </label>
                       <input
@@ -321,16 +527,16 @@ export default function OrganizationCreateSessionPage() {
                           setMaxParticipants(parseInt(e.target.value) || 0)
                         }
                         min={0}
-                        className="w-full px-3 py-2 border border-border rounded-lg bg-background text-zinc-900 dark:text-zinc-100"
+                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
                       />
                     </div>
                   </div>
                 </div>
-              </div>
+              </section>
 
-              <div className="bg-background/80 backdrop-blur rounded-xl border shadow-sm p-6">
-                <h2 className="text-lg font-semibold mb-4 text-zinc-900 dark:text-zinc-100">
-                  3. Thiết lập session
+              <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  4. Thiết lập session
                 </h2>
                 <div className="space-y-3">
                   {[
@@ -386,13 +592,13 @@ export default function OrganizationCreateSessionPage() {
                   ].map((setting) => (
                     <label
                       key={setting.id}
-                      className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/60 cursor-pointer transition-colors"
+                      className="flex cursor-pointer items-start gap-3 rounded-lg p-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
                     >
                       <input
                         type="checkbox"
                         checked={setting.value}
                         onChange={(e) => setting.onChange(e.target.checked)}
-                        className="mt-1 w-5 h-5"
+                        className="mt-1 h-5 w-5 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
                       />
                       <div className="flex-1">
                         <div className="font-medium text-zinc-900 dark:text-zinc-100">
@@ -405,24 +611,24 @@ export default function OrganizationCreateSessionPage() {
                     </label>
                   ))}
                 </div>
-              </div>
+              </section>
 
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => router.push(`/profile/organizations/${orgId}`)}
-                  className="px-6 py-3 bg-muted hover:bg-muted/80 text-zinc-900 dark:text-zinc-100 font-semibold rounded-lg transition-colors"
+                  className="rounded-lg border border-zinc-200 px-6 py-3 font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  disabled={isCreating || !selectedBankId}
-                  className="px-8 py-3 bg-emerald-600 hover:bg-emerald-700 disabled:bg-muted text-white font-semibold rounded-lg transition-colors disabled:cursor-not-allowed flex items-center gap-2"
+                  disabled={isCreating || !selectedMapId}
+                  className="flex items-center gap-2 rounded-lg bg-emerald-500 px-8 py-3 font-semibold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {isCreating ? (
                     <>
-                      <div className="animate-spin w-5 h-5 border-3 border-white border-t-transparent rounded-full"></div>
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
                       <span>Đang tạo...</span>
                     </>
                   ) : (
@@ -440,8 +646,3 @@ export default function OrganizationCreateSessionPage() {
     </div>
   );
 }
-
-
-
-
-

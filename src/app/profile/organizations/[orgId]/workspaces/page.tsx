@@ -257,13 +257,8 @@ export default function WorkspacesPage() {
                   <div className="truncate font-semibold">{workspace.workspaceName || "Untitled"}</div>
                   <div className="text-xs text-zinc-400 truncate">
                     {workspace.description ||
-                      (workspace.isPersonal ? workspace.personalLabel ?? "Không thuộc tổ chức" : "No description")}
+                      "No description"}
                   </div>
-                  {workspace.isPersonal && (
-                    <div className="mt-1 text-[11px] text-emerald-300">
-                      {workspace.orgName} · {workspace.personalLabel ?? "Không thuộc tổ chức"}
-                    </div>
-                  )}
                   <div className="text-xs text-zinc-500">
                     {workspace.createdAt ? formatDate(workspace.createdAt) : "—"}
                   </div>
@@ -335,7 +330,7 @@ export default function WorkspacesPage() {
                   </td>
                   <td className="px-3 py-2 text-zinc-400">
                     {workspace.description ||
-                      (workspace.isPersonal ? workspace.personalLabel ?? "Không thuộc tổ chức" : "—")}
+                      "—"}
                   </td>
                   <td className="px-3 py-2 text-zinc-400">
                     {workspace.createdAt ? formatDate(workspace.createdAt) : "—"}

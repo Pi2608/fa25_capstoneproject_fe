@@ -138,8 +138,8 @@ export default function HelpPage() {
             setError(null);
             try {
                 const [ticket, msgs] = await Promise.all([
-                    getSupportTicket(selectedId),
-                    getSupportTicketMessages(selectedId),
+                    getSupportTicket(selectedId ?? ""),
+                    getSupportTicketMessages(selectedId ?? ""),
                 ]);
                 if (!cancelled) {
                     setSelectedTicket(ticket);
@@ -161,8 +161,8 @@ export default function HelpPage() {
     const orderedTickets = useMemo(
         () =>
             [...tickets].sort((a, b) => {
-                const da = new Date(a.updatedAt || a.createdAt).getTime();
-                const db = new Date(b.updatedAt || b.createdAt).getTime();
+                const da = new Date(a.updatedAt ?? a.createdAt ?? "").getTime();
+                const db = new Date(b.updatedAt ?? b.createdAt ?? "").getTime();
                 return db - da;
             }),
         [tickets],

@@ -9,13 +9,6 @@ import { getOrganizationById, OrganizationDetailDto } from "@/lib/api-organizati
 import { createDefaultMap, deleteMap, getMapDetail } from "@/lib/api-maps";
 import { getWorkspaceById, getWorkspaceMaps, removeMapFromWorkspace } from "@/lib/api-workspaces";
 import { useI18n } from "@/i18n/I18nProvider";
-import {
-  QuestionBankDto,
-  getMyQuestionBanks,
-  createSession,
-  SessionDto,
-  getMySessions,
-} from "@/lib/api-ques";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name" | "author";
@@ -55,37 +48,6 @@ export default function WorkspaceDetailPage() {
   }>({ open: false });
   const [deleteMapLoading, setDeleteMapLoading] = useState(false);
 
-  // -------- Modal chọn bộ câu hỏi & tạo session ----------
-  const [createSessionOpen, setCreateSessionOpen] = useState<{
-    open: boolean;
-    mapId?: string;
-    mapName?: string;
-  }>({ open: false });
-
-  const [questionBanks, setQuestionBanks] = useState<QuestionBankDto[]>([]);
-  const [loadingQuestionBanks, setLoadingQuestionBanks] = useState(false);
-  const [selectedQuestionBankId, setSelectedQuestionBankId] = useState<string>("");
-  const [creatingSession, setCreatingSession] = useState(false);
-
-  // ------- Session form fields -------
-  const [sessionName, setSessionName] = useState("");
-  const [sessionDescription, setSessionDescription] = useState("");
-  const [sessionType, setSessionType] = useState<"live" | "practice">("live");
-  const [maxParticipants, setMaxParticipants] = useState<number>(0);
-  const [allowLateJoin, setAllowLateJoin] = useState(true);
-  const [showLeaderboard, setShowLeaderboard] = useState(true);
-  const [showCorrectAnswers, setShowCorrectAnswers] = useState(true);
-  const [shuffleQuestions, setShuffleQuestions] = useState(true);
-  const [shuffleOptions, setShuffleOptions] = useState(true);
-  const [enableHints, setEnableHints] = useState(true);
-  const [pointsForSpeed, setPointsForSpeed] = useState(true);
-  const [scheduledStartTime, setScheduledStartTime] = useState<string>("");
-
-  // ------- Danh sách các tiết học đã tạo -------
-  const [mySessionsOpen, setMySessionsOpen] = useState(false);
-  const [mySessions, setMySessions] = useState<SessionDto[]>([]);
-  const [mySessionsLoading, setMySessionsLoading] = useState(false);
-  const [mySessionsError, setMySessionsError] = useState<string | null>(null);
 
   const handleCreateMap = useCallback(async () => {
     try {
@@ -99,22 +61,6 @@ export default function WorkspaceDetailPage() {
     }
   }, [router, showToast, workspaceId, t]);
 
-  const handleOpenMySessions = useCallback(async () => {
-    setMySessionsOpen(true);
-    setMySessionsLoading(true);
-    setMySessionsError(null);
-
-    try {
-      const sessions = await getMySessions();
-      setMySessions(sessions);
-    } catch (e) {
-      const msg = safeMessage(e, t("workspace_detail.request_failed"));
-      setMySessionsError(msg);
-      showToast("error", msg);
-    } finally {
-      setMySessionsLoading(false);
-    }
-  }, [showToast, t]);
 
   const loadData = useCallback(async () => {
     try {
@@ -138,7 +84,7 @@ export default function WorkspaceDetailPage() {
       setMaps(normalized);
 
       const detailList = await Promise.all(
-        normalized.map(async (m) => {
+        normalized.map(async (m: any) => {
           try {
             const detail = await getMapDetail(m.id);
             return detail;
@@ -214,120 +160,18 @@ export default function WorkspaceDetailPage() {
   );
 
   const handleOpenCreateSession = useCallback(
-    async (mapId: string, mapName?: string) => {
-      setCreateSessionOpen({ open: true, mapId, mapName });
-
-      // reset form session
-      setSelectedQuestionBankId("");
-      setSessionName(mapName ? `Session - ${mapName}` : "New session");
-      setSessionDescription("");
-      setSessionType("live");
-      setMaxParticipants(0);
-      setAllowLateJoin(true);
-      setShowLeaderboard(true);
-      setShowCorrectAnswers(true);
-      setShuffleQuestions(true);
-      setShuffleOptions(true);
-      setEnableHints(true);
-      setPointsForSpeed(true);
-      setScheduledStartTime("");
-
-      setLoadingQuestionBanks(true);
-      try {
-        const allBanks = await getMyQuestionBanks();
-        const filtered = allBanks.filter((b) => b.mapId === mapId);
-        setQuestionBanks(filtered);
-      } catch (e) {
-        setQuestionBanks([]);
-        showToast("error", safeMessage(e, t("workspace_detail.request_failed")));
-      } finally {
-        setLoadingQuestionBanks(false);
-      }
+    async (mapId: string) => {
+      const search = new URLSearchParams({
+        workspaceId,
+        mapId,
+      });
+      router.push(
+        `/profile/organizations/${orgId}/sessions/create?${search.toString()}`
+      );
     },
-    [showToast, t]
+    [orgId, workspaceId, router]
   );
 
-  const handleCreateSessionForMap = useCallback(
-    async () => {
-      if (!createSessionOpen.mapId) return;
-
-      const mapIdForSession = createSessionOpen.mapId;
-
-      setCreatingSession(true);
-      try {
-        const nowIso = new Date().toISOString();
-        const scheduledIso =
-          scheduledStartTime &&
-          !Number.isNaN(new Date(scheduledStartTime).getTime())
-            ? new Date(scheduledStartTime).toISOString()
-            : nowIso;
-
-        const body: any = {
-          mapId: mapIdForSession,
-          sessionName:
-            sessionName ||
-            (createSessionOpen.mapName
-              ? `Session - ${createSessionOpen.mapName}`
-              : "New session"),
-          description: sessionDescription || null,
-          sessionType,
-          maxParticipants: maxParticipants || 0,
-          allowLateJoin,
-          showLeaderboard,
-          showCorrectAnswers,
-          shuffleQuestions,
-          shuffleOptions,
-          enableHints,
-          pointsForSpeed,
-          scheduledStartTime: scheduledIso,
-        };
-
-        if (selectedQuestionBankId) {
-          body.questionBankId = selectedQuestionBankId;
-        }
-
-        const session = await createSession(body);
-
-        showToast("success", "Tạo session thành công");
-
-        setCreateSessionOpen({
-          open: false,
-          mapId: undefined,
-          mapName: undefined,
-        });
-
-        router.push(
-          `/storymap/control/${mapIdForSession}?sessionId=${session.id}`
-        );
-      } catch (e) {
-        showToast(
-          "error",
-          safeMessage(e, t("workspace_detail.request_failed"))
-        );
-      } finally {
-        setCreatingSession(false);
-      }
-    },
-    [
-      createSessionOpen,
-      selectedQuestionBankId,
-      router,
-      showToast,
-      t,
-      sessionName,
-      sessionDescription,
-      sessionType,
-      maxParticipants,
-      allowLateJoin,
-      showLeaderboard,
-      showCorrectAnswers,
-      shuffleQuestions,
-      shuffleOptions,
-      enableHints,
-      pointsForSpeed,
-      scheduledStartTime,
-    ]
-  );
 
   if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">{t("workspace_detail.loading")}</div>;
   if (err || !org || !workspace) return <div className="max-w-3xl px-4 text-red-400">{err ?? t("workspace_detail.not_found")}</div>;
@@ -356,14 +200,6 @@ export default function WorkspaceDetailPage() {
             className="px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
           >
             {t("workspace_detail.create_map")}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => void handleOpenMySessions()}
-            className="px-4 py-2 rounded-lg border border-emerald-500/60 bg-emerald-500/5 text-emerald-300 text-sm font-semibold hover:bg-emerald-500/10 hover:text-emerald-100 transition"
-          >
-            Các tiết học đã tạo
           </button>
         </div>
 
@@ -566,12 +402,7 @@ export default function WorkspaceDetailPage() {
                     {t("workspace_detail.open_map")}
                   </button>
                   <button
-                    onClick={() =>
-                      void handleOpenCreateSession(
-                        map.id,
-                        map.name || t("workspace_detail.unnamed")
-                      )
-                    }
+                    onClick={() => void handleOpenCreateSession(map.id)}
                     className="w-full px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
                   >
                     Tạo session
@@ -589,406 +420,12 @@ export default function WorkspaceDetailPage() {
         </div>
       )}
 
-      {/* Modal: Các tiết học đã tạo */}
-      {mySessionsOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-full max-w-3xl max-h-[80vh] rounded-2xl bg-zinc-900 border border-white/10 shadow-2xl flex flex-col">
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
-              <div>
-                <h2 className="text-sm font-semibold text-white">
-                  Các tiết học đã tạo
-                </h2>
-                <p className="mt-0.5 text-xs text-zinc-400">
-                  Danh sách session mà bạn là host (lấy từ /api/sessions/my).
-                </p>
-              </div>
-              <button
-                onClick={() => setMySessionsOpen(false)}
-                className="rounded-full bg-zinc-800/80 p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-700 transition"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-              {mySessionsLoading && (
-                <div className="flex items-center justify-center py-10 text-sm text-zinc-400">
-                  Đang tải danh sách tiết học...
-                </div>
-              )}
-
-              {!mySessionsLoading && mySessionsError && (
-                <div className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-200">
-                  {mySessionsError}
-                </div>
-              )}
-
-              {!mySessionsLoading &&
-                !mySessionsError &&
-                mySessions.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-10 text-xs text-zinc-400">
-                    <p>Bạn chưa tạo tiết học nào.</p>
-                  </div>
-                )}
-
-              {!mySessionsLoading &&
-                !mySessionsError &&
-                mySessions.length > 0 && (
-                  <ul className="space-y-2">
-                    {mySessions.map((s) => (
-                      <li
-                        key={s.id}
-                        className="rounded-xl border border-white/10 bg-zinc-900/60 px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-semibold text-white">
-                              {s.sessionName || "Tiết học không tên"}
-                            </span>
-                            <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
-                              {s.status}
-                            </span>
-                          </div>
-
-                          <div className="text-xs text-zinc-400">
-                            <span className="mr-3">
-                              Mã tham gia:{" "}
-                              <span className="font-mono text-emerald-300">
-                                {s.sessionCode}
-                              </span>
-                            </span>
-                            {s.mapName && (
-                              <span>
-                                Bản đồ:{" "}
-                                <span className="text-zinc-100">
-                                  {s.mapName}
-                                </span>
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="text-[11px] text-zinc-500">
-                            Tạo lúc:{" "}
-                            {s.createdAt ? formatDate(s.createdAt) : "—"} •{" "}
-                            Người tham gia: {s.totalParticipants ?? 0}
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!s.mapId) {
-                                showToast("error", "Session này không có mapId, không mở được");
-                                return;
-                              }
-                              setMySessionsOpen(false);
-                              router.push(`/storymap/control/${s.mapId}?sessionId=${s.id}`);
-                            }}
-                            className="inline-flex items-center rounded-lg bg-emerald-500 px-3 py-1.5 text-[11px] font-semibold text-zinc-900 hover:bg-emerald-400 transition"
-                          >
-                            Mở tiết học
-                          </button>
-
-
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(s.sessionCode);
-                                showToast("success", "Đã copy mã tham gia vào clipboard");
-                              } catch {
-                                showToast("error", "Không copy được mã tham gia");
-                              }
-                            }}
-                            className="inline-flex items-center rounded-lg border border-white/15 bg-zinc-900/60 px-3 py-1.5 text-[11px] font-medium text-zinc-100 hover:bg-zinc-800 transition"
-                          >
-                            Copy mã
-                          </button>
-                        </div>
-
-                      </li>
-                    ))}
-                  </ul>
-                )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal chọn bộ câu hỏi + tạo session */}
-      {createSessionOpen.open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
-          <div className="w-[44rem] max-w-[95vw] rounded-xl border border-emerald-500/40 bg-zinc-900 p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <h2 className="text-xl font-semibold text-white">
-                  Thiết lập session
-                </h2>
-                <p className="text-sm text-zinc-300 mt-1">
-                  Bản đồ:&nbsp;
-                  <span className="font-semibold text-emerald-300">
-                    {createSessionOpen.mapName}
-                  </span>
-                </p>
-              </div>
-              <button
-                onClick={() => setCreateSessionOpen({ open: false })}
-                className="px-2 py-1 text-sm rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/10"
-                disabled={creatingSession}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* 2 cột: bên trái thông tin session, bên phải bộ câu hỏi */}
-            <div className="grid gap-5 md:grid-cols-2">
-              {/* Cột 1: Thông tin session */}
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">
-                    Tên session
-                  </label>
-                  <input
-                    className="w-full rounded-lg bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-white"
-                    value={sessionName}
-                    onChange={(e) => setSessionName(e.target.value)}
-                    placeholder="VD: Tiết 1 - Địa lý 9A1"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">
-                    Mô tả (tuỳ chọn)
-                  </label>
-                  <textarea
-                    className="w-full rounded-lg bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-white resize-none"
-                    rows={2}
-                    value={sessionDescription}
-                    onChange={(e) => setSessionDescription(e.target.value)}
-                    placeholder="Ghi chú nhanh cho tiết học này..."
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1">
-                      Loại session
-                    </label>
-                    <select
-                      className="w-full rounded-lg bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-white"
-                      value={sessionType}
-                      onChange={(e) =>
-                        setSessionType(e.target.value as "live" | "practice")
-                      }
-                    >
-                      <option value="live">Live</option>
-                      <option value="practice">Practice</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1">
-                      Số người tham gia tối đa (0 = không giới hạn)
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-full rounded-lg bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-white"
-                      value={maxParticipants}
-                      onChange={(e) =>
-                        setMaxParticipants(Number(e.target.value) || 0)
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-zinc-400 mb-1">
-                    Thời gian bắt đầu (tuỳ chọn)
-                  </label>
-                  <input
-                    type="datetime-local"
-                    className="w-full rounded-lg bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-white"
-                    value={scheduledStartTime}
-                    onChange={(e) => setScheduledStartTime(e.target.value)}
-                  />
-                </div>
-
-                {/* Các tuỳ chọn boolean – gom lại thành 1 card nhỏ */}
-                <div className="rounded-lg border border-white/10 bg-zinc-800/70 px-3 py-3">
-                  <p className="text-xs font-semibold text-zinc-300 mb-2">
-                    Tuỳ chọn hiển thị & chấm điểm
-                  </p>
-                  <div className="grid grid-cols-1 gap-1.5 text-xs text-zinc-200">
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="accent-emerald-500"
-                        checked={allowLateJoin}
-                        onChange={(e) => setAllowLateJoin(e.target.checked)}
-                      />
-                      Cho vào muộn
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="accent-emerald-500"
-                        checked={showLeaderboard}
-                        onChange={(e) => setShowLeaderboard(e.target.checked)}
-                      />
-                      Hiện bảng xếp hạng
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="accent-emerald-500"
-                        checked={showCorrectAnswers}
-                        onChange={(e) =>
-                          setShowCorrectAnswers(e.target.checked)
-                        }
-                      />
-                      Hiện đáp án đúng
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="accent-emerald-500"
-                        checked={shuffleQuestions}
-                        onChange={(e) =>
-                          setShuffleQuestions(e.target.checked)
-                        }
-                      />
-                      Xáo trộn câu hỏi
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="accent-emerald-500"
-                        checked={shuffleOptions}
-                        onChange={(e) => setShuffleOptions(e.target.checked)}
-                      />
-                      Xáo trộn đáp án
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="accent-emerald-500"
-                        checked={enableHints}
-                        onChange={(e) => setEnableHints(e.target.checked)}
-                      />
-                      Cho phép gợi ý
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="accent-emerald-500"
-                        checked={pointsForSpeed}
-                        onChange={(e) => setPointsForSpeed(e.target.checked)}
-                      />
-                      Cộng điểm theo tốc độ
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Cột 2: Bộ câu hỏi */}
-              <div className="flex flex-col h-full">
-                <h3 className="text-sm font-semibold text-white mb-2">
-                  Bộ câu hỏi (tuỳ chọn)
-                </h3>
-                <div className="flex-1 rounded-lg border border-white/10 bg-zinc-800/70 px-3 py-3 max-h-72 overflow-y-auto">
-                  {loadingQuestionBanks ? (
-                    <div className="text-sm text-zinc-400">
-                      Đang tải danh sách bộ câu hỏi...
-                    </div>
-                  ) : questionBanks.length === 0 ? (
-                    <div className="text-sm text-zinc-500">
-                      Chưa có bộ câu hỏi nào gắn với bản đồ này.
-                      <br />
-                      Bạn vẫn có thể tạo session không có câu hỏi.
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <label className="flex items-center gap-2 text-sm text-zinc-200">
-                        <input
-                          type="radio"
-                          name="questionBank"
-                          value=""
-                          checked={selectedQuestionBankId === ""}
-                          onChange={() => setSelectedQuestionBankId("")}
-                          className="accent-emerald-500"
-                        />
-                        <span>Không dùng bộ câu hỏi</span>
-                      </label>
-
-                      <div className="mt-2 space-y-2 border-t border-white/10 pt-2">
-                        {questionBanks.map((qb) => (
-                          <label
-                            key={qb.id}
-                            className="flex items-start gap-2 rounded-lg border border-white/10 bg-zinc-900 hover:bg-zinc-800 px-3 py-2 text-sm cursor-pointer"
-                          >
-                            <input
-                              type="radio"
-                              name="questionBank"
-                              value={qb.id}
-                              checked={selectedQuestionBankId === qb.id}
-                              onChange={() => setSelectedQuestionBankId(qb.id)}
-                              className="mt-1 accent-emerald-500"
-                            />
-                            <div className="min-w-0">
-                              <div className="font-semibold text-zinc-100 truncate">
-                                {qb.bankName}
-                              </div>
-                              {typeof qb.totalQuestions === "number" && (
-                                <div className="text-xs text-zinc-400">
-                                  {qb.totalQuestions} câu hỏi
-                                </div>
-                              )}
-                              {qb.mapName && (
-                                <div className="text-xs text-zinc-500">
-                                  Map: {qb.mapName}
-                                </div>
-                              )}
-                            </div>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer buttons */}
-            <div className="flex justify-end gap-2 mt-5">
-              <button
-                className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
-                onClick={() => setCreateSessionOpen({ open: false })}
-                disabled={creatingSession}
-              >
-                Hủy
-              </button>
-              <button
-                onClick={() => void handleCreateSessionForMap()}
-                disabled={creatingSession || loadingQuestionBanks}
-                className="px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
-              >
-                {creatingSession ? "Đang tạo session..." : "Xác nhận tạo session"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {deleteMapOpen.open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
             <h2 className="text-xl font-semibold text-white mb-4">{t("workspace_detail.delete_map_title")}</h2>
             <p className="text-sm text-zinc-300 mb-6">
-              {t("workspace_detail.delete_map_desc", { name: deleteMapOpen.mapName })}
+              {t("workspace_detail.delete_map_desc", { name: deleteMapOpen.mapName || "" })}
             </p>
             <div className="flex justify-end gap-2">
               <button

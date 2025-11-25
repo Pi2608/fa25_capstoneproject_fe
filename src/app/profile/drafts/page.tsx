@@ -46,7 +46,7 @@ export default function DraftsPage() {
     setPublishingId(mapId);
     try {
       await publishMap(mapId);
-      setItems((prev) => prev.filter((x) => x.id !== mapId));
+      setItems((prev) => prev.filter((x) => x.mapId !== mapId));
     } catch (e) {
       alert(e instanceof Error ? e.message : t("drafts.publish_failed"));
     } finally {
@@ -84,7 +84,7 @@ export default function DraftsPage() {
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {sorted.map((m) => (
             <li
-              key={m.id}
+              key={m.mapId}
               className="group relative rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4"
             >
               <div className="mb-3">
@@ -95,7 +95,7 @@ export default function DraftsPage() {
 
               <div
                 className="h-32 w-full mb-3 cursor-pointer"
-                onClick={() => router.push(`/maps/${m.id}`)}
+                onClick={() => router.push(`/maps/${m.mapId}`)}
               >
                 <div className="h-full w-full rounded-lg border border-white/10 overflow-hidden bg-zinc-900/40 grid place-items-center">
                   <div className="h-16 w-16 rounded-full bg-white/10 backdrop-blur-sm" />
@@ -105,7 +105,7 @@ export default function DraftsPage() {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="truncate font-semibold">
-                    {m.name || t("drafts.untitled")}
+                    {m.mapName || t("drafts.untitled")}
                   </div>
                   <div className="text-xs text-zinc-400">
                     {m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}
@@ -114,16 +114,16 @@ export default function DraftsPage() {
                 <div className="flex items-center gap-2">
                   <button
                     className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
-                    onClick={() => router.push(`/maps/${m.id}`)}
+                    onClick={() => router.push(`/maps/${m.mapId}`)}
                   >
                     {t("drafts.btn_open")}
                   </button>
                   <button
                     className="text-xs px-2 py-1 rounded bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400 disabled:opacity-60"
-                    disabled={publishingId === m.id}
-                    onClick={() => onPublish(m.id)}
+                    disabled={publishingId === m.mapId}
+                    onClick={() => onPublish(m.mapId)}
                   >
-                    {publishingId === m.id
+                    {publishingId === m.mapId
                       ? t("drafts.publishing")
                       : t("drafts.btn_publish")}
                   </button>

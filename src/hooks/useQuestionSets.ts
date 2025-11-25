@@ -156,7 +156,8 @@ export function useQuestionSets(initialQuestions: QuestionDto[] = []) {
         } else {
             setQuestions(createInitialQuestions());
         }
-    }, [initialQuestions]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [JSON.stringify(initialQuestions)]);
 
     const handleChangeQuestion = <K extends keyof Question>(
         index: number,
