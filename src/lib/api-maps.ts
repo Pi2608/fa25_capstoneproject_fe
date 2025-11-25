@@ -20,15 +20,18 @@ export type BaseLayer =
 export type MapStatus = "Draft" | "Published" | "Archived";
 
 export type MapDto = {
-  mapId: string;
-  mapName: string;
+  id: string;
+  name: string;
   ownerId?: string;
+  ownerName?: string;
   description?: string;
-  previewImageUrl?: string | null;
-  createdAt: string;
+  isPublic: boolean;
+  previewImage?: string | null;
+  createdAt: string; 
   updatedAt?: string | null;
-  lastActivityAt?: string | null; // For recent maps - backend calculated activity time
-  status?: string; // Map status: draft, published, etc.
+  lastActivityAt?: string | null;
+  status?: MapStatus;
+  isOwner: boolean;
   workspaceName?: string | null;
 };
 
