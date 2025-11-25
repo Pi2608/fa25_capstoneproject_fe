@@ -88,7 +88,7 @@ export default function ToastContainer() {
   };
 
   return (
-    <div className="fixed top-4 right-4 z-50 space-y-3 max-w-sm w-full">
+    <div className="fixed top-4 right-4 z-[10000] space-y-3 max-w-sm w-full">
       {toasts.map((toast) => {
         const styles = getToastStyles(toast.type);
         const isVisible = visibleToasts.has(toast.id);
