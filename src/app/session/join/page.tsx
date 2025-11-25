@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PinInput } from "@/components/session/PinInput";
 import { joinSession, getSessionByCode } from "@/lib/api-ques";
 import { toast } from "react-toastify";
 
-export default function JoinSessionPage() {
+function JoinSessionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const codeFromUrl = searchParams?.get("code") || null;
@@ -279,6 +279,18 @@ export default function JoinSessionPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function JoinSessionPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e] flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full"></div>
+      </div>
+    }>
+      <JoinSessionContent />
+    </Suspense>
   );
 }
 

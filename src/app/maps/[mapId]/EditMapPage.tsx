@@ -131,7 +131,7 @@ const backendToBaseKey = (backendValue: string | null | undefined): BaseKey => {
   return mapping[normalized] || "osm";
 };
 
-export default function EditMapPage({ id }: { id: string }) {
+export default function EditMapPage() {
   const params = useParams<{ mapId: string }>();
   const sp = useSearchParams();
   const mapId = params?.mapId ?? "";
