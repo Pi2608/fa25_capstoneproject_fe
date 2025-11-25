@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getSegments, type Segment } from "@/lib/api-storymap";
 import { getMapDetail } from "@/lib/api-maps";
@@ -14,14 +15,14 @@ import {
   activateNextQuestion,
   skipCurrentQuestion,
   extendQuestionTime,
-  getMySessions,      
+  getSession,
   type SessionDto,
   type LeaderboardEntryDto,
   type QuestionDto,
 } from "@/lib/api-ques";
 
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
-import { SessionShareModal } from "@/components/session/SessionShareModal";
+import { useLoading } from "@/contexts/LoadingContext";
 
 type QuestionBankMeta = {
   id?: string;
@@ -63,6 +64,51 @@ export default function StoryMapControlPage() {
     useState<QuestionBankMeta | null>(null);
 
   const [showShareModal, setShowShareModal] = useState(false);
+  const shareOverlayGuardRef = useRef(false);
+  useEffect(() => {
+    console.log("[StoryMapControl] showShareModal changed:", showShareModal);
+    if (!showShareModal || typeof document === "undefined") return;
+
+    shareOverlayGuardRef.current = true;
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        shareOverlayGuardRef.current = false;
+      });
+    });
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowShareModal(false);
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      shareOverlayGuardRef.current = false;
+    };
+  }, [showShareModal]);
+  const copyToClipboard = (text: string) => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) return;
+    navigator.clipboard.writeText(text).catch((err) => {
+      console.error("Copy to clipboard failed:", err);
+    });
+  };
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const joinLinkWithCode = `${origin}/session/join`;
+  const joinLinkWithQR = session
+    ? `${origin}/session/join?code=${session.sessionCode}`
+    : joinLinkWithCode;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+    joinLinkWithQR
+  )}`;
+  const { showLoading, hideLoading } = useLoading();
   const [currentQuestionIndex, setCurrentQuestionIndex] =
     useState<number | null>(null);
 
@@ -108,13 +154,11 @@ export default function StoryMapControlPage() {
     })();
   }, [mapId]);
 
-  // ================== Read session + question bank (by sessionId) ==================
   useEffect(() => {
     if (!searchParams) return;
 
     const sessionId = searchParams.get("sessionId");
 
-    // Không có sessionId => không có session
     if (!sessionId) {
       setSession(null);
       setQuestionBankMeta(null);
@@ -125,41 +169,26 @@ export default function StoryMapControlPage() {
 
     (async () => {
       try {
-        // Lấy tất cả session mà mình là host rồi tìm đúng session theo id
-        const list = await getMySessions();
+        const detail = await getSession(sessionId);
         if (cancelled) return;
 
-        const found = list.find(
-          (s) => s.id === sessionId || s.id === sessionId
-        );
-
-        if (!found) {
-          console.warn("Session not found in getMySessions for id:", sessionId);
-          setSession(null);
-          setQuestionBankMeta(null);
-          setError("Không tìm thấy session này trong danh sách của bạn");
-          return;
-        }
-
-        // Lưu session (dùng cho panel bên trái)
         setSession({
-          ...found,
-          mapId: found.mapId ?? mapId, // fallback
+          ...detail,
+          mapId: detail.mapId ?? mapId,
         });
 
-        // Lưu meta bộ câu hỏi (dùng cho panel bên phải)
-        if (found.questionBankId) {
+        if (detail.questionBankId) {
           setQuestionBankMeta({
-            id: found.questionBankId ?? undefined,
-            bankName: (found as any).questionBankName ?? undefined,
-            description: (found as any).description ?? undefined,
+            id: detail.questionBankId ?? undefined,
+            bankName: detail.questionBankName ?? undefined,
+            description: detail.description ?? undefined,
             category: undefined,
             tags: [],
             totalQuestions: null,
             workspaceName: undefined,
-            mapName: (found as any).mapName ?? undefined,
-            createdAt: found.createdAt ?? undefined,
-            updatedAt: undefined,
+            mapName: detail.mapName ?? undefined,
+            createdAt: detail.createdAt ?? undefined,
+            updatedAt: detail.endedAt ?? detail.createdAt ?? undefined,
           });
         } else {
           setQuestionBankMeta(null);
@@ -198,8 +227,8 @@ export default function StoryMapControlPage() {
 
         const ordered = Array.isArray(data)
           ? [...data].sort(
-              (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
-            )
+            (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
+          )
           : [];
         setCurrentQuestionIndex(null);
         setQuestions(ordered);
@@ -247,24 +276,24 @@ export default function StoryMapControlPage() {
 
     try {
       setChangingStatus(true);
-      if (action === "start") await startSession(session.id);
-      if (action === "pause") await pauseSession(session.id);
-      if (action === "resume") await resumeSession(session.id);
-      if (action === "end") await endSession(session.id);
+      if (action === "start") await startSession(session.sessionId);
+      if (action === "pause") await pauseSession(session.sessionId);
+      if (action === "resume") await resumeSession(session.sessionId);
+      if (action === "end") await endSession(session.sessionId);
 
       setSession((prev) =>
         prev
           ? {
-              ...prev,
-              status:
-                action === "start"
-                  ? "Running"
-                  : action === "pause"
+            ...prev,
+            status:
+              action === "start"
+                ? "Running"
+                : action === "pause"
                   ? "Paused"
                   : action === "resume"
-                  ? "Running"
-                  : "Ended",
-            }
+                    ? "Running"
+                    : "Ended",
+          }
           : prev
       );
     } catch (e: any) {
@@ -280,7 +309,7 @@ export default function StoryMapControlPage() {
     try {
       setLoadingLeaderboard(true);
 
-      const data = await getSessionLeaderboard(session.id, 10);
+      const data = await getSessionLeaderboard(session.sessionId, 10);
 
       setLeaderboard(Array.isArray(data) ? data : []);
     } catch (e: any) {
@@ -298,7 +327,7 @@ export default function StoryMapControlPage() {
 
     try {
       setQuestionControlLoading(true);
-      await activateNextQuestion(session.id);
+      await activateNextQuestion(session.sessionId);
 
       setCurrentQuestionIndex((prev) => {
         if (!questions.length) return prev;
@@ -319,7 +348,7 @@ export default function StoryMapControlPage() {
 
     try {
       setQuestionControlLoading(true);
-      await skipCurrentQuestion(session.id);
+      await skipCurrentQuestion(session.sessionId);
 
       setCurrentQuestionIndex((prev) => {
         if (!questions.length) return prev;
@@ -359,15 +388,19 @@ export default function StoryMapControlPage() {
   };
 
   // ================== Render states ==================
+  useEffect(() => {
+    if (loading) {
+      showLoading("Loading Control Panel...");
+    } else {
+      hideLoading();
+    }
+    return () => {
+      hideLoading();
+    };
+  }, [loading, showLoading, hideLoading]);
+
   if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-emerald-500 mx-auto mb-4" />
-          <div className="text-zinc-900 dark:text-zinc-100 text-xl">Loading Control Panel...</div>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   if (error) {
@@ -418,10 +451,10 @@ export default function StoryMapControlPage() {
                     (session.status === "Running"
                       ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
                       : session.status === "Paused"
-                      ? "border-amber-400/60 bg-amber-500/10 text-amber-200"
-                      : session.status === "Ended"
-                      ? "border-rose-500/70 bg-rose-600/10 text-rose-300"
-                      : "border-sky-400/60 bg-sky-500/10 text-sky-200")
+                        ? "border-amber-400/60 bg-amber-500/10 text-amber-200"
+                        : session.status === "Ended"
+                          ? "border-rose-500/70 bg-rose-600/10 text-rose-300"
+                          : "border-sky-400/60 bg-sky-500/10 text-sky-200")
                   }
                 >
                   ● {session.status}
@@ -446,7 +479,7 @@ export default function StoryMapControlPage() {
 
                 {session && (
                   <span className="inline-flex items-center rounded-full bg-zinc-800 px-2 py-0.5 text-[10px] text-zinc-300 border border-zinc-700">
-                    ID: {session.id.slice(0, 6)}…
+                    ID: {session.sessionId.slice(0, 6)}…
                   </span>
                 )}
               </div>
@@ -464,7 +497,13 @@ export default function StoryMapControlPage() {
                     <div className="flex gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setShowShareModal(true)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log("[StoryMapControl] Share button clicked", {
+                            sessionId: session?.sessionId,
+                          });
+                          setShowShareModal(true);
+                        }}
                         className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] text-zinc-100 hover:bg-blue-700 border border-blue-500"
                         title="Chia sẻ link hoặc QR code"
                       >
@@ -481,7 +520,7 @@ export default function StoryMapControlPage() {
                         <span>Copy</span>
                       </button>
                     </div>
-                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
@@ -701,15 +740,15 @@ export default function StoryMapControlPage() {
 
                     {(questionBankMeta.mapName ||
                       questionBankMeta.workspaceName) && (
-                      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
-                        {questionBankMeta.mapName && (
-                          <span>Map: {questionBankMeta.mapName}</span>
-                        )}
-                        {questionBankMeta.workspaceName && (
-                          <span>Workspace: {questionBankMeta.workspaceName}</span>
-                        )}
-                      </div>
-                    )}
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
+                          {questionBankMeta.mapName && (
+                            <span>Map: {questionBankMeta.mapName}</span>
+                          )}
+                          {questionBankMeta.workspaceName && (
+                            <span>Workspace: {questionBankMeta.workspaceName}</span>
+                          )}
+                        </div>
+                      )}
 
                     {questionBankMeta.tags &&
                       questionBankMeta.tags.length > 0 && (
@@ -741,15 +780,15 @@ export default function StoryMapControlPage() {
 
                     {(questionBankMeta.createdAt ||
                       questionBankMeta.updatedAt) && (
-                      <div className="pt-1 border-t border-zinc-800 mt-1 text-[11px] text-zinc-500 space-y-0.5">
-                        {questionBankMeta.createdAt && (
-                          <p>Tạo lúc: {questionBankMeta.createdAt}</p>
-                        )}
-                        {questionBankMeta.updatedAt && (
-                          <p>Cập nhật: {questionBankMeta.updatedAt}</p>
-                        )}
-                      </div>
-                    )}
+                        <div className="pt-1 border-t border-zinc-800 mt-1 text-[11px] text-zinc-500 space-y-0.5">
+                          {questionBankMeta.createdAt && (
+                            <p>Tạo lúc: {questionBankMeta.createdAt}</p>
+                          )}
+                          {questionBankMeta.updatedAt && (
+                            <p>Cập nhật: {questionBankMeta.updatedAt}</p>
+                          )}
+                        </div>
+                      )}
 
                     {/* DANH SÁCH CÂU HỎI */}
                     <div className="pt-2 border-t border-zinc-800 mt-2">
@@ -890,11 +929,10 @@ export default function StoryMapControlPage() {
               <button
                 key={seg.segmentId}
                 onClick={() => goToSegment(index)}
-                className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition ${
-                  index === currentIndex
-                    ? "bg-blue-500 text-white border-blue-400"
-                    : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700"
-                }`}
+                className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition ${index === currentIndex
+                  ? "bg-blue-500 text-white border-blue-400"
+                  : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700"
+                  }`}
               >
                 {index + 1}. {seg.name || "Untitled"}
               </button>
@@ -909,16 +947,95 @@ export default function StoryMapControlPage() {
         </div>
       </div>
 
-      {/* Session Share Modal */}
-      {session && (
-        <SessionShareModal
-          isOpen={showShareModal}
-          onClose={() => setShowShareModal(false)}
-          sessionCode={session.sessionCode}
-          sessionId={session.id}
-          mapId={mapId}
-        />
-      )}
+      {/* Session Share Modal - render via Portal to avoid re-render issues with map */}
+      {session && showShareModal && typeof document !== "undefined" &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+            <div
+              className="absolute inset-0 bg-black/50"
+              role="presentation"
+              onClick={() => {
+                if (shareOverlayGuardRef.current) return;
+                setShowShareModal(false);
+              }}
+            />
+            <div className="relative z-10 bg-white dark:bg-zinc-900 rounded-2xl shadow-2xl w-full max-w-md p-6 max-h-[90vh] overflow-y-auto">
+              <div className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                Chia sẻ Session
+              </div>
+
+              <div className="space-y-6">
+                <section className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Session Code:
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={session.sessionCode}
+                        readOnly
+                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-lg font-semibold tracking-wider text-center"
+                      />
+                      <button
+                        onClick={() => copyToClipboard(session.sessionCode)}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                      >
+                        Copy Code
+                      </button>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Mã QR:
+                  </label>
+                  <div className="text-center">
+                    <div className="bg-white p-4 rounded-lg inline-block border-2 border-gray-200 dark:border-zinc-700">
+                      <img
+                        src={qrCodeUrl}
+                        alt="QR Code for session join"
+                        className="w-64 h-64"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Link từ QR code:
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={joinLinkWithQR}
+                        readOnly
+                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 text-gray-600 dark:text-gray-400 text-sm"
+                      />
+                      <button
+                        onClick={() => copyToClipboard(joinLinkWithQR)}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                      >
+                        Copy Link
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+
+              <div className="mt-6 flex justify-end">
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="px-6 py-2 bg-gray-200 dark:bg-zinc-800 hover:bg-gray-300 dark:hover:bg-zinc-700 text-gray-900 dark:text-white rounded-lg font-medium transition-colors"
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )
+      }
     </div>
   );
 }

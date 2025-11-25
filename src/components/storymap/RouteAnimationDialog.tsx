@@ -14,6 +14,7 @@ import {
   Location,
 } from "@/lib/api-storymap";
 import { Icon } from "@/components/map-editor-ui/Icon";
+import { useI18n } from "@/i18n/I18nProvider";
 
 // Helper function to parse coordinates from location markerGeometry
 function parseLocationCoords(location: Location): { lat: number; lng: number } | null {
@@ -56,6 +57,7 @@ export default function RouteAnimationDialog({
   onClose,
   onSave,
 }: RouteAnimationDialogProps) {
+  const { t } = useI18n();
   const [locations, setLocations] = useState<Location[]>([]);
   const [fromLocationId, setFromLocationId] = useState<string>("");
   const [toLocationId, setToLocationId] = useState<string>("");
@@ -384,7 +386,7 @@ export default function RouteAnimationDialog({
               {isLoadingLocations ? (
                 <div className="w-full bg-zinc-800 text-zinc-400 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
                   <Icon icon="mdi:loading" className="w-4 h-4 animate-spin" />
-                  <span>Đang tải...</span>
+                  <span>{t("common.loading")}</span>
                 </div>
               ) : (
                 <select
@@ -406,7 +408,7 @@ export default function RouteAnimationDialog({
               {isLoadingLocations ? (
                 <div className="w-full bg-zinc-800 text-zinc-400 rounded-lg px-3 py-2 text-sm flex items-center gap-2">
                   <Icon icon="mdi:loading" className="w-4 h-4 animate-spin" />
-                  <span>Đang tải...</span>
+                  <span>{t("common.loading")}</span>
                 </div>
               ) : (
                 <select

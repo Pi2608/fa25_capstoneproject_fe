@@ -261,7 +261,7 @@ export default function RecentsPage() {
     setEdit({
       open: true,
       map: m,
-      name: m.name ?? "",
+      name: m.mapName ?? "",
       description: m.description ?? "",
       previewLocal: m.previewImageUrl ?? null,
       previewFile: null,
@@ -292,13 +292,13 @@ export default function RecentsPage() {
         description: edit.description ?? "",
         previewImageUrl: edit.previewLocal ?? null,
       };
-      await updateMap(edit.map.id, body);
+      await updateMap(edit.map.mapId, body);
       setMaps((ms) =>
         ms.map((m) =>
-          m.id === edit.map!.id
+          m.mapId === edit.map!.mapId
             ? {
               ...m,
-              name: body.name ?? m.name,
+              name: body.name ?? m.mapName,
               description: body.description ?? m.description,
               previewImageUrl: body.previewImageUrl ?? m.previewImageUrl,
             }
@@ -322,7 +322,7 @@ export default function RecentsPage() {
     setDeletingId(mapId);
     try {
       await deleteMap(mapId);
-      setMaps((ms) => ms.filter((m) => m.id !== mapId));
+      setMaps((ms) => ms.filter((m) => m.mapId !== mapId));
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to delete map.");
     } finally {
@@ -391,9 +391,9 @@ export default function RecentsPage() {
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {maps.map((m) => (
               <li
-                key={m.id}
+                key={m.mapId}
                 className="group relative rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4"
-                title={m.name}
+                title={m.mapName}
               >
                 {/* Nút ⋯ cố định góc phải */}
                 <div className="absolute right-2 top-2 z-10" data-menu-container>
@@ -403,25 +403,25 @@ export default function RecentsPage() {
                     className="h-8 w-8 grid place-items-center rounded-md hover:bg-white/10 border border-white/10 text-lg leading-none"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setMenuOpenId((id) => (id === m.id ? null : m.id));
+                      setMenuOpenId((id) => (id === m.mapId ? null : m.mapId));
                     }}
                   >
                     ⋯
                   </button>
-                  {menuOpenId === m.id && (
+                  {menuOpenId === m.mapId && (
                     <div
                       className="absolute right-0 mt-2 w-44 rounded-md border border-white/10 bg-zinc-900/95 shadow-lg"
                       onMouseLeave={() => setMenuOpenId(null)}
                     >
                       <button
                         className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-60"
-                        disabled={deletingId === m.id}
+                        disabled={deletingId === m.mapId}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteMap(m.id);
+                          handleDeleteMap(m.mapId);
                         }}
                       >
-                        {deletingId === m.id ? "Deleting..." : "Delete map"}
+                        {deletingId === m.mapId ? "Deleting..." : "Delete map"}
                       </button>
                     </div>
                   )}
@@ -441,21 +441,21 @@ export default function RecentsPage() {
 
                 <div
                   className="h-32 w-full mb-3 cursor-pointer"
-                  onClick={() => router.push(`/maps/${m.id}`)}
+                  onClick={() => router.push(`/maps/${m.mapId}`)}
                 >
-                  <Thumb src={m.previewImageUrl ?? undefined} fallbackKey={m.id} />
+                  <Thumb src={m.previewImageUrl ?? undefined} fallbackKey={m.mapId} />
                 </div>
 
                 <div className="flex items-center justify-between">
                   <div className="min-w-0">
-                    <div className="truncate font-semibold">{m.name || "Untitled"}</div>
+                    <div className="truncate font-semibold">{m.mapName || "Untitled"}</div>
                     <div className="text-xs text-zinc-400">
                       {m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}
                     </div>
                   </div>
                   <button
                     className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
-                    onClick={() => router.push(`/maps/${m.id}`)}
+                    onClick={() => router.push(`/maps/${m.mapId}`)}
                   >
                     Open
                   </button>
@@ -477,13 +477,13 @@ export default function RecentsPage() {
               </thead>
               <tbody className="divide-y divide-white/10">
                 {maps.map((m) => (
-                  <tr key={m.id} className="hover:bg-white/5">
+                  <tr key={m.mapId} className="hover:bg-white/5">
                     <td className="px-3 py-2">
                       <button
                         className="text-emerald-300 hover:underline"
-                        onClick={() => router.push(`/maps/${m.id}`)}
+                        onClick={() => router.push(`/maps/${m.mapId}`)}
                       >
-                        {m.name || "Untitled"}
+                        {m.mapName || "Untitled"}
                       </button>
                     </td>
                     <td className="px-3 py-2 text-zinc-400">
@@ -502,28 +502,28 @@ export default function RecentsPage() {
                           title="More actions"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setMenuOpenId((id) => (id === m.id ? null : m.id));
+                            setMenuOpenId((id) => (id === m.mapId ? null : m.mapId));
                           }}
                         >
                           ⋯
                         </button>
-                        {menuOpenId === m.id && (
+                        {menuOpenId === m.mapId && (
                           <div
                             className="absolute right-0 mt-1 w-40 rounded-md border border-white/10 bg-zinc-900/95 shadow-lg z-10"
                             onMouseLeave={() => setMenuOpenId(null)}
                           >
                             <button
                               className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-60"
-                              disabled={deletingId === m.id}
-                              onClick={() => handleDeleteMap(m.id)}
+                              disabled={deletingId === m.mapId}
+                              onClick={() => handleDeleteMap(m.mapId)}
                             >
-                              {deletingId === m.id ? "Deleting..." : "Delete map"}
+                              {deletingId === m.mapId ? "Deleting..." : "Delete map"}
                             </button>
                           </div>
                         )}
                         <button
                           className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
-                          onClick={() => router.push(`/maps/${m.id}`)}
+                          onClick={() => router.push(`/maps/${m.mapId}`)}
                         >
                           Open
                         </button>

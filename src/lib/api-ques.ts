@@ -40,7 +40,6 @@ export interface QuestionBankDto {
   category?: string | null;
   tags?: string | string[];
   workspaceId?: string | null;
-  mapId?: string | null;
   isTemplate?: boolean;
   isPublic?: boolean;
   totalQuestions?: number;
@@ -114,6 +113,17 @@ export async function updateQuestionBank(
     body
   );
   return res;
+}
+
+export async function attachMapToQuestionBank(
+  questionBankId: string,
+  mapId: string
+): Promise<void> {
+  const body = { mapId };
+  await postJson<typeof body, void>(
+    `/question-banks/${questionBankId}/maps`,
+    body
+  );
 }
 
 export async function getQuestionBank(
@@ -291,7 +301,7 @@ export async function updateQuestion(
 export type SessionStatus = "Pending" | "Running" | "Paused" | "Ended" | string;
 
 export interface SessionDto {
-  id: string;
+  sessionId: string;
 
   // Map & question bank
   mapId?: string | null;
@@ -369,6 +379,7 @@ export async function deleteSession(sessionId: string) {
 
 export async function getMySessions(): Promise<SessionDto[]> {
   const res = await getJson<SessionDto[]>("/sessions/my");
+  if (!Array.isArray(res)) return [];
   return res;
 }
 
@@ -594,13 +605,13 @@ export async function getCurrentQuestionForParticipant(
 
   const opts = Array.isArray((res as any).options)
     ? (res as any).options.map((o: any, idx: number): QuestionOptionDto => ({
-        questionOptionId: o.questionOptionId ?? o.QuestionOptionId ?? "",
-        questionId: o.questionId ?? o.QuestionId ?? "",
-        optionText: o.optionText ?? o.text ?? "",
-        optionImageUrl: o.optionImageUrl ?? o.imageUrl ?? null,
-        isCorrect: !!(o.isCorrect ?? o.correct ?? false),
-        displayOrder: o.displayOrder ?? idx + 1,
-      }))
+      questionOptionId: o.questionOptionId ?? o.QuestionOptionId ?? "",
+      questionId: o.questionId ?? o.QuestionId ?? "",
+      optionText: o.optionText ?? o.text ?? "",
+      optionImageUrl: o.optionImageUrl ?? o.imageUrl ?? null,
+      isCorrect: !!(o.isCorrect ?? o.correct ?? false),
+      displayOrder: o.displayOrder ?? idx + 1,
+    }))
     : [];
 
   return {

@@ -554,14 +554,6 @@ export default function QuestionBuilderPage() {
               <div className="text-sm text-zinc-900 dark:text-zinc-50">
                 {workspace.workspaceName}
               </div>
-              {(questionBank.mapId || mapName) && (
-                <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                  Gắn với bản đồ:{" "}
-                  <span className="font-semibold text-zinc-900 dark:text-zinc-100">
-                    {mapName ?? String(questionBank.mapId)}
-                  </span>
-                </p>
-              )}
             </div>
           </div>
         </section>
@@ -641,352 +633,352 @@ export default function QuestionBuilderPage() {
                     </div>
 
                     <div>
-                  <label className="block text-xs text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
-                    Loại câu hỏi
-                  </label>
-                  <select
-                    value={q.questionType}
-                    onChange={e =>
-                      handleQuestionTypeChange(
-                        idx,
-                        e.target.value as QuestionType
-                      )
-                    }
-                    className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-800 dark:border-white/10 dark:text-zinc-50"
-                  >
-                    {QUESTION_TYPES.map(type => (
-                      <option key={type} value={type}>
-                        {QUESTION_TYPE_LABELS[type]}
-                      </option>
-                    ))}
-                  </select>
-                    </div>
-                  </div>
-
-              {q.questionType === "SHORT_ANSWER" && (
-                <div className="mt-4">
-                  <label className="block text-xs text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
-                    Đáp án / Gợi ý trả lời
-                  </label>
-                  <textarea
-                    value={q.answer}
-                    onChange={e =>
-                      handleChangeQuestion(idx, "answer", e.target.value)
-                    }
-                    className="w-full rounded-lg bg-white border border-zinc-200 px-3 py-2 text-sm text-zinc-900 min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-800 dark:border-white/10 dark:text-zinc-50"
-                    placeholder="Nhập đáp án đúng hoặc lời giải thích..."
-                  />
-                </div>
-              )}
-
-              {q.questionType === "MULTIPLE_CHOICE" && (
-                <div className="mt-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                      Danh sách lựa chọn
-                    </span>
-                    <button
-                      onClick={() => handleAddOptionRow(idx)}
-                      className="text-xs font-semibold text-emerald-600 hover:text-emerald-500"
-                    >
-                      + Thêm lựa chọn
-                    </button>
-                  </div>
-                  {q.options.map((opt, optIdx) => (
-                    <div
-                      key={opt.id}
-                      className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-white/10 dark:bg-zinc-800"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
-                          Phương án {optIdx + 1}
-                        </span>
-                        {q.options.length > MIN_OPTIONS && (
-                          <button
-                            className="text-xs text-red-500 hover:text-red-400"
-                            onClick={() => handleRemoveOptionRow(idx, optIdx)}
-                            type="button"
-                          >
-                            Xóa
-                          </button>
-                        )}
-                      </div>
-                      <input
-                        value={opt.optionText}
+                      <label className="block text-xs text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                        Loại câu hỏi
+                      </label>
+                      <select
+                        value={q.questionType}
                         onChange={e =>
-                          updateOption(idx, optIdx, {
-                            optionText: e.target.value,
-                          })
-                        }
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
-                        placeholder="Nhập nội dung lựa chọn..."
-                      />
-                      <label className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-300">
-                        <input
-                          type="checkbox"
-                          checked={opt.isCorrect}
-                          onChange={() => handleToggleOptionCorrect(idx, optIdx)}
-                          className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        Đáp án đúng
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {q.questionType === "TRUE_FALSE" && (
-                <div className="mt-4">
-                  <span className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
-                    Đáp án đúng
-                  </span>
-                  <div className="flex gap-4">
-                    {TRUE_FALSE_CHOICES.map(choice => (
-                      <label
-                        key={choice.value}
-                        className="inline-flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-200"
-                      >
-                        <input
-                          type="radio"
-                          name={`tf-${idx}`}
-                          value={choice.value}
-                          checked={q.trueFalseAnswer === choice.value}
-                          onChange={() =>
-                            handleChangeQuestion(
-                              idx,
-                              "trueFalseAnswer",
-                              choice.value
-                            )
-                          }
-                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        {choice.label}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {q.questionType === "PIN_ON_MAP" && (
-                <div className="mt-4">
-                  <span className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
-                    Toạ độ chính xác
-                  </span>
-                  <div className="grid gap-3 sm:grid-cols-3">
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1">
-                        Vĩ độ
-                      </label>
-                      <input
-                        type="number"
-                        value={q.correctLatitude}
-                        onChange={e =>
-                          handleChangeQuestion(idx, "correctLatitude", e.target.value)
-                        }
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
-                        placeholder="Ví dụ: 10.762622"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1">
-                        Kinh độ
-                      </label>
-                      <input
-                        type="number"
-                        value={q.correctLongitude}
-                        onChange={e =>
-                          handleChangeQuestion(idx, "correctLongitude", e.target.value)
-                        }
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
-                        placeholder="Ví dụ: 106.660172"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1">
-                        Bán kính (m)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={q.acceptanceRadiusMeters}
-                        onChange={e =>
-                          handleChangeQuestion(
+                          handleQuestionTypeChange(
                             idx,
-                            "acceptanceRadiusMeters",
-                            e.target.value
+                            e.target.value as QuestionType
                           )
                         }
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
-                        placeholder="Ví dụ: 100"
-                      />
+                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-800 dark:border-white/10 dark:text-zinc-50"
+                      >
+                        {QUESTION_TYPES.map(type => (
+                          <option key={type} value={type}>
+                            {QUESTION_TYPE_LABELS[type]}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
-                  <PinLocationPicker
-                    latitude={q.correctLatitude}
-                    longitude={q.correctLongitude}
-                    radiusMeters={q.acceptanceRadiusMeters}
-                    onChange={(lat, lng) => {
-                      handleChangeQuestion(idx, "correctLatitude", lat);
-                      handleChangeQuestion(idx, "correctLongitude", lng);
-                    }}
-                    className="mt-4"
-                  />
-                </div>
-              )}
 
-              {(() => {
-                const hasOptionalData =
-                  q.questionImageUrl ||
-                  q.questionAudioUrl ||
-                  q.hintText.trim().length > 0 ||
-                  q.explanation.trim().length > 0;
-                const isOpen = optionalOpen[q.id] ?? hasOptionalData;
+                  {q.questionType === "SHORT_ANSWER" && (
+                    <div className="mt-4">
+                      <label className="block text-xs text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                        Đáp án / Gợi ý trả lời
+                      </label>
+                      <textarea
+                        value={q.answer}
+                        onChange={e =>
+                          handleChangeQuestion(idx, "answer", e.target.value)
+                        }
+                        className="w-full rounded-lg bg-white border border-zinc-200 px-3 py-2 text-sm text-zinc-900 min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-800 dark:border-white/10 dark:text-zinc-50"
+                        placeholder="Nhập đáp án đúng hoặc lời giải thích..."
+                      />
+                    </div>
+                  )}
 
-                return (
-                  <div className="mt-6 rounded-xl border border-dashed border-zinc-200 bg-white dark:border-white/10 dark:bg-white/5">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setOptionalOpen(prev => ({ ...prev, [q.id]: !isOpen }))
-                      }
-                      className="flex w-full items-center justify-between px-4 py-3 text-left"
-                    >
-                      <div>
-                        <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                          Nội dung bổ trợ (tùy chọn)
+                  {q.questionType === "MULTIPLE_CHOICE" && (
+                    <div className="mt-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                          Danh sách lựa chọn
                         </span>
-                        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                          {hasOptionalData
-                            ? "Đã thêm nội dung bổ trợ"
-                            : "Thêm ảnh minh hoạ, audio, gợi ý hoặc giải thích khi cần."}
-                        </p>
+                        <button
+                          onClick={() => handleAddOptionRow(idx)}
+                          className="text-xs font-semibold text-emerald-600 hover:text-emerald-500"
+                        >
+                          + Thêm lựa chọn
+                        </button>
                       </div>
-                      <span className="text-xs font-semibold text-emerald-600">
-                        {isOpen ? "Thu gọn" : "Thêm"}
+                      {q.options.map((opt, optIdx) => (
+                        <div
+                          key={opt.id}
+                          className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-white/10 dark:bg-zinc-800"
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                              Phương án {optIdx + 1}
+                            </span>
+                            {q.options.length > MIN_OPTIONS && (
+                              <button
+                                className="text-xs text-red-500 hover:text-red-400"
+                                onClick={() => handleRemoveOptionRow(idx, optIdx)}
+                                type="button"
+                              >
+                                Xóa
+                              </button>
+                            )}
+                          </div>
+                          <input
+                            value={opt.optionText}
+                            onChange={e =>
+                              updateOption(idx, optIdx, {
+                                optionText: e.target.value,
+                              })
+                            }
+                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
+                            placeholder="Nhập nội dung lựa chọn..."
+                          />
+                          <label className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                            <input
+                              type="checkbox"
+                              checked={opt.isCorrect}
+                              onChange={() => handleToggleOptionCorrect(idx, optIdx)}
+                              className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            Đáp án đúng
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {q.questionType === "TRUE_FALSE" && (
+                    <div className="mt-4">
+                      <span className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                        Đáp án đúng
                       </span>
-                    </button>
+                      <div className="flex gap-4">
+                        {TRUE_FALSE_CHOICES.map(choice => (
+                          <label
+                            key={choice.value}
+                            className="inline-flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-200"
+                          >
+                            <input
+                              type="radio"
+                              name={`tf-${idx}`}
+                              value={choice.value}
+                              checked={q.trueFalseAnswer === choice.value}
+                              onChange={() =>
+                                handleChangeQuestion(
+                                  idx,
+                                  "trueFalseAnswer",
+                                  choice.value
+                                )
+                              }
+                              className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+                            />
+                            {choice.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                    {isOpen && (
-                      <div className="space-y-4 border-t border-dashed border-zinc-200 px-4 py-4 dark:border-white/10">
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div className="space-y-2">
-                            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                              Ảnh minh hoạ
-                            </label>
-                            {q.questionImageUrl ? (
-                              <div className="space-y-2">
-                                <img
-                                  src={q.questionImageUrl}
-                                  alt={`Question ${idx + 1} illustration`}
-                                  className="w-full rounded-lg border border-zinc-200 object-cover dark:border-white/10"
-                                />
-                                <div className="flex gap-2">
-                                  <button
-                                    type="button"
-                                    className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/10"
-                                    onClick={() => handleChangeQuestion(idx, "questionImageUrl", "")}
-                                    disabled={uploadingImageFor === q.id}
-                                  >
-                                    Gỡ ảnh
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-600 dark:text-zinc-400 dark:hover:border-emerald-500 dark:hover:text-emerald-400">
-                                <span>
-                                  {uploadingImageFor === q.id ? "Đang tải ảnh..." : "Nhấn để chọn ảnh (JPG, PNG, ≤ 5MB)"}
-                                </span>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  onChange={event => {
-                                    const file = event.target.files?.[0];
-                                    if (file) {
-                                      void handleUploadQuestionImage(idx, file);
-                                      event.target.value = "";
-                                    }
-                                  }}
-                                  disabled={uploadingImageFor === q.id}
-                                />
-                              </label>
-                            )}
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                              Audio (thuyết minh / gợi ý)
-                            </label>
-                            {q.questionAudioUrl ? (
-                              <div className="space-y-2">
-                                <audio
-                                  src={q.questionAudioUrl}
-                                  controls
-                                  className="w-full rounded-lg bg-zinc-100 p-2 dark:bg-zinc-800"
-                                />
-                                <div className="flex gap-2">
-                                  <button
-                                    type="button"
-                                    className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/10"
-                                    onClick={() => handleChangeQuestion(idx, "questionAudioUrl", "")}
-                                    disabled={uploadingAudioFor === q.id}
-                                  >
-                                    Gỡ audio
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-600 dark:text-zinc-400 dark:hover:border-emerald-500 dark:hover:text-emerald-400">
-                                <span>
-                                  {uploadingAudioFor === q.id ? "Đang tải audio..." : "Nhấn để chọn file audio (MP3, WAV, ≤ 10MB)"}
-                                </span>
-                                <input
-                                  type="file"
-                                  accept="audio/*"
-                                  className="hidden"
-                                  onChange={event => {
-                                    const file = event.target.files?.[0];
-                                    if (file) {
-                                      void handleUploadQuestionAudio(idx, file);
-                                      event.target.value = "";
-                                    }
-                                  }}
-                                  disabled={uploadingAudioFor === q.id}
-                                />
-                              </label>
-                            )}
-                          </div>
+                  {q.questionType === "PIN_ON_MAP" && (
+                    <div className="mt-4">
+                      <span className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                        Toạ độ chính xác
+                      </span>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div>
+                          <label className="block text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1">
+                            Vĩ độ
+                          </label>
+                          <input
+                            type="number"
+                            value={q.correctLatitude}
+                            onChange={e =>
+                              handleChangeQuestion(idx, "correctLatitude", e.target.value)
+                            }
+                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
+                            placeholder="Ví dụ: 10.762622"
+                          />
                         </div>
-
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div>
-                            <label className="mb-1 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                              Gợi ý (Hint)
-                            </label>
-                            <textarea
-                              value={q.hintText}
-                              onChange={e => handleChangeQuestion(idx, "hintText", e.target.value)}
-                              className="min-h-[80px] w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50"
-                              placeholder="Nhập gợi ý để giúp học sinh (tùy chọn)..."
-                            />
-                          </div>
-                          <div>
-                            <label className="mb-1 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                              Giải thích sau khi trả lời
-                            </label>
-                            <textarea
-                              value={q.explanation}
-                              onChange={e => handleChangeQuestion(idx, "explanation", e.target.value)}
-                              className="min-h-[80px] w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50"
-                              placeholder="Nhập lời giải thích sẽ hiển thị sau khi trả lời..."
-                            />
-                          </div>
+                        <div>
+                          <label className="block text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1">
+                            Kinh độ
+                          </label>
+                          <input
+                            type="number"
+                            value={q.correctLongitude}
+                            onChange={e =>
+                              handleChangeQuestion(idx, "correctLongitude", e.target.value)
+                            }
+                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
+                            placeholder="Ví dụ: 106.660172"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1">
+                            Bán kính (m)
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={q.acceptanceRadiusMeters}
+                            onChange={e =>
+                              handleChangeQuestion(
+                                idx,
+                                "acceptanceRadiusMeters",
+                                e.target.value
+                              )
+                            }
+                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
+                            placeholder="Ví dụ: 100"
+                          />
                         </div>
                       </div>
-                    )}
-                  </div>
-                );
-              })()}
+                      <PinLocationPicker
+                        latitude={q.correctLatitude}
+                        longitude={q.correctLongitude}
+                        radiusMeters={q.acceptanceRadiusMeters}
+                        onChange={(lat, lng) => {
+                          handleChangeQuestion(idx, "correctLatitude", lat);
+                          handleChangeQuestion(idx, "correctLongitude", lng);
+                        }}
+                        className="mt-4"
+                      />
+                    </div>
+                  )}
+
+                  {(() => {
+                    const hasOptionalData =
+                      q.questionImageUrl ||
+                      q.questionAudioUrl ||
+                      q.hintText.trim().length > 0 ||
+                      q.explanation.trim().length > 0;
+                    const isOpen = optionalOpen[q.id] ?? hasOptionalData;
+
+                    return (
+                      <div className="mt-6 rounded-xl border border-dashed border-zinc-200 bg-white dark:border-white/10 dark:bg-white/5">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOptionalOpen(prev => ({ ...prev, [q.id]: !isOpen }))
+                          }
+                          className="flex w-full items-center justify-between px-4 py-3 text-left"
+                        >
+                          <div>
+                            <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                              Nội dung bổ trợ (tùy chọn)
+                            </span>
+                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                              {hasOptionalData
+                                ? "Đã thêm nội dung bổ trợ"
+                                : "Thêm ảnh minh hoạ, audio, gợi ý hoặc giải thích khi cần."}
+                            </p>
+                          </div>
+                          <span className="text-xs font-semibold text-emerald-600">
+                            {isOpen ? "Thu gọn" : "Thêm"}
+                          </span>
+                        </button>
+
+                        {isOpen && (
+                          <div className="space-y-4 border-t border-dashed border-zinc-200 px-4 py-4 dark:border-white/10">
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <div className="space-y-2">
+                                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                                  Ảnh minh hoạ
+                                </label>
+                                {q.questionImageUrl ? (
+                                  <div className="space-y-2">
+                                    <img
+                                      src={q.questionImageUrl}
+                                      alt={`Question ${idx + 1} illustration`}
+                                      className="w-full rounded-lg border border-zinc-200 object-cover dark:border-white/10"
+                                    />
+                                    <div className="flex gap-2">
+                                      <button
+                                        type="button"
+                                        className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/10"
+                                        onClick={() => handleChangeQuestion(idx, "questionImageUrl", "")}
+                                        disabled={uploadingImageFor === q.id}
+                                      >
+                                        Gỡ ảnh
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-600 dark:text-zinc-400 dark:hover:border-emerald-500 dark:hover:text-emerald-400">
+                                    <span>
+                                      {uploadingImageFor === q.id ? "Đang tải ảnh..." : "Nhấn để chọn ảnh (JPG, PNG, ≤ 5MB)"}
+                                    </span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      onChange={event => {
+                                        const file = event.target.files?.[0];
+                                        if (file) {
+                                          void handleUploadQuestionImage(idx, file);
+                                          event.target.value = "";
+                                        }
+                                      }}
+                                      disabled={uploadingImageFor === q.id}
+                                    />
+                                  </label>
+                                )}
+                              </div>
+
+                              <div className="space-y-2">
+                                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                                  Audio (thuyết minh / gợi ý)
+                                </label>
+                                {q.questionAudioUrl ? (
+                                  <div className="space-y-2">
+                                    <audio
+                                      src={q.questionAudioUrl}
+                                      controls
+                                      className="w-full rounded-lg bg-zinc-100 p-2 dark:bg-zinc-800"
+                                    />
+                                    <div className="flex gap-2">
+                                      <button
+                                        type="button"
+                                        className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/10"
+                                        onClick={() => handleChangeQuestion(idx, "questionAudioUrl", "")}
+                                        disabled={uploadingAudioFor === q.id}
+                                      >
+                                        Gỡ audio
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-600 dark:text-zinc-400 dark:hover:border-emerald-500 dark:hover:text-emerald-400">
+                                    <span>
+                                      {uploadingAudioFor === q.id ? "Đang tải audio..." : "Nhấn để chọn file audio (MP3, WAV, ≤ 10MB)"}
+                                    </span>
+                                    <input
+                                      type="file"
+                                      accept="audio/*"
+                                      className="hidden"
+                                      onChange={event => {
+                                        const file = event.target.files?.[0];
+                                        if (file) {
+                                          void handleUploadQuestionAudio(idx, file);
+                                          event.target.value = "";
+                                        }
+                                      }}
+                                      disabled={uploadingAudioFor === q.id}
+                                    />
+                                  </label>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <div>
+                                <label className="mb-1 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                                  Gợi ý (Hint)
+                                </label>
+                                <textarea
+                                  value={q.hintText}
+                                  onChange={e => handleChangeQuestion(idx, "hintText", e.target.value)}
+                                  className="min-h-[80px] w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50"
+                                  placeholder="Nhập gợi ý để giúp học sinh (tùy chọn)..."
+                                />
+                              </div>
+                              <div>
+                                <label className="mb-1 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                                  Giải thích sau khi trả lời
+                                </label>
+                                <textarea
+                                  value={q.explanation}
+                                  onChange={e => handleChangeQuestion(idx, "explanation", e.target.value)}
+                                  className="min-h-[80px] w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50"
+                                  placeholder="Nhập lời giải thích sẽ hiển thị sau khi trả lời..."
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
