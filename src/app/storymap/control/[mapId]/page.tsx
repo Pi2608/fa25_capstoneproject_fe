@@ -23,6 +23,12 @@ import {
 
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
 import { useLoading } from "@/contexts/LoadingContext";
+import { useSessionHub } from "@/hooks/useSessionHub";
+import {
+  sendSegmentSyncViaSignalR,
+  broadcastQuestionViaSignalR,
+  type SegmentSyncRequest,
+} from "@/lib/hubs/session";
 
 type QuestionBankMeta = {
   id?: string;
@@ -55,6 +61,9 @@ export default function StoryMapControlPage() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntryDto[]>([]);
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
 
+  const [participants, setParticipants] = useState<LeaderboardEntryDto[]>([]);
+  const [loadingParticipants, setLoadingParticipants] = useState(false);
+
   const [questions, setQuestions] = useState<QuestionDto[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
 
@@ -66,7 +75,6 @@ export default function StoryMapControlPage() {
   const [showShareModal, setShowShareModal] = useState(false);
   const shareOverlayGuardRef = useRef(false);
   useEffect(() => {
-    console.log("[StoryMapControl] showShareModal changed:", showShareModal);
     if (!showShareModal || typeof document === "undefined") return;
 
     shareOverlayGuardRef.current = true;
@@ -114,12 +122,25 @@ export default function StoryMapControlPage() {
 
   const broadcastRef = useRef<BroadcastChannel | null>(null);
 
-  // ================== Broadcast channel ==================
+  // ================== SignalR connection for session ==================
+  const { connection, isConnected: signalRConnected } = useSessionHub({
+    sessionId: session?.sessionId || "",
+    enabled: !!session?.sessionId,
+    handlers: {
+      onParticipantJoined: (event) => {
+        handleLoadParticipants();
+      },
+      onParticipantLeft: (event) => {
+        handleLoadParticipants();
+      },
+    },
+  });
+
+  // ================== Broadcast channel (for same-browser testing) ==================
   useEffect(() => {
     if (typeof window === "undefined" || !mapId) return;
 
     broadcastRef.current = new BroadcastChannel(`storymap-${mapId}`);
-    console.log("[Control] Broadcasting on:", `storymap-${mapId}`);
 
     return () => broadcastRef.current?.close();
   }, [mapId]);
@@ -249,16 +270,65 @@ export default function StoryMapControlPage() {
     };
   }, [questionBankMeta?.id]);
 
+  // ================== Load participants when session changes ==================
+  useEffect(() => {
+    if (!session?.sessionId) {
+      setParticipants([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setLoadingParticipants(true);
+        const data = await getSessionLeaderboard(session.sessionId, 1000);
+        if (!cancelled) {
+          setParticipants(Array.isArray(data) ? data : []);
+        }
+      } catch (e: any) {
+        if (!cancelled) {
+          console.error("Load participants failed:", e);
+          setParticipants([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingParticipants(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.sessionId]);
+
   // ================== Segment broadcast ==================
-  const handleSegmentChange = (segment: Segment, index: number) => {
+  const handleSegmentChange = async (segment: Segment, index: number) => {
     setCurrentIndex(index);
+    
+    // Broadcast via BroadcastChannel (for same-browser testing)
     broadcastRef.current?.postMessage({
       type: "segment-change",
       segmentIndex: index,
       segment,
       timestamp: Date.now(),
     });
-    console.log("[Control] Broadcasted segment:", index);
+    
+    // Broadcast via SignalR to students on other devices
+    if (connection && session?.sessionId) {
+      try {
+        const segmentData: SegmentSyncRequest = {
+          segmentIndex: index,
+          segmentId: segment.segmentId,
+          segmentName: segment.name || `Segment ${index + 1}`,
+          isPlaying: true,
+        };
+        await sendSegmentSyncViaSignalR(connection, session.sessionId, segmentData);
+      } catch (error) {
+        console.error("[Control] Failed to broadcast segment via SignalR:", error);
+      }
+    }
   };
 
   const goToSegment = (index: number) => {
@@ -296,6 +366,40 @@ export default function StoryMapControlPage() {
           }
           : prev
       );
+
+      // When starting session, sync the current segment to students
+      if (action === "start" && connection && segments.length > 0) {
+        const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
+        const currentSeg = segments[segmentIndex] || segments[0];
+        try {
+          const segmentData: SegmentSyncRequest = {
+            segmentIndex: segmentIndex,
+            segmentId: currentSeg.segmentId,
+            segmentName: currentSeg.name || `Segment ${segmentIndex + 1}`,
+            isPlaying: false, // Not playing yet, just showing the initial segment
+          };
+          await sendSegmentSyncViaSignalR(connection, session.sessionId, segmentData);
+        } catch (error) {
+          console.error("[Control] Failed to sync initial segment:", error);
+        }
+      }
+
+      // When pausing, sync with isPlaying = false
+      if (action === "pause" && connection && segments.length > 0) {
+        const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
+        const currentSeg = segments[segmentIndex] || segments[0];
+        try {
+          const segmentData: SegmentSyncRequest = {
+            segmentIndex: segmentIndex,
+            segmentId: currentSeg.segmentId,
+            segmentName: currentSeg.name || `Segment ${segmentIndex + 1}`,
+            isPlaying: false,
+          };
+          await sendSegmentSyncViaSignalR(connection, session.sessionId, segmentData);
+        } catch (error) {
+          console.error("[Control] Failed to sync pause state:", error);
+        }
+      }
     } catch (e: any) {
       console.error("Change session status failed:", e);
       setError(e?.message || "Không thay đổi được trạng thái session");
@@ -321,7 +425,56 @@ export default function StoryMapControlPage() {
     }
   };
 
+  const handleLoadParticipants = async () => {
+    if (!session || loadingParticipants) return;
+    try {
+      setLoadingParticipants(true);
+
+      // Sử dụng leaderboard với limit lớn để lấy tất cả participants
+      const data = await getSessionLeaderboard(session.sessionId, 1000);
+
+      setParticipants(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      console.error("Load participants failed:", e);
+      setParticipants([]);
+      setError(e?.message || "Không tải được danh sách người tham gia");
+    } finally {
+      setLoadingParticipants(false);
+    }
+  };
+
   // ================== Question control handlers ==================
+  const handleBroadcastQuestion = async (question: QuestionDto, index: number) => {
+    if (!session || questionControlLoading || !connection) return;
+
+    try {
+      setQuestionControlLoading(true);
+      setCurrentQuestionIndex(index);
+
+      // Broadcast question via SignalR
+      await broadcastQuestionViaSignalR(connection, session.sessionId, {
+        questionId: question.questionId,
+        questionText: question.questionText,
+        questionType: question.questionType,
+        questionImageUrl: question.questionImageUrl ?? undefined,
+        options: question.options?.map(opt => ({
+          id: opt.questionOptionId,
+          optionText: opt.optionText,
+          optionImageUrl: opt.optionImageUrl ?? undefined,
+          displayOrder: opt.displayOrder,
+        })),
+        points: question.points,
+        timeLimit: question.timeLimit ?? 30,
+      });
+
+    } catch (e: any) {
+      console.error("Broadcast question failed:", e);
+      setError(e?.message || "Không phát được câu hỏi");
+    } finally {
+      setQuestionControlLoading(false);
+    }
+  };
+
   const handleNextQuestion = async () => {
     if (!session || questionControlLoading) return;
 
@@ -499,9 +652,6 @@ export default function StoryMapControlPage() {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          console.log("[StoryMapControl] Share button clicked", {
-                            sessionId: session?.sessionId,
-                          });
                           setShowShareModal(true);
                         }}
                         className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] text-zinc-100 hover:bg-blue-700 border border-blue-500"
@@ -626,6 +776,64 @@ export default function StoryMapControlPage() {
                         ))}
                     </div>
                   )}
+
+                  {/* DANH SÁCH NGƯỜI THAM GIA */}
+                  <div className="mt-3 pt-3 border-t border-zinc-800">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-500 font-medium">
+                        Danh sách người tham gia
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleLoadParticipants}
+                        disabled={loadingParticipants}
+                        className="text-[10px] text-sky-300 hover:text-sky-200 underline-offset-2 hover:underline disabled:opacity-50"
+                      >
+                        {loadingParticipants ? "Đang tải..." : "Làm mới"}
+                      </button>
+                    </div>
+
+                    <div className="max-h-48 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 space-y-1.5">
+                      {loadingParticipants && (
+                        <p className="text-[11px] text-zinc-500">
+                          Đang tải danh sách...
+                        </p>
+                      )}
+
+                      {!loadingParticipants && participants.length === 0 && (
+                        <p className="text-[11px] text-zinc-500">
+                          Chưa có người tham gia nào.
+                        </p>
+                      )}
+
+                      {!loadingParticipants &&
+                        participants.length > 0 &&
+                        participants.map((p, idx) => (
+                          <div
+                            key={p.participantId ?? idx}
+                            className="flex items-center justify-between text-[11px] text-zinc-200 py-1 border-b border-zinc-800/50 last:border-0"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-zinc-800 text-[10px] font-semibold text-zinc-300">
+                                {p.rank ?? idx + 1}
+                              </span>
+                              <span className="text-zinc-100">{p.displayName}</span>
+                            </div>
+                            {typeof p.score === "number" && (
+                              <span className="font-semibold text-emerald-400">
+                                {p.score} điểm
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+
+                    {participants.length > 0 && (
+                      <p className="mt-1.5 text-[10px] text-zinc-500 text-right">
+                        Tổng: {participants.length} người tham gia
+                      </p>
+                    )}
+                  </div>
                 </>
               )}
             </section>
@@ -827,21 +1035,32 @@ export default function StoryMapControlPage() {
                                 }
                               >
                                 <div className="flex items-start justify-between gap-2">
-                                  <p className="text-[11px] text-zinc-100">
-                                    <span className="font-semibold">
-                                      Câu {q.displayOrder || idx + 1}:
-                                    </span>{" "}
-                                    {q.questionText}
-                                  </p>
+                                  <div className="flex-1">
+                                    <p className="text-[11px] text-zinc-100">
+                                      <span className="font-semibold">
+                                        Câu {q.displayOrder || idx + 1}:
+                                      </span>{" "}
+                                      {q.questionText}
+                                    </p>
+                                  </div>
 
-                                  <div className="flex flex-col items-end gap-0.5">
+                                  <div className="flex flex-col items-end gap-1">
                                     <span className="text-[10px] text-zinc-400 whitespace-nowrap">
                                       {q.points} điểm · {q.timeLimit ?? 0}s
                                     </span>
-                                    {isActive && (
+                                    {isActive ? (
                                       <span className="inline-flex items-center rounded-full bg-emerald-500/15 border border-emerald-400/60 px-1.5 py-[1px] text-[10px] text-emerald-200">
                                         Đang phát cho HS
                                       </span>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleBroadcastQuestion(q, idx)}
+                                        disabled={!session || session.status !== "Running" || questionControlLoading}
+                                        className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 border border-blue-400/60 px-2 py-0.5 text-[10px] text-blue-200 hover:bg-blue-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+                                      >
+                                        📢 Phát câu hỏi
+                                      </button>
                                     )}
                                   </div>
                                 </div>

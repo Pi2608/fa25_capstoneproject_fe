@@ -30,7 +30,9 @@ interface DrawingToolsBarProps {
 /**
  * Drawing tools bar component with all map editing tools
  */
-export const DrawingToolsBar: React.FC<DrawingToolsBarProps> = ({ mapRef }) => {
+export const DrawingToolsBar: React.FC<DrawingToolsBarProps> = ({ 
+  mapRef,
+}) => {
   const isDisabled = !mapRef.current;
 
   return (

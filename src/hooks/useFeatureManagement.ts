@@ -9,6 +9,8 @@ import {
   saveFeature,
   updateFeatureInDB,
 } from "@/utils/mapUtils";
+import { updateMapFeature } from "@/lib/api-maps";
+import type { FeatureGroup } from "leaflet";
 
 interface UseFeatureManagementParams {
   mapId: string;
@@ -19,6 +21,9 @@ interface UseFeatureManagementParams {
   handleLayerHover: (layer: Layer | null, isEntering: boolean) => void;
   handleLayerClick: (layer: Layer, isShiftKey: boolean) => void;
   resetToOriginalStyle: (layer: Layer) => void;
+  sketchRef: React.MutableRefObject<FeatureGroup | null>;
+  rafThrottle: <T extends (...args: any[]) => any>(func: T) => (...args: Parameters<T>) => void;
+  currentLayerId?: string | null; // Current selected layer ID for new features
 }
 
 /**
@@ -33,6 +38,9 @@ export function useFeatureManagement({
   handleLayerHover,
   handleLayerClick,
   resetToOriginalStyle,
+  sketchRef,
+  rafThrottle,
+  currentLayerId = null,
 }: UseFeatureManagementParams) {
   const lastUpdateRef = useRef<Map<string, number>>(new Map());
   const recentlyCreatedFeatureIdsRef = useRef<Set<string>>(new Set());
@@ -81,7 +89,9 @@ export function useFeatureManagement({
 
       // Save to database
       try {
-        const savedFeature = await saveFeature(mapId, "", extLayer, features, setFeatures, sketch);
+        // Use currentLayerId if available, otherwise use empty string (no layer)
+        const layerIdForFeature = currentLayerId || "";
+        const savedFeature = await saveFeature(mapId, layerIdForFeature, extLayer, features, setFeatures, sketch);
 
         if (savedFeature?.featureId) {
           // Track this feature as recently created by current user IMMEDIATELY
@@ -186,6 +196,7 @@ export function useFeatureManagement({
       handleLayerHover,
       handleLayerClick,
       resetToOriginalStyle,
+      currentLayerId,
     ]
   );
 
@@ -286,6 +297,207 @@ export function useFeatureManagement({
     [features, mapId, setFeatures]
   );
 
+  /**
+   * Handle polygon cut event (pm:cut)
+   */
+  const handlePolygonCut = useCallback(
+    async (e: any) => {
+      try {
+        if (!mapId) return;
+
+        const originalLayer = e.originalLayer;
+        
+        // Geoman pm:cut event can have either 'layer' (single) or 'layers' (multiple)
+        let newLayers: any[] = [];
+        if (e.layer) {
+          // Single resulting layer
+          newLayers = [e.layer];
+        } else if (e.layers && Array.isArray(e.layers)) {
+          // Multiple resulting layers
+          newLayers = e.layers;
+        }
+
+        console.log("pm:cut event received:", { 
+          originalLayer, 
+          newLayersCount: newLayers.length,
+          eventKeys: Object.keys(e),
+          hasLayer: !!e.layer,
+          hasLayers: !!e.layers
+        });
+
+        if (!originalLayer || newLayers.length === 0) {
+          console.warn("Invalid pm:cut event data:", e);
+          return;
+        }
+
+        // Find the original feature from the originalLayer using current features state
+        const originalFeature = features.find((f) => f.layer === originalLayer);
+
+        if (!originalFeature || !originalFeature.featureId) {
+          console.warn("Original feature not found for cut operation. Available features:", features.length);
+          return;
+        }
+
+        const originalFeatureId = originalFeature.featureId;
+
+        // Update the first new layer with the original featureId
+        const firstNewLayer = newLayers[0] as ExtendedLayer;
+        if (firstNewLayer) {
+          // Wait a bit for Leaflet to fully initialize the new layer
+          await new Promise(resolve => setTimeout(resolve, 50));
+          
+          // Get coordinates using toGeoJSON() which is more reliable
+          let newCoordinates: string | null = null;
+          if (typeof (firstNewLayer as any).toGeoJSON === "function") {
+            try {
+              const geoJSON = (firstNewLayer as any).toGeoJSON();
+              console.log("Polygon cut - toGeoJSON result:", geoJSON);
+              if (geoJSON && geoJSON.geometry && geoJSON.geometry.coordinates) {
+                newCoordinates = JSON.stringify(geoJSON.geometry.coordinates);
+              }
+            } catch (err) {
+              console.warn("Error getting GeoJSON from new layer:", err);
+            }
+          }
+          
+          // Fallback: try getLatLngs()
+          if (!newCoordinates && typeof (firstNewLayer as any).getLatLngs === "function") {
+            try {
+              const latlngs = (firstNewLayer as any).getLatLngs();
+              console.log("Polygon cut - getLatLngs result:", latlngs);
+              if (latlngs && Array.isArray(latlngs) && latlngs[0]) {
+                // Convert LatLng array to coordinates array [lng, lat]
+                const coords = latlngs[0].map((ll: any) => [ll.lng, ll.lat]);
+                newCoordinates = JSON.stringify([coords]);
+                // Also update _latlngs
+                (firstNewLayer as any)._latlngs = latlngs;
+              }
+            } catch (err) {
+              console.warn("Error getting LatLngs from new layer:", err);
+            }
+          }
+          
+          // Create updated feature with new layer
+          const updatedFeature: FeatureData = {
+            ...originalFeature,
+            layer: firstNewLayer,
+          };
+
+          // Store original style for the new layer
+          storeOriginalStyle(firstNewLayer);
+
+          // If we got new coordinates, update directly with them
+          if (newCoordinates) {
+            // Call API directly with new coordinates
+            const layerStyle = extractLayerStyle(firstNewLayer);
+            const body = {
+              name: originalFeature.name,
+              description: "",
+              featureCategory: "Data" as const,
+              annotationType: "Highlighter" as const,
+              geometryType: "Polygon" as const,
+              coordinates: newCoordinates,
+              properties: "{}",
+              style: JSON.stringify(layerStyle),
+              isVisible: originalFeature.isVisible,
+              zIndex: 0,
+              layerId: null,
+            };
+            
+            await updateMapFeature(mapId, originalFeatureId, body);
+          } else {
+            // Fallback to updateFeatureInDB (which uses serializeFeature)
+            console.warn("Polygon cut - no new coordinates found, using serializeFeature");
+            await updateFeatureInDB(mapId, originalFeatureId, updatedFeature);
+          }
+
+          // Reset to original style to remove selection styling (orange color)
+          resetToOriginalStyle(firstNewLayer);
+
+          // Update local state for first layer
+          setFeatures((prev) =>
+            prev.map((f) => (f.featureId === originalFeatureId ? updatedFeature : f))
+          );
+        }
+
+        // Create new features for remaining layers (if any)
+        if (newLayers.length > 1) {
+          for (let i = 1; i < newLayers.length; i++) {
+            const newLayer = newLayers[i] as ExtendedLayer;
+            const saved = await saveFeature(
+              mapId,
+              "",
+              newLayer,
+              features,
+              setFeatures,
+              sketchRef.current || undefined
+            );
+
+            if (saved && saved.featureId) {
+              // Attach event listeners to the new feature
+              storeOriginalStyle(newLayer);
+              
+              // Reset to original style to remove any selection styling
+              resetToOriginalStyle(newLayer);
+              
+              const hoverOverHandler = rafThrottle(() => handleLayerHover(newLayer, true));
+              const hoverOutHandler = rafThrottle(() => handleLayerHover(newLayer, false));
+              newLayer.on("mouseover", hoverOverHandler);
+              newLayer.on("mouseout", hoverOutHandler);
+              newLayer.on("click", (event: LeafletMouseEvent) => {
+                if (event.originalEvent) {
+                  event.originalEvent.stopPropagation();
+                }
+                handleLayerClick(newLayer, event.originalEvent.shiftKey);
+              });
+
+              if ("pm" in newLayer && (newLayer as GeomanLayer).pm) {
+                (newLayer as GeomanLayer).pm.enable({
+                  draggable: true,
+                  allowEditing: true,
+                  allowSelfIntersection: true,
+                });
+
+                newLayer.on("pm:edit", async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(saved.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(saved.featureId!, now);
+                  try {
+                    resetToOriginalStyle(newLayer);
+                    setFeatures((currentFeatures) => {
+                      const featureData =
+                        currentFeatures.find((f) => f.featureId === saved.featureId) || saved;
+                      updateFeatureInDB(mapId, saved.featureId!, featureData).catch((err) => {
+                        console.error("Error updating feature after edit:", err);
+                      });
+                      return currentFeatures;
+                    });
+                  } catch (error) {
+                    console.error("Error updating feature after edit:", error);
+                  }
+                });
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error handling polygon cut:", error);
+      }
+    },
+    [
+      mapId,
+      features,
+      setFeatures,
+      storeOriginalStyle,
+      handleLayerHover,
+      handleLayerClick,
+      resetToOriginalStyle,
+      sketchRef,
+      rafThrottle,
+    ]
+  );
+
   return {
     lastUpdateRef,
     recentlyCreatedFeatureIdsRef,
@@ -293,5 +505,6 @@ export function useFeatureManagement({
     handleSketchEdit,
     handleSketchDragEnd,
     handleSketchRotateEnd,
+    handlePolygonCut,
   };
 }

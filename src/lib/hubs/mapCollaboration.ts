@@ -57,17 +57,13 @@ export function createMapCollaborationConnection(
     token: authToken,
     allowGuest: false, // Map collaboration requires authentication
     onClose: (error) => {
-      if (error) {
-        console.error("[SignalR MapCollaboration] Connection closed with error:", error);
-      } else {
-        console.log("[SignalR MapCollaboration] Connection closed");
-      }
+      console.error("[SignalR MapCollaboration] Connection closed with error:", error);
     },
     onReconnecting: (error) => {
       console.warn("[SignalR MapCollaboration] Reconnecting...", error);
     },
     onReconnected: (connectionId) => {
-      console.log("[SignalR MapCollaboration] Reconnected:", connectionId);
+      console.info("[SignalR MapCollaboration] Reconnected:", connectionId);
     },
   });
 }
@@ -90,13 +86,10 @@ export async function startMapCollaborationConnection(
     }
 
     await connection.start();
-    console.log("[SignalR MapCollaboration] Connected successfully");
 
-    // Join the map group on the server if mapId is provided
     if (mapId) {
       try {
         await connection.invoke("JoinMap", mapId);
-        console.log(`[SignalR MapCollaboration] Joined map group: ${mapId}`);
       } catch (invokeError) {
         console.error(
           "[SignalR MapCollaboration] Failed to join map group:",
@@ -120,7 +113,6 @@ export async function leaveMapCollaborationConnection(
   try {
     if (connection.state === signalR.HubConnectionState.Connected) {
       await connection.invoke("LeaveMap", mapId);
-      console.log(`[SignalR MapCollaboration] Left map group: ${mapId}`);
     }
   } catch (error) {
     console.error("[SignalR MapCollaboration] Failed to leave map group:", error);
@@ -133,7 +125,6 @@ export async function stopMapCollaborationConnection(
   try {
     if (connection.state !== signalR.HubConnectionState.Disconnected) {
       await connection.stop();
-      console.log("[SignalR MapCollaboration] Connection stopped");
     }
   } catch (error) {
     console.error("[SignalR MapCollaboration] Failed to stop connection:", error);
@@ -158,8 +149,6 @@ export function registerMapCollaborationEventHandlers(
   if (handlers.onMapUpdate) {
     connection.on("MapUpdate", handlers.onMapUpdate);
   }
-
-  console.log("[SignalR MapCollaboration] Event handlers registered");
 }
 
 export function unregisterMapCollaborationEventHandlers(
@@ -167,7 +156,5 @@ export function unregisterMapCollaborationEventHandlers(
 ): void {
   connection.off("CollaborationChange");
   connection.off("MapUpdate");
-
-  console.log("[SignalR MapCollaboration] Event handlers unregistered");
 }
 

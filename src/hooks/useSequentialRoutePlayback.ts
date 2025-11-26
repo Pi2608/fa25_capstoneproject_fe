@@ -7,10 +7,17 @@ interface UseSequentialRoutePlaybackProps {
   isPlaying: boolean;
   segmentStartTime: number;
   onLocationClick?: (location: Location, event?: any) => void;
+  enableCameraFollow?: boolean;
+  cameraFollowZoom?: number;
+}
+
+interface RoutePlayState {
+  isPlaying: boolean;
+  hasStarted: boolean;
+  hasCompleted: boolean;
 }
 
 /**
- * Hook to manage sequential route playback with camera transitions and location popups
  */
 export function useSequentialRoutePlayback({
   map,
@@ -18,7 +25,11 @@ export function useSequentialRoutePlayback({
   isPlaying,
   segmentStartTime,
   onLocationClick,
+  enableCameraFollow = true, // Default: camera follows icon
+  cameraFollowZoom,
 }: UseSequentialRoutePlaybackProps) {
+  // Track play state for each route (supports parallel routes)
+  const [routePlayStates, setRoutePlayStates] = useState<Map<number, RoutePlayState>>(new Map());
   const [currentRouteIndex, setCurrentRouteIndex] = useState(0);
   const [currentRoutePlaying, setCurrentRoutePlaying] = useState(false);
   const [locationPopupTimeout, setLocationPopupTimeout] = useState<NodeJS.Timeout | null>(null);
@@ -26,6 +37,7 @@ export function useSequentialRoutePlayback({
   const locationsCacheRef = useRef<Map<string, Location>>(new Map());
   const routeStartTimeRef = useRef<number>(0);
   const cameraStateBeforeAppliedRef = useRef<boolean>(false);
+  const schedulerIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load locations cache
   useEffect(() => {
@@ -61,10 +73,15 @@ export function useSequentialRoutePlayback({
     if (!isPlaying || routeAnimations.length === 0) {
       setCurrentRouteIndex(0);
       setCurrentRoutePlaying(false);
+      setRoutePlayStates(new Map());
       setCurrentLocationPopup(null);
       if (locationPopupTimeout) {
         clearTimeout(locationPopupTimeout);
         setLocationPopupTimeout(null);
+      }
+      if (schedulerIntervalRef.current) {
+        clearInterval(schedulerIntervalRef.current);
+        schedulerIntervalRef.current = null;
       }
       cameraStateBeforeAppliedRef.current = false;
       return;
@@ -73,13 +90,136 @@ export function useSequentialRoutePlayback({
     // Reset when segment start time changes (new segment)
     setCurrentRouteIndex(0);
     setCurrentRoutePlaying(false);
+    setRoutePlayStates(new Map());
     cameraStateBeforeAppliedRef.current = false;
   }, [isPlaying, segmentStartTime, routeAnimations.length]);
 
-  // Sequential route playback logic
+  // Time-based route scheduling logic
+  // This scheduler checks every 100ms which routes should be playing based on startTimeMs
+  useEffect(() => {
+    if (!isPlaying || routeAnimations.length === 0 || !segmentStartTime) {
+      return;
+    }
+
+    // Check if any route uses startTimeMs (time-based scheduling)
+    const hasStartTimeMs = routeAnimations.some(r => r.startTimeMs !== undefined && r.startTimeMs !== null);
+    
+    if (!hasStartTimeMs) {
+      // Fallback to sequential playback (legacy behavior)
+      return;
+    }
+
+    const checkAndStartRoutes = () => {
+      const currentTime = Date.now() - segmentStartTime;
+      
+      routeAnimations.forEach((route, index) => {
+        const startTime = route.startTimeMs ?? 0;
+        // endTimeMs can be set manually, otherwise calculate from duration
+        const animationEndTime = startTime + route.durationMs;
+        const endTime = route.endTimeMs ?? animationEndTime;
+        const currentState = routePlayStates.get(index);
+        
+        // Check if route should start
+        if (currentTime >= startTime && currentTime < endTime) {
+          if (!currentState?.hasStarted) {
+            // Apply cameraStateBefore if exists
+            if (route.cameraStateBefore && map) {
+              try {
+                const cameraState = parseCameraState(route.cameraStateBefore);
+                if (cameraState) {
+                  applyCameraState(map, cameraState, { cameraAnimationType: "Fly", cameraAnimationDurationMs: 800 });
+                }
+              } catch (e) {
+                console.error("Failed to apply cameraStateBefore:", e);
+              }
+            }
+            
+            setRoutePlayStates(prev => {
+              const newMap = new Map(prev);
+              newMap.set(index, { isPlaying: true, hasStarted: true, hasCompleted: false });
+              return newMap;
+            });
+          }
+        }
+        
+        // Check if animation should stop (but route time window still active)
+        // This handles case where endTimeMs > startTimeMs + durationMs
+        if (currentTime >= animationEndTime && currentState?.isPlaying) {
+          // Animation finished, but we may still be in the route's time window
+          // Stop the animation but don't mark as completed yet
+          setRoutePlayStates(prev => {
+            const newMap = new Map(prev);
+            const state = newMap.get(index);
+            if (state && !state.hasCompleted) {
+              newMap.set(index, { ...state, isPlaying: false });
+            }
+            return newMap;
+          });
+        }
+        
+        // Check if route should end (trigger completion events)
+        if (currentTime >= endTime && currentState?.hasStarted && !currentState?.hasCompleted) {
+          // Apply cameraStateAfter if exists
+          if (route.cameraStateAfter && map) {
+            try {
+              const cameraState = parseCameraState(route.cameraStateAfter);
+              if (cameraState) {
+                applyCameraState(map, cameraState, { cameraAnimationType: "Fly", cameraAnimationDurationMs: 800 });
+              }
+            } catch (e) {
+              console.error("Failed to apply cameraStateAfter:", e);
+            }
+          }
+          
+          // Show location popup if enabled
+          if (route.showLocationInfoOnArrival && route.toLocationId) {
+            const location = locationsCacheRef.current.get(route.toLocationId);
+            if (location && onLocationClick) {
+              setCurrentLocationPopup(location);
+              onLocationClick(location);
+              
+              if (route.locationInfoDisplayDurationMs) {
+                const timeout = setTimeout(() => {
+                  setCurrentLocationPopup(null);
+                }, route.locationInfoDisplayDurationMs);
+                setLocationPopupTimeout(timeout);
+              }
+            }
+          }
+          
+          setRoutePlayStates(prev => {
+            const newMap = new Map(prev);
+            newMap.set(index, { isPlaying: false, hasStarted: true, hasCompleted: true });
+            return newMap;
+          });
+        }
+      });
+    };
+
+    // Initial check
+    checkAndStartRoutes();
+    
+    // Set up interval to check every 100ms
+    schedulerIntervalRef.current = setInterval(checkAndStartRoutes, 100);
+
+    return () => {
+      if (schedulerIntervalRef.current) {
+        clearInterval(schedulerIntervalRef.current);
+        schedulerIntervalRef.current = null;
+      }
+    };
+  }, [isPlaying, routeAnimations, segmentStartTime, map, onLocationClick]);
+
+  // Sequential route playback logic (fallback when no startTimeMs is used)
   useEffect(() => {
     if (!isPlaying || routeAnimations.length === 0 || currentRouteIndex >= routeAnimations.length) {
       setCurrentRoutePlaying(false);
+      return;
+    }
+
+    // Skip sequential logic if time-based scheduling is active
+    const hasStartTimeMs = routeAnimations.some(r => r.startTimeMs !== undefined && r.startTimeMs !== null);
+    if (hasStartTimeMs) {
       return;
     }
 
@@ -94,7 +234,6 @@ export function useSequentialRoutePlayback({
         try {
           const cameraState = parseCameraState(currentRoute.cameraStateBefore);
           if (cameraState && map && !cancelled) {
-            console.log(`📹 Applying cameraStateBefore for route ${currentRouteIndex + 1}`);
             applyCameraState(map, cameraState, { cameraAnimationType: "Fly", cameraAnimationDurationMs: 1000 });
             // Wait for camera animation to complete
             await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -117,7 +256,6 @@ export function useSequentialRoutePlayback({
       if (cancelled) return;
 
       // Step 3: Start route animation
-      console.log(`🎬 Starting route ${currentRouteIndex + 1}/${routeAnimations.length}`);
       if (!cancelled) {
         setCurrentRoutePlaying(true);
         routeStartTimeRef.current = Date.now();
@@ -134,7 +272,6 @@ export function useSequentialRoutePlayback({
         try {
           const cameraState = parseCameraState(currentRoute.cameraStateAfter);
           if (cameraState && !cancelled) {
-            console.log(`📹 Applying cameraStateAfter for route ${currentRouteIndex + 1}`);
             applyCameraState(map, cameraState, { cameraAnimationType: "Fly", cameraAnimationDurationMs: 1000 });
             await new Promise((resolve) => setTimeout(resolve, 1000));
           }
@@ -149,7 +286,6 @@ export function useSequentialRoutePlayback({
       if (currentRoute.showLocationInfoOnArrival && currentRoute.toLocationId) {
         const location = locationsCacheRef.current.get(currentRoute.toLocationId);
         if (location && onLocationClick && !cancelled) {
-          console.log(`📍 Showing location popup for route ${currentRouteIndex + 1}`);
           setCurrentLocationPopup(location);
           onLocationClick(location);
 
@@ -183,7 +319,6 @@ export function useSequentialRoutePlayback({
       if (currentRouteIndex < routeAnimations.length - 1) {
         setCurrentRouteIndex((prev) => prev + 1);
       } else {
-        console.log("✅ All routes completed");
         setCurrentRoutePlaying(false);
       }
     };
@@ -202,16 +337,31 @@ export function useSequentialRoutePlayback({
   const getRoutePlayState = useCallback(
     (routeIndex: number) => {
       if (!isPlaying || routeAnimations.length === 0) return false;
-      return currentRouteIndex === routeIndex && currentRoutePlaying;
+      
+      // Check if using time-based scheduling
+      const hasStartTimeMs = routeAnimations.some(r => r.startTimeMs !== undefined && r.startTimeMs !== null);
+      
+      if (hasStartTimeMs) {
+        // Time-based: check routePlayStates map
+        const state = routePlayStates.get(routeIndex);
+        return state?.isPlaying ?? false;
+      } else {
+        // Sequential: legacy behavior
+        return currentRouteIndex === routeIndex && currentRoutePlaying;
+      }
     },
-    [isPlaying, routeAnimations.length, currentRouteIndex, currentRoutePlaying]
+    [isPlaying, routeAnimations, currentRouteIndex, currentRoutePlaying, routePlayStates]
   );
 
   return {
     currentRouteIndex,
     currentRoutePlaying,
+    routePlayStates, // Expose for debugging
     getRoutePlayState,
     currentLocationPopup,
+    // Camera follow options
+    enableCameraFollow,
+    cameraFollowZoom,
   };
 }
 

@@ -153,8 +153,8 @@ export function createMapViewData(center: { lat: number; lng: number }, zoom: nu
 /**
  * Default map center (Vietnam)
  */
-export const DEFAULT_MAP_CENTER = { lat: 14.058324, lng: 108.277199 };
-export const DEFAULT_MAP_ZOOM = 13;
+export const DEFAULT_MAP_CENTER = { lat: 14.4879, lng: 110.8740 };
+export const DEFAULT_MAP_ZOOM = 6;
 
 export function createMap(req: CreateMapRequest) {
   const body = {
@@ -425,7 +425,11 @@ export async function toggleFavoriteTemplate(templateId: string, favorite: boole
 
 // ===== LAYERS =====
 export interface AddLayerToMapRequest {
-  layerId: string;
+  layerId?: string;
+  layerName?: string;
+  layerData?: string;
+  layerTypeId?: string;
+  layerStyle?: string;
   isVisible?: boolean;
   zIndex?: number;
   customStyle?: string | null;
@@ -481,6 +485,7 @@ export async function uploadGeoJsonToMap(
 }
 
 export interface UpdateMapLayerRequest {
+  layerName?: string | null;
   isVisible?: boolean | null;
   zIndex?: number | null;
   customStyle?: string | null;

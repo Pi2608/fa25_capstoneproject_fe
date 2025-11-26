@@ -10,6 +10,9 @@ interface SequentialRoutePlaybackWrapperProps {
   isPlaying: boolean;
   segmentStartTime: number;
   onLocationClick?: (location: Location) => void;
+  // Camera follow options
+  enableCameraFollow?: boolean; // Whether camera should follow the moving icon
+  cameraFollowZoom?: number; // Zoom level when following
 }
 
 /**
@@ -22,6 +25,8 @@ export default function SequentialRoutePlaybackWrapper({
   isPlaying,
   segmentStartTime,
   onLocationClick,
+  enableCameraFollow = true,
+  cameraFollowZoom,
 }: SequentialRoutePlaybackWrapperProps) {
   const sequentialPlayback = useSequentialRoutePlayback({
     map,
@@ -29,6 +34,8 @@ export default function SequentialRoutePlaybackWrapper({
     isPlaying,
     segmentStartTime,
     onLocationClick,
+    enableCameraFollow,
+    cameraFollowZoom,
   });
 
   return (
@@ -46,6 +53,10 @@ export default function SequentialRoutePlaybackWrapper({
           const routePath = geoJson.coordinates as [number, number][];
           const isRoutePlaying = sequentialPlayback.getRoutePlayState(index);
 
+          // Use per-route settings if available, otherwise fallback to global settings
+          const routeFollowCamera = anim.followCamera ?? enableCameraFollow;
+          const routeFollowZoom = anim.followCameraZoom ?? cameraFollowZoom;
+
           return (
             <RouteAnimation
               key={anim.routeAnimationId}
@@ -60,6 +71,8 @@ export default function SequentialRoutePlaybackWrapper({
               routeWidth={anim.routeWidth}
               durationMs={anim.durationMs}
               isPlaying={isRoutePlaying}
+              followCamera={routeFollowCamera}
+              followCameraZoom={routeFollowZoom}
             />
           );
         } catch (e) {

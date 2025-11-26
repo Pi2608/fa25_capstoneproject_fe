@@ -49,6 +49,7 @@ import {
   loadFeaturesToMap,
   loadLayerToMap,
   type ExtendedLayer,
+  saveFeature,
 } from "@/utils/mapUtils";
 import {
   getFeatureName,
@@ -62,7 +63,7 @@ import { MapControls } from "@/components/map";
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
-import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions, getRouteAnimationsBySegment } from "@/lib/api-storymap";
+import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions, getRouteAnimationsBySegment, updateSegment, createSegment, deleteSegment, createTimelineTransition, deleteTimelineTransition } from "@/lib/api-storymap";
 import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator } from "@/components/map-editor-ui";
 import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
 import SequentialRoutePlaybackWrapper from "@/components/storymap/SequentialRoutePlaybackWrapper";
@@ -77,8 +78,7 @@ import { useToast } from "@/contexts/ToastContext";
 import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geojson";
 import * as mapHelpers from "@/utils/mapHelpers";
 import PublishButton from "@/components/map-editor/PublishButton";
-import { createSession, type CreateSessionRequest, type SessionDto } from "@/lib/api-ques";
-import { createMapLocation, deleteLocation } from "@/lib/api-location";
+import { createMapLocation, deleteLocation, getMapLocations } from "@/lib/api-location";
 
 
 const normalizeMapStatus = (status: unknown): MapStatus => {
@@ -141,22 +141,12 @@ export default function EditMapPage() {
   const [err, setErr] = useState<string | null>(null);
   const [mapStatus, setMapStatus] = useState<MapStatus>("Draft");
 
-  const [busySaveMeta, setBusySaveMeta] = useState<boolean>(false);
-  const [busySaveView, setBusySaveView] = useState<boolean>(false);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const { showToast } = useToast();
 
-  // Session state for control panel
-  const [isCreatingSession, setIsCreatingSession] = useState<boolean>(false);
-  const [sessionShareModal, setSessionShareModal] = useState<{
-    isOpen: boolean;
-    sessionCode: string;
-    sessionId?: string;
-  }>({
-    isOpen: false,
-    sessionCode: "",
-  });
-
   const [name, setName] = useState<string>("");
+  const [isEditingMapName, setIsEditingMapName] = useState<boolean>(false);
+  const [editingMapName, setEditingMapName] = useState<string>("");
   const [baseKey, setBaseKey] = useState<BaseKey>("osm");
   const [showStylePanel, setShowStylePanel] = useState(false);
   const [features, setFeatures] = useState<FeatureData[]>([]);
@@ -164,6 +154,9 @@ export default function EditMapPage() {
   const [layers, setLayers] = useState<LayerDTO[]>([]);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({});
   const [featureVisibility, setFeatureVisibility] = useState<Record<string, boolean>>({})
+  
+  // Current layer ID for drawing new features
+  const [currentLayerId, setCurrentLayerId] = useState<string | null>(null);
 
   // POI tooltip modal state
   const [poiTooltipModal, setPoiTooltipModal] = useState<{
@@ -321,7 +314,7 @@ export default function EditMapPage() {
 
   // Use feature management hook for Geoman event handling
   const featureManagement = useFeatureManagement({
-    mapId,
+    mapId: detail?.id || mapId || "",
     features,
     setFeatures,
     setFeatureVisibility,
@@ -329,6 +322,9 @@ export default function EditMapPage() {
     handleLayerHover,
     handleLayerClick,
     resetToOriginalStyle,
+    sketchRef,
+    rafThrottle,
+    currentLayerId,
   });
   const {
     lastUpdateRef,
@@ -337,6 +333,7 @@ export default function EditMapPage() {
     handleSketchEdit,
     handleSketchDragEnd,
     handleSketchRotateEnd,
+    handlePolygonCut,
   } = featureManagement;
 
   // Initialize segment playback hook
@@ -1124,6 +1121,24 @@ export default function EditMapPage() {
     };
   }, [mapId]);
 
+  // Listen for layer created event to refresh map detail
+  useEffect(() => {
+    if (!mapId) return;
+
+    const handleLayerCreated = async () => {
+      try {
+        const updatedDetail = await getMapDetail(mapId);
+        setDetail(updatedDetail);
+      } catch (error) {
+        console.error("Failed to refresh map detail after layer creation:", error);
+      }
+    };
+
+    window.addEventListener("layerCreated", handleLayerCreated);
+    return () => {
+      window.removeEventListener("layerCreated", handleLayerCreated);
+    };
+  }, [mapId]);
 
   useEffect(() => {
     if (!detail || !mapEl.current || mapRef.current) return;
@@ -1343,7 +1358,7 @@ export default function EditMapPage() {
               handleLayerClick(feature.layer, event.originalEvent.shiftKey);
             });
 
-            // Attach edit/drag/rotate event listeners for database updates
+            // Attach edit/drag/rotate/cut event listeners for database updates
             if (feature.featureId) {
               feature.layer.on('pm:edit', async () => {
                 const now = Date.now();
@@ -1387,6 +1402,7 @@ export default function EditMapPage() {
                   console.error("Error updating feature after rotation:", error);
                 }
               });
+
             }
 
             // Enable dragging and editing via Geoman
@@ -1435,6 +1451,9 @@ export default function EditMapPage() {
     };
     map.on("pm:create", createHandler);
 
+    // Handle polygon cut event at map level
+    map.on("pm:cut", handlePolygonCut);
+
     // Handle sketch-level edit/drag/rotate events
     sketch.on("pm:edit", handleSketchEdit);
     sketch.on("pm:dragend", handleSketchDragEnd);
@@ -1443,6 +1462,7 @@ export default function EditMapPage() {
     return () => {
       if (mapRef.current) {
         mapRef.current.off("pm:create", createHandler);
+        mapRef.current.off("pm:cut", handlePolygonCut);
       }
       if (sketchRef.current) {
         sketchRef.current.off("pm:edit", handleSketchEdit);
@@ -1450,7 +1470,7 @@ export default function EditMapPage() {
         sketchRef.current.off("pm:rotateend", handleSketchRotateEnd);
       }
     };
-  }, [isMapReady, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd]);
+  }, [isMapReady, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd, handlePolygonCut]);
 
   useEffect(() => {
     if (!mapRef.current || !detail?.layers || detail.layers.length === 0 || !isMapReady) return;
@@ -1542,31 +1562,129 @@ export default function EditMapPage() {
   }, [baseKey, applyBaseLayer]);
 
   // Load segments and transitions for timeline
+  const loadSegmentsAndTransitions = useCallback(async () => {
+    if (!mapId) return;
+
+    try {
+      const [segmentsData, transitionsData] = await Promise.all([
+        getSegments(mapId),
+        getTimelineTransitions(mapId),
+      ]);
+
+      // Fetch route animations for each segment
+      const segmentsWithRoutes = await Promise.all(
+        segmentsData.map(async (segment) => {
+          try {
+            const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
+            return {
+              ...segment,
+              routeAnimations: routes || []
+            };
+          } catch (e) {
+            return segment;
+          }
+        })
+      );
+
+      setSegments(segmentsWithRoutes);
+      setTransitions(transitionsData);
+    } catch (error) {
+      console.error("Failed to load segments/transitions:", error);
+    }
+  }, [mapId]);
+
   useEffect(() => {
     if (!mapId || !isMapReady) return;
 
     let alive = true;
 
     (async () => {
-      try {
-        const [segmentsData, transitionsData] = await Promise.all([
-          getSegments(mapId),
-          getTimelineTransitions(mapId),
-        ]);
-
-        if (alive) {
-          setSegments(segmentsData);
-          setTransitions(transitionsData);
-        }
-      } catch (error) {
-        console.error("Failed to load segments/transitions:", error);
-      }
+      await loadSegmentsAndTransitions();
     })();
 
     return () => {
       alive = false;
     };
-  }, [mapId, isMapReady]);
+  }, [mapId, isMapReady, loadSegmentsAndTransitions]);
+
+  // Listen for location created event to refresh segments
+  useEffect(() => {
+    const handleLocationCreated = (e: Event) => {
+      const customEvent = e as CustomEvent<{ segmentId: string }>;
+      // Refresh segments to show newly created location
+      loadSegmentsAndTransitions();
+    };
+
+    window.addEventListener('locationCreated', handleLocationCreated);
+    return () => {
+      window.removeEventListener('locationCreated', handleLocationCreated);
+    };
+  }, [loadSegmentsAndTransitions]);
+
+  // Listen for route animation changed event to refresh segments
+  useEffect(() => {
+    const handleRouteAnimationChanged = (e: Event) => {
+      const customEvent = e as CustomEvent<{ segmentId: string }>;
+      // Refresh segments to show newly created route animation
+      loadSegmentsAndTransitions();
+    };
+
+    window.addEventListener('routeAnimationChanged', handleRouteAnimationChanged);
+    return () => {
+      window.removeEventListener('routeAnimationChanged', handleRouteAnimationChanged);
+    };
+  }, [loadSegmentsAndTransitions]);
+
+  // Listen for zone created/deleted events to refresh segments
+  useEffect(() => {
+    const handleZoneCreated = (e: Event) => {
+      loadSegmentsAndTransitions();
+    };
+    const handleZoneDeleted = (e: Event) => {
+      loadSegmentsAndTransitions();
+    };
+
+    window.addEventListener('zoneCreated', handleZoneCreated);
+    window.addEventListener('zoneDeleted', handleZoneDeleted);
+    return () => {
+      window.removeEventListener('zoneCreated', handleZoneCreated);
+      window.removeEventListener('zoneDeleted', handleZoneDeleted);
+    };
+  }, [loadSegmentsAndTransitions]);
+
+  // Listen for location deleted/updated events to refresh segments
+  useEffect(() => {
+    const handleLocationDeleted = (e: Event) => {
+      loadSegmentsAndTransitions();
+    };
+    const handleLocationUpdated = (e: Event) => {
+      loadSegmentsAndTransitions();
+    };
+
+    window.addEventListener('locationDeleted', handleLocationDeleted);
+    window.addEventListener('locationUpdated', handleLocationUpdated);
+    return () => {
+      window.removeEventListener('locationDeleted', handleLocationDeleted);
+      window.removeEventListener('locationUpdated', handleLocationUpdated);
+    };
+  }, [loadSegmentsAndTransitions]);
+
+  // Listen for layer created/deleted events to refresh segments
+  useEffect(() => {
+    const handleLayerCreated = (e: Event) => {
+      loadSegmentsAndTransitions();
+    };
+    const handleLayerDeleted = (e: Event) => {
+      loadSegmentsAndTransitions();
+    };
+
+    window.addEventListener('layerCreated', handleLayerCreated);
+    window.addEventListener('layerDeleted', handleLayerDeleted);
+    return () => {
+      window.removeEventListener('layerCreated', handleLayerCreated);
+      window.removeEventListener('layerDeleted', handleLayerDeleted);
+    };
+  }, [loadSegmentsAndTransitions]);
 
   // Zone selection mode handler
   useEffect(() => {
@@ -2037,7 +2155,13 @@ export default function EditMapPage() {
 
 
             const createdLocation = await createMapLocation(currentMapId, locationData);
-            console.log("[Icon] ✅ Successfully created location:", createdLocation.locationId);
+
+            // Dispatch event to refresh segments
+            if (createdLocation.segmentId) {
+              window.dispatchEvent(new CustomEvent("locationCreated", {
+                detail: { segmentId: createdLocation.segmentId }
+              }));
+            }
 
             // Update marker metadata with locationId from API response
             const apiMarkerId = `icon-${createdLocation.locationId}`;
@@ -2155,7 +2279,6 @@ export default function EditMapPage() {
       if (!mapRef.current || !mapIdRef.current || !isMapReady) return;
 
       try {
-        const { getMapLocations } = await import("@/lib/api-location");
         const locations = await getMapLocations(mapIdRef.current);
 
         if (!locations || locations.length === 0) return;
@@ -2542,13 +2665,6 @@ export default function EditMapPage() {
     };
   }, [selectedLayers]); // Only depend on selectedLayers, not the callback
 
-  // NOTE: Map tool helper functions (enableDraw, toggleEdit, toggleDelete,
-  // toggleDrag, enableCutPolygon, toggleRotate, zoomIn, zoomOut)
-  // are now available from mapHelpers utility module
-  // Usage: mapHelpers.enableDraw(mapRef, "Marker")
-  // (Old implementation removed - now using utility functions)
-
-  // Context menu handlers
   const handleZoomToFit = useCallback(async () => {
     if (!mapRef.current || !contextMenu.feature) return;
     const bounds = getFeatureBounds(contextMenu.feature);
@@ -2652,25 +2768,6 @@ export default function EditMapPage() {
     }
   }, [detail, contextMenu, showToast]);
 
-  const clearSketch = useCallback(async () => {
-    if (!detail) return;
-
-    // Delete all features from database
-    for (const feature of features) {
-      if (feature.featureId) {
-        try {
-          await deleteFeatureFromDB(detail.id, feature.featureId);
-        } catch (error) {
-          console.error("Error deleting from DB:", error);
-        }
-      }
-    }
-
-    sketchRef.current?.clearLayers();
-    setFeatures([]);
-    setFeatureVisibility({});
-  }, [detail, features]);
-
   const onLayerVisibilityChange = useCallback(async (layerId: string, isVisible: boolean) => {
     if (!detail?.id || !mapRef.current) return;
 
@@ -2752,7 +2849,6 @@ export default function EditMapPage() {
     }
 
     try {
-      const { updateMapFeature } = await import("@/lib/api-maps");
 
       // Prepare update request
       const updateRequest: any = {};
@@ -2799,7 +2895,6 @@ export default function EditMapPage() {
     if (!mapId) return;
 
     try {
-      const { createSegment, updateSegment, getSegments } = await import("@/lib/api-storymap");
 
       if (segmentId) {
         // Update existing segment
@@ -2824,7 +2919,6 @@ export default function EditMapPage() {
     if (!mapId) return;
 
     try {
-      const { deleteSegment, getSegments } = await import("@/lib/api-storymap");
       await deleteSegment(mapId, segmentId);
       showToast("success", "Segment deleted successfully");
 
@@ -2841,7 +2935,6 @@ export default function EditMapPage() {
     if (!mapId) return;
 
     try {
-      const { createTimelineTransition, getTimelineTransitions } = await import("@/lib/api-storymap");
 
       if (transitionId) {
         // Update not supported by API - would need to delete and recreate
@@ -2866,7 +2959,6 @@ export default function EditMapPage() {
     if (!mapId) return;
 
     try {
-      const { deleteTimelineTransition, getTimelineTransitions } = await import("@/lib/api-storymap");
       await deleteTimelineTransition(mapId, transitionId);
       showToast("success", "Transition deleted successfully");
 
@@ -3138,55 +3230,45 @@ export default function EditMapPage() {
     return extractLayerStyle(feature.layer);
   }, [features]);
 
-  const saveMeta = useCallback(async () => {
+  const saveMap = useCallback(async () => {
     if (!detail) return;
-    setBusySaveMeta(true);
+    
+    if (!mapRef.current) {
+      console.warn("saveMap: mapRef.current is null");
+      showToast("error", "Bản đồ chưa sẵn sàng");
+      return;
+    }
+    
+    setIsSaving(true);
     try {
+      const map = mapRef.current;
+      
+      // Get camera state if map is valid
+      let viewState: string | undefined = undefined;
+      if (map && map.getCenter && typeof map.getCenter === 'function') {
+        const c = map.getCenter();
+        if (c) {
+          const zoom = map.getZoom ? map.getZoom() : 10;
+          const view = { center: [c.lat, c.lng] as [number, number], zoom };
+          viewState = JSON.stringify(view);
+        }
+      }
+      
+      // Update map with both metadata and view state
       const body: UpdateMapRequest = {
         name: (name ?? "").trim() || "Untitled Map",
         baseLayer: baseKeyToBackend(baseKey),
+        ...(viewState && { viewState }),
       };
+      
       await updateMap(detail.id, body);
-      showToast("success", "Đã lưu thông tin bản đồ.");
+      showToast("success", "Đã lưu thông tin bản đồ và vị trí hiển thị.");
     } catch (e) {
       showToast("error", e instanceof Error ? e.message : "Lưu thất bại");
     } finally {
-      setBusySaveMeta(false);
+      setIsSaving(false);
     }
   }, [detail, name, baseKey, showToast]);
-
-  const saveView = useCallback(async () => {
-    if (!detail || !mapRef.current) {
-      console.warn("saveView: detail or mapRef.current is null");
-      return;
-    }
-    const map = mapRef.current;
-    if (!map) {
-      return;
-    }
-    setBusySaveView(true);
-    try {
-      // Check if map is still valid
-      if (!map.getCenter || typeof map.getCenter !== 'function') {
-        showToast("error", "Bản đồ chưa sẵn sàng");
-        return;
-      }
-      const c = map.getCenter();
-      if (!c) {
-        showToast("error", "Bản đồ chưa sẵn sàng");
-        return;
-      }
-      const zoom = map.getZoom ? map.getZoom() : 10;
-      const view = { center: [c.lat, c.lng] as [number, number], zoom };
-      const body: UpdateMapRequest = { viewState: JSON.stringify(view) };
-      await updateMap(detail.id, body);
-      showToast("success", "Đã lưu vị trí hiển thị.");
-    } catch (e) {
-      showToast("error", e instanceof Error ? e.message : "Lưu thất bại");
-    } finally {
-      setBusySaveView(false);
-    }
-  }, [detail, showToast]);
 
 
   if (loading) return <main className="h-screen w-screen grid place-items-center text-zinc-400">Đang tải…</main>;
@@ -3198,167 +3280,149 @@ export default function EditMapPage() {
         <div className="pointer-events-auto bg-black/70 backdrop-blur-md ring-1 ring-white/15 shadow-xl py-1 px-3">
           <div className="grid grid-cols-3 place-items-stretch gap-2">
             <div className="flex items-center justify-start gap-2 overflow-x-auto no-scrollbar">
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="px-2.5 py-1.5 rounded-md bg-white text-black text-sm font-medium w-52"
-                placeholder="Untitled Map"
-              />
-              <PublishButton mapId={mapId} status={mapStatus} onStatusChange={setMapStatus} />
+              {isEditingMapName ? (
+                <input
+                  type="text"
+                  value={editingMapName}
+                  onChange={(e) => setEditingMapName(e.target.value)}
+                  onKeyDown={async (e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      const newName = editingMapName.trim() || "Untitled Map";
+                      if (newName !== name) {
+                        try {
+                          setIsSaving(true);
+                          await updateMap(detail.id, { name: newName });
+                          setName(newName);
+                          showToast("success", "Đã đổi tên bản đồ");
+                        } catch (error) {
+                          showToast("error", "Không thể đổi tên bản đồ");
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }
+                      setIsEditingMapName(false);
+                      setEditingMapName("");
+                    } else if (e.key === "Escape") {
+                      setIsEditingMapName(false);
+                      setEditingMapName("");
+                    }
+                  }}
+                  onBlur={async () => {
+                    const newName = editingMapName.trim() || "Untitled Map";
+                    if (newName !== name) {
+                      try {
+                        setIsSaving(true);
+                        await updateMap(detail.id, { name: newName });
+                        setName(newName);
+                        showToast("success", "Đã đổi tên bản đồ");
+                      } catch (error) {
+                        showToast("error", "Không thể đổi tên bản đồ");
+                      } finally {
+                        setIsSaving(false);
+                      }
+                    }
+                    setIsEditingMapName(false);
+                    setEditingMapName("");
+                  }}
+                  className="px-2.5 py-1.5 rounded-md bg-white text-black text-sm font-medium w-52 border-2 border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  placeholder="Untitled Map"
+                  autoFocus
+                  disabled={isSaving}
+                />
+              ) : (
+                <span
+                  onDoubleClick={() => {
+                    setEditingMapName(name);
+                    setIsEditingMapName(true);
+                  }}
+                  className="px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm font-medium w-52 cursor-pointer transition-colors truncate"
+                  title="Double click để đổi tên"
+                >
+                  {name || "Untitled Map"}
+                </span>
+              )}
             </div>
             <DrawingToolsBar mapRef={mapRef} />
-            <div className="flex items-center justify-end gap-1.5 overflow-x-auto no-scrollbar">
+            <div className="flex items-center justify-end gap-2 overflow-x-auto no-scrollbar">
+              {/* Active Users */}
               <ActiveUsersIndicator
                 activeUsers={collaboration.activeUsers}
                 isConnected={collaboration.isConnected}
               />
-              <input
-                type="file"
-                accept=".geojson,.json,.kml,.gpx"
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (file && mapId) {
-                    try {
-                      showToast("info", "Đang tải file lên...");
-
-                      // Backend tự động tạo layer mới, chỉ cần truyền mapId
-                      const result = await uploadGeoJsonToMap(mapId, file);
-
-                      showToast("info", "Đang load dữ liệu...");
-
-                      // Refresh toàn bộ map detail để lấy layer mới
-                      const updatedDetail = await getMapDetail(mapId);
-                      setDetail(updatedDetail);
-
-                      showToast("success", `Tải lên thành công! Đã thêm ${result.featuresAdded} đối tượng vào layer "${result.layerId}".`);
-
-                      // Clear the input
-                      e.target.value = '';
-                    } catch (error) {
-                      console.error("Upload error:", error);
-                      showToast("error", error instanceof Error ? error.message : "Tải file thất bại");
-                      e.target.value = '';
-                    }
-                  }
-                }}
-                className="hidden"
-                id="upload-layer"
-              />
-              <label
-                htmlFor="upload-layer"
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-500 cursor-pointer"
-                title="Upload GeoJSON/KML/GPX file to add as layer"
-              >
-                Upload File
-              </label>
-              <button
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-zinc-700 hover:bg-zinc-600 disabled:opacity-60"
-                onClick={saveView}
-                disabled={busySaveView || !mapRef.current}
-                title="Lưu tâm & zoom hiện tại"
-              >
-                {busySaveView ? "Đang lưu…" : "Save view"}
-              </button>
-              <button
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-zinc-800 hover:bg-zinc-700"
-                onClick={clearSketch}
-                disabled={!mapRef.current}
-              >
-                Xoá vẽ
-              </button>
-              <button
-                className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-emerald-600 text-zinc-950 hover:bg-emerald-500 disabled:opacity-60"
-                onClick={saveMeta}
-                disabled={busySaveMeta}
-              >
-                {busySaveMeta ? "Đang lưu…" : "Save"}
-              </button>
-              {/* Story Map Buttons */}
-              {mapStatus === "Published" && (
-                <>
-                  <button
-                    className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1 disabled:opacity-60 disabled:cursor-not-allowed"
-                    onClick={async () => {
-                      if (isCreatingSession) return;
-
-                      setIsCreatingSession(true);
+              
+              {/* Toolbar Group - Canva Style */}
+              <div className="flex items-center gap-0 bg-zinc-800/50 rounded-lg p-0.5 border border-zinc-700/50">
+                <input
+                  type="file"
+                  accept=".geojson,.json,.kml,.gpx"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file && mapId) {
                       try {
-                        // Create a new session for this map
-                        const newSession = await createSession({
-                          mapId,
-                          sessionName: `Session - ${detail?.name || "Untitled Map"}`,
-                          sessionType: "live",
-                          allowLateJoin: true,
-                          showLeaderboard: true,
-                          showCorrectAnswers: true,
-                          shuffleQuestions: false,
-                          shuffleOptions: false,
-                          enableHints: true,
-                          pointsForSpeed: true,
-                        } as CreateSessionRequest);
+                        showToast("info", "Đang tải file lên...");
 
-                        // Open control panel with session info in URL
-                        const controlUrl = `/storymap/control/${mapId}?sessionId=${newSession.sessionId}&sessionCode=${newSession.sessionCode}`;
-                        window.open(controlUrl, '_blank');
+                        // Backend tự động tạo layer mới, chỉ cần truyền mapId
+                        const result = await uploadGeoJsonToMap(mapId, file);
 
-                        // Show share modal
-                        setSessionShareModal({
-                          isOpen: true,
-                          sessionCode: newSession.sessionCode,
-                          sessionId: newSession.sessionId,
-                        });
+                        showToast("info", "Đang load dữ liệu...");
 
-                        showToast("success", "Session đã được tạo thành công!");
-                      } catch (error: any) {
-                        console.error("Failed to create session:", error);
-                        showToast("error", error?.message || "Không thể tạo session. Vui lòng thử lại.");
-                      } finally {
-                        setIsCreatingSession(false);
+                        // Refresh toàn bộ map detail để lấy layer mới
+                        const updatedDetail = await getMapDetail(mapId);
+                        setDetail(updatedDetail);
+
+                        showToast("success", `Tải lên thành công! Đã thêm ${result.featuresAdded} đối tượng vào layer "${result.layerId}".`);
+
+                        // Clear the input
+                        e.target.value = '';
+                      } catch (error) {
+                        console.error("Upload error:", error);
+                        showToast("error", error instanceof Error ? error.message : "Tải file thất bại");
+                        e.target.value = '';
                       }
-                    }}
-                    disabled={isCreatingSession}
-                    title="Open control panel (presenter view)"
-                  >
-                    {isCreatingSession ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                        </svg>
-                        Control
-                      </>
-                    )}
-                  </button>
-                  <button
-                    className="rounded-lg px-3 py-1.5 text-xs font-semibold bg-purple-600 hover:bg-purple-500 flex items-center gap-1"
-                    onClick={() => window.open(`/storymap/${mapId}`, '_blank')}
-                    title="Open viewer (audience view)"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    View
-                  </button>
-                </>
-              )}
-              <button
-                className="rounded-lg p-1.5 text-xs font-semibold bg-zinc-700 hover:bg-zinc-600"
-                onClick={() => {
-                  localStorage.removeItem('skipDeleteConfirm');
-                  showToast("info", "Delete confirmations re-enabled");
-                }}
-                title="Re-enable delete confirmation dialogs"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                </svg>
-              </button>
+                    }
+                  }}
+                  className="hidden"
+                  id="upload-layer"
+                />
+                <label
+                  htmlFor="upload-layer"
+                  className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white cursor-pointer transition-all flex items-center gap-2"
+                  title="Upload GeoJSON/KML/GPX file to add as layer"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Upload
+                </label>
+                
+                <div className="h-5 w-px bg-zinc-600/50" />
+                
+                <button
+                  className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                  onClick={saveMap}
+                  disabled={isSaving || !mapRef.current}
+                  title="Lưu thông tin bản đồ và vị trí hiển thị"
+                >
+                  {isSaving ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                      Save
+                    </>
+                  )}
+                </button>
+                
+                <div className="h-5 w-px bg-zinc-600/50" />
+                
+                <PublishButton mapId={mapId} status={mapStatus} onStatusChange={setMapStatus} />
+              </div>
             </div>
           </div>
           {/* Toast messages are handled globally via ToastProvider */}
@@ -3399,6 +3463,8 @@ export default function EditMapPage() {
         onDeleteSegment={handleDeleteSegment}
         onSaveTransition={handleSaveTransition}
         onDeleteTransition={handleDeleteTransition}
+        currentLayerId={currentLayerId}
+        onLayerChange={setCurrentLayerId}
       />
 
       {/* NEW: Right Properties Panel */}

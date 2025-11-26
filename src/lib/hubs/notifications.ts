@@ -48,21 +48,13 @@ export function createNotificationConnection(
     token: authToken,
     allowGuest: false, // Notifications require authentication
     onClose: (error) => {
-      if (error) {
-        const currentToken = getToken();
-        if (!currentToken || !isTokenValid(currentToken)) {
-          return; // Token expired, don't log error
-        }
-        console.error("[SignalR Notifications] Connection closed with error:", error);
-      } else {
-        console.log("[SignalR Notifications] Connection closed");
-      }
+      console.error("[SignalR Notifications] Connection closed with error:", error);
     },
     onReconnecting: (error) => {
       console.warn("[SignalR Notifications] Reconnecting...", error);
     },
     onReconnected: (connectionId) => {
-      console.log("[SignalR Notifications] Reconnected:", connectionId);
+      console.info("[SignalR Notifications] Reconnected:", connectionId);
     },
   });
 }
@@ -97,8 +89,6 @@ export async function startNotificationConnection(
 
     await connection.start();
     
-    // If start() completes without throwing, connection is successful
-    console.log("[SignalR Notifications] Connected successfully");
     return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message.toLowerCase() : "";
@@ -115,7 +105,6 @@ export async function stopNotificationConnection(
   try {
     if (connection.state !== signalR.HubConnectionState.Disconnected) {
       await connection.stop();
-      console.log("[SignalR Notifications] Connection stopped");
     }
   } catch (error) {
     console.error("[SignalR Notifications] Failed to stop connection:", error);
@@ -140,8 +129,6 @@ export function registerNotificationEventHandlers(
   if (handlers.onNotificationRead) {
     connection.on("NotificationRead", handlers.onNotificationRead);
   }
-
-  console.log("[SignalR Notifications] Event handlers registered");
 }
 
 export function unregisterNotificationEventHandlers(
@@ -149,7 +136,5 @@ export function unregisterNotificationEventHandlers(
 ): void {
   connection.off("NotificationReceived");
   connection.off("NotificationRead");
-
-  console.log("[SignalR Notifications] Event handlers unregistered");
 }
 

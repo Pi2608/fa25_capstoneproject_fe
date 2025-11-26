@@ -105,8 +105,25 @@ function JoinSessionContent() {
 
       toast.success(`Welcome, ${participant.displayName}!`);
       
-      // Redirect to session page
-      router.push(`/session/play/${participant.sessionId}?participantId=${participant.id}`);
+      // Get session details to get mapId for redirect
+      const session = await getSessionByCode(pin);
+      
+      if (!session.mapId) {
+        setError("Session does not have a map attached");
+        setIsLoading(false);
+        return;
+      }
+
+      // Store participant info in sessionStorage for the view page
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem("imos_student_name", displayName.trim());
+        window.sessionStorage.setItem("imos_session_code", pin);
+        window.sessionStorage.setItem("imos_participant_id", participant.id);
+        window.sessionStorage.setItem("imos_session_id", participant.sessionId);
+      }
+      
+      // Redirect to storymap view page with session context
+      router.push(`/storymap/view/${session.mapId}?sessionId=${participant.sessionId}&participantId=${participant.id}`);
     } catch (err: any) {
       console.error("Failed to join session:", err);
       setError(err?.message || "Failed to join session. Please try again.");

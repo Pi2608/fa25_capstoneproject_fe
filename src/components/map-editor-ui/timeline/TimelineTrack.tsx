@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState, useEffect, useRef } from "react";
+import { Fragment, useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -478,7 +478,7 @@ function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; map
   const [editingRoute, setEditingRoute] = useState<RouteAnimation | null>(null);
   const [showDialog, setShowDialog] = useState(false);
 
-  const loadRoutes = async () => {
+  const loadRoutes = useCallback(async () => {
     setIsLoading(true);
     try {
       const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
@@ -488,7 +488,7 @@ function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; map
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [mapId, segment.segmentId]);
 
   // Sync state with prop when segment.routeAnimations changes
   useEffect(() => {
@@ -499,7 +499,23 @@ function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; map
       // Fallback: load from API if prop doesn't have routes
       loadRoutes();
     }
-  }, [segment.segmentId, segment.routeAnimations]);
+  }, [segment.segmentId, segment.routeAnimations, loadRoutes]);
+
+  // Listen for route animation changed event to refresh routes
+  useEffect(() => {
+    const handleRouteAnimationChanged = (e: Event) => {
+      const customEvent = e as CustomEvent<{ segmentId: string }>;
+      if (customEvent.detail?.segmentId === segment.segmentId) {
+        // Refresh routes from API or wait for parent to reload segments
+        loadRoutes();
+      }
+    };
+
+    window.addEventListener('routeAnimationChanged', handleRouteAnimationChanged);
+    return () => {
+      window.removeEventListener('routeAnimationChanged', handleRouteAnimationChanged);
+    };
+  }, [segment.segmentId, loadRoutes]);
 
   const handleDelete = async (routeId: string) => {
     if (!confirm("Delete this route?")) return;
@@ -640,8 +656,10 @@ function LocationTrackItems({ segment, mapId, currentMap }: { segment: Segment; 
     if (!confirm("Delete this location?")) return;
     try {
       await deleteLocation(mapId, segment.segmentId, locationId);
-      // Reload page to refresh segment data
-      window.location.reload();
+      // Dispatch event to refresh segments
+      window.dispatchEvent(new CustomEvent("locationDeleted", {
+        detail: { segmentId: segment.segmentId }
+      }));
     } catch (e) {
       console.error("Failed to delete location:", e);
       alert("Failed to delete location");
@@ -660,7 +678,10 @@ function LocationTrackItems({ segment, mapId, currentMap }: { segment: Segment; 
       await updateLocation(mapId || "", segment.segmentId, locationId, data);
       setShowEditDialog(false);
       setEditingLocation(null);
-      window.location.reload();
+      // Dispatch event to refresh segments
+      window.dispatchEvent(new CustomEvent("locationUpdated", {
+        detail: { segmentId: segment.segmentId }
+      }));
     } catch (e) {
       console.error("Failed to update location:", e);
       alert("Failed to update location");
@@ -803,7 +824,9 @@ function ZoneLayerTrackItems({
     if (!confirm("Remove this zone?")) return;
     try {
       await deleteSegmentZone(mapId, segment.segmentId, zoneId);
-      window.location.reload();
+      window.dispatchEvent(new CustomEvent("zoneDeleted", {
+        detail: { segmentId: segment.segmentId }
+      }));
     } catch (e) {
       console.error("Failed to delete zone:", e);
       alert("Failed to remove zone");
@@ -814,7 +837,9 @@ function ZoneLayerTrackItems({
     if (!confirm("Remove this layer?")) return;
     try {
       await detachLayerFromSegment(mapId, segment.segmentId, layerId);
-      window.location.reload();
+      window.dispatchEvent(new CustomEvent("layerDeleted", {
+        detail: { segmentId: segment.segmentId }
+      }));
     } catch (e) {
       console.error("Failed to delete layer:", e);
       alert("Failed to remove layer");
@@ -892,7 +917,7 @@ function ZoneLayerTrackItems({
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-[11px] font-semibold text-purple-50 truncate">
-                {layer.layer?.name || "Layer"}
+                {layer.layer?.layerName || "Layer"}
               </div>
             </div>
           </div>

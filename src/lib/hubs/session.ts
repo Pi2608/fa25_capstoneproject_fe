@@ -7,8 +7,12 @@ import { isTokenValid, createBaseConnection, API_BASE_URL } from "./base";
 
 export interface SessionStatusChangedEvent {
   sessionId: string;
-  status: "Pending" | "Running" | "Paused" | "Ended";
-  timestamp: string;
+  // Backend sends: "WAITING", "IN_PROGRESS", "PAUSED", "COMPLETED"
+  // Frontend uses: "Pending", "Running", "Paused", "Ended"
+  status: "Pending" | "Running" | "Paused" | "Ended" | "WAITING" | "IN_PROGRESS" | "PAUSED" | "COMPLETED";
+  message?: string;
+  changedAt?: string;
+  timestamp?: string; // Legacy field, use changedAt if available
 }
 
 export interface ParticipantJoinedEvent {
@@ -113,6 +117,60 @@ export interface SessionEndedEvent {
   finalLeaderboard: LeaderboardEntry[];
 }
 
+// JoinedSession event - sent when client joins a session
+export interface JoinedSessionEvent {
+  sessionId: string;
+  sessionCode: string;
+  status: string; // "WAITING", "IN_PROGRESS", "PAUSED", "COMPLETED"
+  message?: string;
+  mapState?: MapStateSyncEvent | null;
+  segmentState?: SegmentSyncEvent | null;
+}
+
+// ===================== SEGMENT SYNC EVENTS =====================
+
+export interface SegmentSyncEvent {
+  sessionId: string;
+  segmentIndex: number;
+  segmentId?: string;
+  segmentName?: string;
+  isPlaying: boolean;
+  syncedAt: string;
+}
+
+// ===================== QUESTION BROADCAST EVENTS =====================
+
+export interface QuestionBroadcastEvent {
+  sessionId: string;
+  questionId: string;
+  questionText: string;
+  questionType: string;
+  questionImageUrl?: string;
+  options?: Array<{
+    id: string;
+    optionText: string;
+    optionImageUrl?: string;
+    displayOrder: number;
+  }>;
+  points: number;
+  timeLimit: number;
+  broadcastedAt: string;
+}
+
+export interface QuestionResultsEvent {
+  sessionId: string;
+  questionId: string;
+  results?: Array<{
+    participantId: string;
+    displayName: string;
+    answer?: string;
+    isCorrect: boolean;
+    pointsEarned: number;
+  }>;
+  correctAnswer?: string;
+  showedAt: string;
+}
+
 // ===================== CONNECTION SETUP =====================
 
 /**
@@ -128,14 +186,19 @@ export function createSessionConnection(
     return null;
   }
 
-  const authToken = token || getToken();
-
-  // Guest users (no token) can connect to session hub
-  // Teachers/logged-in users need valid token
-  if (authToken && !isTokenValid(authToken)) {
-    console.error("[SignalR Session] Invalid token");
-    return null;
+  // For session hub, allow guest connections (no token required)
+  // Get token if available, but don't require it to be valid
+  let authToken: string | null | undefined = token || getToken();
+  
+  // If token is empty string or null/undefined, treat as no token (guest mode)
+  if (!authToken || (typeof authToken === 'string' && authToken.trim().length === 0)) {
+    authToken = undefined; // No token - will connect as guest
+  } else if (!isTokenValid(authToken)) {
+    // Token exists but is invalid - log warning but still allow connection as guest
+    console.warn("[SignalR Session] Token provided but invalid, connecting as guest");
+    authToken = undefined; // Treat as no token, allow guest connection
   }
+  // If token is valid, it will be used for authenticated connection
 
   const baseUrl = API_BASE_URL.replace(/\/$/, "");
   const hubUrl = `${baseUrl}/hubs/session`;
@@ -144,17 +207,13 @@ export function createSessionConnection(
     token: authToken || undefined,
     allowGuest: true, // Session hub allows guest connections
     onClose: (error) => {
-      if (error) {
-        console.error("[SignalR Session] Connection closed with error:", error);
-      } else {
-        console.log("[SignalR Session] Connection closed");
-      }
+      console.error("[SignalR Session] Connection closed with error:", error);
     },
     onReconnecting: (error) => {
       console.warn("[SignalR Session] Reconnecting...", error);
     },
     onReconnected: (connectionId) => {
-      console.log("[SignalR Session] Reconnected:", connectionId);
+      console.info("[SignalR Session] Reconnected:", connectionId);
     },
   });
 }
@@ -177,12 +236,9 @@ export async function startSessionConnection(
     }
 
     await connection.start();
-    console.log("[SignalR Session] Connected successfully");
 
-    // Join the session group on the server
     try {
       await connection.invoke("JoinSession", sessionId);
-      console.log(`[SignalR Session] Joined session group: ${sessionId}`);
     } catch (invokeError) {
       console.error(
         "[SignalR Session] Failed to join session group:",
@@ -205,7 +261,6 @@ export async function leaveSessionConnection(
   try {
     if (connection.state === signalR.HubConnectionState.Connected) {
       await connection.invoke("LeaveSession", sessionId);
-      console.log(`[SignalR Session] Left session group: ${sessionId}`);
     }
   } catch (error) {
     console.error("[SignalR Session] Failed to leave session group:", error);
@@ -218,7 +273,6 @@ export async function stopSessionConnection(
   try {
     if (connection.state !== signalR.HubConnectionState.Disconnected) {
       await connection.stop();
-      console.log("[SignalR Session] Connection stopped");
     }
   } catch (error) {
     console.error("[SignalR Session] Failed to stop connection:", error);
@@ -228,6 +282,7 @@ export async function stopSessionConnection(
 // ===================== EVENT HANDLERS SETUP =====================
 
 export interface SessionEventHandlers {
+  onJoinedSession?: (event: JoinedSessionEvent) => void;
   onSessionStatusChanged?: (event: SessionStatusChangedEvent) => void;
   onParticipantJoined?: (event: ParticipantJoinedEvent) => void;
   onParticipantLeft?: (event: ParticipantLeftEvent) => void;
@@ -238,12 +293,20 @@ export interface SessionEventHandlers {
   onLeaderboardUpdated?: (event: LeaderboardUpdatedEvent) => void;
   onTeacherFocusChanged?: (event: TeacherFocusChangedEvent) => void;
   onSessionEnded?: (event: SessionEndedEvent) => void;
+  onSegmentSync?: (event: SegmentSyncEvent) => void;
+  onQuestionBroadcast?: (event: QuestionBroadcastEvent) => void;
+  onQuestionResults?: (event: QuestionResultsEvent) => void;
 }
 
 export function registerSessionEventHandlers(
   connection: signalR.HubConnection,
   handlers: SessionEventHandlers
 ): void {
+  // Handle JoinedSession event - sent when client joins a session
+  if (handlers.onJoinedSession) {
+    connection.on("JoinedSession", handlers.onJoinedSession);
+  }
+
   if (handlers.onSessionStatusChanged) {
     connection.on("SessionStatusChanged", handlers.onSessionStatusChanged);
   }
@@ -298,12 +361,24 @@ export function registerSessionEventHandlers(
     connection.on("SessionEnded", handlers.onSessionEnded);
   }
 
-  console.log("[SignalR Session] Event handlers registered");
+  if (handlers.onSegmentSync) {
+    connection.on("SegmentSync", handlers.onSegmentSync);
+  }
+
+  if (handlers.onQuestionBroadcast) {
+    connection.on("QuestionBroadcast", handlers.onQuestionBroadcast);
+  }
+
+  if (handlers.onQuestionResults) {
+    connection.on("QuestionResults", handlers.onQuestionResults);
+  }
+
 }
 
 export function unregisterSessionEventHandlers(
   connection: signalR.HubConnection
 ): void {
+  connection.off("JoinedSession");
   connection.off("SessionStatusChanged");
   connection.off("ParticipantJoined");
   connection.off("ParticipantLeft");
@@ -315,8 +390,9 @@ export function unregisterSessionEventHandlers(
   connection.off("MapStateSync");
   connection.off("TeacherFocusChanged");
   connection.off("SessionEnded");
-
-  console.log("[SignalR Session] Event handlers unregistered");
+  connection.off("SegmentSync");
+  connection.off("QuestionBroadcast");
+  connection.off("QuestionResults");
 }
 
 // ===================== TEACHER FOCUS (MAP SYNC) =====================
@@ -352,10 +428,130 @@ export async function sendTeacherFocusViaSignalR(
       Pitch: focus.pitch ?? null,
     });
 
-    console.log("[SignalR Session] Teacher Focus sent successfully");
     return true;
   } catch (error) {
     console.error("[SignalR Session] Failed to send Teacher Focus:", error);
+    return false;
+  }
+}
+
+// ===================== SEGMENT SYNC =====================
+
+export interface SegmentSyncRequest {
+  segmentIndex: number;
+  segmentId?: string;
+  segmentName?: string;
+  isPlaying: boolean;
+}
+
+/**
+ * Send Segment Sync via SignalR Hub
+ * This syncs the current segment to all students
+ */
+export async function sendSegmentSyncViaSignalR(
+  connection: signalR.HubConnection,
+  sessionId: string,
+  segment: SegmentSyncRequest
+): Promise<boolean> {
+  try {
+    if (connection.state !== signalR.HubConnectionState.Connected) {
+      console.error("[SignalR Session] Connection not connected for SyncSegment");
+      return false;
+    }
+
+    await connection.invoke("SyncSegment", sessionId, {
+      SegmentIndex: segment.segmentIndex,
+      SegmentId: segment.segmentId ?? null,
+      SegmentName: segment.segmentName ?? null,
+      IsPlaying: segment.isPlaying,
+    });
+
+    return true;
+  } catch (error) {
+    console.error("[SignalR Session] Failed to send Segment sync:", error);
+    return false;
+  }
+}
+
+// ===================== QUESTION BROADCAST =====================
+
+export interface QuestionBroadcastRequest {
+  questionId: string;
+  questionText: string;
+  questionType: string;
+  questionImageUrl?: string;
+  options?: Array<{
+    id: string;
+    optionText: string;
+    optionImageUrl?: string;
+    displayOrder: number;
+  }>;
+  points: number;
+  timeLimit: number;
+}
+
+/**
+ * Broadcast a question to all students via SignalR Hub
+ */
+export async function broadcastQuestionViaSignalR(
+  connection: signalR.HubConnection,
+  sessionId: string,
+  question: QuestionBroadcastRequest
+): Promise<boolean> {
+  try {
+    if (connection.state !== signalR.HubConnectionState.Connected) {
+      console.error("[SignalR Session] Connection not connected for BroadcastQuestion");
+      return false;
+    }
+
+    await connection.invoke("BroadcastQuestionToStudents", sessionId, {
+      QuestionId: question.questionId,
+      QuestionText: question.questionText,
+      QuestionType: question.questionType,
+      QuestionImageUrl: question.questionImageUrl ?? null,
+      Options: question.options ?? null,
+      Points: question.points,
+      TimeLimit: question.timeLimit,
+    });
+
+    return true;
+  } catch (error) {
+    console.error("[SignalR Session] Failed to broadcast question:", error);
+    return false;
+  }
+}
+
+/**
+ * Show question results to all students via SignalR Hub
+ */
+export async function showQuestionResultsViaSignalR(
+  connection: signalR.HubConnection,
+  sessionId: string,
+  questionId: string,
+  results: Array<{
+    participantId: string;
+    displayName: string;
+    answer?: string;
+    isCorrect: boolean;
+    pointsEarned: number;
+  }>,
+  correctAnswer?: string
+): Promise<boolean> {
+  try {
+    if (connection.state !== signalR.HubConnectionState.Connected) {
+      console.error("[SignalR Session] Connection not connected for ShowQuestionResults");
+      return false;
+    }
+
+    await connection.invoke("ShowQuestionResults", sessionId, {
+      QuestionId: questionId,
+      Results: results,
+      CorrectAnswer: correctAnswer ?? null,
+    });
+
+    return true;
+  } catch (error) {
+    console.error("[SignalR Session] Failed to show question results:", error);
     return false;
   }
 }

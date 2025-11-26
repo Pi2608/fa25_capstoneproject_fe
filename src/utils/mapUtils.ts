@@ -52,6 +52,7 @@ export interface FeatureData {
   layer: ExtendedLayer;
   isVisible: boolean;
   featureId?: string;
+  layerId?: string | null; // Layer ID that this feature belongs to
 }
 
 export interface LayerInfo {
@@ -447,11 +448,30 @@ export function serializeFeature(layer: ExtendedLayer): {
   } else if (type === "Polygon") {
     geometryType = "Polygon";
     annotationType = "Highlighter";
-    const latlngs = layer._latlngs as LatLng[][];
+    
+    // Try to use getLatLngs() method first (more reliable for updated layers)
+    let latlngs: LatLng[][] | undefined;
+    if (typeof (layer as any).getLatLngs === "function") {
+      try {
+        const result = (layer as any).getLatLngs();
+        if (result && Array.isArray(result)) {
+          // getLatLngs() returns LatLng[][] for Polygon
+          latlngs = result as LatLng[][];
+        }
+      } catch (err) {
+        console.warn("Error calling getLatLngs() on polygon layer:", err);
+      }
+    }
+    
+    // Fallback to _latlngs if getLatLngs() didn't work
+    if (!latlngs) {
+      latlngs = layer._latlngs as LatLng[][];
+    }
+    
     if (latlngs && latlngs[0] && latlngs[0].length > 0) {
       coordinates = [latlngs[0].map((ll) => [ll.lng, ll.lat])];
     } else {
-      console.warn("Polygon layer missing valid _latlngs property");
+      console.warn("Polygon layer missing valid coordinates. _latlngs:", layer._latlngs);
       coordinates = [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]];
     }
   } else {
@@ -738,6 +758,7 @@ export async function saveFeature(
       ...optimisticFeature,
       id: `feature-${response.featureId}`, // Update id to match real featureId format
       featureId: response.featureId,
+      layerId: response.layerId || null, // Store layerId from backend response
     };
 
     // Replace temporary feature with real one, but check for duplicates first
@@ -1040,6 +1061,7 @@ export async function loadFeaturesToMap(
           layer,
           isVisible,
           featureId: feature.featureId,
+          layerId: feature.layerId || null, // Store layerId from backend
         });
       }
     }

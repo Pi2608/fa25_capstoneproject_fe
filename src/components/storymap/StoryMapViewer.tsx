@@ -165,21 +165,121 @@ export default function StoryMapViewer({
       }
       
       baseRef.current = L.tileLayer(config.url, tileLayerOptions).addTo(map);
+      
+      // Wait for map to fully initialize (tiles to load)
+      map.whenReady(() => {
+        if (alive && mapRef.current === map) {
+          // Map is ready - check if container has valid size
+          setTimeout(() => {
+            try {
+              const size = map.getSize();
+              const container = map.getContainer();
+              if (size && size.x > 0 && size.y > 0 && container && container.offsetWidth > 0) {
+                setIsMapReady(true);
+              }
+            } catch {
+              // Will be checked by the checkMapReady interval below
+            }
+          }, 100);
+        }
+      });
     })();
 
     return () => {
       alive = false;
+      setIsMapReady(false);
       mapRef.current?.remove();
       mapRef.current = null;
     };
   }, [baseMapProvider, initialCenter, initialZoom]);
 
+  // Track map ready state
+  const [isMapReady, setIsMapReady] = useState(false);
+
+  // Mark map as ready when it's initialized
+  useEffect(() => {
+    if (!mapRef.current) {
+      setIsMapReady(false);
+      return;
+    }
+
+    // Check if map is fully initialized
+    const checkMapReady = () => {
+      try {
+        const map = mapRef.current;
+        if (map && map.getContainer()) {
+          const container = map.getContainer();
+          const size = map.getSize();
+          if (size && size.x > 0 && size.y > 0 && container.offsetWidth > 0) {
+            setIsMapReady(true);
+            return true;
+          }
+        }
+      } catch {
+        // Map not ready yet
+      }
+      return false;
+    };
+
+    // Check immediately
+    if (checkMapReady()) {
+      return;
+    }
+
+    // Retry with interval
+    const interval = setInterval(() => {
+      if (checkMapReady()) {
+        clearInterval(interval);
+      }
+    }, 50);
+
+    return () => clearInterval(interval);
+  }, [baseMapProvider, initialCenter, initialZoom]); // Re-check when map config changes
+
+  // Track last viewed segment index to prevent re-rendering the same segment
+  const lastViewedIndexRef = useRef<number | null>(null);
+  const segmentsRef = useRef<Segment[]>(segments);
+  const handleViewSegmentRef = useRef<((segment: Segment, opts?: any) => void) | null>(null);
+  
+  // Update refs when they change
+  useEffect(() => {
+    segmentsRef.current = segments;
+  }, [segments]);
+
+  useEffect(() => {
+    handleViewSegmentRef.current = playback.handleViewSegment;
+  }, [playback.handleViewSegment]);
+
   // Sync with external control (for control page)
   useEffect(() => {
-    if (controlledIndex !== undefined && segments[controlledIndex]) {
-      playback.handleViewSegment(segments[controlledIndex]);
+    // Wait for map to be ready before viewing segment
+    if (
+      controlledIndex !== undefined && 
+      controlledIndex >= 0 && 
+      segmentsRef.current.length > 0 &&
+      segmentsRef.current[controlledIndex] && 
+      isMapReady && 
+      mapRef.current &&
+      handleViewSegmentRef.current &&
+      lastViewedIndexRef.current !== controlledIndex // Only render if index changed
+    ) {
+      const currentIndex = controlledIndex;
+      lastViewedIndexRef.current = currentIndex;
+      
+      // Add a small delay to ensure map is fully rendered
+      const timer = setTimeout(() => {
+        if (mapRef.current && mapEl.current && segmentsRef.current[currentIndex] && handleViewSegmentRef.current) {
+          // Use handleViewSegment from ref to avoid dependency issues
+          // Disable two-phase fly for smooth direct transition when teacher controls the view
+          handleViewSegmentRef.current(segmentsRef.current[currentIndex], {
+            disableTwoPhaseFly: true, // Direct flyTo from current position to target (no zoom out first)
+          });
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
-  }, [controlledIndex, segments]);
+  }, [controlledIndex, isMapReady]); // Removed playback dependency
 
   useEffect(() => {
     if (controlledPlaying !== undefined) {

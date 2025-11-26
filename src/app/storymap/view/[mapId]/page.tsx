@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 
 import { getSegments, type Segment } from "@/lib/api-storymap";
 import { getMapDetail } from "@/lib/api-maps";
@@ -10,25 +10,73 @@ import StoryMapViewer from "@/components/storymap/StoryMapViewer";
 import {
   getCurrentQuestionForParticipant,
   submitParticipantResponse,
+  getSession,
+  getSessionLeaderboard,
   type SessionRunningQuestionDto,
+  type SessionDto,
+  type LeaderboardEntryDto,
 } from "@/lib/api-ques";
+
+import { useSessionHub } from "@/hooks/useSessionHub";
+import type {
+  SessionStatusChangedEvent,
+  SegmentSyncEvent,
+  QuestionBroadcastEvent,
+  QuestionResultsEvent,
+  SessionEndedEvent,
+  JoinedSessionEvent,
+} from "@/lib/hubs/session";
+import { toast } from "react-toastify";
+
+type ViewState = "waiting" | "viewing" | "question" | "results" | "ended";
 
 export default function StoryMapViewPage() {
   const params = useParams<{ mapId: string }>();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const mapId = params?.mapId ?? "";
   const sessionId = searchParams.get("sessionId") ?? "";
+  const participantIdFromUrl = searchParams.get("participantId") ?? "";
 
+  // User info state
   const [displayName, setDisplayName] = useState("Học sinh");
   const [sessionCode, setSessionCode] = useState("");
   const [participantId, setParticipantId] = useState("");
 
+  // Session state
+  const [session, setSession] = useState<SessionDto | null>(null);
+  const [viewState, setViewState] = useState<ViewState>("waiting");
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntryDto[]>([]);
+
+  // Map and segments
+  const [segments, setSegments] = useState<Segment[]>([]);
+  const [mapDetail, setMapDetail] = useState<any>(null);
+  const [currentIndex, setCurrentIndex] = useState(-1); // -1 = no segment selected yet
+  const [isTeacherPlaying, setIsTeacherPlaying] = useState(false); // Track if teacher is playing
+  const [hasReceivedSegmentSync, setHasReceivedSegmentSync] = useState(false); // Track if we've received a live sync from teacher
+  const cachedStateTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Track timeout for using cached state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Question state
+  const [currentQuestion, setCurrentQuestion] = useState<QuestionBroadcastEvent | null>(null);
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
+  const [answering, setAnswering] = useState(false);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [hasSubmitted, setHasSubmitted] = useState(false);
+  const [questionResults, setQuestionResults] = useState<QuestionResultsEvent | null>(null);
+
+  // Countdown timer
+  const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load user info from sessionStorage
   useEffect(() => {
     if (typeof window === "undefined") return;
 
     const storedName = window.sessionStorage.getItem("imos_student_name");
     const storedCode = window.sessionStorage.getItem("imos_session_code");
-    const storedParticipant = window.sessionStorage.getItem("imos_participant_id");
+    const storedParticipant = window.sessionStorage.getItem("imos_participant_id") || participantIdFromUrl;
 
     if (storedName) setDisplayName(storedName);
     if (storedCode) setSessionCode(storedCode);
@@ -37,51 +85,50 @@ export default function StoryMapViewPage() {
       setParticipantId(storedParticipant);
     } else if (sessionId) {
       setError(
-        "Không tìm thấy thông tin học viên cho tiết học này. Vui lòng quay lại trang trước và tham gia lại bằng mã tiết học."
+        "Không tìm thấy thông tin học viên. Vui lòng quay lại và tham gia lại bằng mã tiết học."
       );
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, participantIdFromUrl]);
 
-  const [segments, setSegments] = useState<Segment[]>([]);
-  const [mapDetail, setMapDetail] = useState<any>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-
-  const [question, setQuestion] = useState<SessionRunningQuestionDto | null>(
-    null
-  );
-  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
-  const [answering, setAnswering] = useState(false);
-  const [infoMessage, setInfoMessage] = useState<string | null>(null);
-
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const broadcastRef = useRef<BroadcastChannel | null>(null);
-
+  // Load session info (only for initial data, viewState is controlled by SignalR)
   useEffect(() => {
-    if (typeof window === "undefined" || !mapId) return;
+    if (!sessionId) return;
 
-    const ch = new BroadcastChannel(`storymap-${mapId}`);
-    broadcastRef.current = ch;
+    let cancelled = false;
 
-    ch.onmessage = (ev) => {
-      if (ev?.data?.type === "segment-change") {
-        const idx = ev.data.segmentIndex as number;
-        if (typeof idx === "number") {
-          setCurrentIndex(idx);
+    (async () => {
+      try {
+        const sessionData = await getSession(sessionId);
+        if (cancelled) return;
+        setSession(sessionData);
+        
+        // Only set ended state from API - other states are controlled by SignalR
+        const status = sessionData.status as string;
+        if (status === "COMPLETED" || status === "Ended") {
+          setViewState("ended");
+          // Load final leaderboard
+          try {
+            const lb = await getSessionLeaderboard(sessionId, 100);
+            setLeaderboard(lb);
+          } catch (e) {
+            console.error("Failed to load leaderboard:", e);
+          }
+        }
+        // Note: viewState "waiting" or "viewing" will be set by JoinedSession event
+        // This ensures we get the correct cached segment state from the hub
+      } catch (e: any) {
+        console.error("Load session failed:", e);
+        if (!cancelled) {
+          setError(e?.message || "Không tải được thông tin tiết học.");
         }
       }
-    };
+    })();
 
-    return () => {
-      ch.close();
-      broadcastRef.current = null;
-    };
-  }, [mapId]);
+    return () => { cancelled = true; };
+  }, [sessionId]);
 
+  // Load map and segments
   useEffect(() => {
     if (!mapId) return;
 
@@ -95,13 +142,6 @@ export default function StoryMapViewPage() {
           getSegments(mapId),
         ]);
 
-        if (detail.status !== "Published" && !detail.isPublic) {
-          setError(
-            "Bản đồ này chưa được publish hoặc không công khai, không thể tham gia tiết học."
-          );
-          return;
-        }
-
         setMapDetail(detail);
         setSegments(segs);
       } catch (e: any) {
@@ -113,34 +153,171 @@ export default function StoryMapViewPage() {
     })();
   }, [mapId]);
 
-  // ================== Poll câu hỏi hiện tại cho student ==================
-  useEffect(() => {
-    if (!participantId) return;
+  // ================== SignalR Event Handlers ==================
 
-    const fetchQuestion = async () => {
-      try {
-        const q = await getCurrentQuestionForParticipant(participantId);
-        setQuestion(q ?? null);
-        setSelectedOptionId(null);
-        setInfoMessage(null);
-      } catch (e) {
-        console.error("Fetch current question for participant failed:", e);
+  // Handle JoinedSession - sent when student joins/rejoins the session
+  const handleJoinedSession = useCallback((event: JoinedSessionEvent) => {
+    
+    // Clear any existing timeout
+    if (cachedStateTimeoutRef.current) {
+      clearTimeout(cachedStateTimeoutRef.current);
+      cachedStateTimeoutRef.current = null;
+    }
+    
+    // Reset sync state when joining/rejoining
+    setHasReceivedSegmentSync(false);
+    setCurrentIndex(-1); // Reset to no segment selected
+    
+    // Set view state based on session status
+    const status = event.status as string;
+    if (status === "IN_PROGRESS" || status === "Running") {
+      // Session is in progress - show viewing state
+      // But don't render segments until teacher sends live sync
+      setViewState("viewing");
+      setIsTeacherPlaying(false);
+      // Note: We don't use cached segmentState here - wait for live SegmentSync event
+    } else if (status === "COMPLETED" || status === "Ended") {
+      setViewState("ended");
+    } else {
+      setViewState("waiting");
+    }
+  }, []);
+  
+  const handleSessionStatusChanged = useCallback((event: SessionStatusChangedEvent) => {
+    
+    const status = event.status as string;
+    if (status === "IN_PROGRESS" || status === "Running") {
+      // Session started - but wait for teacher to sync segment before playing
+      setViewState("viewing");
+      toast.info("Tiết học đã bắt đầu!");
+    } else if (status === "PAUSED" || status === "Paused") {
+      setIsTeacherPlaying(false);
+      toast.info("Tiết học đã tạm dừng");
+    } else if (status === "COMPLETED" || status === "Ended") {
+      setViewState("ended");
+      setIsTeacherPlaying(false);
+      toast.info("Tiết học đã kết thúc");
+    }
+  }, []);
+
+  const handleSegmentSync = useCallback((event: SegmentSyncEvent) => {
+    const idx = event.segmentIndex;
+    
+    // Clear any pending cached state timeout - we have a live sync now
+    if (cachedStateTimeoutRef.current) {
+      clearTimeout(cachedStateTimeoutRef.current);
+      cachedStateTimeoutRef.current = null;
+    }
+    
+    // Only update segment index when receiving live sync from teacher
+    if (typeof idx === "number" && idx >= 0) {
+      setCurrentIndex(idx);
+      setHasReceivedSegmentSync(true); // Mark that we've received a live sync
+    }
+    
+    // Update playing state from teacher
+    setIsTeacherPlaying(event.isPlaying ?? false);
+    
+    // When viewing map, ensure we're in viewing state
+    if (viewState === "waiting") {
+      setViewState("viewing");
+    }
+  }, [viewState]);
+
+  const handleQuestionBroadcast = useCallback((event: QuestionBroadcastEvent) => {
+    
+    setCurrentQuestion(event);
+    setSelectedOptionId(null);
+    setHasSubmitted(false);
+    setInfoMessage(null);
+    setQuestionResults(null);
+    setViewState("question");
+    
+    // Start countdown timer
+    if (event.timeLimit > 0) {
+      setTimeRemaining(event.timeLimit);
+      
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      
+      timerRef.current = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev === null || prev <= 1) {
+            if (timerRef.current) {
+              clearInterval(timerRef.current);
+              timerRef.current = null;
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    
+    toast.success(`Câu hỏi mới! ${event.points} điểm`);
+  }, []);
+
+  const handleQuestionResults = useCallback((event: QuestionResultsEvent) => {
+    
+    setQuestionResults(event);
+    setViewState("results");
+    
+    // Clear timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    toast.info("Xem kết quả câu hỏi!");
+  }, []);
+
+  const handleSessionEnded = useCallback((event: SessionEndedEvent) => {
+    
+    setViewState("ended");
+    setLeaderboard(event.finalLeaderboard || []);
+    
+    // Clear timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    toast.info("Tiết học đã kết thúc!");
+  }, []);
+
+  // ================== SignalR Connection ==================
+  const { isConnected, error: hubError } = useSessionHub({
+    sessionId: sessionId,
+    enabled: !!sessionId && !!participantId,
+    handlers: {
+      onJoinedSession: handleJoinedSession,
+      onSessionStatusChanged: handleSessionStatusChanged,
+      onSegmentSync: handleSegmentSync,
+      onQuestionBroadcast: handleQuestionBroadcast,
+      onQuestionResults: handleQuestionResults,
+      onSessionEnded: handleSessionEnded,
+    },
+  });
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      if (cachedStateTimeoutRef.current) {
+        clearTimeout(cachedStateTimeoutRef.current);
       }
     };
+  }, []);
 
-    fetchQuestion();
-
-    pollTimerRef.current = setInterval(fetchQuestion, 3000);
-
-    return () => {
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-    };
-  }, [participantId]);
-
-  // ================== Gửi đáp án ==================
+  // ================== Submit Answer ==================
   const handleSubmitAnswer = async () => {
-    if (!participantId || !question || !selectedOptionId) {
-      setInfoMessage("Vui lòng chọn một đáp án trước khi gửi.");
+    if (!participantId || !currentQuestion || !selectedOptionId || hasSubmitted) {
+      if (!selectedOptionId) {
+        setInfoMessage("Vui lòng chọn một đáp án trước khi gửi.");
+      }
       return;
     }
 
@@ -149,24 +326,32 @@ export default function StoryMapViewPage() {
       setInfoMessage(null);
 
       await submitParticipantResponse(participantId, {
-        sessionQuestionId: question.sessionQuestionId,
+        sessionQuestionId: currentQuestion.questionId,
         questionOptionId: selectedOptionId,
       });
 
-      setInfoMessage(
-        "Đã gửi đáp án. Vui lòng chờ giáo viên chuyển câu hỏi tiếp theo."
-      );
+      setHasSubmitted(true);
+      setInfoMessage("Đã gửi đáp án! Chờ giáo viên hiển thị kết quả...");
+      toast.success("Đã gửi đáp án!");
     } catch (e: any) {
       console.error("Submit answer failed:", e);
       setInfoMessage(
-        e?.message ||
-        "Gửi đáp án thất bại. Vui lòng kiểm tra kết nối và thử lại."
+        e?.message || "Gửi đáp án thất bại. Vui lòng thử lại."
       );
     } finally {
       setAnswering(false);
     }
   };
 
+  // Continue viewing map after results
+  const handleContinueViewing = () => {
+    setCurrentQuestion(null);
+    setQuestionResults(null);
+    setViewState("viewing");
+  };
+
+  // ================== Render States ==================
+  
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-zinc-950">
@@ -186,6 +371,12 @@ export default function StoryMapViewPage() {
             Không thể tham gia tiết học
           </p>
           <p className="text-sm text-zinc-300">{error}</p>
+          <button
+            onClick={() => router.push("/session/join")}
+            className="mt-4 px-6 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg"
+          >
+            Quay lại trang tham gia
+          </button>
         </div>
       </div>
     );
@@ -193,18 +384,112 @@ export default function StoryMapViewPage() {
 
   const center: [number, number] = mapDetail?.center
     ? [mapDetail.center.latitude, mapDetail.center.longitude]
-    : [10.8231, 106.6297]; // fallback Sài Gòn
+    : [10.8231, 106.6297];
 
-  const currentSegment = segments[currentIndex];
+  // Ensure currentIndex is valid (>= 0 and within segments array)
+  const safeCurrentIndex = currentIndex >= 0 && currentIndex < segments.length ? currentIndex : 0;
+  const currentSegment = segments.length > 0 ? segments[safeCurrentIndex] : null;
 
-  // ================== MAIN LAYOUT ==================
+  // ================== WAITING STATE ==================
+  if (viewState === "waiting") {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
+        <div className="text-center max-w-md px-4">
+          <div className="text-6xl mb-6">⏳</div>
+          <h2 className="text-2xl font-bold mb-2 text-zinc-900 dark:text-zinc-100">
+            Chờ giáo viên bắt đầu tiết học...
+          </h2>
+          <p className="text-zinc-600 dark:text-zinc-400 mb-4">
+            Bạn đã tham gia thành công!
+          </p>
+          
+          {sessionCode && (
+            <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 mb-4">
+              <p className="text-[11px] text-emerald-400 uppercase tracking-wider">Mã tiết học</p>
+              <p className="text-2xl font-mono font-bold text-emerald-300">{sessionCode}</p>
+            </div>
+          )}
+          
+          <div className="flex items-center justify-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+            <span className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"} animate-pulse`} />
+            <span>{isConnected ? "Đã kết nối" : "Đang kết nối..."}</span>
+          </div>
+          
+          <p className="mt-2 text-[11px] text-zinc-400">
+            Xin chào, <span className="font-semibold text-emerald-300">{displayName}</span>
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ================== ENDED STATE ==================
+  if (viewState === "ended") {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
+        <div className="text-center max-w-lg px-4">
+          <div className="text-6xl mb-6">🏁</div>
+          <h2 className="text-3xl font-bold mb-2 text-zinc-900 dark:text-zinc-100">
+            Tiết học đã kết thúc!
+          </h2>
+          <p className="text-zinc-600 dark:text-zinc-400 mb-6">
+            Cảm ơn bạn đã tham gia!
+          </p>
+
+          {/* Final Leaderboard */}
+          {leaderboard.length > 0 && (
+            <div className="bg-zinc-900/80 rounded-xl border border-zinc-800 p-4 mb-6">
+              <h3 className="text-sm font-semibold text-zinc-300 mb-3 uppercase tracking-wider">
+                Bảng xếp hạng
+              </h3>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {leaderboard.map((entry, idx) => (
+                  <div
+                    key={entry.participantId}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg ${
+                      entry.participantId === participantId
+                        ? "bg-emerald-500/20 border border-emerald-500/40"
+                        : "bg-zinc-800/50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
+                        idx === 0 ? "bg-yellow-500 text-yellow-900" :
+                        idx === 1 ? "bg-gray-300 text-gray-800" :
+                        idx === 2 ? "bg-amber-600 text-amber-100" :
+                        "bg-zinc-700 text-zinc-300"
+                      }`}>
+                        {entry.rank ?? idx + 1}
+                      </span>
+                      <span className="text-zinc-100">{entry.displayName}</span>
+                    </div>
+                    <span className="font-bold text-emerald-400">{entry.score} điểm</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={() => router.push("/session/join")}
+            className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors"
+          >
+            Tham gia tiết học khác
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ================== MAIN LAYOUT (VIEWING / QUESTION / RESULTS) ==================
   return (
     <div className="h-screen flex bg-zinc-950 text-zinc-50">
+      {/* LEFT SIDEBAR */}
       <div className="w-[360px] border-r border-zinc-800 bg-zinc-950/95 flex flex-col">
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950">
           <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 font-medium">
-            Tham gia tiết học
+            Đang xem tiết học
           </p>
           <h1 className="mt-1 text-lg font-semibold text-white truncate">
             {mapDetail?.name || "Bản đồ chưa đặt tên"}
@@ -213,19 +498,11 @@ export default function StoryMapViewPage() {
           <div className="mt-3 flex items-center justify-between gap-2">
             <div className="text-[11px] text-zinc-400">
               <p className="font-semibold text-zinc-200">{displayName}</p>
-              {currentSegment && (
+              {currentSegment && currentIndex >= 0 && (
                 <p className="mt-0.5">
                   Đang xem:{" "}
                   <span className="text-zinc-50">
-                    {currentIndex + 1}. {currentSegment.name || "Segment"}
-                  </span>
-                </p>
-              )}
-              {sessionId && (
-                <p className="mt-0.5">
-                  Session:{" "}
-                  <span className="font-mono text-zinc-400 text-[10px]">
-                    {sessionId}
+                    {safeCurrentIndex + 1}. {currentSegment.name || "Segment"}
                   </span>
                 </p>
               )}
@@ -242,102 +519,241 @@ export default function StoryMapViewPage() {
               </div>
             )}
           </div>
+          
+          {/* Connection status */}
+          <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
+            <span className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"} animate-pulse`} />
+            <span>{isConnected ? "Đã kết nối với giáo viên" : "Đang kết nối..."}</span>
+          </div>
         </div>
 
+        {/* Question Panel */}
         <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3 space-y-4">
-          <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium">
-                Câu hỏi hiện tại
-              </p>
-              {question && (
-                <span className="text-[11px] text-zinc-400">
-                  {question.points ?? 0} điểm · {question.timeLimit ?? 0}s
-                </span>
-              )}
-            </div>
-
-            {!question && (
-              <p className="text-[12px] text-zinc-400">
-                Giáo viên chưa bắt đầu hoặc đang chuyển câu hỏi. Vui lòng chờ…
-              </p>
-            )}
-
-            {question && (
-              <>
-                <div className="rounded-lg bg-zinc-950/70 border border-zinc-800 px-3 py-2">
-                  <p className="text-[11px] text-zinc-400 mb-1">
-                    Câu hỏi cho cả lớp
-                  </p>
-                  <p className="text-sm text-zinc-50 whitespace-pre-wrap">
-                    {question.questionText}
-                  </p>
+          {/* Current Question Card */}
+          {(viewState === "question" || viewState === "results") && currentQuestion && (
+            <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium">
+                  {viewState === "results" ? "Kết quả câu hỏi" : "Câu hỏi hiện tại"}
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-zinc-400">
+                    {currentQuestion.points} điểm
+                  </span>
+                  {viewState === "question" && timeRemaining !== null && (
+                    <span className={`font-mono text-sm font-bold ${
+                      timeRemaining <= 10 ? "text-red-400" : "text-emerald-400"
+                    }`}>
+                      {timeRemaining}s
+                    </span>
+                  )}
                 </div>
+              </div>
 
-                {question.options && question.options.length > 0 && (
-                  <div className="space-y-1.5">
-                    {question.options
-                      .slice()
-                      .sort(
-                        (a, b) =>
-                          (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
-                      )
-                      .map((opt) => (
-                        <label
-                          key={opt.questionOptionId ?? opt.optionText}
-                          className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer text-[13px] transition ${selectedOptionId ===
-                            (opt.questionOptionId as string | undefined)
+              {/* Question Text */}
+              <div className="rounded-lg bg-zinc-950/70 border border-zinc-800 px-3 py-2">
+                <p className="text-sm text-zinc-50 whitespace-pre-wrap">
+                  {currentQuestion.questionText}
+                </p>
+                {currentQuestion.questionImageUrl && (
+                  <img
+                    src={currentQuestion.questionImageUrl}
+                    alt="Question"
+                    className="mt-2 rounded-lg max-h-40 object-contain"
+                  />
+                )}
+              </div>
+
+              {/* Answer Options */}
+              {viewState === "question" && currentQuestion.options && currentQuestion.options.length > 0 && (
+                <div className="space-y-1.5">
+                  {[...currentQuestion.options]
+                    .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
+                    .map((opt) => (
+                      <label
+                        key={opt.id}
+                        className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer text-[13px] transition ${
+                          hasSubmitted
+                            ? "opacity-60 cursor-not-allowed"
+                            : selectedOptionId === opt.id
                             ? "border-emerald-500 bg-emerald-500/10 text-emerald-50"
                             : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
-                            }`}
-                        >
-                          <input
-                            type="radio"
-                            name="answer"
-                            value={opt.questionOptionId}
-                            checked={
-                              selectedOptionId ===
-                              (opt.questionOptionId as string | undefined)
-                            }
-                            onChange={() =>
-                              setSelectedOptionId(opt.questionOptionId as string)
-                            }
-                            className="mt-[3px] h-3 w-3 accent-emerald-500"
-                          />
-                          <span>{opt.optionText || "(Không có nội dung)"}</span>
-                        </label>
-                      ))}
-                  </div>
-                )}
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="answer"
+                          value={opt.id}
+                          checked={selectedOptionId === opt.id}
+                          onChange={() => !hasSubmitted && setSelectedOptionId(opt.id)}
+                          disabled={hasSubmitted}
+                          className="mt-[3px] h-3 w-3 accent-emerald-500"
+                        />
+                        <span>{opt.optionText || "(Không có nội dung)"}</span>
+                      </label>
+                    ))}
+                </div>
+              )}
 
+              {/* Submit Button */}
+              {viewState === "question" && !hasSubmitted && (
                 <button
                   type="button"
                   onClick={handleSubmitAnswer}
                   disabled={answering || !selectedOptionId}
                   className="mt-2 inline-flex justify-center w-full rounded-lg px-3 py-2 text-[13px] font-medium border border-emerald-500/70 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Gửi đáp án
+                  {answering ? "Đang gửi..." : "Gửi đáp án"}
                 </button>
-              </>
-            )}
+              )}
 
-            {infoMessage && (
-              <p className="text-[11px] text-zinc-400 mt-1">{infoMessage}</p>
-            )}
-          </section>
+              {/* Submitted Message */}
+              {viewState === "question" && hasSubmitted && (
+                <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 text-[12px] text-emerald-300">
+                  ✅ Đã gửi đáp án! Chờ giáo viên hiển thị kết quả...
+                </div>
+              )}
+
+              {/* Results Display */}
+              {viewState === "results" && questionResults && (
+                <div className="space-y-2">
+                  {questionResults.correctAnswer && (
+                    <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2">
+                      <p className="text-[11px] text-emerald-400 uppercase tracking-wider mb-1">Đáp án đúng</p>
+                      <p className="text-sm text-emerald-100 font-medium">{questionResults.correctAnswer}</p>
+                    </div>
+                  )}
+                  
+                  {questionResults.results && questionResults.results.length > 0 && (
+                    <div className="rounded-lg bg-zinc-950/70 border border-zinc-800 px-3 py-2">
+                      <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Kết quả các bạn</p>
+                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                        {questionResults.results.map((result, idx) => (
+                          <div
+                            key={result.participantId}
+                            className={`flex items-center justify-between text-[11px] ${
+                              result.participantId === participantId
+                                ? "text-emerald-300 font-semibold"
+                                : "text-zinc-300"
+                            }`}
+                          >
+                            <span>
+                              {result.displayName}
+                              {result.participantId === participantId && " (Bạn)"}
+                            </span>
+                            <span className={result.isCorrect ? "text-emerald-400" : "text-red-400"}>
+                              {result.isCorrect ? `+${result.pointsEarned}` : "Sai"}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleContinueViewing}
+                    className="mt-2 inline-flex justify-center w-full rounded-lg px-3 py-2 text-[13px] font-medium border border-sky-500/70 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25"
+                  >
+                    Tiếp tục xem bản đồ
+                  </button>
+                </div>
+              )}
+
+              {infoMessage && (
+                <p className="text-[11px] text-zinc-400 mt-1">{infoMessage}</p>
+              )}
+            </section>
+          )}
+
+          {/* No Question - Viewing Map */}
+          {viewState === "viewing" && !currentQuestion && (
+            <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium mb-2">
+                Thông tin
+              </p>
+              <p className="text-[12px] text-zinc-400">
+                Giáo viên đang điều khiển bản đồ. Hãy theo dõi màn hình chính.
+              </p>
+              {currentSegment && currentIndex >= 0 && (
+                <div className="mt-3 p-2 rounded-lg bg-zinc-950/70 border border-zinc-800">
+                  <p className="text-[11px] text-zinc-500">Segment hiện tại:</p>
+                  <p className="text-[13px] text-zinc-100 font-medium">
+                    {safeCurrentIndex + 1}. {currentSegment.name || "Không có tên"}
+                  </p>
+                  {currentSegment.description && (
+                    <p className="text-[11px] text-zinc-400 mt-1">
+                      {currentSegment.description}
+                    </p>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
         </div>
       </div>
 
+      {/* MAP AREA */}
       <div className="flex-1 min-h-0">
-        <StoryMapViewer
-          mapId={mapId}
-          segments={segments}
-          baseMapProvider={mapDetail?.baseMapProvider}
-          initialCenter={center}
-          initialZoom={mapDetail?.defaultZoom || 10}
-          onSegmentChange={(_, idx) => setCurrentIndex(idx)}
-        />
+        {/* Only render map when teacher has synced a segment (currentIndex >= 0) AND we've received live sync */}
+        {currentIndex >= 0 && hasReceivedSegmentSync && segments.length > 0 ? (
+          <StoryMapViewer
+            mapId={mapId}
+            segments={segments}
+            baseMapProvider={mapDetail?.baseMapProvider}
+            initialCenter={center}
+            initialZoom={mapDetail?.defaultZoom || 10}
+            controlledIndex={safeCurrentIndex}
+            controlledPlaying={isTeacherPlaying}
+            controlsEnabled={false}
+          />
+        ) : (
+          <div className="h-full flex items-center justify-center bg-zinc-900">
+            <div className="text-center">
+              <div className="text-4xl mb-4">🗺️</div>
+              <p className="text-zinc-400">Chờ giáo viên điều khiển bản đồ...</p>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* QUESTION OVERLAY - When question is active */}
+      {viewState === "question" && currentQuestion && (
+        <div className="absolute inset-0 z-[9999] flex items-center justify-center pointer-events-none">
+          <div className="bg-zinc-900/95 backdrop-blur-sm border-2 border-emerald-500/50 rounded-2xl p-6 shadow-2xl max-w-lg mx-4 pointer-events-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-500/40 rounded-full text-emerald-300 text-sm font-semibold">
+                  {currentQuestion.points} điểm
+                </span>
+                {timeRemaining !== null && (
+                  <span className={`font-mono text-2xl font-bold ${
+                    timeRemaining <= 10 ? "text-red-400 animate-pulse" : "text-white"
+                  }`}>
+                    {timeRemaining}s
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <h2 className="text-xl font-bold text-white mb-4">
+              {currentQuestion.questionText}
+            </h2>
+
+            {currentQuestion.questionImageUrl && (
+              <img
+                src={currentQuestion.questionImageUrl}
+                alt="Question"
+                className="mb-4 rounded-lg max-h-48 mx-auto object-contain"
+              />
+            )}
+
+            <p className="text-zinc-400 text-sm">
+              Trả lời câu hỏi ở sidebar bên trái →
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { BaseKey } from "@/types";
 import type { FeatureData } from "@/utils/mapUtils";
 import type { LayerDTO } from "@/lib/api-maps";
+import { addLayerToMap, updateMapLayer } from "@/lib/api-maps";
 import {
   type Segment,
   type TimelineTransition,
@@ -28,12 +29,16 @@ import {
   getCurrentCameraState,
   stringifyCameraState,
   RouteAnimation,
+  createLocation,
+  createSegmentZone,
+  attachLayerToSegment,
 } from "@/lib/api-storymap";
 
 import LocationDialog from "@/components/storymap/LocationDialog";
 import ZoneSelectionDialog from "@/components/storymap/ZoneSelectionDialog";
 import LayerAttachDialog from "@/components/storymap/LayerAttachDialog";
 import RouteAnimationDialog from "@/components/storymap/RouteAnimationDialog";
+import { LayerSelector } from "./LayerSelector";
 
 interface LeftSidebarToolboxProps {
   activeView: "explorer" | "segments" | "transitions" | "icons" | null;
@@ -55,6 +60,10 @@ interface LeftSidebarToolboxProps {
   onLayerVisibilityChange: (layerId: string, isVisible: boolean) => void;
   onDeleteFeature: (featureId: string) => void;
   onSegmentClick: (segmentId: string) => void;
+  
+  // Layer selection for drawing
+  currentLayerId?: string | null;
+  onLayerChange?: (layerId: string | null) => void;
 
   // Segment CRUD
   onSaveSegment: (data: CreateSegmentRequest, segmentId?: string) => Promise<void>;
@@ -97,6 +106,8 @@ export function LeftSidebarToolbox({
   onAddLocation,
   onAddZone,
   onAddLayer,
+  currentLayerId,
+  onLayerChange,
 }: LeftSidebarToolboxProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -221,9 +232,12 @@ export function LeftSidebarToolbox({
       await onAddLocation(locationData);
     } else if (mapId) {
       // Use API directly if handler not provided
-      const { createLocation } = await import("@/lib/api-storymap");
       await createLocation(mapId, editingSegment.segmentId, locationData);
     }
+
+    window.dispatchEvent(new CustomEvent("locationCreated", {
+      detail: { segmentId: editingSegment.segmentId }
+    }));
 
     setShowLocationDialog(false);
     setWaitingForLocation(false);
@@ -240,10 +254,13 @@ export function LeftSidebarToolbox({
     if (onAddZone) {
       await onAddZone(zoneData);
     } else if (mapId) {
-      // Use API directly if handler not provided
-      const { createSegmentZone } = await import("@/lib/api-storymap");
       await createSegmentZone(mapId, editingSegment.segmentId, zoneData);
     }
+
+    // Dispatch event to refresh segments
+    window.dispatchEvent(new CustomEvent("zoneCreated", {
+      detail: { segmentId: editingSegment.segmentId }
+    }));
 
     setShowZoneDialog(false);
   }, [editingSegment, onAddZone, mapId]);
@@ -254,10 +271,13 @@ export function LeftSidebarToolbox({
     if (onAddLayer) {
       await onAddLayer(data);
     } else if (mapId) {
-      // Use API directly if handler not provided
-      const { attachLayerToSegment } = await import("@/lib/api-storymap");
       await attachLayerToSegment(mapId, editingSegment.segmentId, data);
     }
+
+    // Dispatch event to refresh segments
+    window.dispatchEvent(new CustomEvent("layerCreated", {
+      detail: { segmentId: editingSegment.segmentId }
+    }));
 
     setShowLayerDialog(false);
   }, [editingSegment, onAddLayer, mapId]);
@@ -365,12 +385,15 @@ export function LeftSidebarToolbox({
                 features={features}
                 layers={layers}
                 baseLayer={baseLayer}
+                mapId={mapId}
                 onSelectFeature={onSelectFeature}
                 onSelectLayer={onSelectLayer}
                 onBaseLayerChange={onBaseLayerChange}
                 onFeatureVisibilityChange={onFeatureVisibilityChange}
                 onLayerVisibilityChange={onLayerVisibilityChange}
                 onDeleteFeature={onDeleteFeature}
+                currentLayerId={currentLayerId}
+                onLayerChange={onLayerChange}
               />
             )}
 
@@ -504,13 +527,19 @@ export function LeftSidebarToolbox({
           <RouteAnimationDialog
             mapId={mapId}
             segmentId={editingSegment.segmentId}
+            segmentDurationMs={editingSegment.durationMs}
             currentMap={currentMap}
             routeAnimation={null}
             isOpen={showRouteAnimationDialog}
             onClose={() => setShowRouteAnimationDialog(false)}
             onSave={async () => {
-              // Refresh segments if needed
-              window.location.reload();
+              // Dispatch event to refresh route animations list without full page reload
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('routeAnimationChanged', {
+                  detail: { segmentId: editingSegment.segmentId }
+                }));
+              }
+              setShowRouteAnimationDialog(false);
             }}
           />
         </>
@@ -671,24 +700,99 @@ function ExplorerView({
   features,
   layers,
   baseLayer,
+  mapId,
   onSelectFeature,
   onSelectLayer,
   onBaseLayerChange,
   onFeatureVisibilityChange,
   onLayerVisibilityChange,
   onDeleteFeature,
+  currentLayerId,
+  onLayerChange,
 }: {
   features: FeatureData[];
   layers: LayerDTO[];
   baseLayer: BaseKey;
+  mapId?: string;
   onSelectFeature: (feature: FeatureData) => void;
   onSelectLayer: (layer: LayerDTO) => void;
   onBaseLayerChange: (key: BaseKey) => void;
   onFeatureVisibilityChange: (featureId: string, isVisible: boolean) => void;
   onLayerVisibilityChange: (layerId: string, isVisible: boolean) => void;
   onDeleteFeature: (featureId: string) => void;
+  currentLayerId?: string | null;
+  onLayerChange?: (layerId: string | null) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
+  const [editingLayerName, setEditingLayerName] = useState("");
+  const [isUpdatingLayer, setIsUpdatingLayer] = useState(false);
+
+  const handleCreateLayer = async () => {
+    if (!mapId) return;
+
+    try {
+      // Generate default layer name
+      const layerNumber = layers.length + 1;
+      const defaultName = `Layer ${layerNumber}`;
+
+      // Create empty GeoJSON FeatureCollection
+      const emptyGeoJSON = {
+        type: "FeatureCollection",
+        features: []
+      };
+
+      await addLayerToMap(mapId, {
+        layerName: defaultName,
+        layerData: JSON.stringify(emptyGeoJSON),
+        layerTypeId: "GeoJSON",
+        isVisible: true,
+        zIndex: 1
+      });
+
+      // Dispatch event to refresh layers
+      window.dispatchEvent(new CustomEvent("layerCreated"));
+    } catch (error) {
+      console.error("Failed to create layer:", error);
+      alert("Không thể tạo layer. Vui lòng thử lại.");
+    }
+  };
+
+  const handleStartEditLayerName = (layer: LayerDTO) => {
+    setEditingLayerId(layer.id);
+    setEditingLayerName(layer.layerName);
+  };
+
+  const handleSaveLayerName = async () => {
+    if (!mapId || !editingLayerId || !editingLayerName.trim()) {
+      setEditingLayerId(null);
+      setEditingLayerName("");
+      return;
+    }
+
+    setIsUpdatingLayer(true);
+    try {
+      await updateMapLayer(mapId, editingLayerId, {
+        layerName: editingLayerName.trim()
+      });
+
+      // Dispatch event to refresh layers
+      window.dispatchEvent(new CustomEvent("layerCreated"));
+      
+      setEditingLayerId(null);
+      setEditingLayerName("");
+    } catch (error) {
+      console.error("Failed to update layer name:", error);
+      alert("Không thể cập nhật tên layer. Vui lòng thử lại.");
+    } finally {
+      setIsUpdatingLayer(false);
+    }
+  };
+
+  const handleCancelEditLayerName = () => {
+    setEditingLayerId(null);
+    setEditingLayerName("");
+  };
 
   const filteredFeatures = features.filter(f => 
     f.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -714,6 +818,22 @@ function ExplorerView({
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
+      {/* Layer Selector - Chọn layer để vẽ feature */}
+      {onLayerChange && layers.length > 0 && (
+        <div className="space-y-1.5">
+          <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider px-1">
+            Layer cho vẽ mới
+          </h4>
+          <div className="px-1">
+            <LayerSelector
+              layers={layers}
+              currentLayerId={currentLayerId || null}
+              onLayerChange={onLayerChange}
+            />
+          </div>
+        </div>
+      )}
+      
       {/* Base Layer Selection */}
       <div className="space-y-2">
         <h4 className="text-xs font-semibold text-zinc-400 uppercase">
@@ -755,7 +875,18 @@ function ExplorerView({
           <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
             Layers
           </h4>
-          <span className="text-[10px] text-zinc-600">{filteredLayers.length}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-600">{filteredLayers.length}</span>
+            {mapId && (
+              <button
+                onClick={handleCreateLayer}
+                className="p-1 hover:bg-zinc-700/50 rounded transition-colors"
+                title="Tạo layer mới"
+              >
+                <Icon icon="mdi:plus" className="w-3.5 h-3.5 text-emerald-400" />
+              </button>
+            )}
+          </div>
         </div>
         {filteredLayers.length === 0 ? (
           <div className="px-2 py-4 text-center">
@@ -766,18 +897,66 @@ function ExplorerView({
             {filteredLayers.map((layer) => (
               <div
                 key={layer.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800/60 cursor-pointer group/item transition-colors"
-                onClick={() => onSelectLayer(layer)}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800/60 cursor-pointer group/item transition-colors",
+                  currentLayerId === layer.id && "bg-emerald-500/20 border border-emerald-500/50"
+                )}
+                onClick={() => {
+                  if (editingLayerId !== layer.id) {
+                    onSelectLayer(layer);
+                    // Auto-select this layer for drawing when clicked
+                    if (onLayerChange) {
+                      onLayerChange(layer.id);
+                    }
+                  }
+                }}
               >
-                <div className="w-6 h-6 rounded bg-blue-500/20 flex items-center justify-center flex-shrink-0">
+                <div className={cn(
+                  "w-6 h-6 rounded flex items-center justify-center flex-shrink-0",
+                  currentLayerId === layer.id 
+                    ? "bg-emerald-500/20" 
+                    : "bg-blue-500/20"
+                )}>
                   <Icon
-                    icon="mdi:folder-outline"
-                    className="w-3.5 h-3.5 text-blue-400"
+                    icon={currentLayerId === layer.id ? "mdi:folder-check" : "mdi:folder-outline"}
+                    className={cn(
+                      "w-3.5 h-3.5",
+                      currentLayerId === layer.id 
+                        ? "text-emerald-400" 
+                        : "text-blue-400"
+                    )}
                   />
                 </div>
-                <span className="flex-1 text-xs text-zinc-300 truncate font-medium">
-                  {layer.layerName}
-                </span>
+                {editingLayerId === layer.id ? (
+                  <input
+                    type="text"
+                    value={editingLayerName}
+                    onChange={(e) => setEditingLayerName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleSaveLayerName();
+                      } else if (e.key === "Escape") {
+                        handleCancelEditLayerName();
+                      }
+                    }}
+                    onBlur={handleSaveLayerName}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-1 text-xs text-zinc-300 font-medium bg-zinc-700 border border-emerald-500/50 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                    autoFocus
+                    disabled={isUpdatingLayer}
+                  />
+                ) : (
+                  <span
+                    className="flex-1 text-xs text-zinc-300 truncate font-medium"
+                    onDoubleClick={(e) => {
+                      e.stopPropagation();
+                      handleStartEditLayerName(layer);
+                    }}
+                    title="Double click để đổi tên"
+                  >
+                    {layer.layerName}
+                  </span>
+                )}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -825,9 +1004,16 @@ function ExplorerView({
                     className="w-3.5 h-3.5 text-emerald-400"
                   />
                 </div>
-                <span className="flex-1 text-xs text-zinc-300 truncate font-medium">
-                  {feature.name}
-                </span>
+                <div className="flex-1 min-w-0">
+                  <span className="text-xs text-zinc-300 truncate font-medium block">
+                    {feature.name}
+                  </span>
+                  {feature.layerId && (
+                    <span className="text-[10px] text-zinc-500 truncate block">
+                      {layers.find(l => l.id === feature.layerId)?.layerName || "Unknown layer"}
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
                   <button
                     onClick={(e) => {
@@ -1115,39 +1301,50 @@ export function SegmentItemsList({
   const [isLoadingRoutes, setIsLoadingRoutes] = useState(false);
 
   // Load route animations on mount or when segmentId changes
-  useEffect(() => {
-    let cancelled = false;
+  const loadRouteAnimations = useCallback(() => {
+    if (!mapId || !segmentId) return;
     
     setIsLoadingRoutes(true);
-    setRouteAnimations([]); // Reset when segment changes
     
     getRouteAnimationsBySegment(mapId, segmentId)
       .then((routes) => {
-        if (!cancelled) {
-          setRouteAnimations(routes || []);
-        }
+        setRouteAnimations(routes || []);
       })
       .catch((e) => {
-        if (!cancelled) {
-          console.error("Failed to load route animations:", e);
-        }
+        console.error("Failed to load route animations:", e);
       })
       .finally(() => {
-        if (!cancelled) {
-          setIsLoadingRoutes(false);
-        }
+        setIsLoadingRoutes(false);
       });
-    
-    return () => {
-      cancelled = true;
+  }, [mapId, segmentId]);
+
+  useEffect(() => {
+    loadRouteAnimations();
+  }, [loadRouteAnimations]);
+
+  // Listen for route animation changes to refresh the list
+  useEffect(() => {
+    const handleRouteAnimationChanged = (e: Event) => {
+      const customEvent = e as CustomEvent<{ segmentId: string }>;
+      if (customEvent.detail?.segmentId === segmentId) {
+        loadRouteAnimations();
+      }
     };
-  }, [mapId, segmentId]); // Only depend on mapId and segmentId
+
+    window.addEventListener('routeAnimationChanged', handleRouteAnimationChanged);
+    return () => {
+      window.removeEventListener('routeAnimationChanged', handleRouteAnimationChanged);
+    };
+  }, [segmentId, loadRouteAnimations]);
 
   const handleDeleteZone = async (segmentZoneId: string) => {
     if (!window.confirm("Remove this zone from segment?")) return;
     try {
       await deleteSegmentZone(mapId, segmentId, segmentZoneId);
-      window.location.reload();
+      // Dispatch event to refresh segments
+      window.dispatchEvent(new CustomEvent("zoneDeleted", {
+        detail: { segmentId }
+      }));
     } catch (e) {
       console.error("Failed to delete zone:", e);
       alert("Failed to remove zone");
@@ -1158,7 +1355,10 @@ export function SegmentItemsList({
     if (!window.confirm("Remove this location from segment?")) return;
     try {
       await deleteLocation(mapId, segmentId, locationId);
-      window.location.reload();
+      // Dispatch event to refresh segments
+      window.dispatchEvent(new CustomEvent("locationDeleted", {
+        detail: { segmentId }
+      }));
     } catch (e) {
       console.error("Failed to delete location:", e);
       alert("Failed to remove location");
@@ -1169,7 +1369,10 @@ export function SegmentItemsList({
     if (!window.confirm("Remove this layer from segment?")) return;
     try {
       await detachLayerFromSegment(mapId, segmentId, layerId);
-      window.location.reload();
+      // Dispatch event to refresh segments
+      window.dispatchEvent(new CustomEvent("layerDeleted", {
+        detail: { segmentId }
+      }));
     } catch (e) {
       console.error("Failed to delete layer:", e);
       alert("Failed to remove layer");

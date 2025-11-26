@@ -6,7 +6,6 @@ import { toast } from "react-toastify";
 import * as signalR from "@microsoft/signalr";
 import { sendTeacherFocusViaSignalR } from "@/lib/hubs/session";
 
-// Dynamically import Leaflet components
 const MapContainer = dynamic(
   () => import("react-leaflet").then((mod) => mod.MapContainer),
   { ssr: false }
@@ -15,39 +14,43 @@ const TileLayer = dynamic(
   () => import("react-leaflet").then((mod) => mod.TileLayer),
   { ssr: false }
 );
-const useMapEvents = dynamic(
-  () => import("react-leaflet").then((mod) => mod.useMapEvents),
+
+// MapEventHandler component - import useMapEvents directly since this is a client component
+const MapEventHandler = dynamic(
+  () =>
+    import("react-leaflet").then((mod) => {
+      const { useMapEvents } = mod;
+      return function MapEventHandler({
+        onViewChange,
+      }: {
+        onViewChange: (lat: number, lng: number, zoom: number) => void;
+      }) {
+        const map = useMapEvents({
+          moveend: () => {
+            const center = map.getCenter();
+            const zoom = map.getZoom();
+            onViewChange(center.lat, center.lng, zoom);
+          },
+          zoomend: () => {
+            const center = map.getCenter();
+            const zoom = map.getZoom();
+            onViewChange(center.lat, center.lng, zoom);
+          },
+        });
+
+        return null;
+      };
+    }),
   { ssr: false }
 );
 
 interface TeacherMapControlProps {
   sessionId: string;
-  connection?: signalR.HubConnection | null; // SignalR connection for sync
+  connection?: signalR.HubConnection | null;
   initialCenter?: [number, number];
   initialZoom?: number;
   onFocusChange?: (lat: number, lng: number, zoom: number) => void;
   className?: string;
-}
-
-function MapEventHandler({
-  onViewChange,
-}: {
-  onViewChange: (lat: number, lng: number, zoom: number) => void;
-}) {
-  const map = useMapEvents({
-    moveend: () => {
-      const center = map.getCenter();
-      const zoom = map.getZoom();
-      onViewChange(center.lat, center.lng, zoom);
-    },
-    zoomend: () => {
-      const center = map.getCenter();
-      const zoom = map.getZoom();
-      onViewChange(center.lat, center.lng, zoom);
-    },
-  });
-
-  return null;
 }
 
 export function TeacherMapControl({
@@ -80,9 +83,7 @@ export function TeacherMapControl({
         onFocusChange(lat, lng, zoom);
       }
 
-      // Auto-sync if enabled
       if (autoSync) {
-        // Debounce the sync to avoid too many requests
         if (autoSyncTimeoutRef.current) {
           clearTimeout(autoSyncTimeoutRef.current);
         }
@@ -162,7 +163,6 @@ export function TeacherMapControl({
 
   return (
     <div className={`flex flex-col gap-3 ${className}`}>
-      {/* Control Panel */}
       <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
         <div className="flex items-center justify-between">
           <div>
@@ -176,7 +176,6 @@ export function TeacherMapControl({
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Auto-sync Toggle */}
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -194,7 +193,6 @@ export function TeacherMapControl({
               </span>
             </label>
 
-            {/* Manual Sync Button */}
             {!autoSync && (
               <button
                 onClick={handleManualSync}
@@ -216,8 +214,7 @@ export function TeacherMapControl({
             )}
           </div>
         </div>
-
-        {/* Current View Info */}
+            
         <div className="mt-3 flex gap-4 text-xs text-gray-600 dark:text-gray-400">
           <div>
             <span className="font-semibold">Latitude:</span>{" "}
@@ -276,26 +273,74 @@ export function TeacherMapControl({
 // Compact version for smaller spaces
 export function CompactTeacherMapControl({
   sessionId,
+  connection,
+  onGetCurrentView,
   className = "",
 }: {
   sessionId: string;
+  connection?: signalR.HubConnection | null;
+  onGetCurrentView?: () => { lat: number; lng: number; zoom: number } | null;
   className?: string;
 }) {
   const [isSyncing, setIsSyncing] = useState(false);
 
   const handleQuickSync = async () => {
+    if (!connection) {
+      toast.error("SignalR connection not available");
+      return;
+    }
+
     setIsSyncing(true);
     try {
-      // NOTE: Backend chưa có endpoint cho Teacher Focus
-      // TODO: Implement qua SignalR Hub
-      console.log("Quick Sync Teacher Focus:", {
-        latitude: 10.762622,
-        longitude: 106.660172,
-        zoom: 13,
-      });
-      toast.info("Teacher Focus - Cần implement qua SignalR");
+      // Get current camera state from map
+      let cameraState: { lat: number; lng: number; zoom: number } | null = null;
+      
+      if (onGetCurrentView) {
+        cameraState = onGetCurrentView();
+      } else {
+        // Try to get camera state via event system
+        const viewPromise = new Promise<{ lat: number; lng: number; zoom: number } | null>((resolve) => {
+          const timeout = setTimeout(() => resolve(null), 500);
+          
+          const handler = (event: Event) => {
+            const customEvent = event as CustomEvent<{ lat: number; lng: number; zoom: number }>;
+            clearTimeout(timeout);
+            window.removeEventListener("currentMapViewResponse", handler);
+            resolve(customEvent.detail);
+          };
+          
+          window.addEventListener("currentMapViewResponse", handler);
+          
+          // Request current map view
+          window.dispatchEvent(new CustomEvent("requestCurrentMapView"));
+        });
+        
+        cameraState = await viewPromise;
+      }
+
+      if (!cameraState) {
+        toast.error("Unable to get current map view. Please ensure map is loaded.");
+        return;
+      }
+
+      const success = await sendTeacherFocusViaSignalR(
+        connection,
+        sessionId,
+        {
+          latitude: cameraState.lat,
+          longitude: cameraState.lng,
+          zoomLevel: cameraState.zoom,
+        }
+      );
+
+      if (success) {
+        toast.success("Map view synced to all students!");
+      } else {
+        toast.error("Failed to sync map view");
+      }
     } catch (error: any) {
-      toast.error("Failed to sync view");
+      console.error("Failed to sync map view:", error);
+      toast.error(error?.message || "Failed to sync map view");
     } finally {
       setIsSyncing(false);
     }

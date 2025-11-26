@@ -6,12 +6,14 @@
 import type { Segment, Location } from "@/lib/api-storymap";
 import type L from "leaflet";
 
+type LeafletInstance = typeof import("leaflet");
 export interface RenderSegmentOptions {
   transitionType?: "Jump" | "Ease" | "Linear";
   durationMs?: number;
   cameraAnimationType?: "Jump" | "Ease" | "Fly";
   cameraAnimationDurationMs?: number;
   skipCameraState?: boolean;
+  disableTwoPhaseFly?: boolean;
 }
 
 export interface RenderResult {
@@ -25,7 +27,7 @@ export interface RenderResult {
 export async function renderSegmentZones(
   segment: Segment,
   map: L.Map,
-  L: typeof import("leaflet").default,
+  L: LeafletInstance,
   options?: RenderSegmentOptions
 ): Promise<RenderResult> {
   const layers: any[] = [];
@@ -204,7 +206,7 @@ export function buildLocationPopupHtml(location: Location): string {
 export async function renderSegmentLocations(
   segment: Segment,
   map: L.Map,
-  L: typeof import("leaflet").default,
+  L: LeafletInstance,
   options?: RenderSegmentOptions & {
     onLocationClick?: (location: Location, event?: any) => void;
   }
@@ -357,7 +359,6 @@ export async function renderSegmentLocations(
     }
   }
 
-  console.log(`✅ Rendered ${segment.locations.length} locations`);
   return { layers, bounds };
 }
 
@@ -397,40 +398,94 @@ export function applyCameraState(
   const camType = options?.cameraAnimationType || 'Fly';
   const camDurationSec = (options?.cameraAnimationDurationMs ?? 1500) / 1000;
 
-  console.log(`📹 Camera animation: type=${camType}, duration=${camDurationSec}s, zoom ${currentZoom}→${targetZoom}`);
-
-  if (camType === 'Jump') {
-    // Immediate jump without animation
-    console.log("⚡ Jump: immediate setView");
-    map.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
-  } else if (camType === 'Ease') {
-    // Smooth pan and zoom separately for an eased feel
-    console.log("🌊 Ease: panTo then setZoom");
+  // Helper function to check if map container is ready
+  const isMapReady = (map: L.Map): boolean => {
     try {
-      map.panTo([targetCenter[1], targetCenter[0]], { animate: true, duration: camDurationSec * 0.6 });
-      setTimeout(() => {
-        try {
-          map.setZoom(targetZoom, { animate: true });
-        } catch {}
-      }, camDurationSec * 600);
+      const container = map.getContainer();
+      if (!container || !container.parentElement) {
+        return false;
+      }
+      if ((container as any)._leaflet_id === undefined) {
+        return false;
+      }
+      const size = map.getSize();
+      return size.x > 0 && size.y > 0;
     } catch {
-      map.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: true });
+      return false;
     }
-  } else {
-    // Fly (default)
-    // Only use two-phase if NO transition options (manual view) AND significant zoom change AND old layers exist
-    const needsTwoPhase = !options?.transitionType && Math.abs(currentZoom - targetZoom) > 1 && (options?.oldLayersCount || 0) > 0;
-    console.log(`✈️ Fly: ${needsTwoPhase ? 'two-phase (zoom out then in)' : 'direct flyTo'}`);
-    if (needsTwoPhase) {
-      const midZoom = Math.min(currentZoom, targetZoom) - 2;
-      map.flyTo([targetCenter[1], targetCenter[0]], midZoom, { duration: Math.max(0.2, camDurationSec * 0.4), animate: true });
-      setTimeout(() => {
-        map.flyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: Math.max(0.2, camDurationSec * 0.6), animate: true });
-      }, Math.max(200, camDurationSec * 400));
-    } else {
-      map.flyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: camDurationSec, animate: true });
+  };
+
+  // Wait for map to be ready before applying camera state
+  const applyCameraWithRetry = (attempts = 0) => {
+    if (!isMapReady(map)) {
+      if (attempts < 10) {
+        // Retry after a short delay
+        setTimeout(() => applyCameraWithRetry(attempts + 1), 50);
+        return;
+      } else {
+        console.warn("⚠️ Map container not ready after multiple attempts, using simple setView");
+        try {
+          map.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
+        } catch (e) {
+          console.error("❌ Failed to set view even with fallback:", e);
+        }
+        return;
+      }
     }
-  }
+
+    // Map is ready, proceed with camera animation
+    try {
+      if (camType === 'Jump') {
+        // Immediate jump without animation
+        map.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
+      } else if (camType === 'Ease') {
+        // Smooth pan and zoom separately for an eased feel
+        try {
+          map.panTo([targetCenter[1], targetCenter[0]], { animate: true, duration: camDurationSec * 0.6 });
+          setTimeout(() => {
+            try {
+              map.setZoom(targetZoom, { animate: true });
+            } catch {}
+          }, camDurationSec * 600);
+        } catch {
+          map.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: true });
+        }
+      } else {
+        const zoomDiff = targetZoom - currentZoom;
+        const shouldUseTwoPhase = 
+          !options?.disableTwoPhaseFly &&
+          zoomDiff < -3 &&
+          !options?.transitionType &&
+          (options?.oldLayersCount || 0) > 0;
+        
+        if (shouldUseTwoPhase) {
+          const midZoom = Math.min(currentZoom, targetZoom) - 1;
+          map.flyTo([targetCenter[1], targetCenter[0]], midZoom, { duration: Math.max(0.2, camDurationSec * 0.3), animate: true });
+          setTimeout(() => {
+            try {
+              map.flyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: Math.max(0.2, camDurationSec * 0.7), animate: true });
+            } catch (e) {
+              console.error("❌ Failed to flyTo in second phase:", e);
+            }
+          }, Math.max(150, camDurationSec * 300));
+        } else {
+          // Direct flyTo - smooth transition from current position to target (always used for teacher-controlled)
+          map.flyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: camDurationSec, animate: true });
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error applying camera state:", error);
+      // Fallback to simple setView
+      try {
+        map.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
+      } catch (e) {
+        console.error("❌ Failed to set view as fallback:", e);
+      }
+    }
+  };
+
+  // Start applying camera state with retry logic
+  applyCameraWithRetry();
 }
 
 /**
@@ -456,7 +511,6 @@ export function autoFitBounds(
         duration: animate ? camDurationSec : undefined,
         maxZoom: 15,
       });
-      console.log(`📦 Auto-fitted bounds to show ${bounds.length} elements (no camera state)`);
     } catch (error) {
       console.error("❌ Failed to fit bounds:", error);
     }
@@ -477,11 +531,8 @@ export function applyLayerCrossFade(
 ): void {
   const doFade = options?.transitionType && options.transitionType !== 'Jump';
   const totalMs = options?.durationMs ?? 800;
-  console.log(`🎭 Layer transition: type=${options?.transitionType || 'default'}, fade=${doFade}, duration=${totalMs}ms, old=${oldLayers.length}, new=${newLayers.length}`);
   
   if (!doFade) {
-    // Clear old immediately and keep new as-is
-    console.log("⚡ Jump transition: removing old layers immediately");
     oldLayers.forEach(layer => {
       try { map.removeLayer(layer); } catch {}
     });
@@ -489,11 +540,9 @@ export function applyLayerCrossFade(
       onComplete(newLayers);
     }
   } else {
-    console.log(`🌈 Cross-fade transition: ${options?.transitionType} over ${totalMs}ms`);
     const start = performance.now();
     const easing = (t: number) => {
       if (options?.transitionType === 'Linear') return t;
-      // EaseInOutQuad
       return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
     };
 
@@ -511,7 +560,6 @@ export function applyLayerCrossFade(
       if (tRaw < 1) {
         requestAnimationFrame(step);
       } else {
-        // Cleanup old layers
         oldLayers.forEach(layer => {
           try { map.removeLayer(layer); } catch {}
         });
@@ -520,7 +568,6 @@ export function applyLayerCrossFade(
         }
       }
     };
-    // Ensure initial state
     oldLayers.forEach(l => setOpacitySafe(l, 1));
     newLayers.forEach(l => setOpacitySafe(l, 0));
     requestAnimationFrame(step);
@@ -529,12 +576,11 @@ export function applyLayerCrossFade(
 
 /**
  * Main function to render a segment - combines all rendering logic
- * This is the single source of truth for segment rendering
  */
 export async function renderSegment(
   segment: Segment,
   map: L.Map,
-  L: typeof import("leaflet").default,
+  L: LeafletInstance,
   options?: RenderSegmentOptions & {
     onLocationClick?: (location: Location, event?: any) => void;
   },

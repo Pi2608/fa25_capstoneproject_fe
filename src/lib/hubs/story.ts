@@ -51,17 +51,13 @@ export function createStoryConnection(
     token: authToken || undefined,
     allowGuest: true, // Story hub allows guest connections (no authorization required)
     onClose: (error) => {
-      if (error) {
-        console.error("[SignalR Story] Connection closed with error:", error);
-      } else {
-        console.log("[SignalR Story] Connection closed");
-      }
+      console.error("[SignalR Story] Connection closed with error:", error);
     },
     onReconnecting: (error) => {
       console.warn("[SignalR Story] Reconnecting...", error);
     },
     onReconnected: (connectionId) => {
-      console.log("[SignalR Story] Reconnected:", connectionId);
+      console.info("[SignalR Story] Reconnected:", connectionId);
     },
   });
 }
@@ -84,13 +80,12 @@ export async function startStoryConnection(
     }
 
     await connection.start();
-    console.log("[SignalR Story] Connected successfully");
+    console.info("[SignalR Story] Connected successfully");
 
     // Join the story group on the server if storyId is provided
     if (storyId) {
       try {
         await connection.invoke("JoinStory", storyId);
-        console.log(`[SignalR Story] Joined story group: ${storyId}`);
       } catch (invokeError) {
         console.error(
           "[SignalR Story] Failed to join story group:",
@@ -114,7 +109,6 @@ export async function leaveStoryConnection(
   try {
     if (connection.state === signalR.HubConnectionState.Connected) {
       await connection.invoke("LeaveStory", storyId);
-      console.log(`[SignalR Story] Left story group: ${storyId}`);
     }
   } catch (error) {
     console.error("[SignalR Story] Failed to leave story group:", error);
@@ -127,7 +121,6 @@ export async function stopStoryConnection(
   try {
     if (connection.state !== signalR.HubConnectionState.Disconnected) {
       await connection.stop();
-      console.log("[SignalR Story] Connection stopped");
     }
   } catch (error) {
     console.error("[SignalR Story] Failed to stop connection:", error);
@@ -152,8 +145,6 @@ export function registerStoryEventHandlers(
   if (handlers.onCollaborationChange) {
     connection.on("CollaborationChange", handlers.onCollaborationChange);
   }
-
-  console.log("[SignalR Story] Event handlers registered");
 }
 
 export function unregisterStoryEventHandlers(
@@ -161,7 +152,5 @@ export function unregisterStoryEventHandlers(
 ): void {
   connection.off("StoryUpdate");
   connection.off("CollaborationChange");
-
-  console.log("[SignalR Story] Event handlers unregistered");
 }
 

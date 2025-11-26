@@ -309,6 +309,10 @@ export type RouteAnimation = {
   showLocationInfoOnArrival: boolean; // Auto-show location popup when route completes
   locationInfoDisplayDurationMs?: number; // Duration to show location info popup
   
+  // Camera follow settings
+  followCamera: boolean; // Whether camera should follow the moving icon
+  followCameraZoom?: number; // Zoom level when following (null = keep current zoom)
+  
   createdAt: string;
   updatedAt?: string;
 };
@@ -345,6 +349,8 @@ export type CreateRouteAnimationRequest = {
   cameraStateAfter?: string; // Camera state after route completes (JSON)
   showLocationInfoOnArrival?: boolean; // Auto-show location popup when route completes
   locationInfoDisplayDurationMs?: number; // Duration to show location info popup
+  followCamera?: boolean; // Whether camera should follow the moving icon
+  followCameraZoom?: number; // Zoom level when following (null = keep current zoom)
 };
 
 export type UpdateRouteAnimationRequest = Partial<CreateRouteAnimationRequest>;

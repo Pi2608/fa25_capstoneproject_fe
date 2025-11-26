@@ -60,6 +60,7 @@ export function useSegmentPlayback({
     cameraAnimationType?: "Jump" | "Ease" | "Fly";
     cameraAnimationDurationMs?: number;
     skipCameraState?: boolean; // Skip applying camera state
+    disableTwoPhaseFly?: boolean; // Disable two-phase fly animation for smoother transitions
   };
 
   const findTransition = useCallback((fromId?: string | null, toId?: string | null) => {
@@ -134,6 +135,7 @@ export function useSegmentPlayback({
         cameraAnimationType: opts?.cameraAnimationType,
         cameraAnimationDurationMs: opts?.cameraAnimationDurationMs,
         skipCameraState: opts?.skipCameraState,
+        disableTwoPhaseFly: opts?.disableTwoPhaseFly,
       };
 
       // Render zones using shared function
@@ -193,9 +195,6 @@ export function useSegmentPlayback({
       const prevSegment = currentPlayIndex > 0 ? segments[currentPlayIndex - 1] : undefined;
       const t = findTransition(prevSegment?.segmentId ?? null, segment.segmentId);
       
-      console.log(`🔄 Segment ${currentPlayIndex}: ${prevSegment?.segmentId || 'START'} → ${segment.segmentId}`);
-      console.log(`📌 Found transition:`, t);
-      
       // Normalize case from backend (linear/ease/jump → Linear/Ease/Jump)
       const normalizeTransitionType = (str: string): "Jump" | "Ease" | "Linear" => {
         const lower = str.toLowerCase();
@@ -218,15 +217,12 @@ export function useSegmentPlayback({
         cameraAnimationDurationMs: t.animateCamera ? t.cameraAnimationDurationMs : undefined,
       } : undefined;
       
-      console.log(`⚙️ Applying transition options:`, options);
-      
       setActiveSegmentId(segment.segmentId);
       await handleViewSegment(segment, options);
       onSegmentSelect?.(segment);
       
       // Check if this transition requires user action
       if (t && t.requireUserAction) {
-        console.log(`⏸️ Waiting for user action: "${t.triggerButtonText}"`);
         setCurrentTransition(t);
         setWaitingForUserAction(true);
         setIsPlaying(false); // Pause playback
@@ -277,7 +273,6 @@ export function useSegmentPlayback({
         setSegmentStartTime(Date.now());
         setIsRouteAnimationOnly(true); // Set flag to skip playback loop
         setIsPlaying(true);
-        console.log(`🎬 Playing ${animations.length} route animation(s) for segment ${targetSegmentId} (without camera state)`);
       } else {
         console.warn("⚠️ No route animations found for this segment");
       }
@@ -305,7 +300,6 @@ export function useSegmentPlayback({
   const handleClearMap = () => {
     if (!currentMap) return;
     
-    console.log(`🧹 Clearing ${currentSegmentLayers.length} layers from map...`);
     currentSegmentLayers.forEach(layer => {
       try {
         currentMap.removeLayer(layer);
@@ -316,11 +310,9 @@ export function useSegmentPlayback({
     
     setCurrentSegmentLayers([]);
     setActiveSegmentId(null);
-    console.log("✅ Map cleared");
   };
 
   const handleContinueAfterUserAction = () => {
-    console.log("▶️ User clicked continue, resuming playback");
     setWaitingForUserAction(false);
     setCurrentTransition(null);
     setCurrentPlayIndex(prev => prev + 1); // Move to next segment
