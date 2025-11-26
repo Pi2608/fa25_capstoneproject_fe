@@ -417,7 +417,7 @@ export default function OrgDetailPage() {
       setInviteInput("");
       await refreshMembers();
     } catch (e) {
-      setInviteMsg(userMessage(e, t));
+      setInviteMsg(safeMessage(e, t("org_detail.action_failed")));
     } finally {
       setInviteBusy(false);
     }

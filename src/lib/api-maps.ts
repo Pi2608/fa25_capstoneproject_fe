@@ -7,9 +7,9 @@ import { getJson, postJson, putJson, delJson, patchJson, apiFetch, getToken, Api
 
 // ===== TYPES =====
 export type ViewState = { center: [number, number]; zoom: number };
-export type BaseLayer = 
-  | "OSM" 
-  | "Satellite" 
+export type BaseLayer =
+  | "OSM"
+  | "Satellite"
   | "Dark"
   | "Positron"
   | "DarkMatter"
@@ -23,12 +23,15 @@ export type MapDto = {
   id: string;
   name: string;
   ownerId?: string;
+  ownerName?: string;
   description?: string;
-  previewImageUrl?: string | null;
-  createdAt: string;
+  isPublic: boolean;
+  previewImage?: string | null;
+  createdAt: string; 
   updatedAt?: string | null;
-  lastActivityAt?: string | null; // For recent maps - backend calculated activity time
-  status?: string; // Map status: draft, published, etc.
+  lastActivityAt?: string | null;
+  status?: MapStatus;
+  isOwner: boolean;
   workspaceName?: string | null;
 };
 
@@ -696,8 +699,8 @@ export async function getMapViews(mapId: string): Promise<number> {
       if (typeof res.total === "number") return res.total;
       if (typeof res.month === "number") return res.month;
     }
-  } catch {}
-  
+  } catch { }
+
   try {
     const res = await getJson<MapViewsResponse | number>(`/maps/${mapId}/stats`);
     if (typeof res === "number") return res;
@@ -707,8 +710,8 @@ export async function getMapViews(mapId: string): Promise<number> {
       if (typeof res.total === "number") return res.total;
       if (typeof res.month === "number") return res.month;
     }
-  } catch {}
-  
+  } catch { }
+
   try {
     const res = await getJson<MapViewsResponse | number>(`/analytics/maps/${mapId}/views`);
     if (typeof res === "number") return res;
@@ -718,8 +721,8 @@ export async function getMapViews(mapId: string): Promise<number> {
       if (typeof res.total === "number") return res.total;
       if (typeof res.month === "number") return res.month;
     }
-  } catch {}
-  
+  } catch { }
+
   try {
     const res = await getJson<MapViewsResponse | number>(`/analytics/map-views?mapId=${encodeURIComponent(mapId)}`);
     if (typeof res === "number") return res;
@@ -729,8 +732,8 @@ export async function getMapViews(mapId: string): Promise<number> {
       if (typeof res.total === "number") return res.total;
       if (typeof res.month === "number") return res.month;
     }
-  } catch {}
-  
+  } catch { }
+
   return 0;
 }
 

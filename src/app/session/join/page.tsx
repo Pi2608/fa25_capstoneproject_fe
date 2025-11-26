@@ -38,7 +38,7 @@ function JoinSessionContent() {
           }
 
           setSessionInfo({
-            name: session.sessionName,
+            name: session.sessionName || "",
             code: codeFromUrl,
           });
           setIsLoading(false);
@@ -70,7 +70,7 @@ function JoinSessionContent() {
       }
 
       setSessionInfo({
-        name: session.sessionName,
+        name: session.sessionName || "",
         code: pinCode,
       });
 

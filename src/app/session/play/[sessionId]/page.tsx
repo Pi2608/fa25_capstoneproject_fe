@@ -68,7 +68,7 @@ export default function StudentPlayPage() {
     const fetchSession = async () => {
       try {
         const session = await getSession(sessionId);
-        setSessionStatus(session.status);
+        setSessionStatus(session.status as SessionStatus);
         setParticipantCount(session.totalParticipants || 0);
 
         if (session.status === "Running") {
@@ -89,7 +89,7 @@ export default function StudentPlayPage() {
   const fetchLeaderboard = useCallback(async () => {
     try {
       const data = await getSessionLeaderboard(sessionId);
-      setLeaderboard(data);
+      setLeaderboard(data as LeaderboardEntry[]);
     } catch (error) {
       console.error("Failed to fetch leaderboard:", error);
     }

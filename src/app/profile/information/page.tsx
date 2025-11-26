@@ -22,7 +22,6 @@ function initialsFrom(name?: string, email?: string) {
 
 export default function ThongTinCaNhanPage() {
   const { t } = useI18n();
-  const tr = (k: string) => t("profile", k);
 
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,7 +83,7 @@ export default function ThongTinCaNhanPage() {
     const safeFullName = (fullName ?? "").trim();
     const safePhone = (phone ?? "").trim();
     if (safePhone && !/^\+?\d{8,15}$/.test(safePhone)) {
-      setError(tr("phone_invalid"));
+      setError(t("profile.phone_invalid"));
       return;
     }
     if (!dirty) {
@@ -107,10 +106,10 @@ export default function ThongTinCaNhanPage() {
       );
       setFullName(res.fullName ?? "");
       setPhone(res.phone ?? "");
-      setOk(tr("banner_success"));
+      setOk(t("profile.banner_success"));
       setEditing(false);
     } catch (e: unknown) {
-      let message = tr("banner_error_generic");
+      let message = t("profile.banner_error_generic");
       if (e instanceof Error) message = e.message;
       else if (typeof e === "object" && e && "message" in e) {
         const msg = (e as { message?: unknown }).message;
@@ -140,9 +139,9 @@ export default function ThongTinCaNhanPage() {
               {initialsFrom(me?.fullName, me?.email)}
             </div>
             <div>
-              <h1 className="text-lg font-semibold">{tr("header_title")}</h1>
+              <h1 className="text-lg font-semibold">{t("profile.header_title")}</h1>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                {tr("header_sub")}
+                {t("profile.header_sub")}
               </p>
             </div>
           </div>
@@ -153,7 +152,7 @@ export default function ThongTinCaNhanPage() {
               onClick={() => setEditing(true)}
               disabled={loading}
             >
-              {tr("btn_edit")}
+              {t("profile.btn_edit")}
             </button>
           ) : (
             <div className="flex gap-2">
@@ -162,14 +161,14 @@ export default function ThongTinCaNhanPage() {
                 onClick={handleCancel}
                 disabled={saving}
               >
-                {tr("btn_cancel")}
+                {t("profile.btn_cancel")}
               </button>
               <button
                 className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-50"
                 onClick={handleSave}
                 disabled={saving || !dirty}
               >
-                {saving ? tr("btn_saving") : tr("btn_save")}
+                {saving ? t("profile.btn_saving") : t("profile.btn_save")}
               </button>
             </div>
           )}
@@ -190,7 +189,7 @@ export default function ThongTinCaNhanPage() {
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div className="rounded-lg border border-zinc-200/70 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/5">
               <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                {tr("field_fullname")}
+                {t("profile.field_fullname")}
               </div>
               {!editing ? (
                 <div className="text-sm font-medium">
@@ -201,24 +200,24 @@ export default function ThongTinCaNhanPage() {
                   className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-white/10 dark:bg-transparent"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder={tr("placeholder_fullname")}
+                  placeholder={t("profile.placeholder_fullname")}
                 />
               )}
             </div>
 
             <div className="rounded-lg border border-zinc-200/70 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/5">
               <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                {tr("field_email")}
+                {t("profile.field_email")}
               </div>
               <div className="text-sm font-medium">
                 {loading ? <div className="h-5 w-56 animate-pulse rounded bg-zinc-200 dark:bg-white/10" /> : me?.email ?? "-"}
               </div>
-              <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{tr("read_only")}</div>
+              <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{t("profile.read_only")}</div>
             </div>
 
             <div className="lg:col-span-2 rounded-lg border border-zinc-200/70 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/5">
               <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                {tr("field_phone")}
+                {t("profile.field_phone")}
               </div>
               {!editing ? (
                 <div className="text-sm font-medium">
@@ -230,10 +229,10 @@ export default function ThongTinCaNhanPage() {
                     className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-white/10 dark:bg-transparent"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder={tr("placeholder_phone")}
+                    placeholder={t("profile.placeholder_phone")}
                     inputMode="tel"
                   />
-                  <div className="hidden text-xs text-zinc-500 md:block">{tr("helper_phone")}</div>
+                  <div className="hidden text-xs text-zinc-500 md:block">{t("profile.helper_phone")}</div>
                 </div>
               )}
             </div>
@@ -245,7 +244,7 @@ export default function ThongTinCaNhanPage() {
         <div className="pointer-events-none fixed bottom-5 left-[300px] right-5 z-10">
           <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-md border border-zinc-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-900/80">
             <div className="text-xs text-zinc-600 dark:text-zinc-300">
-              {dirty ? tr("unsaved") : tr("no_changes")}
+              {dirty ? t("profile.unsaved") : t("profile.no_changes")}
             </div>
             <div className="flex gap-2">
               <button
@@ -253,14 +252,14 @@ export default function ThongTinCaNhanPage() {
                 onClick={handleCancel}
                 disabled={saving}
               >
-                {tr("btn_cancel")}
+                {t("profile.btn_cancel")}
               </button>
               <button
                 className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
                 onClick={handleSave}
                 disabled={saving || !dirty}
               >
-                {saving ? tr("btn_saving") : tr("btn_save_changes")}
+                {saving ? t("profile.btn_saving") : t("profile.btn_save_changes")}
               </button>
             </div>
           </div>
