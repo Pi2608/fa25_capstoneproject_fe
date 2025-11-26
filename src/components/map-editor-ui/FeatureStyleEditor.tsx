@@ -47,6 +47,12 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
 
   // Load initial values from feature
   useEffect(() => {
+    setName(feature.name);
+    setDescription("");
+    setIsVisible(feature.isVisible);
+    setZIndex(0);
+    setCustomAttributes({});
+
     if (feature.layer) {
       const style = extractLayerStyle(feature.layer);
 
@@ -73,7 +79,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
         if (props.zIndex) setZIndex(Number(props.zIndex));
       }
     }
-    
+
     // Reset initial mount flag when feature changes
     isInitialMountRef.current = true;
   }, [feature]);
@@ -234,6 +240,12 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
               className="w-full px-2 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded text-zinc-200 focus:border-emerald-500 focus:outline-none transition-colors"
               placeholder="Tên feature"
             />
@@ -244,6 +256,12 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
               className="w-full px-2 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded text-zinc-200 focus:border-emerald-500 focus:outline-none resize-none transition-colors"
               placeholder="Mô tả tùy chọn"
               rows={2}

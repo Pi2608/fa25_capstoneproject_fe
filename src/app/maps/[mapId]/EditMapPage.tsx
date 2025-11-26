@@ -330,11 +330,13 @@ export default function EditMapPage() {
     handleLayerHover,
     handleLayerClick,
     resetToOriginalStyle,
+    sketch: sketchRef.current,
   });
   const {
     lastUpdateRef,
     recentlyCreatedFeatureIdsRef,
     handleFeatureCreate,
+    handleFeatureCut,
     handleSketchEdit,
     handleSketchDragEnd,
     handleSketchRotateEnd,
@@ -872,8 +874,6 @@ export default function EditMapPage() {
       setFeatures(prev => {
         const alreadyExists = prev.some(f => f.featureId === featureId);
         if (alreadyExists) {
-          // CRITICAL FIX: Remove the layer we just added because we are aborting
-          // This prevents "orphan" layers from persisting on the map
           if (sketchRef.current && layer) {
             sketchRef.current.removeLayer(layer);
           }
@@ -888,6 +888,7 @@ export default function EditMapPage() {
           layer,
           isVisible: newFeature.isVisible ?? true,
           featureId,
+          layerId: newFeature.layerId || null,
         };
 
         setFeatureVisibility(prevVisibility => ({
@@ -1424,7 +1425,7 @@ export default function EditMapPage() {
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !sketchRef.current) return;
-    if (!handleFeatureCreate || !handleSketchEdit || !handleSketchDragEnd || !handleSketchRotateEnd) return;
+    if (!handleFeatureCreate || !handleFeatureCut || !handleSketchEdit || !handleSketchDragEnd || !handleSketchRotateEnd) return;
 
     const map = mapRef.current;
     const sketch = sketchRef.current;
@@ -1436,6 +1437,9 @@ export default function EditMapPage() {
     };
     map.on("pm:create", createHandler);
 
+    // Handle cut event (map level)
+    map.on("pm:cut", handleFeatureCut);
+
     // Handle sketch-level edit/drag/rotate events
     sketch.on("pm:edit", handleSketchEdit);
     sketch.on("pm:dragend", handleSketchDragEnd);
@@ -1444,6 +1448,7 @@ export default function EditMapPage() {
     return () => {
       if (mapRef.current) {
         mapRef.current.off("pm:create", createHandler);
+        mapRef.current.off("pm:cut", handleFeatureCut);
       }
       if (sketchRef.current) {
         sketchRef.current.off("pm:edit", handleSketchEdit);
@@ -1451,7 +1456,7 @@ export default function EditMapPage() {
         sketchRef.current.off("pm:rotateend", handleSketchRotateEnd);
       }
     };
-  }, [isMapReady, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd]);
+  }, [isMapReady, handleFeatureCreate, handleFeatureCut, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd]);
 
   useEffect(() => {
     if (!mapRef.current || !detail?.layers || detail.layers.length === 0 || !isMapReady) return;
@@ -2691,6 +2696,7 @@ export default function EditMapPage() {
   const onFeatureVisibilityChange = useCallback(async (featureId: string, isVisible: boolean) => {
     if (!detail?.id) return;
 
+    // Update the feature visibility
     await handleFeatureVisibilityChange(
       detail.id,
       featureId,
@@ -2701,7 +2707,28 @@ export default function EditMapPage() {
       sketchRef.current,
       setFeatureVisibility
     );
-  }, [detail?.id, features]);
+
+    // If turning feature ON, also turn on its parent layer
+    if (isVisible) {
+      const feature = features.find(f => f.id === featureId || f.featureId === featureId);
+      if (feature?.layerId) {
+        const layerData = layers.find(l => l.id === feature.layerId);
+
+        // Only turn on the layer if it's currently off
+        if (layerVisibility[feature.layerId] === false) {
+          await handleLayerVisibilityChange(
+            detail.id,
+            feature.layerId,
+            true,
+            mapRef.current as any,
+            dataLayerRefs,
+            setLayerVisibility,
+            layerData
+          );
+        }
+      }
+    }
+  }, [detail?.id, features, layers, layerVisibility, dataLayerRefs]);
 
   const onSelectLayer = useCallback((layer: FeatureData | LayerDTO) => {
     setSelectedLayer(layer);
@@ -2789,11 +2816,15 @@ export default function EditMapPage() {
         data: { ...feature, name: updates.name || feature.name, isVisible: updates.isVisible ?? feature.isVisible },
       });
 
+      if (updates.style && feature.layer) {
+        storeOriginalStyle(feature.layer);
+      }
+
       showToast("success", "Feature updated successfully");
     } catch (error) {
       showToast("error", "Failed to update feature");
     }
-  }, [mapId, selectedEntity, showToast]);
+  }, [mapId, selectedEntity, showToast, storeOriginalStyle]);
 
   // Save segment (create or update) - used by inline form
   const handleSaveSegment = useCallback(async (data: any, segmentId?: string) => {
@@ -2861,6 +2892,133 @@ export default function EditMapPage() {
       showToast("error", "Failed to save transition");
     }
   }, [mapId, showToast]);
+
+  // Refresh layers and features without page reload
+  const handleRefreshLayers = useCallback(async () => {
+    if (!mapId) return;
+
+    try {
+      // Reload map detail to get updated layers
+      const updatedDetail = await getMapDetail(mapId);
+      setDetail(updatedDetail);
+      setLayers(updatedDetail.layers);
+
+      // Reload features from database - DIRECTLY fetch and update
+      if (mapRef.current && sketchRef.current) {
+        const L = (await import("leaflet")).default;
+
+        // Clear existing features from sketch group
+        sketchRef.current.clearLayers();
+
+        const dbFeatures = await loadFeaturesToMap(mapId, L, sketchRef.current);
+
+        // Attach event listeners to features
+        dbFeatures.forEach(feature => {
+          if (feature.layer) {
+            storeOriginalStyle(feature.layer);
+            feature.layer.on('mouseover', () => handleLayerHover(feature.layer, true));
+            feature.layer.on('mouseout', () => handleLayerHover(feature.layer, false));
+            feature.layer.on('click', (event: LeafletMouseEvent) => {
+              if (event.originalEvent) {
+                event.originalEvent.stopPropagation();
+              }
+              handleLayerClick(feature.layer, event.originalEvent.shiftKey);
+            });
+          }
+        });
+
+        // Update features state
+        setFeatures(dbFeatures);
+
+        // Update visibility state
+        const initialFeatureVisibility: Record<string, boolean> = {};
+        dbFeatures.forEach(feature => {
+          initialFeatureVisibility[feature.id] = feature.isVisible ?? true;
+          if (feature.featureId) {
+            initialFeatureVisibility[feature.featureId] = feature.isVisible ?? true;
+          }
+        });
+        setFeatureVisibility(initialFeatureVisibility);
+      }
+    } catch (error) {
+      console.error("[handleRefreshLayers] Failed to refresh layers:", error);
+      showToast("error", "Failed to refresh layers");
+    }
+  }, [mapId, showToast]);
+
+  // Refresh segments and transitions without page reload
+  const handleRefreshSegments = useCallback(async () => {
+    if (!mapId) return;
+
+    try {
+      const updatedSegments = await getSegments(mapId);
+      setSegments(updatedSegments);
+    } catch (error) {
+      console.error("Failed to refresh segments:", error);
+      showToast("error", "Failed to refresh segments");
+    }
+  }, [mapId, showToast]);
+
+  // Listen for refresh segments event (triggered after creating location/zone)
+  useEffect(() => {
+    const handleRefreshSegmentsEvent = () => {
+      handleRefreshSegments();
+    };
+
+    window.addEventListener('refreshSegments', handleRefreshSegmentsEvent);
+
+    return () => {
+      window.removeEventListener('refreshSegments', handleRefreshSegmentsEvent);
+    };
+  }, [handleRefreshSegments]);
+
+  // Render zones from segments as persistent features on the map
+  useEffect(() => {
+    if (!mapRef.current || segments.length === 0) return;
+
+    const map = mapRef.current;
+    let zoneLayers: any[] = [];
+    let isMounted = true;
+
+    (async () => {
+      // Import Leaflet and rendering utilities
+      const L = (window as any).L;
+      if (!L || !isMounted) return;
+
+      const { renderSegmentZones } = await import("@/utils/segmentRenderer");
+
+      // Render zones from all segments
+      for (const segment of segments) {
+        if (!isMounted) break; // Stop if component unmounted
+        if (segment.zones && segment.zones.length > 0) {
+          try {
+            const { layers } = await renderSegmentZones(segment, map, L, {
+              transitionType: "Jump", // No animation for persistent zones
+            });
+            zoneLayers.push(...layers);
+          } catch (error) {
+            console.error(`Failed to render zones for segment ${segment.segmentId}:`, error);
+          }
+        }
+      }
+
+      if (isMounted) {
+        console.log(`✅ Rendered ${zoneLayers.length} zone layers from ${segments.length} segments`);
+      }
+    })();
+
+    // Cleanup: remove zone layers when segments change or component unmounts
+    return () => {
+      isMounted = false;
+      zoneLayers.forEach(layer => {
+        try {
+          map.removeLayer(layer);
+        } catch (e) {
+          // Layer might have already been removed
+        }
+      });
+    };
+  }, [segments]);
 
   // Delete transition
   const handleDeleteTransition = useCallback(async (transitionId: string) => {
@@ -3389,6 +3547,8 @@ export default function EditMapPage() {
         baseLayer={baseKey}
         currentMap={mapRef.current}
         mapId={mapId}
+        layerVisibility={layerVisibility}
+        featureVisibility={featureVisibility}
         onSelectFeature={handleSelectFeature}
         onSelectLayer={handleSelectLayerNew}
         onBaseLayerChange={setBaseKey}
@@ -3400,6 +3560,7 @@ export default function EditMapPage() {
         onDeleteSegment={handleDeleteSegment}
         onSaveTransition={handleSaveTransition}
         onDeleteTransition={handleDeleteTransition}
+        onRefreshLayers={handleRefreshLayers}
       />
 
       {/* NEW: Right Properties Panel */}

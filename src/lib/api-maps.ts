@@ -422,11 +422,12 @@ export async function toggleFavoriteTemplate(templateId: string, favorite: boole
 
 // ===== LAYERS =====
 export interface AddLayerToMapRequest {
-  layerId: string;
+  layerId?: string; // Optional - if not provided, creates a new empty layer
+  layerName?: string; // Name for the new layer
   isVisible?: boolean;
   zIndex?: number;
-  customStyle?: string | null;
-  filterConfig?: string | null;
+  layerData?: string | null;
+  layerTypeId?: string | null;
 }
 
 export interface AddLayerToMapResponse { mapLayerId: string; }
