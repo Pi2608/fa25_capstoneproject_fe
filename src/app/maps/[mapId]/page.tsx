@@ -1515,7 +1515,7 @@ export default function EditMapPage() {
 
       for (const layer of detail.layers) {
         if (!alive) break;
-        const isVisible = layer.isPublic ?? true;
+        const isVisible = layer.isVisible ?? true;
         initialLayerVisibility[layer.id] = isVisible;
 
         try {
@@ -2735,11 +2735,23 @@ export default function EditMapPage() {
     });
   }, [detail, contextMenu.feature, contextMenu.layerId, showToast]);
 
-  const handleCopyToExistingLayer = useCallback(() => {
+  const handleCopyToExistingLayer = useCallback((layerId?: string) => {
+    // If layerId is provided, it means copy was done directly from context menu
+    if (layerId) {
+      // The actual copy is handled in ZoneContextMenu component
+      return;
+    }
+    // Otherwise, open the dialog (for backward compatibility)
     openCopyFeatureDialog("existing");
   }, [openCopyFeatureDialog]);
 
-  const handleCopyToNewLayer = useCallback(() => {
+  const handleCopyToNewLayer = useCallback((layerName?: string) => {
+    // If layerName is provided, it means copy was done directly from context menu
+    if (layerName) {
+      // The actual copy is handled in ZoneContextMenu component
+      return;
+    }
+    // Otherwise, open the dialog (for backward compatibility)
     openCopyFeatureDialog("new");
   }, [openCopyFeatureDialog]);
 
@@ -2796,6 +2808,50 @@ export default function EditMapPage() {
 
     const layerData = layers.find(l => l.id === layerId);
 
+    // First, update all features in this layer to match the layer visibility
+    const featuresInLayer = features.filter(f => f.layerId === layerId);
+    for (const feature of featuresInLayer) {
+      const featureId = feature.featureId || feature.id;
+      if (feature.isVisible !== isVisible) {
+        // Update feature visibility state immediately
+        setFeatureVisibility(prev => ({
+          ...prev,
+          [featureId]: isVisible
+        }));
+        
+        // Update feature in features state
+        setFeatures(prev => prev.map(f => {
+          if (f.id === feature.id || f.featureId === feature.featureId) {
+            return { ...f, isVisible };
+          }
+          return f;
+        }));
+
+        // Update in database if feature has featureId
+        if (feature.featureId) {
+          try {
+            await updateMapFeature(detail.id, feature.featureId, { isVisible });
+          } catch (error) {
+            console.error(`Failed to update feature ${feature.featureId} visibility:`, error);
+          }
+        }
+
+        // Update on map
+        if (feature.layer && mapRef.current) {
+          if (isVisible) {
+            if (sketchRef.current && !sketchRef.current.hasLayer(feature.layer)) {
+              sketchRef.current.addLayer(feature.layer);
+            }
+          } else {
+            if (sketchRef.current && sketchRef.current.hasLayer(feature.layer)) {
+              sketchRef.current.removeLayer(feature.layer);
+            }
+          }
+        }
+      }
+    }
+
+    // Then update the layer itself
     await handleLayerVisibilityChange(
       detail.id,
       layerId,
@@ -2805,7 +2861,7 @@ export default function EditMapPage() {
       setLayerVisibility,
       layerData
     );
-  }, [detail?.id, layers]);
+  }, [detail?.id, layers, features, setFeatures, setFeatureVisibility, sketchRef]);
 
   const onFeatureVisibilityChange = useCallback(async (featureId: string, isVisible: boolean) => {
     if (!detail?.id) return;
@@ -3475,6 +3531,7 @@ export default function EditMapPage() {
         baseLayer={baseKey}
         currentMap={mapRef.current}
         mapId={mapId}
+        layerVisibility={layerVisibility}
         onSelectFeature={handleSelectFeature}
         onSelectLayer={handleSelectLayerNew}
         onBaseLayerChange={setBaseKey}
@@ -3584,7 +3641,16 @@ export default function EditMapPage() {
         onDeleteZone={handleDeleteZone}
         mapId={detail?.id}
         layerId={contextMenu.layerId ?? undefined}
+        featureIndex={
+          detail && contextMenu.feature && contextMenu.layerId
+            ? findFeatureIndex(
+                (detail.layers.find(l => l.id === contextMenu.layerId)?.layerData as FeatureCollection) || {},
+                contextMenu.feature
+              )
+            : 0
+        }
         feature={contextMenu.feature ?? undefined}
+        onSuccess={handleCopyFeatureSuccess}
       />
 
       <CopyFeatureDialog

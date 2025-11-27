@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import type { Feature as GeoJSONFeature } from "geojson";
+import { getMapLayers, LayerInfo, copyFeatureToLayer } from "@/lib/api-maps";
 
 interface ZoneContextMenuProps {
   visible: boolean;
@@ -10,13 +11,15 @@ interface ZoneContextMenuProps {
   onClose: () => void;
   onZoomToFit: () => void;
   onCopyCoordinates: () => void;
-  onCopyToExistingLayer: () => void;
-  onCopyToNewLayer: () => void;
+  onCopyToExistingLayer?: (layerId: string) => void;
+  onCopyToNewLayer?: (layerName: string) => void;
   onDeleteZone: () => void;
   zoneName?: string;
   mapId?: string;       
   layerId?: string;   
+  featureIndex?: number;
   feature?: GeoJSONFeature;
+  onSuccess?: (message: string) => void;
 }
 
 export default function ZoneContextMenu(props: ZoneContextMenuProps) {
@@ -31,7 +34,80 @@ export default function ZoneContextMenu(props: ZoneContextMenuProps) {
     onCopyToNewLayer,
     onDeleteZone,
     zoneName = "Zone",
+    mapId,
+    layerId,
+    featureIndex = 0,
+    onSuccess,
   } = props;
+
+  const [showCopySubmenu, setShowCopySubmenu] = useState<"existing" | "new" | null>(null);
+  const [layers, setLayers] = useState<LayerInfo[]>([]);
+  const [newLayerName, setNewLayerName] = useState("");
+  const [loadingLayers, setLoadingLayers] = useState(false);
+  const [copying, setCopying] = useState(false);
+
+  const loadLayers = async () => {
+    if (!mapId) return;
+    try {
+      setLoadingLayers(true);
+      const layersData = await getMapLayers(mapId);
+      const availableLayers = layersData.filter(layer => layer.layerId !== layerId);
+      setLayers(availableLayers);
+    } catch (error) {
+      console.error("Failed to load layers:", error);
+    } finally {
+      setLoadingLayers(false);
+    }
+  };
+
+  const handleCopyToExisting = async (targetLayerId: string) => {
+    if (!mapId || !layerId) return;
+    try {
+      setCopying(true);
+      const response = await copyFeatureToLayer(mapId, layerId, {
+        featureIndex,
+        targetLayerId,
+      });
+      if (response.success) {
+        onSuccess?.(response.message);
+        onCopyToExistingLayer?.(targetLayerId);
+        setShowCopySubmenu(null);
+        onClose();
+      } else {
+        alert("Failed to copy feature: " + response.message);
+      }
+    } catch (error) {
+      console.error("Failed to copy feature:", error);
+      alert("Failed to copy feature. Please try again.");
+    } finally {
+      setCopying(false);
+    }
+  };
+
+  const handleCopyToNew = async () => {
+    if (!mapId || !layerId || !newLayerName.trim()) return;
+    try {
+      setCopying(true);
+      const response = await copyFeatureToLayer(mapId, layerId, {
+        featureIndex,
+        newLayerName: newLayerName.trim(),
+      });
+      if (response.success) {
+        onSuccess?.(response.message);
+        onCopyToNewLayer?.(newLayerName.trim());
+        setShowCopySubmenu(null);
+        setNewLayerName("");
+        onClose();
+      } else {
+        alert("Failed to copy feature: " + response.message);
+      }
+    } catch (error) {
+      console.error("Failed to copy feature:", error);
+      alert("Failed to copy feature. Please try again.");
+    } finally {
+      setCopying(false);
+    }
+  };
 
   useEffect(() => {
     if (!visible) return;
@@ -39,10 +115,20 @@ export default function ZoneContextMenu(props: ZoneContextMenuProps) {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       if (!target || !target.closest) return;
-      if (!target.closest(".zone-context-menu")) onClose();
+      const contextMenuEl = target.closest(".zone-context-menu");
+      if (!contextMenuEl) {
+        setShowCopySubmenu(null);
+        onClose();
+      }
     };
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (showCopySubmenu) {
+          setShowCopySubmenu(null);
+        } else {
+          onClose();
+        }
+      }
     };
 
     document.addEventListener("click", handleClickOutside);
@@ -51,7 +137,7 @@ export default function ZoneContextMenu(props: ZoneContextMenuProps) {
       document.removeEventListener("click", handleClickOutside);
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [visible, onClose]);
+  }, [visible, onClose, showCopySubmenu]);
 
   if (!visible) return null;
 
@@ -63,6 +149,7 @@ export default function ZoneContextMenu(props: ZoneContextMenuProps) {
         shortcut?: string;
         danger?: boolean;
         type?: undefined;
+        submenu?: boolean;
       }
     | { type: "divider" }
   > = [
@@ -88,17 +175,27 @@ export default function ZoneContextMenu(props: ZoneContextMenuProps) {
       icon: "📁",
       label: "Copy to Existing Layer",
       onClick: () => {
-        onCopyToExistingLayer();
-        onClose();
+        if (showCopySubmenu !== "existing") {
+          loadLayers();
+          setShowCopySubmenu("existing");
+        } else {
+          setShowCopySubmenu(null);
+        }
       },
+      submenu: true,
     },
     {
       icon: "➕",
       label: "Copy to New Layer",
       onClick: () => {
-        onCopyToNewLayer();
-        onClose();
+        if (showCopySubmenu !== "new") {
+          setShowCopySubmenu("new");
+          setNewLayerName("");
+        } else {
+          setShowCopySubmenu(null);
+        }
       },
+      submenu: true,
     },
     { type: "divider" },
     {
@@ -115,7 +212,7 @@ export default function ZoneContextMenu(props: ZoneContextMenuProps) {
 
   return (
     <div
-      className="zone-context-menu fixed z-[10000] bg-zinc-900 border border-white/10 rounded-lg shadow-2xl py-1 min-w-[200px]"
+      className="zone-context-menu fixed z-[10000] bg-zinc-900 border border-white/10 rounded-lg shadow-2xl py-1 min-w-[250px]"
       style={{ left: `${x}px`, top: `${y}px` }}
       suppressHydrationWarning={true}
     >
@@ -130,22 +227,94 @@ export default function ZoneContextMenu(props: ZoneContextMenuProps) {
             return <div key={`divider-${index}`} className="my-1 border-t border-white/10" />;
           }
 
+          const isSubmenuOpen = 
+            (item.label === "Copy to Existing Layer" && showCopySubmenu === "existing") ||
+            (item.label === "Copy to New Layer" && showCopySubmenu === "new");
+
           return (
-            <button
-              key={index}
-              onClick={item.onClick}
-              className={`
-                w-full px-3 py-2 text-left text-sm flex items-center justify-between gap-3
-                transition-colors
-                ${item.danger ? "text-red-400 hover:bg-red-500/10" : "text-white hover:bg-white/10"}
-              `}
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-base">{item.icon}</span>
-                <span>{item.label}</span>
-              </div>
-              {item.shortcut && <span className="text-xs text-white/40">{item.shortcut}</span>}
-            </button>
+            <div key={index}>
+              <button
+                onClick={item.onClick}
+                className={`
+                  w-full px-3 py-2 text-left text-sm flex items-center justify-between gap-3
+                  transition-colors
+                  ${item.danger ? "text-red-400 hover:bg-red-500/10" : "text-white hover:bg-white/10"}
+                  ${isSubmenuOpen ? "bg-white/5" : ""}
+                `}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{item.icon}</span>
+                  <span>{item.label}</span>
+                </div>
+                {item.submenu && (
+                  <span className="text-xs text-white/40">
+                    {isSubmenuOpen ? "▼" : "▶"}
+                  </span>
+                )}
+                {item.shortcut && !item.submenu && <span className="text-xs text-white/40">{item.shortcut}</span>}
+              </button>
+
+              {/* Submenu for Copy to Existing Layer */}
+              {isSubmenuOpen && item.label === "Copy to Existing Layer" && (
+                <div className="bg-white/5 border-t border-white/5 px-2 py-2">
+                  {loadingLayers ? (
+                    <div className="text-xs text-white/50 px-2 py-2">Loading layers...</div>
+                  ) : layers.length === 0 ? (
+                    <div className="text-xs text-white/50 px-2 py-2">No other layers available</div>
+                  ) : (
+                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                      {layers.map((layer) => (
+                        <button
+                          key={layer.layerId}
+                          onClick={() => handleCopyToExisting(layer.layerId)}
+                          disabled={copying}
+                          className="w-full px-2 py-1.5 text-left text-xs rounded transition-colors text-white/80 hover:bg-emerald-500/20 hover:text-white disabled:opacity-50"
+                        >
+                          <div className="font-medium truncate">{layer.layerName}</div>
+                          <div className="text-white/50 text-xs">{layer.featureCount} features</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Submenu for Copy to New Layer */}
+              {isSubmenuOpen && item.label === "Copy to New Layer" && (
+                <div className="bg-white/5 border-t border-white/5 px-2 py-2">
+                  <input
+                    type="text"
+                    value={newLayerName}
+                    onChange={(e) => setNewLayerName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && newLayerName.trim()) {
+                        handleCopyToNew();
+                      }
+                    }}
+                    placeholder="Layer name..."
+                    autoFocus
+                    disabled={copying}
+                    className="w-full px-2 py-1.5 text-xs bg-white/10 border border-white/20 rounded text-white placeholder-white/40 focus:outline-none focus:border-emerald-500/50 disabled:opacity-50"
+                  />
+                  <div className="flex gap-1 mt-2">
+                    <button
+                      onClick={() => setShowCopySubmenu(null)}
+                      disabled={copying}
+                      className="flex-1 px-2 py-1 text-xs rounded bg-white/5 hover:bg-white/10 text-white/80 transition-colors disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleCopyToNew}
+                      disabled={copying || !newLayerName.trim()}
+                      className="flex-1 px-2 py-1 text-xs rounded bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {copying ? "..." : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>

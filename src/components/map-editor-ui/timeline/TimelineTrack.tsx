@@ -25,9 +25,8 @@ import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "../Icon";
 import { cn } from "@/lib/utils";
 import type { Segment, TimelineTransition, RouteAnimation, Location, SegmentZone, SegmentLayer } from "@/lib/api-storymap";
-import { getRouteAnimationsBySegment, deleteRouteAnimation, deleteLocation, deleteSegmentZone, detachLayerFromSegment, reorderSegments, moveLocationToSegment, moveZoneToSegment, moveLayerToSegment, moveRouteToSegment, updateLocation } from "@/lib/api-storymap";
+import { getRouteAnimationsBySegment, deleteRouteAnimation, deleteLocation, deleteSegmentZone, detachLayerFromSegment, reorderSegments, moveLocationToSegment, moveZoneToSegment, moveLayerToSegment, moveRouteToSegment } from "@/lib/api-storymap";
 import RouteAnimationDialog from "@/components/storymap/RouteAnimationDialog";
-import LocationDialog from "@/components/storymap/LocationDialog";
 
 interface TimelineTrackProps {
   segments: Segment[];
@@ -648,8 +647,6 @@ function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; map
 
 function LocationTrackItems({ segment, mapId, currentMap }: { segment: Segment; mapId: string; currentMap?: any }) {
   const locations = segment.locations || [];
-  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
-  const [showEditDialog, setShowEditDialog] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
   const handleDelete = async (locationId: string) => {
@@ -667,26 +664,18 @@ function LocationTrackItems({ segment, mapId, currentMap }: { segment: Segment; 
   };
 
   const handleEdit = (location: Location) => {
-    setEditingLocation(location);
-    setShowEditDialog(true);
-  };
-
-  const handleSaveEdit = async (data: any) => {
-    const locationId = editingLocation?.locationId;
-    if (!locationId) return;
-    try {
-      await updateLocation(mapId || "", segment.segmentId, locationId, data);
-      setShowEditDialog(false);
-      setEditingLocation(null);
-      // Dispatch event to refresh segments
-      window.dispatchEvent(new CustomEvent("locationUpdated", {
-        detail: { segmentId: segment.segmentId }
+    // Dispatch event to trigger edit mode in LeftSidebarToolbox
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('editLocation', {
+        detail: { 
+          location,
+          segmentId: segment.segmentId,
+          mapId
+        }
       }));
-    } catch (e) {
-      console.error("Failed to update location:", e);
-      alert("Failed to update location");
     }
   };
+
 
   if (locations.length === 0) {
     return <div className="text-[10px] text-zinc-500 px-2 italic">No locations</div>;
@@ -777,29 +766,6 @@ function LocationTrackItems({ segment, mapId, currentMap }: { segment: Segment; 
         })}
       </div>
 
-      {/* Edit Dialog */}
-      {showEditDialog && editingLocation && typeof window !== "undefined" && createPortal(
-        <LocationDialog
-          isOpen={showEditDialog}
-          onClose={() => {
-            setShowEditDialog(false);
-            setEditingLocation(null);
-          }}
-          onSave={handleSaveEdit}
-          segmentId={segment.segmentId}
-          currentMap={currentMap}
-          initialLocation={editingLocation}
-          initialCoordinates={editingLocation?.markerGeometry ? (() => {
-            try {
-              const geoJson = JSON.parse(editingLocation.markerGeometry);
-              return geoJson.coordinates as [number, number] | null;
-            } catch {
-              return null;
-            }
-          })() : null}
-        />,
-        document.body
-      )}
     </>
   );
 }

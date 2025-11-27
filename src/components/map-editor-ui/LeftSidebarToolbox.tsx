@@ -2,7 +2,10 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo, type DragEvent } from "react";
 import { gsap } from "gsap";
-import { Icon } from "./Icon";
+import { LocationForm } from "./forms/LocationForm";
+import { ZoneForm } from "./forms/ZoneForm";
+import { LayerForm } from "./forms/LayerForm";
+import { RouteAnimationForm } from "./forms/RouteAnimationForm";
 import { cn } from "@/lib/utils";
 import type { BaseKey } from "@/types";
 import type { FeatureData } from "@/utils/mapUtils";
@@ -17,6 +20,7 @@ import {
   type CreateLocationRequest,
   type CreateSegmentZoneRequest,
   type AttachLayerRequest,
+  type CreateRouteAnimationRequest,
   type Location,
   type Zone,
   deleteSegmentZone,
@@ -32,13 +36,15 @@ import {
   createLocation,
   createSegmentZone,
   attachLayerToSegment,
+  updateLocation,
+  createRouteAnimation,
 } from "@/lib/api-storymap";
 
 import LocationDialog from "@/components/storymap/LocationDialog";
 import ZoneSelectionDialog from "@/components/storymap/ZoneSelectionDialog";
 import LayerAttachDialog from "@/components/storymap/LayerAttachDialog";
 import RouteAnimationDialog from "@/components/storymap/RouteAnimationDialog";
-
+import { Icon } from "./Icon";
 
 interface LeftSidebarToolboxProps {
   activeView: "explorer" | "segments" | "transitions" | "icons" | null;
@@ -52,6 +58,7 @@ interface LeftSidebarToolboxProps {
   baseLayer: BaseKey;
   currentMap?: any;
   mapId?: string; // Required for adding locations, zones, and layers
+  layerVisibility?: Record<string, boolean>; // Track layer visibility state
 
   onSelectFeature: (feature: FeatureData) => void;
   onSelectLayer: (layer: LayerDTO) => void;
@@ -92,6 +99,7 @@ export function LeftSidebarToolbox({
   baseLayer,
   currentMap,
   mapId,
+  layerVisibility,
   onSelectFeature,
   onSelectLayer,
   onBaseLayerChange,
@@ -126,22 +134,96 @@ export function LeftSidebarToolbox({
   const [showRouteAnimationDialog, setShowRouteAnimationDialog] = useState(false);
   const [waitingForLocation, setWaitingForLocation] = useState(false);
   const [pickedCoordinates, setPickedCoordinates] = useState<[number, number] | null>(null);
+  const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+
+  // Track which inline form is currently showing (replaces segment list)
+  const [inlineFormMode, setInlineFormMode] = useState<"list" | "location" | "zone" | "layer" | "route">("list");
+
+  // Listen for editLocation event from TimelineTrack
+  useEffect(() => {
+    const handleEditLocation = (e: Event) => {
+      const customEvent = e as CustomEvent<{ location: Location; segmentId: string; mapId: string }>;
+      const { location, segmentId, mapId: eventMapId } = customEvent.detail;
+      
+      // Find the segment that contains this location
+      const segment = segments.find(s => s.segmentId === segmentId);
+      if (segment) {
+        setEditingSegment(segment);
+        setEditingLocation(location);
+        setInlineFormMode("location");
+        
+        // Extract coordinates from location if available
+        if (location.markerGeometry) {
+          try {
+            const geo = JSON.parse(location.markerGeometry);
+            if (geo.type === "Point" && Array.isArray(geo.coordinates) && geo.coordinates.length >= 2) {
+              setPickedCoordinates([geo.coordinates[0], geo.coordinates[1]]); // [lng, lat]
+            }
+          } catch (e) {
+            console.error("Failed to parse location coordinates:", e);
+            setPickedCoordinates(null);
+          }
+        } else {
+          setPickedCoordinates(null);
+        }
+        
+        // Switch to segments view if not already there
+        if (activeView !== "segments") {
+          onViewChange("segments");
+        }
+        setSegmentFormMode("list");
+      }
+    };
+
+    window.addEventListener('editLocation', handleEditLocation);
+    return () => {
+      window.removeEventListener('editLocation', handleEditLocation);
+    };
+  }, [segments, activeView, onViewChange]);
 
   // Handle map click when waiting for location
   useEffect(() => {
-    if (!currentMap || !waitingForLocation || !editingSegment) return;
+    if (!currentMap || !waitingForLocation || !editingSegment) {
+      // Reset cursor when not waiting for location
+      if (currentMap && !waitingForLocation) {
+        const mapContainer = currentMap.getContainer();
+        if (mapContainer) {
+          mapContainer.style.cursor = '';
+          mapContainer.style.removeProperty('cursor');
+        }
+      }
+      return;
+    }
+
+    // Change cursor to crosshair when waiting for location
+    const mapContainer = currentMap.getContainer();
+    if (mapContainer) {
+      mapContainer.style.cursor = 'crosshair';
+      mapContainer.style.setProperty('cursor', 'crosshair', 'important');
+    }
 
     const handleMapClick = (e: any) => {
       const { lat, lng } = e.latlng;
       setPickedCoordinates([lng, lat]); // [longitude, latitude]
       setWaitingForLocation(false);
       setShowLocationDialog(true);
+      
+      // Reset cursor after picking location
+      if (mapContainer) {
+        mapContainer.style.cursor = '';
+        mapContainer.style.removeProperty('cursor');
+      }
     };
 
     currentMap.on('click', handleMapClick);
 
     return () => {
       currentMap.off('click', handleMapClick);
+      // Reset cursor when unmounting or waitingForLocation changes
+      if (mapContainer) {
+        mapContainer.style.cursor = '';
+        mapContainer.style.removeProperty('cursor');
+      }
     };
   }, [currentMap, waitingForLocation, editingSegment]);
 
@@ -219,29 +301,44 @@ export function LeftSidebarToolbox({
     setEditingTransition(null);
   }, [onSaveTransition, editingTransition]);
 
-  // Handlers for adding location, zone, and layer
+  // Handlers for adding/updating location, zone, and layer
   const handleAddLocation = useCallback(async (data: CreateLocationRequest) => {
-    if (!editingSegment?.segmentId) return;
+    if (!editingSegment?.segmentId || !mapId) return;
 
-    const locationData = {
-      ...data,
-      segmentId: editingSegment.segmentId,
-    };
+    try {
+      if (editingLocation?.locationId) {
+        // Update existing location
+        await updateLocation(mapId, editingSegment.segmentId, editingLocation.locationId, data);
+        window.dispatchEvent(new CustomEvent("locationUpdated", {
+          detail: { segmentId: editingSegment.segmentId }
+        }));
+      } else {
+        // Create new location
+        const locationData = {
+          ...data,
+          segmentId: editingSegment.segmentId,
+        };
 
-    if (onAddLocation) {
-      await onAddLocation(locationData);
-    } else if (mapId) {
-      // Use API directly if handler not provided
-      await createLocation(mapId, editingSegment.segmentId, locationData);
+        if (onAddLocation) {
+          await onAddLocation(locationData);
+        } else {
+          await createLocation(mapId, editingSegment.segmentId, locationData);
+        }
+
+        window.dispatchEvent(new CustomEvent("locationCreated", {
+          detail: { segmentId: editingSegment.segmentId }
+        }));
+      }
+
+      setShowLocationDialog(false);
+      setWaitingForLocation(false);
+      setEditingLocation(null);
+      setInlineFormMode("list");
+    } catch (error) {
+      console.error("Failed to save location:", error);
+      alert("Không thể lưu location. Vui lòng thử lại.");
     }
-
-    window.dispatchEvent(new CustomEvent("locationCreated", {
-      detail: { segmentId: editingSegment.segmentId }
-    }));
-
-    setShowLocationDialog(false);
-    setWaitingForLocation(false);
-  }, [editingSegment, onAddLocation, mapId]);
+  }, [editingSegment, editingLocation, onAddLocation, mapId]);
 
   const handleAddZone = useCallback(async (data: CreateSegmentZoneRequest) => {
     if (!editingSegment?.segmentId) return;
@@ -330,7 +427,15 @@ export function LeftSidebarToolbox({
             <div className="flex items-center gap-2">
               <span className="font-semibold text-xs text-zinc-300 uppercase tracking-wider">
                 {activeView === "explorer" && "PROJECT"}
-                {activeView === "segments" && (segmentFormMode === "list" ? "SEGMENTS" : segmentFormMode === "create" ? "NEW SEGMENT" : "EDIT SEGMENT")}
+                {activeView === "segments" && (
+                  inlineFormMode === "location" ? (editingLocation ? "EDIT LOCATION" : "ADD LOCATION") :
+                  inlineFormMode === "zone" ? "ADD ZONE" :
+                  inlineFormMode === "layer" ? "ADD LAYER" :
+                  inlineFormMode === "route" ? "ADD ROUTE" :
+                  segmentFormMode === "list" ? "SEGMENTS" : 
+                  segmentFormMode === "create" ? "NEW SEGMENT" : 
+                  "EDIT SEGMENT"
+                )}
                 {activeView === "transitions" && (transitionFormMode === "list" ? "TRANSITIONS" : transitionFormMode === "create" ? "NEW TRANSITION" : "EDIT TRANSITION")}
                 {activeView === "icons" && "ASSETS"}
               </span>
@@ -348,11 +453,17 @@ export function LeftSidebarToolbox({
 
             <div className="flex items-center gap-1">
               {/* Back button for forms */}
-              {((activeView === "segments" && segmentFormMode !== "list") ||
+              {((activeView === "segments" && (segmentFormMode !== "list" || inlineFormMode !== "list")) ||
                 (activeView === "transitions" && transitionFormMode !== "list")) && (
                   <button
                     onClick={() => {
-                      if (activeView === "segments") handleCancelSegmentForm();
+                      if (activeView === "segments") {
+                        if (inlineFormMode !== "list") {
+                          setInlineFormMode("list");
+                        } else {
+                          handleCancelSegmentForm();
+                        }
+                      }
                       if (activeView === "transitions") handleCancelTransitionForm();
                     }}
                     className="p-1 hover:bg-zinc-800 rounded transition-colors"
@@ -363,7 +474,7 @@ export function LeftSidebarToolbox({
                 )}
 
               {/* Close panel button (only show when in list mode) */}
-              {((activeView === "segments" && segmentFormMode === "list") ||
+              {((activeView === "segments" && segmentFormMode === "list" && inlineFormMode === "list") ||
                 (activeView === "transitions" && transitionFormMode === "list") ||
                 activeView === "explorer" ||
                 activeView === "icons") && (
@@ -386,6 +497,7 @@ export function LeftSidebarToolbox({
                 layers={layers}
                 baseLayer={baseLayer}
                 mapId={mapId}
+                layerVisibility={layerVisibility}
                 onSelectFeature={onSelectFeature}
                 onSelectLayer={onSelectLayer}
                 onBaseLayerChange={onBaseLayerChange}
@@ -397,7 +509,7 @@ export function LeftSidebarToolbox({
               />
             )}
 
-            {activeView === "segments" && segmentFormMode === "list" && (
+            {activeView === "segments" && segmentFormMode === "list" && inlineFormMode === "list" && (
               <SegmentsView
                 segments={segments}
                 onSegmentClick={onSegmentClick}
@@ -410,6 +522,8 @@ export function LeftSidebarToolbox({
                     setEditingSegment(segment);
                     setWaitingForLocation(true);
                     setPickedCoordinates(null);
+                    setShowLocationDialog(true);
+                    setInlineFormMode("location");
                     // Show instruction message
                     if (typeof window !== 'undefined') {
                       window.dispatchEvent(new CustomEvent('showMapInstruction', {
@@ -423,6 +537,7 @@ export function LeftSidebarToolbox({
                   if (segment) {
                     setEditingSegment(segment);
                     setShowZoneDialog(true);
+                    setInlineFormMode("zone");
                   }
                 }}
                 onAddLayer={(segmentId: string) => {
@@ -430,6 +545,7 @@ export function LeftSidebarToolbox({
                   if (segment) {
                     setEditingSegment(segment);
                     setShowLayerDialog(true);
+                    setInlineFormMode("layer");
                   }
                 }}
                 onAddRouteAnimation={(segmentId: string) => {
@@ -437,6 +553,7 @@ export function LeftSidebarToolbox({
                   if (segment) {
                     setEditingSegment(segment);
                     setShowRouteAnimationDialog(true);
+                    setInlineFormMode("route");
                   }
                 }}
                 mapId={mapId}
@@ -454,6 +571,7 @@ export function LeftSidebarToolbox({
                   if (currentMap) {
                     setWaitingForLocation(true);
                     setPickedCoordinates(null);
+                    setShowLocationDialog(true);
                     // Show instruction message
                     if (typeof window !== 'undefined') {
                       window.dispatchEvent(new CustomEvent('showMapInstruction', {
@@ -488,62 +606,99 @@ export function LeftSidebarToolbox({
             )}
             {activeView === "icons" && <IconLibraryView />}
 
+            {/* Inline Forms for adding/editing location and zone */}
+            {activeView === "segments" && segmentFormMode === "list" && inlineFormMode === "location" && editingSegment && mapId && (
+              <LocationForm
+                segmentId={editingSegment.segmentId}
+                onSave={handleAddLocation}
+                onCancel={() => {
+                  setShowLocationDialog(false);
+                  setWaitingForLocation(false);
+                  setPickedCoordinates(null);
+                  setEditingLocation(null);
+                  setInlineFormMode("list");
+                }}
+                initialCoordinates={pickedCoordinates}
+                initialLocation={editingLocation}
+                onRepickLocation={() => {
+                  if (currentMap) {
+                    setWaitingForLocation(true);
+                    setPickedCoordinates(null);
+                    // Show instruction message
+                    if (typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('showMapInstruction', {
+                        detail: { message: 'Click on the map to place the location marker' }
+                      }));
+                    }
+                  }
+                }}
+              />
+            )}
+
+            {activeView === "segments" && segmentFormMode === "list" && inlineFormMode === "zone" && editingSegment && mapId && (
+              <ZoneForm
+                segmentId={editingSegment.segmentId}
+                onSave={async (data: CreateSegmentZoneRequest) => {
+                  await handleAddZone(data);
+                  setInlineFormMode("list");
+                }}
+                onCancel={() => {
+                  setShowZoneDialog(false);
+                  setInlineFormMode("list");
+                }}
+              />
+            )}
+
+            {activeView === "segments" && segmentFormMode === "list" && inlineFormMode === "layer" && editingSegment && mapId && (
+              <LayerForm
+                mapId={mapId}
+                segmentId={editingSegment.segmentId}
+                onSave={async (data: AttachLayerRequest) => {
+                  if (onAddLayer) {
+                    await onAddLayer(data);
+                  } else {
+                    await attachLayerToSegment(mapId, editingSegment.segmentId, data);
+                  }
+                  setInlineFormMode("list");
+                }}
+                onCancel={() => {
+                  setShowLayerDialog(false);
+                  setInlineFormMode("list");
+                }}
+              />
+            )}
+
+            {activeView === "segments" && segmentFormMode === "list" && inlineFormMode === "route" && editingSegment && mapId && (
+              <RouteAnimationForm
+                mapId={mapId}
+                segmentId={editingSegment.segmentId}
+                onSave={async (data: CreateRouteAnimationRequest) => {
+                  try {
+                    await createRouteAnimation(mapId, editingSegment.segmentId, data);
+                    
+                    // Dispatch event to refresh segments and route animations
+                    window.dispatchEvent(new CustomEvent("routeAnimationCreated", {
+                      detail: { segmentId: editingSegment.segmentId }
+                    }));
+                    
+                    setInlineFormMode("list");
+                  } catch (error) {
+                    console.error("Failed to create route animation:", error);
+                    alert("Không thể lưu route animation. Vui lòng thử lại.");
+                    throw error; // Re-throw to let form handle error state
+                  }
+                }}
+                onCancel={() => {
+                  setShowRouteAnimationDialog(false);
+                  setInlineFormMode("list");
+                }}
+              />
+            )}
+
           </div>
         </div>
       </div>
 
-      {/* Dialogs for adding location, zone, and layer */}
-      {editingSegment && mapId && (
-        <>
-          <LocationDialog
-            isOpen={showLocationDialog}
-            onClose={() => {
-              setShowLocationDialog(false);
-              setWaitingForLocation(false);
-              setPickedCoordinates(null);
-            }}
-            onSave={handleAddLocation}
-            segmentId={editingSegment.segmentId}
-            currentMap={currentMap}
-            initialCoordinates={pickedCoordinates}
-          />
-
-          <ZoneSelectionDialog
-            isOpen={showZoneDialog}
-            onClose={() => setShowZoneDialog(false)}
-            onSave={handleAddZone}
-            segmentId={editingSegment.segmentId}
-          />
-
-          <LayerAttachDialog
-            isOpen={showLayerDialog}
-            onClose={() => setShowLayerDialog(false)}
-            onSave={handleAddLayer}
-            mapId={mapId}
-            segmentId={editingSegment.segmentId}
-            attachedLayerIds={editingSegment.layers?.map(l => l.layerId) || []}
-          />
-
-          <RouteAnimationDialog
-            mapId={mapId}
-            segmentId={editingSegment.segmentId}
-            segmentDurationMs={editingSegment.durationMs}
-            currentMap={currentMap}
-            routeAnimation={null}
-            isOpen={showRouteAnimationDialog}
-            onClose={() => setShowRouteAnimationDialog(false)}
-            onSave={async () => {
-              // Dispatch event to refresh route animations list without full page reload
-              if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('routeAnimationChanged', {
-                  detail: { segmentId: editingSegment.segmentId }
-                }));
-              }
-              setShowRouteAnimationDialog(false);
-            }}
-          />
-        </>
-      )}
     </>
   );
 }
@@ -701,6 +856,7 @@ function ExplorerView({
   layers,
   baseLayer,
   mapId,
+  layerVisibility,
   onSelectFeature,
   onSelectLayer,
   onBaseLayerChange,
@@ -714,6 +870,7 @@ function ExplorerView({
   layers: LayerDTO[];
   baseLayer: BaseKey;
   mapId?: string;
+  layerVisibility?: Record<string, boolean>;
   onSelectFeature: (feature: FeatureData) => void;
   onSelectLayer: (layer: LayerDTO) => void;
   onBaseLayerChange: (key: BaseKey) => void;
@@ -1221,15 +1378,18 @@ function ExplorerView({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        onLayerVisibilityChange(layer.id, !layer.isPublic);
+                        const currentVisibility = layerVisibility?.[layer.id] ?? true;
+                        onLayerVisibilityChange(layer.id, !currentVisibility);
                       }}
+                      onMouseDown={(e) => e.stopPropagation()}
                       className="opacity-0 group-hover/item:opacity-100 transition-opacity p-0.5 hover:bg-zinc-700 rounded"
+                      title={(layerVisibility?.[layer.id] ?? true) ? "Ẩn layer" : "Hiện layer"}
                     >
                       <Icon
-                        icon={layer.isPublic ? "mdi:eye" : "mdi:eye-off"}
+                        icon={(layerVisibility?.[layer.id] ?? true) ? "mdi:eye" : "mdi:eye-off"}
                         className={cn(
                           "w-3.5 h-3.5",
-                          layer.isPublic ? "text-emerald-400" : "text-zinc-600"
+                          (layerVisibility?.[layer.id] ?? true) ? "text-emerald-400" : "text-zinc-600"
                         )}
                       />
                     </button>
@@ -1258,7 +1418,7 @@ function ExplorerView({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between px-1">
           <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-            Features chưa thuộc layer
+            Features chưa có layer
           </h4>
           <span className="text-[10px] text-zinc-600">{visibleUnassignedFeatures.length}</span>
         </div>
@@ -1278,8 +1438,8 @@ function ExplorerView({
           {visibleUnassignedFeatures.length === 0 ? (
             <p className="text-[11px] text-zinc-500 italic">
               {unassignedFeatures.length === 0
-                ? "Tất cả feature đã nằm trong layer"
-                : "Không có feature khớp tìm kiếm"}
+                ? "Trống"
+                : "Không có feature"}
             </p>
           ) : (
             <div className="space-y-0.5">
@@ -1430,20 +1590,19 @@ function SegmentsView({
                       </div>
                     )}
 
-                    {/* Quick action buttons - Compact style */}
                     {mapId && (onAddLocation || onAddZone || onAddLayer || onAddRouteAnimation) && (
-                      <div className="mt-1.5 pt-1.5 border-t border-zinc-800/50 flex items-center gap-1 flex-wrap">
+                      <div className="mt-2 pt-2 border-t border-zinc-800/50 flex items-center gap-1.5 flex-wrap">
                         {onAddLocation && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               onAddLocation(segment.segmentId);
                             }}
-                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 hover:border-emerald-500/40 text-emerald-400 hover:text-emerald-300 transition-all text-[9px] font-medium"
+                            className="flex items-center gap-1 px-2 py-1 rounded-md bg-gradient-to-r from-emerald-600/40 to-emerald-500/30 hover:from-emerald-600/60 hover:to-emerald-500/50 border border-emerald-500/40 hover:border-emerald-400/60 text-emerald-300 hover:text-emerald-100 transition-all text-[10px] font-semibold shadow-sm hover:shadow-md"
                             title="Add location"
                           >
-                            <Icon icon="mdi:plus" className="w-2.5 h-2.5" />
-                            <Icon icon="mdi:map-marker" className="w-2.5 h-2.5" />
+                            <Icon icon="mdi:map-marker" className="w-3.5 h-3.5" />
+                            <span>Location</span>
                           </button>
                         )}
                         {onAddZone && (
@@ -1452,11 +1611,11 @@ function SegmentsView({
                               e.stopPropagation();
                               onAddZone(segment.segmentId);
                             }}
-                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/40 text-blue-400 hover:text-blue-300 transition-all text-[9px] font-medium"
+                            className="flex items-center gap-1 px-2 py-1 rounded-md bg-gradient-to-r from-blue-600/40 to-blue-500/30 hover:from-blue-600/60 hover:to-blue-500/50 border border-blue-500/40 hover:border-blue-400/60 text-blue-300 hover:text-blue-100 transition-all text-[10px] font-semibold shadow-sm hover:shadow-md"
                             title="Add zone"
                           >
-                            <Icon icon="mdi:plus" className="w-2.5 h-2.5" />
-                            <Icon icon="mdi:shape" className="w-2.5 h-2.5" />
+                            <Icon icon="mdi:shape" className="w-3.5 h-3.5" />
+                            <span>Zone</span>
                           </button>
                         )}
                         {onAddLayer && (
@@ -1465,11 +1624,11 @@ function SegmentsView({
                               e.stopPropagation();
                               onAddLayer(segment.segmentId);
                             }}
-                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 hover:border-purple-500/40 text-purple-400 hover:text-purple-300 transition-all text-[9px] font-medium"
+                            className="flex items-center gap-1 px-2 py-1 rounded-md bg-gradient-to-r from-purple-600/40 to-purple-500/30 hover:from-purple-600/60 hover:to-purple-500/50 border border-purple-500/40 hover:border-purple-400/60 text-purple-300 hover:text-purple-100 transition-all text-[10px] font-semibold shadow-sm hover:shadow-md"
                             title="Attach layer"
                           >
-                            <Icon icon="mdi:plus" className="w-2.5 h-2.5" />
-                            <Icon icon="mdi:layers" className="w-2.5 h-2.5" />
+                            <Icon icon="mdi:layers" className="w-3.5 h-3.5" />
+                            <span>Layer</span>
                           </button>
                         )}
                         {onAddRouteAnimation && (
@@ -1478,11 +1637,11 @@ function SegmentsView({
                               e.stopPropagation();
                               onAddRouteAnimation(segment.segmentId);
                             }}
-                            className="flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-orange-500/10 hover:bg-orange-500/20 border border-orange-500/20 hover:border-orange-500/40 text-orange-400 hover:text-orange-300 transition-all text-[9px] font-medium"
-                            title="Add route"
+                            className="flex items-center gap-1 px-2 py-1 rounded-md bg-gradient-to-r from-orange-600/40 to-orange-500/30 hover:from-orange-600/60 hover:to-orange-500/50 border border-orange-500/40 hover:border-orange-400/60 text-orange-300 hover:text-orange-100 transition-all text-[10px] font-semibold shadow-sm hover:shadow-md"
+                            title="Add route animation"
                           >
-                            <Icon icon="mdi:plus" className="w-2.5 h-2.5" />
-                            <Icon icon="mdi:route" className="w-2.5 h-2.5" />
+                            <Icon icon="mdi:route" className="w-3.5 h-3.5" />
+                            <span>Route</span>
                           </button>
                         )}
                         {mapId && (

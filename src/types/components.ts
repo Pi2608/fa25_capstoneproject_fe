@@ -48,13 +48,15 @@ export interface ZoneContextMenuProps {
   onClose: () => void;
   onZoomToFit: () => void;
   onCopyCoordinates: () => void;
-  onCopyToExistingLayer: () => void;
-  onCopyToNewLayer: () => void;
+  onCopyToExistingLayer?: (layerId?: string) => void;
+  onCopyToNewLayer?: (layerName?: string) => void;
   onDeleteZone: () => void;
   zoneName?: string;
   mapId?: string;
   layerId?: string;
+  featureIndex?: number;
   feature?: GeoJSON.Feature;
+  onSuccess?: (message: string) => void;
 }
 
 export interface LayerPickerDialogProps {

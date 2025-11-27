@@ -85,6 +85,7 @@ export function useFeatureManagement({
         type,
         layer: extLayer,
         isVisible: true,
+        layerId: currentLayerId || null, // Include layerId immediately
       };
 
       // Save to database

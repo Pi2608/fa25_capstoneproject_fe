@@ -725,6 +725,7 @@ export async function saveFeature(
       layer,
       isVisible: true,
       featureId: tempFeatureId, // Temporary ID
+      layerId: layerId || null, // Include layerId immediately
     };
 
     // Immediately add to UI (optimistic update)
@@ -758,7 +759,8 @@ export async function saveFeature(
       ...optimisticFeature,
       id: `feature-${response.featureId}`, // Update id to match real featureId format
       featureId: response.featureId,
-      layerId: response.layerId || null, // Store layerId from backend response
+      // Prefer server response, but keep optimistic layerId if server returns null/undefined
+      layerId: response.layerId !== undefined ? response.layerId : optimisticFeature.layerId,
     };
 
     // Replace temporary feature with real one, but check for duplicates first
