@@ -633,11 +633,17 @@ export default function EditMapPage() {
         }));
       }
 
-      setFeatures(prev => prev.map(f =>
-        f.featureId === featureId
-          ? { ...f, isVisible: updatedFeature.isVisible ?? true }
-          : f
-      ));
+      setFeatures(prev =>
+        prev.map(f =>
+          f.featureId === featureId
+            ? {
+                ...f,
+                isVisible: updatedFeature.isVisible ?? true,
+                layerId: updatedFeature.layerId || null,
+              }
+            : f
+        )
+      );
     } catch (error) {
       console.error("Failed to update feature:", error);
       if (handleMapDataChangedRef.current) {
@@ -983,6 +989,23 @@ export default function EditMapPage() {
   const handleZoomIn = useCallback(() => {
     mapHelpers.zoomIn(mapRef);
   }, []);
+
+  useEffect(() => {
+    const handleFeatureLayerEvent = (event: Event) => {
+      const custom = event as CustomEvent<{ featureId?: string }>;
+      const featureId = custom.detail?.featureId;
+      if (featureId) {
+        handleFeatureUpdated(featureId);
+      } else if (handleMapDataChangedRef.current) {
+        handleMapDataChangedRef.current();
+      }
+    };
+
+    window.addEventListener("featureLayerUpdated", handleFeatureLayerEvent as EventListener);
+    return () => {
+      window.removeEventListener("featureLayerUpdated", handleFeatureLayerEvent as EventListener);
+    };
+  }, [handleFeatureUpdated]);
 
   const handleZoomOut = useCallback(() => {
     mapHelpers.zoomOut(mapRef);

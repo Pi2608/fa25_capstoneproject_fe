@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, type DragEvent } from "react";
 import { gsap } from "gsap";
 import { Icon } from "./Icon";
 import { cn } from "@/lib/utils";
 import type { BaseKey } from "@/types";
 import type { FeatureData } from "@/utils/mapUtils";
 import type { LayerDTO } from "@/lib/api-maps";
-import { addLayerToMap, updateMapLayer } from "@/lib/api-maps";
+import { addLayerToMap, updateMapLayer, updateMapFeature } from "@/lib/api-maps";
 import {
   type Segment,
   type TimelineTransition,
@@ -38,7 +38,7 @@ import LocationDialog from "@/components/storymap/LocationDialog";
 import ZoneSelectionDialog from "@/components/storymap/ZoneSelectionDialog";
 import LayerAttachDialog from "@/components/storymap/LayerAttachDialog";
 import RouteAnimationDialog from "@/components/storymap/RouteAnimationDialog";
-import { LayerSelector } from "./LayerSelector";
+
 
 interface LeftSidebarToolboxProps {
   activeView: "explorer" | "segments" | "transitions" | "icons" | null;
@@ -727,6 +727,243 @@ function ExplorerView({
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingLayerName, setEditingLayerName] = useState("");
   const [isUpdatingLayer, setIsUpdatingLayer] = useState(false);
+  const [expandedLayers, setExpandedLayers] = useState<Record<string, boolean>>({});
+  const [isUnassignedExpanded, setIsUnassignedExpanded] = useState(true);
+  const [draggingFeatureId, setDraggingFeatureId] = useState<string | null>(null);
+  const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(null);
+  const [updatingFeatureId, setUpdatingFeatureId] = useState<string | null>(null);
+
+  const UNASSIGNED_KEY = "__unassigned__";
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const doesFeatureMatch = useCallback(
+    (feature: FeatureData) =>
+      normalizedQuery.length === 0 ||
+      feature.name.toLowerCase().includes(normalizedQuery),
+    [normalizedQuery]
+  );
+  const doesLayerMatch = useCallback(
+    (layer: LayerDTO) =>
+      normalizedQuery.length === 0 ||
+      layer.layerName.toLowerCase().includes(normalizedQuery),
+    [normalizedQuery]
+  );
+
+  useEffect(() => {
+    setExpandedLayers(prev => {
+      const next = { ...prev };
+      layers.forEach(layer => {
+        if (next[layer.id] === undefined) {
+          next[layer.id] = true;
+        }
+      });
+      return next;
+    });
+  }, [layers]);
+
+  const featuresByLayer = useMemo(() => {
+    const map = new Map<string, FeatureData[]>();
+    layers.forEach(layer => map.set(layer.id, []));
+    features.forEach(feature => {
+      const key = feature.layerId || UNASSIGNED_KEY;
+      if (!map.has(key)) {
+        map.set(key, []);
+      }
+      map.get(key)!.push(feature);
+    });
+    if (!map.has(UNASSIGNED_KEY)) {
+      map.set(UNASSIGNED_KEY, []);
+    }
+    return map;
+  }, [features, layers]);
+
+  const filteredFeatures = useMemo(
+    () => features.filter(doesFeatureMatch),
+    [features, doesFeatureMatch]
+  );
+
+  const visibleLayers = useMemo(
+    () =>
+      layers.filter(layer => {
+        if (doesLayerMatch(layer)) return true;
+        const assigned = featuresByLayer.get(layer.id) || [];
+        return assigned.some(doesFeatureMatch);
+      }),
+    [layers, featuresByLayer, doesLayerMatch, doesFeatureMatch]
+  );
+
+  const unassignedFeatures = featuresByLayer.get(UNASSIGNED_KEY) || [];
+  const unassignedLabelVariants = ["unassigned", "no layer", "chua co layer", "chua thuoc layer"];
+  const unassignedMatchesQuery =
+    normalizedQuery.length === 0 ||
+    unassignedLabelVariants.some(label => label.includes(normalizedQuery));
+  const visibleUnassignedFeatures = useMemo(
+    () =>
+      unassignedMatchesQuery
+        ? unassignedFeatures
+        : unassignedFeatures.filter(doesFeatureMatch),
+    [unassignedFeatures, doesFeatureMatch, unassignedMatchesQuery]
+  );
+
+  const toggleLayerExpanded = (layerId: string) => {
+    setExpandedLayers(prev => ({ ...prev, [layerId]: !prev[layerId] }));
+  };
+
+  const resetDragState = () => {
+    setDraggingFeatureId(null);
+    setDropTargetLayerId(null);
+  };
+
+  const handleFeatureDragStart = (
+    event: DragEvent<HTMLDivElement>,
+    feature: FeatureData
+  ) => {
+    if (!mapId || !feature.featureId) {
+      event.preventDefault();
+      return;
+    }
+    const featurePersistedId = feature.featureId || feature.id;
+    setDraggingFeatureId(featurePersistedId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", featurePersistedId);
+  };
+
+  const handleFeatureDragEnd = () => {
+    resetDragState();
+  };
+
+  const handleLayerDragOver = (
+    event: DragEvent<HTMLDivElement>,
+    targetId: string
+  ) => {
+    if (!draggingFeatureId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (dropTargetLayerId !== targetId) {
+      setDropTargetLayerId(targetId);
+    }
+  };
+
+  const handleLayerDragLeave = (targetId: string) => {
+    if (dropTargetLayerId === targetId) {
+      setDropTargetLayerId(null);
+    }
+  };
+
+  const handleLayerDrop = async (targetLayerId: string | null) => {
+    if (!mapId || !draggingFeatureId) {
+      resetDragState();
+      return;
+    }
+
+    const feature = features.find(
+      f => (f.featureId || f.id) === draggingFeatureId
+    );
+    if (!feature || !feature.featureId) {
+      resetDragState();
+      return;
+    }
+
+    const normalizedTarget = targetLayerId;
+    if ((feature.layerId || null) === normalizedTarget) {
+      resetDragState();
+      return;
+    }
+
+    try {
+      setUpdatingFeatureId(feature.featureId);
+      await updateMapFeature(mapId, feature.featureId, {
+        layerId: normalizedTarget,
+      });
+      window.dispatchEvent(
+        new CustomEvent("featureLayerUpdated", {
+          detail: { featureId: feature.featureId },
+        })
+      );
+    } catch (error) {
+      console.error("Failed to move feature to layer:", error);
+      alert("Không thể di chuyển feature. Vui lòng thử lại.");
+    } finally {
+      setUpdatingFeatureId(null);
+      resetDragState();
+    }
+  };
+
+  const renderFeatureRow = (feature: FeatureData, subtitle?: string) => {
+    const isDraggable = Boolean(mapId && feature.featureId);
+    const isUpdating = updatingFeatureId === feature.featureId;
+    return (
+      <div
+        key={feature.id}
+        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800/60 cursor-pointer group/item transition-colors"
+        onClick={() => onSelectFeature(feature)}
+        draggable={isDraggable}
+        onDragStart={event => handleFeatureDragStart(event, feature)}
+        onDragEnd={handleFeatureDragEnd}
+        title={
+          isDraggable
+            ? "Kéo thả để chuyển layer"
+            : "Feature cần được lưu trước khi kéo"
+        }
+      >
+        <div className="w-6 h-6 rounded bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
+          <Icon
+            icon={getFeatureIcon(feature.type)}
+            className="w-3.5 h-3.5 text-emerald-400"
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <span className="text-xs text-zinc-300 truncate font-medium block">
+            {feature.name}
+          </span>
+          {subtitle && (
+            <span className="text-[10px] text-zinc-500 truncate block">
+              {subtitle}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {isUpdating && (
+            <Icon
+              icon="mdi:loading"
+              className="w-3.5 h-3.5 text-emerald-400 animate-spin"
+            />
+          )}
+          <div className="flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onFeatureVisibilityChange(
+                  feature.featureId || feature.id,
+                  !feature.isVisible
+                );
+              }}
+              className="p-0.5 hover:bg-zinc-700 rounded"
+            >
+              <Icon
+                icon={feature.isVisible ? "mdi:eye" : "mdi:eye-off"}
+                className={cn(
+                  "w-3.5 h-3.5",
+                  feature.isVisible ? "text-emerald-400" : "text-zinc-600"
+                )}
+              />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDeleteFeature(feature.featureId || feature.id);
+              }}
+              className="p-0.5 hover:bg-zinc-700 rounded"
+            >
+              <Icon
+                icon="mdi:delete-outline"
+                className="w-3.5 h-3.5 text-red-400 hover:text-red-300"
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const handleCreateLayer = async () => {
     if (!mapId) return;
@@ -794,13 +1031,6 @@ function ExplorerView({
     setEditingLayerName("");
   };
 
-  const filteredFeatures = features.filter(f => 
-    f.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-  const filteredLayers = layers.filter(l => 
-    l.layerName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
     <div className="h-full flex flex-col">
       {/* Search Bar */}
@@ -818,26 +1048,11 @@ function ExplorerView({
       </div>
 
       <div className="flex-1 overflow-y-auto p-2 space-y-3">
-      {/* Layer Selector - Chọn layer để vẽ feature */}
-      {onLayerChange && layers.length > 0 && (
-        <div className="space-y-1.5">
-          <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider px-1">
-            Layer cho vẽ mới
-          </h4>
-          <div className="px-1">
-            <LayerSelector
-              layers={layers}
-              currentLayerId={currentLayerId || null}
-              onLayerChange={onLayerChange}
-            />
-          </div>
-        </div>
-      )}
       
       {/* Base Layer Selection */}
       <div className="space-y-2">
         <h4 className="text-xs font-semibold text-zinc-400 uppercase">
-          Base Layer
+          Map Base Layer
         </h4>
         <div className="grid grid-cols-3 gap-2">
           {[
@@ -869,14 +1084,16 @@ function ExplorerView({
         </div>
       </div>
 
-      {/* Layers List - Video Editor Style */}
+      {/* Layers & Features Tree */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between px-1">
           <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-            Layers
+            Layers & Features
           </h4>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] text-zinc-600">{filteredLayers.length}</span>
+          <div className="flex items-center gap-2 text-[10px] text-zinc-600">
+            <span>{visibleLayers.length} layers</span>
+            <span>•</span>
+            <span>{filteredFeatures.length} features</span>
             {mapId && (
               <button
                 onClick={handleCreateLayer}
@@ -888,170 +1105,190 @@ function ExplorerView({
             )}
           </div>
         </div>
-        {filteredLayers.length === 0 ? (
+        {visibleLayers.length === 0 ? (
           <div className="px-2 py-4 text-center">
-            <p className="text-xs text-zinc-500 italic">No layers</p>
+            <p className="text-xs text-zinc-500 italic">Không có layer trùng khớp</p>
           </div>
         ) : (
-          <div className="space-y-0.5">
-            {filteredLayers.map((layer) => (
-              <div
-                key={layer.id}
-                className={cn(
-                  "flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800/60 cursor-pointer group/item transition-colors",
-                  currentLayerId === layer.id && "bg-emerald-500/20 border border-emerald-500/50"
-                )}
-                onClick={() => {
-                  if (editingLayerId !== layer.id) {
-                    onSelectLayer(layer);
-                    // Auto-select this layer for drawing when clicked
-                    if (onLayerChange) {
-                      onLayerChange(layer.id);
-                    }
-                  }
-                }}
-              >
-                <div className={cn(
-                  "w-6 h-6 rounded flex items-center justify-center flex-shrink-0",
-                  currentLayerId === layer.id 
-                    ? "bg-emerald-500/20" 
-                    : "bg-blue-500/20"
-                )}>
-                  <Icon
-                    icon={currentLayerId === layer.id ? "mdi:folder-check" : "mdi:folder-outline"}
+          <div className="space-y-1">
+            {visibleLayers.map(layer => {
+              const assignedFeatures = featuresByLayer.get(layer.id) || [];
+              const layerMatches = doesLayerMatch(layer);
+              const isExpanded = expandedLayers[layer.id] ?? true;
+              const featuresToShow =
+                layerMatches || normalizedQuery.length === 0
+                  ? assignedFeatures
+                  : assignedFeatures.filter(doesFeatureMatch);
+              const dropActive = dropTargetLayerId === layer.id;
+              return (
+                <div
+                  key={layer.id}
+                  className={cn(
+                    "rounded border border-transparent bg-zinc-900/40",
+                    dropActive && "border-emerald-500/50 bg-emerald-500/10"
+                  )}
+                  onDragOver={event => handleLayerDragOver(event, layer.id)}
+                  onDragLeave={() => handleLayerDragLeave(layer.id)}
+                  onDrop={event => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    handleLayerDrop(layer.id);
+                  }}
+                >
+                  <div
                     className={cn(
-                      "w-3.5 h-3.5",
-                      currentLayerId === layer.id 
-                        ? "text-emerald-400" 
-                        : "text-blue-400"
+                      "group/item flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800/60 cursor-pointer transition-colors",
+                      currentLayerId === layer.id &&
+                        "bg-emerald-500/20 border border-emerald-500/50"
                     )}
-                  />
-                </div>
-                {editingLayerId === layer.id ? (
-                  <input
-                    type="text"
-                    value={editingLayerName}
-                    onChange={(e) => setEditingLayerName(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        handleSaveLayerName();
-                      } else if (e.key === "Escape") {
-                        handleCancelEditLayerName();
+                    onClick={() => {
+                      if (editingLayerId !== layer.id) {
+                        onSelectLayer(layer);
+                        if (onLayerChange) {
+                          onLayerChange(layer.id);
+                        }
                       }
                     }}
-                    onBlur={handleSaveLayerName}
-                    onClick={(e) => e.stopPropagation()}
-                    className="flex-1 text-xs text-zinc-300 font-medium bg-zinc-700 border border-emerald-500/50 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-                    autoFocus
-                    disabled={isUpdatingLayer}
-                  />
-                ) : (
-                  <span
-                    className="flex-1 text-xs text-zinc-300 truncate font-medium"
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      handleStartEditLayerName(layer);
-                    }}
-                    title="Double click để đổi tên"
                   >
-                    {layer.layerName}
-                  </span>
-                )}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onLayerVisibilityChange(layer.id, !layer.isPublic);
-                  }}
-                  className="opacity-0 group-hover/item:opacity-100 transition-opacity p-0.5 hover:bg-zinc-700 rounded"
-                >
-                  <Icon
-                    icon={layer.isPublic ? "mdi:eye" : "mdi:eye-off"}
-                    className={cn(
-                      "w-3.5 h-3.5",
-                      layer.isPublic ? "text-emerald-400" : "text-zinc-600"
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleLayerExpanded(layer.id);
+                      }}
+                      className="p-1 rounded hover:bg-zinc-800/80 transition-colors"
+                      title={isExpanded ? "Thu gọn" : "Mở rộng"}
+                    >
+                      <Icon
+                        icon={isExpanded ? "mdi:chevron-down" : "mdi:chevron-right"}
+                        className="w-3.5 h-3.5 text-zinc-500"
+                      />
+                    </button>
+                    <div
+                      className={cn(
+                        "w-6 h-6 rounded flex items-center justify-center flex-shrink-0",
+                        currentLayerId === layer.id
+                          ? "bg-emerald-500/20"
+                          : "bg-blue-500/20"
+                      )}
+                    >
+                      <Icon
+                        icon={
+                          currentLayerId === layer.id
+                            ? "mdi:folder-check"
+                            : "mdi:folder-outline"
+                        }
+                        className={cn(
+                          "w-3.5 h-3.5",
+                          currentLayerId === layer.id
+                            ? "text-emerald-400"
+                            : "text-blue-400"
+                        )}
+                      />
+                    </div>
+                    {editingLayerId === layer.id ? (
+                      <input
+                        type="text"
+                        value={editingLayerName}
+                        onChange={(e) => setEditingLayerName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            handleSaveLayerName();
+                          } else if (e.key === "Escape") {
+                            handleCancelEditLayerName();
+                          }
+                        }}
+                        onBlur={handleSaveLayerName}
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex-1 text-xs text-zinc-300 font-medium bg-zinc-700 border border-emerald-500/50 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
+                        autoFocus
+                        disabled={isUpdatingLayer}
+                      />
+                    ) : (
+                      <span
+                        className="flex-1 text-xs text-zinc-300 truncate font-medium"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          handleStartEditLayerName(layer);
+                        }}
+                        title="Double click để đổi tên"
+                      >
+                        {layer.layerName}
+                      </span>
                     )}
-                  />
-                </button>
-              </div>
-            ))}
+                    <span className="text-[10px] text-zinc-500 font-semibold min-w-[32px] text-right">
+                      {assignedFeatures.length}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onLayerVisibilityChange(layer.id, !layer.isPublic);
+                      }}
+                      className="opacity-0 group-hover/item:opacity-100 transition-opacity p-0.5 hover:bg-zinc-700 rounded"
+                    >
+                      <Icon
+                        icon={layer.isPublic ? "mdi:eye" : "mdi:eye-off"}
+                        className={cn(
+                          "w-3.5 h-3.5",
+                          layer.isPublic ? "text-emerald-400" : "text-zinc-600"
+                        )}
+                      />
+                    </button>
+                  </div>
+                  {isExpanded && (
+                    <div className="pl-8 pr-2 pb-2 space-y-0.5">
+                      {featuresToShow.length === 0 ? (
+                        <p className="text-[11px] text-zinc-500 italic">
+                          {assignedFeatures.length === 0
+                            ? "Chưa có feature"
+                            : "Không có feature khớp tìm kiếm"}
+                        </p>
+                      ) : (
+                        featuresToShow.map(feature => renderFeatureRow(feature))
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Features List - Video Editor Style */}
+      {/* Unassigned features */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between px-1">
           <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-            Features
+            Features chưa thuộc layer
           </h4>
-          <span className="text-[10px] text-zinc-600">{filteredFeatures.length}</span>
+          <span className="text-[10px] text-zinc-600">{visibleUnassignedFeatures.length}</span>
         </div>
-        {filteredFeatures.length === 0 ? (
-          <div className="px-2 py-4 text-center">
-            <p className="text-xs text-zinc-500 italic">No features</p>
-          </div>
-        ) : (
-          <div className="space-y-0.5">
-            {filteredFeatures.map((feature) => (
-              <div
-                key={feature.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800/60 cursor-pointer group/item transition-colors"
-                onClick={() => onSelectFeature(feature)}
-              >
-                <div className="w-6 h-6 rounded bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
-                  <Icon
-                    icon={getFeatureIcon(feature.type)}
-                    className="w-3.5 h-3.5 text-emerald-400"
-                  />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <span className="text-xs text-zinc-300 truncate font-medium block">
-                    {feature.name}
-                  </span>
-                  {feature.layerId && (
-                    <span className="text-[10px] text-zinc-500 truncate block">
-                      {layers.find(l => l.id === feature.layerId)?.layerName || "Unknown layer"}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-center gap-0.5 opacity-0 group-hover/item:opacity-100 transition-opacity">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onFeatureVisibilityChange(
-                        feature.featureId || feature.id,
-                        !feature.isVisible
-                      );
-                    }}
-                    className="p-0.5 hover:bg-zinc-700 rounded"
-                  >
-                    <Icon
-                      icon={feature.isVisible ? "mdi:eye" : "mdi:eye-off"}
-                      className={cn(
-                        "w-3.5 h-3.5",
-                        feature.isVisible
-                          ? "text-emerald-400"
-                          : "text-zinc-600"
-                      )}
-                    />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteFeature(feature.featureId || feature.id);
-                    }}
-                    className="p-0.5 hover:bg-zinc-700 rounded"
-                  >
-                    <Icon
-                      icon="mdi:delete-outline"
-                      className="w-3.5 h-3.5 text-red-400 hover:text-red-300"
-                    />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div
+          className={cn(
+            "rounded border border-dashed border-zinc-700 px-2 py-2",
+            dropTargetLayerId === UNASSIGNED_KEY && "border-emerald-500/60 bg-emerald-500/10"
+          )}
+          onDragOver={event => handleLayerDragOver(event, UNASSIGNED_KEY)}
+          onDragLeave={() => handleLayerDragLeave(UNASSIGNED_KEY)}
+          onDrop={event => {
+            event.preventDefault();
+            event.stopPropagation();
+            handleLayerDrop(null);
+          }}
+        >
+          {visibleUnassignedFeatures.length === 0 ? (
+            <p className="text-[11px] text-zinc-500 italic">
+              {unassignedFeatures.length === 0
+                ? "Tất cả feature đã nằm trong layer"
+                : "Không có feature khớp tìm kiếm"}
+            </p>
+          ) : (
+            <div className="space-y-0.5">
+              {visibleUnassignedFeatures.map(feature =>
+                renderFeatureRow(feature, "Chưa thuộc layer")
+              )}
+            </div>
+          )}
+        </div>
       </div>
       </div>
     </div>
