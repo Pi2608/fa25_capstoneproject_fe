@@ -9,7 +9,6 @@ import type { FeatureData } from "@/utils/mapUtils";
 import type { LayerDTO } from "@/lib/api-maps";
 import { addLayerToMap, getMapFeatures, updateMapFeature, type MapFeatureResponse } from "@/lib/api-maps";
 import DeleteLayerDialog from "@/components/dialogs/DeleteLayerDialog";
-import RouteAnimationDialog from "@/components/storymap/RouteAnimationDialog";
 import { handleDeleteLayerWithFeatures } from "@/utils/mapUtils";
 import LayerTree from "@/components/map-editor-ui/LayerTree";
 import { buildLayerTree, filterLayerTree } from "@/utils/layerTreeUtils";
@@ -85,7 +84,7 @@ interface LeftSidebarToolboxProps {
 
 type ViewType = "explorer" | "segments" | "transitions" | "icons";
 type FormMode = "list" | "create" | "edit";
-type PanelMode = "add-location" | "add-zone" | "add-layer" | null;
+type PanelMode = "add-location" | "add-zone" | "add-layer" | "add-route" | null;
 
 export function LeftSidebarToolbox({
   activeView,
@@ -125,14 +124,10 @@ export function LeftSidebarToolbox({
   const [transitionFormMode, setTransitionFormMode] = useState<FormMode>("list");
   const [editingTransition, setEditingTransition] = useState<TimelineTransition | null>(null);
 
-  // Panel mode for next-step panels (location, zone, layer)
+  // Panel mode for next-step panels (location, zone, layer, route)
   const [panelMode, setPanelMode] = useState<PanelMode>(null);
   const [waitingForLocation, setWaitingForLocation] = useState(false);
   const [pickedCoordinates, setPickedCoordinates] = useState<[number, number] | null>(null);
-
-  // Route Animation Dialog
-  const [showRouteDialog, setShowRouteDialog] = useState(false);
-  const [routeSegmentId, setRouteSegmentId] = useState<string | null>(null);
 
   // Handle map click when waiting for location
   useEffect(() => {
@@ -347,6 +342,7 @@ export function LeftSidebarToolbox({
                 {panelMode === "add-location" && "ADD LOCATION"}
                 {panelMode === "add-zone" && "ADD ZONE"}
                 {panelMode === "add-layer" && "ATTACH LAYER"}
+                {panelMode === "add-route" && "ADD ROUTE ANIMATION"}
                 {!panelMode && activeView === "explorer" && "PROJECT"}
                 {!panelMode && activeView === "segments" && (segmentFormMode === "list" ? "SEGMENTS" : segmentFormMode === "create" ? "NEW SEGMENT" : "EDIT SEGMENT")}
                 {!panelMode && activeView === "transitions" && (transitionFormMode === "list" ? "TRANSITIONS" : transitionFormMode === "create" ? "NEW TRANSITION" : "EDIT TRANSITION")}
@@ -446,6 +442,22 @@ export function LeftSidebarToolbox({
               />
             )}
 
+            {panelMode === "add-route" && editingSegment && mapId && (
+              <RouteAnimationView
+                mapId={mapId}
+                segmentId={editingSegment.segmentId}
+                currentMap={currentMap}
+                onSave={async () => {
+                  setPanelMode(null);
+                  // Refresh segments without page reload
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('refreshSegments'));
+                  }
+                }}
+                onCancel={() => setPanelMode(null)}
+              />
+            )}
+
 
             {!panelMode && activeView === "explorer" && (
               <ExplorerView
@@ -495,8 +507,11 @@ export function LeftSidebarToolbox({
                   }
                 }}
                 onAddRouteAnimation={(segmentId: string) => {
-                  setRouteSegmentId(segmentId);
-                  setShowRouteDialog(true);
+                  const segment = segments.find(s => s.segmentId === segmentId);
+                  if (segment) {
+                    setEditingSegment(segment);
+                    setPanelMode("add-route");
+                  }
                 }}
                 mapId={mapId}
               />
@@ -525,12 +540,7 @@ export function LeftSidebarToolbox({
                 }}
                 onAddZone={() => setPanelMode("add-zone")}
                 onAddLayer={() => setPanelMode("add-layer")}
-                onAddRouteAnimation={() => {
-                  if (editingSegment?.segmentId) {
-                    setRouteSegmentId(editingSegment.segmentId);
-                    setShowRouteDialog(true);
-                  }
-                }}
+                onAddRouteAnimation={() => setPanelMode("add-route")}
               />
             )}
 
@@ -1423,6 +1433,417 @@ function LayerPanelView({
   );
 }
 
+function RouteAnimationView({
+  mapId,
+  segmentId,
+  currentMap,
+  onSave,
+  onCancel,
+}: {
+  mapId: string;
+  segmentId: string;
+  currentMap?: any;
+  onSave: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  // Helper function to parse coordinates
+  const parseLocationCoords = (location: Location): { lat: number; lng: number } | null => {
+    if (!location.markerGeometry) return null;
+    try {
+      const geoJson = typeof location.markerGeometry === "string"
+        ? JSON.parse(location.markerGeometry)
+        : location.markerGeometry;
+      if (geoJson.type === "Point" && geoJson.coordinates?.length >= 2) {
+        return { lng: geoJson.coordinates[0], lat: geoJson.coordinates[1] };
+      }
+    } catch (e) {
+      console.error("Failed to parse location geometry:", e);
+    }
+    return null;
+  };
+
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [fromLocationId, setFromLocationId] = useState("");
+  const [toLocationId, setToLocationId] = useState("");
+  const [waypointLocationIds, setWaypointLocationIds] = useState<string[]>([]);
+  const [routePath, setRoutePath] = useState<[number, number][]>([]);
+  const [routeType, setRouteType] = useState<"road" | "straight">("road");
+  const [iconType, setIconType] = useState<"car" | "walking" | "bike" | "plane" | "custom">("car");
+  const [iconUrl, setIconUrl] = useState("");
+  const [routeColor, setRouteColor] = useState("#666666");
+  const [visitedColor, setVisitedColor] = useState("#3b82f6");
+  const [routeWidth, setRouteWidth] = useState(4);
+  const [durationMs, setDurationMs] = useState(5000);
+  const [showLocationInfoOnArrival, setShowLocationInfoOnArrival] = useState(true);
+  const [locationInfoDisplayDurationMs, setLocationInfoDisplayDurationMs] = useState<number | undefined>();
+  const [cameraStateBefore, setCameraStateBefore] = useState("");
+  const [cameraStateAfter, setCameraStateAfter] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Load locations
+  useEffect(() => {
+    setLoading(true);
+    getMapLocations(mapId)
+      .then((locs) => setLocations(locs || []))
+      .catch((e) => console.error("Failed to load locations:", e))
+      .finally(() => setLoading(false));
+  }, [mapId]);
+
+  const handleSearchRoute = async () => {
+    if (!fromLocationId || !toLocationId) {
+      alert("Please select start and end locations");
+      return;
+    }
+
+    const allLocationIds = [fromLocationId, ...waypointLocationIds.filter(id => id), toLocationId];
+    if (allLocationIds.length < 2) {
+      alert("Need at least 2 points to create route");
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const result = await searchRouteWithMultipleLocations(allLocationIds, routeType);
+      if (result?.routePath) {
+        const geoJson = typeof result.routePath === "string" ? JSON.parse(result.routePath) : result.routePath;
+        if (geoJson.type === "LineString" && geoJson.coordinates) {
+          setRoutePath(geoJson.coordinates as [number, number][]);
+        }
+      } else {
+        alert("No route found between these locations");
+      }
+    } catch (error: any) {
+      console.error("Failed to search route:", error);
+      alert(error?.message || "Error finding route");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const fromLocation = locations.find(l => l.locationId === fromLocationId);
+    const toLocation = locations.find(l => l.locationId === toLocationId);
+    const fromCoords = fromLocation ? parseLocationCoords(fromLocation) : null;
+    const toCoords = toLocation ? parseLocationCoords(toLocation) : null;
+
+    if (!fromCoords || !toCoords || routePath.length === 0) {
+      alert("Please search for a route before saving");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const geoJson = { type: "LineString", coordinates: routePath };
+
+      let waypointsJson: string | undefined;
+      const validWaypoints = waypointLocationIds.filter(id => id);
+      if (validWaypoints.length > 0) {
+        const waypoints = validWaypoints.map(locId => {
+          const loc = locations.find(l => l.locationId === locId);
+          const coords = loc ? parseLocationCoords(loc) : null;
+          return {
+            locationId: locId,
+            lat: coords?.lat || 0,
+            lng: coords?.lng || 0,
+            name: loc?.title || "Unnamed",
+            segmentId
+          };
+        });
+        waypointsJson = JSON.stringify(waypoints);
+      }
+
+      const data: CreateRouteAnimationRequest = {
+        segmentId,
+        fromLat: fromCoords.lat,
+        fromLng: fromCoords.lng,
+        fromName: fromLocation?.title,
+        toLat: toCoords.lat,
+        toLng: toCoords.lng,
+        toName: toLocation?.title,
+        routePath: JSON.stringify(geoJson),
+        waypoints: waypointsJson,
+        iconType,
+        iconUrl: iconUrl || undefined,
+        iconWidth: 32,
+        iconHeight: 32,
+        routeColor,
+        visitedColor,
+        routeWidth,
+        durationMs,
+        autoPlay: true,
+        loop: false,
+        isVisible: true,
+        zIndex: 1000,
+        displayOrder: 0,
+        toLocationId: toLocationId || undefined,
+        showLocationInfoOnArrival,
+        locationInfoDisplayDurationMs,
+        cameraStateBefore: cameraStateBefore || undefined,
+        cameraStateAfter: cameraStateAfter || undefined,
+      };
+
+      await createRouteAnimation(mapId, segmentId, data);
+      await onSave();
+    } catch (error) {
+      console.error("Failed to save route animation:", error);
+      alert("Failed to save route animation");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const availableFromLocations = locations.filter(l => l.locationId !== toLocationId);
+  const availableToLocations = locations.filter(l => l.locationId !== fromLocationId);
+  const usedIds = [fromLocationId, toLocationId, ...waypointLocationIds].filter(Boolean);
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {/* From/To Locations */}
+        <div className="space-y-2">
+          <div>
+            <label className="block text-xs font-medium text-zinc-300 mb-1">From *</label>
+            <select
+              value={fromLocationId}
+              onChange={(e) => setFromLocationId(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-zinc-700 rounded bg-zinc-800 text-white"
+              required
+            >
+              <option value="">Select start location</option>
+              {availableFromLocations.map((loc) => (
+                <option key={loc.locationId} value={loc.locationId}>{loc.title}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-300 mb-1">To *</label>
+            <select
+              value={toLocationId}
+              onChange={(e) => setToLocationId(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-zinc-700 rounded bg-zinc-800 text-white"
+              required
+            >
+              <option value="">Select end location</option>
+              {availableToLocations.map((loc) => (
+                <option key={loc.locationId} value={loc.locationId}>{loc.title}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Waypoints */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-medium text-zinc-300">Waypoints</label>
+            <button
+              type="button"
+              onClick={() => setWaypointLocationIds([...waypointLocationIds, ""])}
+              className="text-xs text-emerald-400 hover:text-emerald-300"
+            >
+              + Add
+            </button>
+          </div>
+          {waypointLocationIds.map((wpId, idx) => (
+            <div key={idx} className="flex gap-1 mb-1">
+              <select
+                value={wpId}
+                onChange={(e) => {
+                  const newWaypoints = [...waypointLocationIds];
+                  newWaypoints[idx] = e.target.value;
+                  setWaypointLocationIds(newWaypoints);
+                }}
+                className="flex-1 px-2 py-1 text-xs border border-zinc-700 rounded bg-zinc-800 text-white"
+              >
+                <option value="">Select waypoint</option>
+                {locations.filter(l => !usedIds.includes(l.locationId) || l.locationId === wpId).map((loc) => (
+                  <option key={loc.locationId} value={loc.locationId}>{loc.title}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setWaypointLocationIds(waypointLocationIds.filter((_, i) => i !== idx))}
+                className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Route Type & Search */}
+        <div>
+          <label className="block text-xs font-medium text-zinc-300 mb-1">Route Type</label>
+          <div className="flex gap-2">
+            <select
+              value={routeType}
+              onChange={(e) => setRouteType(e.target.value as "road" | "straight")}
+              className="flex-1 px-2 py-1.5 text-xs border border-zinc-700 rounded bg-zinc-800 text-white"
+            >
+              <option value="road">Road</option>
+              <option value="straight">Straight Line</option>
+            </select>
+            <button
+              type="button"
+              onClick={handleSearchRoute}
+              disabled={searching || !fromLocationId || !toLocationId}
+              className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded disabled:opacity-50"
+            >
+              {searching ? "..." : "Find"}
+            </button>
+          </div>
+          {routePath.length > 0 && (
+            <p className="text-xs text-emerald-400 mt-1">✓ Route found ({routePath.length} points)</p>
+          )}
+        </div>
+
+        {/* Icon & Style */}
+        <div className="bg-zinc-800/50 border border-zinc-700 rounded p-2 space-y-2">
+          <h4 className="text-xs font-medium text-white">Appearance</h4>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-0.5">Icon</label>
+              <select
+                value={iconType}
+                onChange={(e) => setIconType(e.target.value as any)}
+                className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white"
+              >
+                <option value="car">🚗 Car</option>
+                <option value="walking">🚶 Walking</option>
+                <option value="bike">🚲 Bike</option>
+                <option value="plane">✈️ Plane</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-0.5">Duration (ms)</label>
+              <input
+                type="number"
+                value={durationMs}
+                onChange={(e) => setDurationMs(Number(e.target.value))}
+                min={1000}
+                max={30000}
+                step={500}
+                className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white"
+              />
+            </div>
+          </div>
+
+          {iconType === "custom" && (
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-0.5">Icon URL</label>
+              <input
+                type="text"
+                value={iconUrl}
+                onChange={(e) => setIconUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white"
+              />
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-0.5">Route Color</label>
+              <input
+                type="color"
+                value={routeColor}
+                onChange={(e) => setRouteColor(e.target.value)}
+                className="w-full h-7 rounded border border-zinc-600"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-0.5">Visited Color</label>
+              <input
+                type="color"
+                value={visitedColor}
+                onChange={(e) => setVisitedColor(e.target.value)}
+                className="w-full h-7 rounded border border-zinc-600"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Camera States */}
+        <div className="space-y-2">
+          <div>
+            <label className="block text-[10px] text-zinc-400 mb-0.5">Camera Before (JSON)</label>
+            <textarea
+              value={cameraStateBefore}
+              onChange={(e) => setCameraStateBefore(e.target.value)}
+              placeholder='{"center": [lng, lat], "zoom": 10}'
+              rows={2}
+              className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white font-mono"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] text-zinc-400 mb-0.5">Camera After (JSON)</label>
+            <textarea
+              value={cameraStateAfter}
+              onChange={(e) => setCameraStateAfter(e.target.value)}
+              placeholder='{"center": [lng, lat], "zoom": 15}'
+              rows={2}
+              className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white font-mono"
+            />
+          </div>
+        </div>
+
+        {/* Location Info */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="showInfo"
+              checked={showLocationInfoOnArrival}
+              onChange={(e) => setShowLocationInfoOnArrival(e.target.checked)}
+              className="w-3 h-3 rounded border-zinc-600"
+            />
+            <label htmlFor="showInfo" className="text-xs text-zinc-300">Show info on arrival</label>
+          </div>
+          {showLocationInfoOnArrival && (
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-1">
+                Display duration (ms) - Leave empty for manual close
+              </label>
+              <input
+                type="number"
+                value={locationInfoDisplayDurationMs || ""}
+                onChange={(e) => setLocationInfoDisplayDurationMs(e.target.value ? Number(e.target.value) : undefined)}
+                placeholder="e.g., 5000"
+                min="0"
+                className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex gap-2 p-3 border-t border-zinc-800">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="flex-1 px-3 py-1.5 text-xs rounded bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={saving || routePath.length === 0}
+          className="flex-1 px-3 py-1.5 text-xs rounded bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Add Route"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 function getZoneCenter(zone: Zone): [number, number] | null {
   if (zone.centroid) {
     const str = zone.centroid.trim();
@@ -1942,28 +2363,6 @@ function ExplorerView({
         }
         totalLayerCount={layers.length}
       />
-
-      {/* Route Animation Dialog */}
-      {/* {mapId && routeSegmentId && (
-        <RouteAnimationDialog
-          mapId={mapId}
-          segmentId={routeSegmentId}
-          currentMap={currentMap}
-          isOpen={showRouteDialog}
-          onClose={() => {
-            setShowRouteDialog(false);
-            setRouteSegmentId(null);
-          }}
-          onSave={async () => {
-            setShowRouteDialog(false);
-            setRouteSegmentId(null);
-            // Refresh segments without page reload
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('refreshSegments'));
-            }
-          }}
-        />
-      )} */}
     </div>
   );
 }

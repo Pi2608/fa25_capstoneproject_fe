@@ -78,7 +78,7 @@ import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geo
 import * as mapHelpers from "@/utils/mapHelpers";
 import PublishButton from "@/components/map-editor/PublishButton";
 import { createSession, type CreateSessionRequest, type SessionDto } from "@/lib/api-ques";
-import { SessionShareModal } from "@/components/session/SessionShareModal";
+// import { SessionShareModal } from "@/components/session/SessionShareModal";
 import { createMapLocation, deleteLocation } from "@/lib/api-location";
 
 
@@ -211,7 +211,6 @@ export default function EditMapPage() {
     applySelectionStyle,
     applyMultiSelectionStyle,
     handleLayerHover,
-    // NOTE: resetAllSelections from hook is not used - we have a custom implementation below
     // resetAllSelections,
   } = layerStyles;
 
@@ -1425,7 +1424,7 @@ export default function EditMapPage() {
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !sketchRef.current) return;
-    if (!handleFeatureCreate || !handleFeatureCut || !handleSketchEdit || !handleSketchDragEnd || !handleSketchRotateEnd) return;
+    if (!handleFeatureCreate || !handleSketchEdit || !handleSketchDragEnd || !handleSketchRotateEnd) return;
 
     const map = mapRef.current;
     const sketch = sketchRef.current;
@@ -3458,14 +3457,14 @@ export default function EditMapPage() {
                         } as CreateSessionRequest);
 
                         // Open control panel with session info in URL
-                        const controlUrl = `/storymap/control/${mapId}?sessionId=${newSession.id}&sessionCode=${newSession.sessionCode}`;
+                        const controlUrl = `/storymap/control/${mapId}?sessionId=${newSession.sessionId}&sessionCode=${newSession.sessionCode}`;
                         window.open(controlUrl, '_blank');
 
                         // Show share modal
                         setSessionShareModal({
                           isOpen: true,
                           sessionCode: newSession.sessionCode,
-                          sessionId: newSession.id,
+                          sessionId: newSession.sessionId,
                         });
 
                         showToast("success", "Session đã được tạo thành công!");
@@ -3789,13 +3788,13 @@ export default function EditMapPage() {
       `}</style>
 
       {/* Session Share Modal */}
-      <SessionShareModal
+      {/* <SessionShareModal
         isOpen={sessionShareModal.isOpen}
         onClose={() => setSessionShareModal({ isOpen: false, sessionCode: "" })}
         sessionCode={sessionShareModal.sessionCode}
         sessionId={sessionShareModal.sessionId}
         mapId={mapId}
-      />
+      /> */}
     </main>
   );
 }

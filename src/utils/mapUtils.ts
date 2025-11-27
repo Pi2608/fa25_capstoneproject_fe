@@ -779,6 +779,13 @@ export async function updateFeatureInDB(
     const serialized = serializeFeature(feature.layer);
     const { geometryType, annotationType, coordinates, text } = serialized;
 
+    console.log(`[updateFeatureInDB] Serialized feature ${featureId}:`, {
+      geometryType,
+      annotationType,
+      coordinates,
+      coordinatesLength: coordinates?.length || 0,
+    });
+
     // Extract current style from layer
     const layerStyle = extractLayerStyle(feature.layer);
 
@@ -807,10 +814,14 @@ export async function updateFeatureInDB(
       layerId: null,
     };
 
+    console.log(`[updateFeatureInDB] Request payload for ${featureId}:`, body);
+
     await updateMapFeature(mapId, featureId, body);
+
+    console.log(`[updateFeatureInDB] Successfully updated feature ${featureId}`);
     return true;
   } catch (error) {
-    console.error("Failed to update feature:", error);
+    console.error(`[updateFeatureInDB] Failed to update feature ${featureId}:`, error);
     return false;
   }
 }
@@ -1859,8 +1870,8 @@ export async function addDataLayerToMap(
       layerId,
       isVisible,
       zIndex,
-      customStyle: null,
-      filterConfig: null,
+      layerData: null,
+      layerTypeId: "1",
     });
     return true;
   } catch (error) {
