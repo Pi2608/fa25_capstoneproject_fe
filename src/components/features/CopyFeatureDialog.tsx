@@ -143,9 +143,6 @@ export default function CopyFeatureDialog({
                         />
                         <div className="flex-1">
                           <div className="text-sm font-medium text-gray-900">{layer.layerName}</div>
-                          <div className="text-xs text-gray-500">
-                            {layer.featureCount} features • {layer.layerType}
-                          </div>
                         </div>
                         <div className={`w-2 h-2 rounded-full ${layer.isVisible ? 'bg-green-500' : 'bg-gray-300'}`} title={layer.isVisible ? 'Visible' : 'Hidden'} />
                       </label>

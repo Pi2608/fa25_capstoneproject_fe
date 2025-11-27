@@ -68,7 +68,7 @@ export type LayerDTO = {
   filePath: string;
   layerData: FeatureCollection | Record<string, unknown>;
   layerStyle: LayerStyle | Record<string, unknown>;
-  isPublic: boolean;
+  isVisible: boolean;
   featureCount: number;
   dataSizeKB: number;
   dataBounds: string;
