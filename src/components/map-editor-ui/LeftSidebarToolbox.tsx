@@ -4,9 +4,14 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { gsap } from "gsap";
 import { Icon } from "./Icon";
 import { cn } from "@/lib/utils";
-import type { BaseKey } from "@/types";
+import type { BaseKey, LocationType } from "@/types";
 import type { FeatureData } from "@/utils/mapUtils";
 import type { LayerDTO } from "@/lib/api-maps";
+import { addLayerToMap, getMapFeatures, updateMapFeature, type MapFeatureResponse } from "@/lib/api-maps";
+import DeleteLayerDialog from "@/components/dialogs/DeleteLayerDialog";
+import { handleDeleteLayerWithFeatures } from "@/utils/mapUtils";
+import LayerTree from "@/components/map-editor-ui/LayerTree";
+import { buildLayerTree, filterLayerTree } from "@/utils/layerTreeUtils";
 import {
   type Segment,
   type TimelineTransition,
@@ -28,12 +33,14 @@ import {
   getCurrentCameraState,
   stringifyCameraState,
   RouteAnimation,
+  getZones,
+  searchZones,
+  getMapLocations,
+  searchRouteWithMultipleLocations,
+  createRouteAnimation,
+  updateRouteAnimation,
+  type CreateRouteAnimationRequest,
 } from "@/lib/api-storymap";
-
-import LocationDialog from "@/components/storymap/LocationDialog";
-import ZoneSelectionDialog from "@/components/storymap/ZoneSelectionDialog";
-import LayerAttachDialog from "@/components/storymap/LayerAttachDialog";
-import RouteAnimationDialog from "@/components/storymap/RouteAnimationDialog";
 
 interface LeftSidebarToolboxProps {
   activeView: "explorer" | "segments" | "transitions" | "icons" | null;
@@ -47,6 +54,8 @@ interface LeftSidebarToolboxProps {
   baseLayer: BaseKey;
   currentMap?: any;
   mapId?: string; // Required for adding locations, zones, and layers
+  layerVisibility: Record<string, boolean>;
+  featureVisibility: Record<string, boolean>;
 
   onSelectFeature: (feature: FeatureData) => void;
   onSelectLayer: (layer: LayerDTO) => void;
@@ -68,10 +77,14 @@ interface LeftSidebarToolboxProps {
   onAddLocation?: (data: CreateLocationRequest) => Promise<void>;
   onAddZone?: (data: CreateSegmentZoneRequest) => Promise<void>;
   onAddLayer?: (data: AttachLayerRequest) => Promise<void>;
+
+  // Refresh handler to reload layers without page reload
+  onRefreshLayers?: () => Promise<void>;
 }
 
 type ViewType = "explorer" | "segments" | "transitions" | "icons";
 type FormMode = "list" | "create" | "edit";
+type PanelMode = "add-location" | "add-zone" | "add-layer" | "add-route" | null;
 
 export function LeftSidebarToolbox({
   activeView,
@@ -83,6 +96,8 @@ export function LeftSidebarToolbox({
   baseLayer,
   currentMap,
   mapId,
+  layerVisibility,
+  featureVisibility,
   onSelectFeature,
   onSelectLayer,
   onBaseLayerChange,
@@ -97,6 +112,7 @@ export function LeftSidebarToolbox({
   onAddLocation,
   onAddZone,
   onAddLayer,
+  onRefreshLayers,
 }: LeftSidebarToolboxProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -108,11 +124,8 @@ export function LeftSidebarToolbox({
   const [transitionFormMode, setTransitionFormMode] = useState<FormMode>("list");
   const [editingTransition, setEditingTransition] = useState<TimelineTransition | null>(null);
 
-  // Dialog state for locations, zones, and layers
-  const [showLocationDialog, setShowLocationDialog] = useState(false);
-  const [showZoneDialog, setShowZoneDialog] = useState(false);
-  const [showLayerDialog, setShowLayerDialog] = useState(false);
-  const [showRouteAnimationDialog, setShowRouteAnimationDialog] = useState(false);
+  // Panel mode for next-step panels (location, zone, layer, route)
+  const [panelMode, setPanelMode] = useState<PanelMode>(null);
   const [waitingForLocation, setWaitingForLocation] = useState(false);
   const [pickedCoordinates, setPickedCoordinates] = useState<[number, number] | null>(null);
 
@@ -124,7 +137,7 @@ export function LeftSidebarToolbox({
       const { lat, lng } = e.latlng;
       setPickedCoordinates([lng, lat]); // [longitude, latitude]
       setWaitingForLocation(false);
-      setShowLocationDialog(true);
+      setPanelMode("add-location"); // Open panel instead of dialog
     };
 
     currentMap.on('click', handleMapClick);
@@ -145,11 +158,12 @@ export function LeftSidebarToolbox({
   }, [activeView]);
 
   const handleIconClick = useCallback((view: ViewType) => {
-    // Reset form modes when switching views
+    // Reset form modes and panel modes when switching views
     setSegmentFormMode("list");
     setTransitionFormMode("list");
     setEditingSegment(null);
     setEditingTransition(null);
+    setPanelMode(null);
 
     onViewChange(activeView === view ? null : view);
   }, [activeView, onViewChange]);
@@ -225,8 +239,14 @@ export function LeftSidebarToolbox({
       await createLocation(mapId, editingSegment.segmentId, locationData);
     }
 
-    setShowLocationDialog(false);
+    setPanelMode(null); // Close panel
     setWaitingForLocation(false);
+    setPickedCoordinates(null);
+
+    // Trigger callback to refresh segments so the location appears
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('refreshSegments'));
+    }
   }, [editingSegment, onAddLocation, mapId]);
 
   const handleAddZone = useCallback(async (data: CreateSegmentZoneRequest) => {
@@ -245,7 +265,12 @@ export function LeftSidebarToolbox({
       await createSegmentZone(mapId, editingSegment.segmentId, zoneData);
     }
 
-    setShowZoneDialog(false);
+    setPanelMode(null); // Close panel
+
+    // Trigger callback to refresh segments so the zone appears
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('refreshSegments'));
+    }
   }, [editingSegment, onAddZone, mapId]);
 
   const handleAddLayer = useCallback(async (data: AttachLayerRequest) => {
@@ -259,7 +284,12 @@ export function LeftSidebarToolbox({
       await attachLayerToSegment(mapId, editingSegment.segmentId, data);
     }
 
-    setShowLayerDialog(false);
+    setPanelMode(null); // Close panel
+
+    // Trigger refresh to show attached layer
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('refreshSegments'));
+    }
   }, [editingSegment, onAddLayer, mapId]);
 
   return (
@@ -309,10 +339,14 @@ export function LeftSidebarToolbox({
           <div className="h-11 border-b border-zinc-800/80 bg-zinc-950/50 flex items-center justify-between px-3">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-xs text-zinc-300 uppercase tracking-wider">
-                {activeView === "explorer" && "PROJECT"}
-                {activeView === "segments" && (segmentFormMode === "list" ? "SEGMENTS" : segmentFormMode === "create" ? "NEW SEGMENT" : "EDIT SEGMENT")}
-                {activeView === "transitions" && (transitionFormMode === "list" ? "TRANSITIONS" : transitionFormMode === "create" ? "NEW TRANSITION" : "EDIT TRANSITION")}
-                {activeView === "icons" && "ASSETS"}
+                {panelMode === "add-location" && "ADD LOCATION"}
+                {panelMode === "add-zone" && "ADD ZONE"}
+                {panelMode === "add-layer" && "ATTACH LAYER"}
+                {panelMode === "add-route" && "ADD ROUTE ANIMATION"}
+                {!panelMode && activeView === "explorer" && "PROJECT"}
+                {!panelMode && activeView === "segments" && (segmentFormMode === "list" ? "SEGMENTS" : segmentFormMode === "create" ? "NEW SEGMENT" : "EDIT SEGMENT")}
+                {!panelMode && activeView === "transitions" && (transitionFormMode === "list" ? "TRANSITIONS" : transitionFormMode === "create" ? "NEW TRANSITION" : "EDIT TRANSITION")}
+                {!panelMode && activeView === "icons" && "ASSETS"}
               </span>
               {activeView === "explorer" && (
                 <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] rounded">
@@ -327,8 +361,20 @@ export function LeftSidebarToolbox({
             </div>
 
             <div className="flex items-center gap-1">
-              {/* Back button for forms */}
-              {((activeView === "segments" && segmentFormMode !== "list") ||
+              {/* Back button for panel modes and forms */}
+              {panelMode ? (
+                <button
+                  onClick={() => {
+                    setPanelMode(null);
+                    setWaitingForLocation(false);
+                    setPickedCoordinates(null);
+                  }}
+                  className="p-1 hover:bg-zinc-800 rounded transition-colors"
+                  title="Back"
+                >
+                  <Icon icon="mdi:arrow-left" className="w-4 h-4 text-zinc-400" />
+                </button>
+              ) : ((activeView === "segments" && segmentFormMode !== "list") ||
                 (activeView === "transitions" && transitionFormMode !== "list")) && (
                   <button
                     onClick={() => {
@@ -342,8 +388,8 @@ export function LeftSidebarToolbox({
                   </button>
                 )}
 
-              {/* Close panel button (only show when in list mode) */}
-              {((activeView === "segments" && segmentFormMode === "list") ||
+              {/* Close panel button (only show when in list mode and no panel mode) */}
+              {!panelMode && ((activeView === "segments" && segmentFormMode === "list") ||
                 (activeView === "transitions" && transitionFormMode === "list") ||
                 activeView === "explorer" ||
                 activeView === "icons") && (
@@ -360,21 +406,78 @@ export function LeftSidebarToolbox({
 
           {/* Panel Content */}
           <div className="flex-1 overflow-y-auto">
-            {activeView === "explorer" && (
+            {/* Next-step panels for adding location, zone, layer, route */}
+            {panelMode === "add-location" && editingSegment && mapId && (
+              <LocationPanelView
+                segmentId={editingSegment.segmentId}
+                currentMap={currentMap}
+                initialCoordinates={pickedCoordinates}
+                onSave={handleAddLocation}
+                onCancel={() => {
+                  setPanelMode(null);
+                  setWaitingForLocation(false);
+                  setPickedCoordinates(null);
+                }}
+                waitingForLocation={waitingForLocation}
+                setWaitingForLocation={setWaitingForLocation}
+              />
+            )}
+
+            {panelMode === "add-zone" && editingSegment && mapId && (
+              <ZonePanelView
+                segmentId={editingSegment.segmentId}
+                onSave={handleAddZone}
+                onCancel={() => setPanelMode(null)}
+              />
+            )}
+
+            {panelMode === "add-layer" && editingSegment && mapId && (
+              <LayerPanelView
+                mapId={mapId}
+                segmentId={editingSegment.segmentId}
+                attachedLayerIds={editingSegment.layers?.map(l => l.layerId) || []}
+                layers={layers}
+                onSave={handleAddLayer}
+                onCancel={() => setPanelMode(null)}
+              />
+            )}
+
+            {panelMode === "add-route" && editingSegment && mapId && (
+              <RouteAnimationView
+                mapId={mapId}
+                segmentId={editingSegment.segmentId}
+                currentMap={currentMap}
+                onSave={async () => {
+                  setPanelMode(null);
+                  // Refresh segments without page reload
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('refreshSegments'));
+                  }
+                }}
+                onCancel={() => setPanelMode(null)}
+              />
+            )}
+
+
+            {!panelMode && activeView === "explorer" && (
               <ExplorerView
                 features={features}
                 layers={layers}
                 baseLayer={baseLayer}
+                layerVisibility={layerVisibility}
+                featureVisibility={featureVisibility}
+                mapId={mapId}
                 onSelectFeature={onSelectFeature}
                 onSelectLayer={onSelectLayer}
                 onBaseLayerChange={onBaseLayerChange}
                 onFeatureVisibilityChange={onFeatureVisibilityChange}
                 onLayerVisibilityChange={onLayerVisibilityChange}
                 onDeleteFeature={onDeleteFeature}
+                onRefreshLayers={onRefreshLayers}
               />
             )}
 
-            {activeView === "segments" && segmentFormMode === "list" && (
+            {!panelMode && activeView === "segments" && segmentFormMode === "list" && (
               <SegmentsView
                 segments={segments}
                 onSegmentClick={onSegmentClick}
@@ -385,42 +488,36 @@ export function LeftSidebarToolbox({
                   const segment = segments.find(s => s.segmentId === segmentId);
                   if (segment && currentMap) {
                     setEditingSegment(segment);
-                    setWaitingForLocation(true);
+                    setPanelMode("add-location");
                     setPickedCoordinates(null);
-                    // Show instruction message
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(new CustomEvent('showMapInstruction', {
-                        detail: { message: 'Click on the map to place the location marker' }
-                      }));
-                    }
                   }
                 }}
                 onAddZone={(segmentId: string) => {
                   const segment = segments.find(s => s.segmentId === segmentId);
                   if (segment) {
                     setEditingSegment(segment);
-                    setShowZoneDialog(true);
+                    setPanelMode("add-zone");
                   }
                 }}
                 onAddLayer={(segmentId: string) => {
                   const segment = segments.find(s => s.segmentId === segmentId);
                   if (segment) {
                     setEditingSegment(segment);
-                    setShowLayerDialog(true);
+                    setPanelMode("add-layer");
                   }
                 }}
                 onAddRouteAnimation={(segmentId: string) => {
                   const segment = segments.find(s => s.segmentId === segmentId);
                   if (segment) {
                     setEditingSegment(segment);
-                    setShowRouteAnimationDialog(true);
+                    setPanelMode("add-route");
                   }
                 }}
                 mapId={mapId}
               />
             )}
 
-            {activeView === "segments" && segmentFormMode !== "list" && (
+            {!panelMode && activeView === "segments" && segmentFormMode !== "list" && (
               <SegmentFormView
                 editing={editingSegment}
                 currentMap={currentMap}
@@ -429,23 +526,25 @@ export function LeftSidebarToolbox({
                 onSave={handleSaveSegmentForm}
                 onAddLocation={() => {
                   if (currentMap) {
-                    setWaitingForLocation(true);
-                    setPickedCoordinates(null);
-                    // Show instruction message
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(new CustomEvent('showMapInstruction', {
-                        detail: { message: 'Click on the map to place the location marker' }
-                      }));
+                    // IMPORTANT: Ensure editingSegment is set
+                    // When creating a new segment, we can't add locations yet
+                    if (!editingSegment) {
+                      if (typeof window !== 'undefined') {
+                        alert('Please save the segment first before adding locations.');
+                      }
+                      return;
                     }
+                    setPanelMode("add-location");
+                    setPickedCoordinates(null);
                   }
                 }}
-                onAddZone={() => setShowZoneDialog(true)}
-                onAddLayer={() => setShowLayerDialog(true)}
-                onAddRouteAnimation={() => setShowRouteAnimationDialog(true)}
+                onAddZone={() => setPanelMode("add-zone")}
+                onAddLayer={() => setPanelMode("add-layer")}
+                onAddRouteAnimation={() => setPanelMode("add-route")}
               />
             )}
 
-            {activeView === "transitions" && transitionFormMode === "list" && (
+            {!panelMode && activeView === "transitions" && transitionFormMode === "list" && (
               <TransitionsView
                 transitions={transitions}
                 segments={segments}
@@ -455,7 +554,7 @@ export function LeftSidebarToolbox({
               />
             )}
 
-            {activeView === "transitions" && transitionFormMode !== "list" && (
+            {!panelMode && activeView === "transitions" && transitionFormMode !== "list" && (
               <TransitionFormView
                 editing={editingTransition}
                 segments={segments}
@@ -463,59 +562,1285 @@ export function LeftSidebarToolbox({
                 onSave={handleSaveTransitionForm}
               />
             )}
-            {activeView === "icons" && <IconLibraryView />}
+            {!panelMode && activeView === "icons" && <IconLibraryView />}
 
           </div>
         </div>
       </div>
 
-      {/* Dialogs for adding location, zone, and layer */}
-      {editingSegment && mapId && (
-        <>
-          <LocationDialog
-            isOpen={showLocationDialog}
-            onClose={() => {
-              setShowLocationDialog(false);
-              setWaitingForLocation(false);
-              setPickedCoordinates(null);
-            }}
-            onSave={handleAddLocation}
-            segmentId={editingSegment.segmentId}
-            currentMap={currentMap}
-            initialCoordinates={pickedCoordinates}
-          />
-
-          <ZoneSelectionDialog
-            isOpen={showZoneDialog}
-            onClose={() => setShowZoneDialog(false)}
-            onSave={handleAddZone}
-            segmentId={editingSegment.segmentId}
-          />
-
-          <LayerAttachDialog
-            isOpen={showLayerDialog}
-            onClose={() => setShowLayerDialog(false)}
-            onSave={handleAddLayer}
-            mapId={mapId}
-            segmentId={editingSegment.segmentId}
-            attachedLayerIds={editingSegment.layers?.map(l => l.layerId) || []}
-          />
-
-          <RouteAnimationDialog
-            mapId={mapId}
-            segmentId={editingSegment.segmentId}
-            currentMap={currentMap}
-            routeAnimation={null}
-            isOpen={showRouteAnimationDialog}
-            onClose={() => setShowRouteAnimationDialog(false)}
-            onSave={async () => {
-              // Refresh segments if needed
-              window.location.reload();
-            }}
-          />
-        </>
-      )}
     </>
+  );
+}
+
+// Panel view components that replace modals
+function LocationPanelView({
+  segmentId,
+  currentMap,
+  initialCoordinates,
+  onSave,
+  onCancel,
+  waitingForLocation,
+  setWaitingForLocation,
+}: {
+  segmentId: string;
+  currentMap?: any;
+  initialCoordinates: [number, number] | null;
+  onSave: (data: CreateLocationRequest) => Promise<void>;
+  onCancel: () => void;
+  waitingForLocation: boolean;
+  setWaitingForLocation: (waiting: boolean) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [subtitle, setSubtitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [locationType, setLocationType] = useState<LocationType>("PointOfInterest");
+  const [coordinates, setCoordinates] = useState<[number, number] | null>(initialCoordinates);
+  const [iconType, setIconType] = useState("📍");
+  const [iconUrl, setIconUrl] = useState("");
+  const [iconColor, setIconColor] = useState("#FF0000");
+  const [iconSize, setIconSize] = useState(32);
+  const [showTooltip, setShowTooltip] = useState(true);
+  const [tooltipContent, setTooltipContent] = useState("");
+  const [openPopupOnClick, setOpenPopupOnClick] = useState(true);
+  const [popupContent, setPopupContent] = useState("");
+  const [mediaUrls, setMediaUrls] = useState("");
+  const [playAudioOnClick, setPlayAudioOnClick] = useState(false);
+  const [audioUrl, setAudioUrl] = useState("");
+  const [externalUrl, setExternalUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Update coordinates when initialCoordinates change
+  useEffect(() => {
+    if (initialCoordinates) {
+      setCoordinates(initialCoordinates);
+    }
+  }, [initialCoordinates]);
+
+  // Show temporary marker on map when coordinates are set
+  useEffect(() => {
+    if (!currentMap || !coordinates) return;
+
+    const L = (window as any).L;
+    if (!L) return;
+
+    const [lng, lat] = coordinates;
+    const tempMarker = L.marker([lat, lng], {
+      icon: L.divIcon({
+        className: 'temp-location-marker',
+        html: `<div style="font-size: ${iconSize}px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));">${iconType}</div>`,
+        iconSize: [iconSize, iconSize],
+        iconAnchor: [iconSize / 2, iconSize],
+      }),
+    });
+    tempMarker.addTo(currentMap);
+
+    return () => {
+      currentMap.removeLayer(tempMarker);
+    };
+  }, [currentMap, coordinates, iconType, iconSize]);
+
+  const handlePickLocation = () => {
+    setWaitingForLocation(true);
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('showMapInstruction', {
+        detail: { message: 'Click on the map to place the location marker' }
+      }));
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!title.trim()) {
+      alert("Please enter a location title");
+      return;
+    }
+
+    if (!coordinates) {
+      alert("Please select a location on the map");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const markerGeometry = JSON.stringify({
+        type: "Point",
+        coordinates: coordinates,
+      });
+
+      const data: CreateLocationRequest = {
+        segmentId,
+        title: title.trim(),
+        subtitle: subtitle.trim() || undefined,
+        description: description.trim() || undefined,
+        locationType,
+        markerGeometry,
+        iconType: iconType || undefined,
+        iconUrl: iconUrl.trim() || undefined,
+        iconColor,
+        iconSize,
+        displayOrder: 0,
+        highlightOnEnter: false,
+        showTooltip,
+        tooltipContent: tooltipContent.trim() || title.trim(),
+        openPopupOnClick,
+        popupContent: popupContent.trim() || description.trim() || undefined,
+        mediaUrls: mediaUrls.trim() || undefined,
+        playAudioOnClick,
+        audioUrl: audioUrl.trim() || undefined,
+        externalUrl: externalUrl.trim() || undefined,
+        isVisible: true,
+        zIndex: 100,
+      };
+
+      await onSave(data);
+    } catch (error) {
+      console.error("Failed to save location:", error);
+      alert("Failed to save location. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="p-3 space-y-3">
+      {/* Pick location button */}
+      <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3">
+        <label className="block text-xs font-medium text-zinc-300 mb-2">
+          Location Coordinates *
+        </label>
+        {coordinates ? (
+          <div className="space-y-2">
+            <div className="text-xs text-zinc-400 font-mono bg-zinc-900 rounded px-3 py-2">
+              Lng: {coordinates[0].toFixed(6)}, Lat: {coordinates[1].toFixed(6)}
+            </div>
+            <button
+              type="button"
+              onClick={handlePickLocation}
+              className="w-full py-2 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 rounded text-xs text-emerald-400 transition-colors"
+            >
+              Pick different location
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handlePickLocation}
+            disabled={waitingForLocation}
+            className="w-full py-2 px-3 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-medium text-white disabled:opacity-50"
+          >
+            {waitingForLocation ? "Click on map..." : "Pick location on map"}
+          </button>
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-3">
+        {/* Title */}
+        <div>
+          <label className="block text-xs font-medium text-zinc-300 mb-1">
+            Title *
+          </label>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Location name"
+            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+
+        {/* Subtitle */}
+        <div>
+          <label className="block text-xs font-medium text-zinc-300 mb-1">
+            Subtitle
+          </label>
+          <input
+            type="text"
+            value={subtitle}
+            onChange={(e) => setSubtitle(e.target.value)}
+            placeholder="Brief tagline"
+            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+
+        {/* Description */}
+        <div>
+          <label className="block text-xs font-medium text-zinc-300 mb-1">
+            Description
+          </label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Detailed description"
+            rows={3}
+            className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
+          />
+        </div>
+
+        {/* Icon settings */}
+        <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-3 space-y-2">
+          <h4 className="text-xs font-semibold text-white">Icon</h4>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-1">Emoji</label>
+              <input
+                type="text"
+                value={iconType}
+                onChange={(e) => setIconType(e.target.value)}
+                placeholder="📍"
+                className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-600 rounded text-sm text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-1">Color</label>
+              <input
+                type="color"
+                value={iconColor}
+                onChange={(e) => setIconColor(e.target.value)}
+                className="w-full h-8 rounded border border-zinc-600 bg-zinc-800"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] text-zinc-400 mb-1">Icon URL (optional)</label>
+            <input
+              type="text"
+              value={iconUrl}
+              onChange={(e) => setIconUrl(e.target.value)}
+              placeholder="https://..."
+              className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-600 rounded text-sm text-white placeholder-zinc-500"
+            />
+          </div>
+        </div>
+
+        {/* Tooltip & Popup */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="showTooltip"
+              checked={showTooltip}
+              onChange={(e) => setShowTooltip(e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-zinc-600 text-emerald-600"
+            />
+            <label htmlFor="showTooltip" className="text-xs text-zinc-300 cursor-pointer">
+              Show Tooltip (label above marker)
+            </label>
+          </div>
+          {showTooltip && (
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-1">Tooltip Content (optional)</label>
+              <input
+                type="text"
+                value={tooltipContent}
+                onChange={(e) => setTooltipContent(e.target.value)}
+                placeholder={title || "Will use title if empty"}
+                className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-600 rounded text-sm text-white placeholder-zinc-500"
+              />
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="openPopupOnClick"
+              checked={openPopupOnClick}
+              onChange={(e) => setOpenPopupOnClick(e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-zinc-600 text-emerald-600"
+            />
+            <label htmlFor="openPopupOnClick" className="text-xs text-zinc-300 cursor-pointer">
+              Open popup on click
+            </label>
+          </div>
+          {openPopupOnClick && (
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-1">Popup Content (HTML supported)</label>
+              <textarea
+                value={popupContent}
+                onChange={(e) => setPopupContent(e.target.value)}
+                placeholder={description || "Will use description if empty"}
+                rows={3}
+                className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-600 rounded text-sm text-white placeholder-zinc-500 resize-none font-mono"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Media */}
+        <div className="space-y-2">
+          <div>
+            <label className="block text-xs font-medium text-zinc-300 mb-1">
+              Media URLs (one per line)
+            </label>
+            <textarea
+              value={mediaUrls}
+              onChange={(e) => setMediaUrls(e.target.value)}
+              placeholder="https://example.com/image1.jpg&#10;https://example.com/image2.jpg"
+              rows={2}
+              className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-600 rounded text-sm text-white placeholder-zinc-500 resize-none font-mono"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="playAudioOnClick"
+              checked={playAudioOnClick}
+              onChange={(e) => setPlayAudioOnClick(e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-zinc-600 text-emerald-600"
+            />
+            <label htmlFor="playAudioOnClick" className="text-xs text-zinc-300 cursor-pointer">
+              Play audio on click
+            </label>
+          </div>
+          {playAudioOnClick && (
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-1">Audio URL</label>
+              <input
+                type="text"
+                value={audioUrl}
+                onChange={(e) => setAudioUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-600 rounded text-sm text-white placeholder-zinc-500"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-[10px] text-zinc-400 mb-1">External Link URL</label>
+            <input
+              type="text"
+              value={externalUrl}
+              onChange={(e) => setExternalUrl(e.target.value)}
+              placeholder="https://..."
+              className="w-full px-2 py-1.5 bg-zinc-800 border border-zinc-600 rounded text-sm text-white placeholder-zinc-500"
+            />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2 pt-2 border-t border-zinc-800">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 px-3 py-2 rounded bg-zinc-800 hover:bg-zinc-700 text-sm text-white"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={saving || !title.trim() || !coordinates}
+            className="flex-1 px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-sm font-medium text-white disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {saving ? "Adding..." : "Add Location"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ZonePanelView({
+  segmentId,
+  onSave,
+  onCancel,
+}: {
+  segmentId: string;
+  onSave: (data: CreateSegmentZoneRequest) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Configuration for zone highlighting
+  const [highlightBoundary, setHighlightBoundary] = useState(true);
+  const [boundaryColor, setBoundaryColor] = useState("#FFD700");
+  const [boundaryWidth, setBoundaryWidth] = useState(2);
+  const [fillZone, setFillZone] = useState(true);
+  const [fillColor, setFillColor] = useState("#FFD700");
+  const [fillOpacity, setFillOpacity] = useState(0.3);
+  const [showLabel, setShowLabel] = useState(true);
+  const [labelOverride, setLabelOverride] = useState("");
+
+  // Load zones on mount
+  useEffect(() => {
+    loadZones();
+  }, []);
+
+  const loadZones = async () => {
+    setLoading(true);
+    try {
+      const data = await getZones();
+      setZones(data || []);
+    } catch (error) {
+      console.error("Failed to load zones:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearch = async () => {
+    if (!searchTerm.trim()) {
+      loadZones();
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const results = await searchZones(searchTerm);
+      setZones(results || []);
+    } catch (error) {
+      console.error("Failed to search zones:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedZone) {
+      alert("Please select a zone");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const data: CreateSegmentZoneRequest = {
+        segmentId,
+        zoneId: selectedZone.zoneId,
+        highlightBoundary,
+        boundaryColor: highlightBoundary ? boundaryColor : undefined,
+        boundaryWidth: highlightBoundary ? boundaryWidth : undefined,
+        fillZone,
+        fillColor: fillZone ? fillColor : undefined,
+        fillOpacity: fillZone ? fillOpacity : undefined,
+        showLabel,
+        labelOverride: showLabel && labelOverride.trim() ? labelOverride : undefined,
+        isVisible: true,
+        displayOrder: 0,
+      };
+
+      await onSave(data);
+    } catch (error) {
+      console.error("Failed to add zone:", error);
+      alert("Failed to add zone. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {/* Search */}
+        <div>
+          <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+            Search Zones
+          </label>
+          <div className="flex gap-1.5">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleSearch())}
+              placeholder="Search by name..."
+              className="flex-1 px-2.5 py-1.5 text-xs border border-zinc-700 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-zinc-800 text-white placeholder-zinc-500"
+            />
+            <button
+              type="button"
+              onClick={handleSearch}
+              disabled={loading}
+              className="px-2.5 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded disabled:opacity-50"
+            >
+              🔍
+            </button>
+          </div>
+        </div>
+
+        {/* Zone List */}
+        <div>
+          <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+            Available Zones ({zones.length})
+          </label>
+          <div className="max-h-48 overflow-y-auto border border-zinc-700 rounded bg-zinc-800/50">
+            {loading ? (
+              <div className="p-6 text-center text-zinc-400">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-emerald-500 mx-auto mb-1.5"></div>
+                <div className="text-xs">Loading...</div>
+              </div>
+            ) : zones.length === 0 ? (
+              <div className="p-6 text-center text-zinc-500 text-xs">
+                No zones found
+              </div>
+            ) : (
+              <div className="divide-y divide-zinc-700">
+                {zones.map((zone) => (
+                  <button
+                    key={zone.zoneId}
+                    type="button"
+                    onClick={() => setSelectedZone(zone)}
+                    className={`w-full text-left px-2.5 py-2 hover:bg-zinc-700/50 transition-colors ${
+                      selectedZone?.zoneId === zone.zoneId ? 'bg-emerald-900/30 border-l-2 border-emerald-500' : ''
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-white truncate">{zone.name}</div>
+                        <div className="text-[10px] text-zinc-400 mt-0.5">
+                          {zone.zoneType}
+                        </div>
+                      </div>
+                      {selectedZone?.zoneId === zone.zoneId && (
+                        <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Configuration */}
+        {selectedZone && (
+          <div className="bg-zinc-800/50 border border-zinc-700 rounded p-2.5 space-y-2.5">
+            <h4 className="text-xs font-medium text-white">Display Config</h4>
+
+            {/* Boundary */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="highlightBoundary"
+                  checked={highlightBoundary}
+                  onChange={(e) => setHighlightBoundary(e.target.checked)}
+                  className="w-3 h-3 rounded border-zinc-600 text-emerald-600"
+                />
+                <label htmlFor="highlightBoundary" className="text-xs text-zinc-300 cursor-pointer">
+                  Highlight Boundary
+                </label>
+              </div>
+              {highlightBoundary && (
+                <div className="grid grid-cols-2 gap-2 ml-5">
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 mb-0.5">Color</label>
+                    <input
+                      type="color"
+                      value={boundaryColor}
+                      onChange={(e) => setBoundaryColor(e.target.value)}
+                      className="w-full h-7 rounded border border-zinc-600 bg-zinc-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 mb-0.5">Width</label>
+                    <input
+                      type="number"
+                      value={boundaryWidth}
+                      onChange={(e) => setBoundaryWidth(Number(e.target.value))}
+                      min={1}
+                      max={10}
+                      className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Fill */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="fillZone"
+                  checked={fillZone}
+                  onChange={(e) => setFillZone(e.target.checked)}
+                  className="w-3 h-3 rounded border-zinc-600 text-emerald-600"
+                />
+                <label htmlFor="fillZone" className="text-xs text-zinc-300 cursor-pointer">
+                  Fill Zone
+                </label>
+              </div>
+              {fillZone && (
+                <div className="grid grid-cols-2 gap-2 ml-5">
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 mb-0.5">Color</label>
+                    <input
+                      type="color"
+                      value={fillColor}
+                      onChange={(e) => setFillColor(e.target.value)}
+                      className="w-full h-7 rounded border border-zinc-600 bg-zinc-800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-zinc-400 mb-0.5">Opacity</label>
+                    <input
+                      type="number"
+                      value={fillOpacity}
+                      onChange={(e) => setFillOpacity(Number(e.target.value))}
+                      min={0}
+                      max={1}
+                      step={0.1}
+                      className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Label */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="showLabel"
+                  checked={showLabel}
+                  onChange={(e) => setShowLabel(e.target.checked)}
+                  className="w-3 h-3 rounded border-zinc-600 text-emerald-600"
+                />
+                <label htmlFor="showLabel" className="text-xs text-zinc-300 cursor-pointer">
+                  Show Label
+                </label>
+              </div>
+              {showLabel && (
+                <div className="ml-5">
+                  <input
+                    type="text"
+                    value={labelOverride}
+                    onChange={(e) => setLabelOverride(e.target.value)}
+                    placeholder={selectedZone.name}
+                    className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white placeholder-zinc-500"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex gap-2 p-3 border-t border-zinc-800">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="flex-1 px-3 py-1.5 text-xs rounded bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={saving || !selectedZone}
+          className="flex-1 px-3 py-1.5 text-xs rounded bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
+        >
+          {saving ? "Adding..." : "Add Zone"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function LayerPanelView({
+  mapId,
+  segmentId,
+  attachedLayerIds,
+  layers,
+  onSave,
+  onCancel,
+}: {
+  mapId: string;
+  segmentId: string;
+  attachedLayerIds: string[];
+  layers: LayerDTO[];
+  onSave: (data: AttachLayerRequest) => Promise<void>;
+  onCancel: () => void;
+}) {
+  const [selectedLayer, setSelectedLayer] = useState<LayerDTO | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Configuration
+  const [isVisible, setIsVisible] = useState(true);
+  const [opacity, setOpacity] = useState(1);
+  const [zIndex, setZIndex] = useState(0);
+
+  // Filter out already attached layers
+  const availableLayers = layers.filter(
+    (layer) => !attachedLayerIds.includes(layer.id)
+  );
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!selectedLayer) {
+      alert("Please select a layer");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const data: AttachLayerRequest = {
+        layerId: selectedLayer.id,
+        isVisible,
+        opacity,
+        zIndex,
+        displayOrder: 0,
+      };
+
+      await onSave(data);
+    } catch (error) {
+      console.error("Failed to attach layer:", error);
+      alert("Failed to attach layer. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {/* Layer Selection */}
+        <div>
+          <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+            Available Layers ({availableLayers.length})
+          </label>
+          <div className="max-h-64 overflow-y-auto border border-zinc-700 rounded bg-zinc-800/50">
+            {availableLayers.length === 0 ? (
+              <div className="p-6 text-center text-zinc-500 text-xs">
+                {attachedLayerIds.length > 0
+                  ? "All layers are already attached"
+                  : "No layers found in this map"}
+              </div>
+            ) : (
+              <div className="divide-y divide-zinc-700">
+                {availableLayers.map((layer) => (
+                  <button
+                    key={layer.id}
+                    type="button"
+                    onClick={() => setSelectedLayer(layer)}
+                    className={`w-full text-left px-2.5 py-2 hover:bg-zinc-700/50 transition-colors ${
+                      selectedLayer?.id === layer.id
+                        ? 'bg-emerald-900/30 border-l-2 border-emerald-500'
+                        : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-medium text-white truncate">{layer.layerName}</span>
+                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-0.5">
+                          {layer.layerType}
+                        </div>
+                      </div>
+                      {selectedLayer?.id === layer.id && (
+                        <svg className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Configuration */}
+        {selectedLayer && (
+          <div className="bg-zinc-800/50 border border-zinc-700 rounded p-2.5 space-y-3">
+            <h4 className="text-xs font-medium text-white">Display Settings</h4>
+
+            {/* Visibility */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="layerVisible"
+                checked={isVisible}
+                onChange={(e) => setIsVisible(e.target.checked)}
+                className="w-3 h-3 rounded border-zinc-600 text-emerald-600"
+              />
+              <label htmlFor="layerVisible" className="text-xs text-zinc-300 cursor-pointer">
+                Visible in segment
+              </label>
+            </div>
+
+            {/* Opacity */}
+            <div>
+              <label className="block text-xs text-zinc-300 mb-1.5">
+                Opacity: {(opacity * 100).toFixed(0)}%
+              </label>
+              <input
+                type="range"
+                value={opacity}
+                onChange={(e) => setOpacity(Number(e.target.value))}
+                min={0}
+                max={1}
+                step={0.1}
+                className="w-full h-1.5 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
+              />
+              <div className="flex justify-between text-[10px] text-zinc-500 mt-0.5">
+                <span>0%</span>
+                <span>50%</span>
+                <span>100%</span>
+              </div>
+            </div>
+
+            {/* Z-Index */}
+            <div>
+              <label className="block text-xs text-zinc-300 mb-1.5">
+                Z-Index (layer order)
+              </label>
+              <input
+                type="number"
+                value={zIndex}
+                onChange={(e) => setZIndex(Number(e.target.value))}
+                min={-100}
+                max={100}
+                className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white"
+              />
+              <p className="text-[10px] text-zinc-500 mt-0.5">
+                Higher values appear on top
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex gap-2 p-3 border-t border-zinc-800">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="flex-1 px-3 py-1.5 text-xs rounded bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={saving || !selectedLayer}
+          className="flex-1 px-3 py-1.5 text-xs rounded bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
+        >
+          {saving ? "Attaching..." : "Attach Layer"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function RouteAnimationView({
+  mapId,
+  segmentId,
+  currentMap,
+  onSave,
+  onCancel,
+}: {
+  mapId: string;
+  segmentId: string;
+  currentMap?: any;
+  onSave: () => Promise<void>;
+  onCancel: () => void;
+}) {
+  // Helper function to parse coordinates
+  const parseLocationCoords = (location: Location): { lat: number; lng: number } | null => {
+    if (!location.markerGeometry) return null;
+    try {
+      const geoJson = typeof location.markerGeometry === "string"
+        ? JSON.parse(location.markerGeometry)
+        : location.markerGeometry;
+      if (geoJson.type === "Point" && geoJson.coordinates?.length >= 2) {
+        return { lng: geoJson.coordinates[0], lat: geoJson.coordinates[1] };
+      }
+    } catch (e) {
+      console.error("Failed to parse location geometry:", e);
+    }
+    return null;
+  };
+
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [fromLocationId, setFromLocationId] = useState("");
+  const [toLocationId, setToLocationId] = useState("");
+  const [waypointLocationIds, setWaypointLocationIds] = useState<string[]>([]);
+  const [routePath, setRoutePath] = useState<[number, number][]>([]);
+  const [routeType, setRouteType] = useState<"road" | "straight">("road");
+  const [iconType, setIconType] = useState<"car" | "walking" | "bike" | "plane" | "custom">("car");
+  const [iconUrl, setIconUrl] = useState("");
+  const [routeColor, setRouteColor] = useState("#666666");
+  const [visitedColor, setVisitedColor] = useState("#3b82f6");
+  const [routeWidth, setRouteWidth] = useState(4);
+  const [durationMs, setDurationMs] = useState(5000);
+  const [showLocationInfoOnArrival, setShowLocationInfoOnArrival] = useState(true);
+  const [locationInfoDisplayDurationMs, setLocationInfoDisplayDurationMs] = useState<number | undefined>();
+  const [cameraStateBefore, setCameraStateBefore] = useState("");
+  const [cameraStateAfter, setCameraStateAfter] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Load locations
+  useEffect(() => {
+    setLoading(true);
+    getMapLocations(mapId)
+      .then((locs) => setLocations(locs || []))
+      .catch((e) => console.error("Failed to load locations:", e))
+      .finally(() => setLoading(false));
+  }, [mapId]);
+
+  const handleSearchRoute = async () => {
+    if (!fromLocationId || !toLocationId) {
+      alert("Please select start and end locations");
+      return;
+    }
+
+    const allLocationIds = [fromLocationId, ...waypointLocationIds.filter(id => id), toLocationId];
+    if (allLocationIds.length < 2) {
+      alert("Need at least 2 points to create route");
+      return;
+    }
+
+    setSearching(true);
+    try {
+      const result = await searchRouteWithMultipleLocations(allLocationIds, routeType);
+      if (result?.routePath) {
+        const geoJson = typeof result.routePath === "string" ? JSON.parse(result.routePath) : result.routePath;
+        if (geoJson.type === "LineString" && geoJson.coordinates) {
+          setRoutePath(geoJson.coordinates as [number, number][]);
+        }
+      } else {
+        alert("No route found between these locations");
+      }
+    } catch (error: any) {
+      console.error("Failed to search route:", error);
+      alert(error?.message || "Error finding route");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const fromLocation = locations.find(l => l.locationId === fromLocationId);
+    const toLocation = locations.find(l => l.locationId === toLocationId);
+    const fromCoords = fromLocation ? parseLocationCoords(fromLocation) : null;
+    const toCoords = toLocation ? parseLocationCoords(toLocation) : null;
+
+    if (!fromCoords || !toCoords || routePath.length === 0) {
+      alert("Please search for a route before saving");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const geoJson = { type: "LineString", coordinates: routePath };
+
+      let waypointsJson: string | undefined;
+      const validWaypoints = waypointLocationIds.filter(id => id);
+      if (validWaypoints.length > 0) {
+        const waypoints = validWaypoints.map(locId => {
+          const loc = locations.find(l => l.locationId === locId);
+          const coords = loc ? parseLocationCoords(loc) : null;
+          return {
+            locationId: locId,
+            lat: coords?.lat || 0,
+            lng: coords?.lng || 0,
+            name: loc?.title || "Unnamed",
+            segmentId
+          };
+        });
+        waypointsJson = JSON.stringify(waypoints);
+      }
+
+      const data: CreateRouteAnimationRequest = {
+        segmentId,
+        fromLat: fromCoords.lat,
+        fromLng: fromCoords.lng,
+        fromName: fromLocation?.title,
+        toLat: toCoords.lat,
+        toLng: toCoords.lng,
+        toName: toLocation?.title,
+        routePath: JSON.stringify(geoJson),
+        waypoints: waypointsJson,
+        iconType,
+        iconUrl: iconUrl || undefined,
+        iconWidth: 32,
+        iconHeight: 32,
+        routeColor,
+        visitedColor,
+        routeWidth,
+        durationMs,
+        autoPlay: true,
+        loop: false,
+        isVisible: true,
+        zIndex: 1000,
+        displayOrder: 0,
+        toLocationId: toLocationId || undefined,
+        showLocationInfoOnArrival,
+        locationInfoDisplayDurationMs,
+        cameraStateBefore: cameraStateBefore || undefined,
+        cameraStateAfter: cameraStateAfter || undefined,
+      };
+
+      await createRouteAnimation(mapId, segmentId, data);
+      await onSave();
+    } catch (error) {
+      console.error("Failed to save route animation:", error);
+      alert("Failed to save route animation");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const availableFromLocations = locations.filter(l => l.locationId !== toLocationId);
+  const availableToLocations = locations.filter(l => l.locationId !== fromLocationId);
+  const usedIds = [fromLocationId, toLocationId, ...waypointLocationIds].filter(Boolean);
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {/* From/To Locations */}
+        <div className="space-y-2">
+          <div>
+            <label className="block text-xs font-medium text-zinc-300 mb-1">From *</label>
+            <select
+              value={fromLocationId}
+              onChange={(e) => setFromLocationId(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-zinc-700 rounded bg-zinc-800 text-white"
+              required
+            >
+              <option value="">Select start location</option>
+              {availableFromLocations.map((loc) => (
+                <option key={loc.locationId} value={loc.locationId}>{loc.title}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-zinc-300 mb-1">To *</label>
+            <select
+              value={toLocationId}
+              onChange={(e) => setToLocationId(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-zinc-700 rounded bg-zinc-800 text-white"
+              required
+            >
+              <option value="">Select end location</option>
+              {availableToLocations.map((loc) => (
+                <option key={loc.locationId} value={loc.locationId}>{loc.title}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Waypoints */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs font-medium text-zinc-300">Waypoints</label>
+            <button
+              type="button"
+              onClick={() => setWaypointLocationIds([...waypointLocationIds, ""])}
+              className="text-xs text-emerald-400 hover:text-emerald-300"
+            >
+              + Add
+            </button>
+          </div>
+          {waypointLocationIds.map((wpId, idx) => (
+            <div key={idx} className="flex gap-1 mb-1">
+              <select
+                value={wpId}
+                onChange={(e) => {
+                  const newWaypoints = [...waypointLocationIds];
+                  newWaypoints[idx] = e.target.value;
+                  setWaypointLocationIds(newWaypoints);
+                }}
+                className="flex-1 px-2 py-1 text-xs border border-zinc-700 rounded bg-zinc-800 text-white"
+              >
+                <option value="">Select waypoint</option>
+                {locations.filter(l => !usedIds.includes(l.locationId) || l.locationId === wpId).map((loc) => (
+                  <option key={loc.locationId} value={loc.locationId}>{loc.title}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => setWaypointLocationIds(waypointLocationIds.filter((_, i) => i !== idx))}
+                className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Route Type & Search */}
+        <div>
+          <label className="block text-xs font-medium text-zinc-300 mb-1">Route Type</label>
+          <div className="flex gap-2">
+            <select
+              value={routeType}
+              onChange={(e) => setRouteType(e.target.value as "road" | "straight")}
+              className="flex-1 px-2 py-1.5 text-xs border border-zinc-700 rounded bg-zinc-800 text-white"
+            >
+              <option value="road">Road</option>
+              <option value="straight">Straight Line</option>
+            </select>
+            <button
+              type="button"
+              onClick={handleSearchRoute}
+              disabled={searching || !fromLocationId || !toLocationId}
+              className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded disabled:opacity-50"
+            >
+              {searching ? "..." : "Find"}
+            </button>
+          </div>
+          {routePath.length > 0 && (
+            <p className="text-xs text-emerald-400 mt-1">✓ Route found ({routePath.length} points)</p>
+          )}
+        </div>
+
+        {/* Icon & Style */}
+        <div className="bg-zinc-800/50 border border-zinc-700 rounded p-2 space-y-2">
+          <h4 className="text-xs font-medium text-white">Appearance</h4>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-0.5">Icon</label>
+              <select
+                value={iconType}
+                onChange={(e) => setIconType(e.target.value as any)}
+                className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white"
+              >
+                <option value="car">🚗 Car</option>
+                <option value="walking">🚶 Walking</option>
+                <option value="bike">🚲 Bike</option>
+                <option value="plane">✈️ Plane</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-0.5">Duration (ms)</label>
+              <input
+                type="number"
+                value={durationMs}
+                onChange={(e) => setDurationMs(Number(e.target.value))}
+                min={1000}
+                max={30000}
+                step={500}
+                className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white"
+              />
+            </div>
+          </div>
+
+          {iconType === "custom" && (
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-0.5">Icon URL</label>
+              <input
+                type="text"
+                value={iconUrl}
+                onChange={(e) => setIconUrl(e.target.value)}
+                placeholder="https://..."
+                className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white"
+              />
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-0.5">Route Color</label>
+              <input
+                type="color"
+                value={routeColor}
+                onChange={(e) => setRouteColor(e.target.value)}
+                className="w-full h-7 rounded border border-zinc-600"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-0.5">Visited Color</label>
+              <input
+                type="color"
+                value={visitedColor}
+                onChange={(e) => setVisitedColor(e.target.value)}
+                className="w-full h-7 rounded border border-zinc-600"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Camera States */}
+        <div className="space-y-2">
+          <div>
+            <label className="block text-[10px] text-zinc-400 mb-0.5">Camera Before (JSON)</label>
+            <textarea
+              value={cameraStateBefore}
+              onChange={(e) => setCameraStateBefore(e.target.value)}
+              placeholder='{"center": [lng, lat], "zoom": 10}'
+              rows={2}
+              className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white font-mono"
+            />
+          </div>
+          <div>
+            <label className="block text-[10px] text-zinc-400 mb-0.5">Camera After (JSON)</label>
+            <textarea
+              value={cameraStateAfter}
+              onChange={(e) => setCameraStateAfter(e.target.value)}
+              placeholder='{"center": [lng, lat], "zoom": 15}'
+              rows={2}
+              className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white font-mono"
+            />
+          </div>
+        </div>
+
+        {/* Location Info */}
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="showInfo"
+              checked={showLocationInfoOnArrival}
+              onChange={(e) => setShowLocationInfoOnArrival(e.target.checked)}
+              className="w-3 h-3 rounded border-zinc-600"
+            />
+            <label htmlFor="showInfo" className="text-xs text-zinc-300">Show info on arrival</label>
+          </div>
+          {showLocationInfoOnArrival && (
+            <div>
+              <label className="block text-[10px] text-zinc-400 mb-1">
+                Display duration (ms) - Leave empty for manual close
+              </label>
+              <input
+                type="number"
+                value={locationInfoDisplayDurationMs || ""}
+                onChange={(e) => setLocationInfoDisplayDurationMs(e.target.value ? Number(e.target.value) : undefined)}
+                placeholder="e.g., 5000"
+                min="0"
+                className="w-full px-2 py-1 text-xs border border-zinc-600 rounded bg-zinc-800 text-white"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="flex gap-2 p-3 border-t border-zinc-800">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="flex-1 px-3 py-1.5 text-xs rounded bg-zinc-800 hover:bg-zinc-700 text-white disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={saving || routePath.length === 0}
+          className="flex-1 px-3 py-1.5 text-xs rounded bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Add Route"}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -671,31 +1996,149 @@ function ExplorerView({
   features,
   layers,
   baseLayer,
+  layerVisibility,
+  featureVisibility,
+  mapId,
   onSelectFeature,
   onSelectLayer,
   onBaseLayerChange,
   onFeatureVisibilityChange,
   onLayerVisibilityChange,
   onDeleteFeature,
+  onRefreshLayers,
 }: {
   features: FeatureData[];
   layers: LayerDTO[];
   baseLayer: BaseKey;
+  layerVisibility: Record<string, boolean>;
+  featureVisibility: Record<string, boolean>;
+  mapId?: string;
   onSelectFeature: (feature: FeatureData) => void;
   onSelectLayer: (layer: LayerDTO) => void;
   onBaseLayerChange: (key: BaseKey) => void;
   onFeatureVisibilityChange: (featureId: string, isVisible: boolean) => void;
   onLayerVisibilityChange: (layerId: string, isVisible: boolean) => void;
   onDeleteFeature: (featureId: string) => void;
+  onRefreshLayers?: () => Promise<void>;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [showInlineLayerInput, setShowInlineLayerInput] = useState(false);
+  const [newLayerName, setNewLayerName] = useState("");
+  const [showDeleteLayerDialog, setShowDeleteLayerDialog] = useState(false);
+  const [layerToDelete, setLayerToDelete] = useState<LayerDTO | null>(null);
+  const [allFeatures, setAllFeatures] = useState<MapFeatureResponse[]>([]);
+  const [collapsedLayers, setCollapsedLayers] = useState<Set<string>>(new Set());
 
-  const filteredFeatures = features.filter(f => 
-    f.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const handleAddLayer = async (layerName: string) => {
+    if (!mapId) return;
+
+    try {
+      // Create a new empty layer with valid empty GeoJSON FeatureCollection
+      const emptyGeoJSON = JSON.stringify({
+        type: 'FeatureCollection',
+        features: []
+      });
+
+      await addLayerToMap(mapId, {
+        layerName: layerName,
+        isVisible: true,
+        zIndex: layers.length,
+        layerData: emptyGeoJSON,
+        layerTypeId: "1"
+      });
+
+      // Refresh layers
+      if (onRefreshLayers) {
+        await onRefreshLayers();
+      }
+    } catch (error) {
+      console.error("Failed to add layer:", error);
+      alert("Failed to add layer. Please try again.");
+      throw error;
+    }
+  };
+
+  const handleDeleteLayerClick = async (layer: LayerDTO) => {
+    if (!mapId) return;
+
+    // Load all features to check how many belong to this layer
+    try {
+      const featuresResponse = await getMapFeatures(mapId);
+      setAllFeatures(featuresResponse);
+      setLayerToDelete(layer);
+      setShowDeleteLayerDialog(true);
+    } catch (error) {
+      console.error("Failed to load features:", error);
+      alert("Failed to load layer features. Please try again.");
+    }
+  };
+
+  const handleConfirmDeleteLayer = async (options: { action: 'delete-features' | 'move-to-default'; targetLayerId?: string }) => {
+    if (!mapId || !layerToDelete) return;
+
+    try {
+      await handleDeleteLayerWithFeatures(mapId, layerToDelete.id, options, allFeatures);
+
+      // Refresh layers
+      if (onRefreshLayers) {
+        await onRefreshLayers();
+      }
+    } catch (error) {
+      console.error("Failed to delete layer:", error);
+      alert("Failed to delete layer. Please try again.");
+      throw error;
+    }
+  };
+
+  // Handler for feature drag-and-drop to different layer
+  const handleFeatureDrop = async (featureId: string, targetLayerId: string | null) => {
+    if (!mapId) return;
+
+    try {
+      // Update the feature's layerId in the database
+      await updateMapFeature(mapId, featureId, {
+        layerId: targetLayerId,
+      });
+
+      // Refresh layers
+      if (onRefreshLayers) {
+        await onRefreshLayers();
+      }
+    } catch (error) {
+      console.error("Failed to move feature to layer:", error);
+      alert("Failed to move feature. Please try again.");
+    }
+  };
+
+  // Handler for layer collapse/expand
+  const handleLayerCollapse = (layerId: string, isCollapsed: boolean) => {
+    setCollapsedLayers((prev) => {
+      const newSet = new Set(prev);
+      if (isCollapsed) {
+        newSet.add(layerId);
+      } else {
+        newSet.delete(layerId);
+      }
+      return newSet;
+    });
+  };
+
+  // Build layer tree
+  const layerTree = buildLayerTree(
+    layers,
+    features,
+    layerVisibility,
+    featureVisibility,
+    collapsedLayers
   );
-  const filteredLayers = layers.filter(l => 
-    l.layerName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+
+  // Filter tree based on search query
+  const filteredTree = filterLayerTree(layerTree, searchQuery);
+
+  // Keep filtered features for search results display
+  const filteredFeatures = searchQuery
+    ? features.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    : [];
 
   return (
     <div className="h-full flex flex-col">
@@ -749,69 +2192,102 @@ function ExplorerView({
         </div>
       </div>
 
-      {/* Layers List - Video Editor Style */}
+      {/* Layers & Features Tree - Video Editor Style with Hierarchy */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between px-1">
           <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-            Layers
+            Layers & Features
           </h4>
-          <span className="text-[10px] text-zinc-600">{filteredLayers.length}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-600">
+              {layers.length} layer{layers.length !== 1 ? 's' : ''}, {features.length} feature{features.length !== 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={() => setShowInlineLayerInput(true)}
+              className="p-1 rounded hover:bg-zinc-800 text-emerald-400 hover:text-emerald-300 transition-colors"
+              title="Add Layer"
+            >
+              <Icon icon="mdi:plus" className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
-        {filteredLayers.length === 0 ? (
+
+        {/* Inline Layer Input */}
+        {showInlineLayerInput && (
+          <div className="mx-1 mb-2 p-2 bg-zinc-800/80 border border-zinc-700 rounded-lg">
+            <input
+              type="text"
+              value={newLayerName}
+              onChange={(e) => setNewLayerName(e.target.value)}
+              placeholder="Enter layer name..."
+              autoFocus
+              className="w-full px-2.5 py-1.5 bg-zinc-900 border border-zinc-600 rounded text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newLayerName.trim()) {
+                  handleAddLayer(newLayerName);
+                  setShowInlineLayerInput(false);
+                  setNewLayerName("");
+                } else if (e.key === 'Escape') {
+                  setShowInlineLayerInput(false);
+                  setNewLayerName("");
+                }
+              }}
+            />
+            <div className="flex gap-1.5 mt-2">
+              <button
+                onClick={async () => {
+                  if (!newLayerName.trim()) return;
+                  await handleAddLayer(newLayerName);
+                  setShowInlineLayerInput(false);
+                  setNewLayerName("");
+                }}
+                disabled={!newLayerName.trim()}
+                className="flex-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed text-white text-xs font-medium rounded transition-colors"
+              >
+                ✓ Add Layer
+              </button>
+              <button
+                onClick={() => {
+                  setShowInlineLayerInput(false);
+                  setNewLayerName("");
+                }}
+                className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white text-xs font-medium rounded transition-colors"
+              >
+                ✕ Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {filteredTree.length === 0 ? (
           <div className="px-2 py-4 text-center">
-            <p className="text-xs text-zinc-500 italic">No layers</p>
+            <p className="text-xs text-zinc-500 italic">No layers or features</p>
           </div>
         ) : (
-          <div className="space-y-0.5">
-            {filteredLayers.map((layer) => (
-              <div
-                key={layer.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800/60 cursor-pointer group/item transition-colors"
-                onClick={() => onSelectLayer(layer)}
-              >
-                <div className="w-6 h-6 rounded bg-blue-500/20 flex items-center justify-center flex-shrink-0">
-                  <Icon
-                    icon="mdi:folder-outline"
-                    className="w-3.5 h-3.5 text-blue-400"
-                  />
-                </div>
-                <span className="flex-1 text-xs text-zinc-300 truncate font-medium">
-                  {layer.layerName}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onLayerVisibilityChange(layer.id, !layer.isPublic);
-                  }}
-                  className="opacity-0 group-hover/item:opacity-100 transition-opacity p-0.5 hover:bg-zinc-700 rounded"
-                >
-                  <Icon
-                    icon={layer.isPublic ? "mdi:eye" : "mdi:eye-off"}
-                    className={cn(
-                      "w-3.5 h-3.5",
-                      layer.isPublic ? "text-emerald-400" : "text-zinc-600"
-                    )}
-                  />
-                </button>
-              </div>
-            ))}
-          </div>
+          <LayerTree
+            tree={filteredTree}
+            onFeatureDrop={handleFeatureDrop}
+            onLayerCollapse={handleLayerCollapse}
+            onLayerVisibilityChange={onLayerVisibilityChange}
+            onFeatureVisibilityChange={onFeatureVisibilityChange}
+            onSelectLayer={onSelectLayer}
+            onSelectFeature={onSelectFeature}
+            onDeleteLayer={handleDeleteLayerClick}
+            onDeleteFeature={onDeleteFeature}
+            totalLayerCount={layers.length}
+          />
         )}
       </div>
 
-      {/* Features List - Video Editor Style */}
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between px-1">
-          <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-            Features
-          </h4>
-          <span className="text-[10px] text-zinc-600">{filteredFeatures.length}</span>
-        </div>
-        {filteredFeatures.length === 0 ? (
-          <div className="px-2 py-4 text-center">
-            <p className="text-xs text-zinc-500 italic">No features</p>
+      {/* Keep legacy features list for search compatibility */}
+      {searchQuery && filteredFeatures.length > 0 && (
+        <div className="space-y-1.5 pt-2 border-t border-zinc-800/80">
+          <div className="flex items-center justify-between px-1">
+            <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+              Search Results
+            </h4>
+            <span className="text-[10px] text-zinc-600">{filteredFeatures.length}</span>
           </div>
-        ) : (
           <div className="space-y-0.5">
             {filteredFeatures.map((feature) => (
               <div
@@ -832,18 +2308,19 @@ function ExplorerView({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
+                      const currentVisibility = featureVisibility[feature.id] ?? feature.isVisible;
                       onFeatureVisibilityChange(
                         feature.featureId || feature.id,
-                        !feature.isVisible
+                        !currentVisibility
                       );
                     }}
                     className="p-0.5 hover:bg-zinc-700 rounded"
                   >
                     <Icon
-                      icon={feature.isVisible ? "mdi:eye" : "mdi:eye-off"}
+                      icon={(featureVisibility[feature.id] ?? feature.isVisible) ? "mdi:eye" : "mdi:eye-off"}
                       className={cn(
                         "w-3.5 h-3.5",
-                        feature.isVisible
+                        (featureVisibility[feature.id] ?? feature.isVisible)
                           ? "text-emerald-400"
                           : "text-zinc-600"
                       )}
@@ -865,9 +2342,27 @@ function ExplorerView({
               </div>
             ))}
           </div>
-        )}
+        </div>
+      )}
       </div>
-      </div>
+
+      {/* Delete Layer Dialog */}
+      <DeleteLayerDialog
+        isOpen={showDeleteLayerDialog}
+        onClose={() => {
+          setShowDeleteLayerDialog(false);
+          setLayerToDelete(null);
+        }}
+        onConfirm={handleConfirmDeleteLayer}
+        layerName={layerToDelete?.layerName || ""}
+        featureCount={allFeatures.filter(f => f.layerId === layerToDelete?.id).length}
+        defaultLayerId={
+          layers.find(l => l.layerName.toLowerCase().includes('default'))?.id ||
+          layers[0]?.id ||
+          ""
+        }
+        totalLayerCount={layers.length}
+      />
     </div>
   );
 }
@@ -1147,7 +2642,10 @@ export function SegmentItemsList({
     if (!window.confirm("Remove this zone from segment?")) return;
     try {
       await deleteSegmentZone(mapId, segmentId, segmentZoneId);
-      window.location.reload();
+      // Trigger refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshSegments'));
+      }
     } catch (e) {
       console.error("Failed to delete zone:", e);
       alert("Failed to remove zone");
@@ -1158,7 +2656,10 @@ export function SegmentItemsList({
     if (!window.confirm("Remove this location from segment?")) return;
     try {
       await deleteLocation(mapId, segmentId, locationId);
-      window.location.reload();
+      // Trigger refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshSegments'));
+      }
     } catch (e) {
       console.error("Failed to delete location:", e);
       alert("Failed to remove location");
@@ -1169,7 +2670,10 @@ export function SegmentItemsList({
     if (!window.confirm("Remove this layer from segment?")) return;
     try {
       await detachLayerFromSegment(mapId, segmentId, layerId);
-      window.location.reload();
+      // Trigger refresh
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('refreshSegments'));
+      }
     } catch (e) {
       console.error("Failed to delete layer:", e);
       alert("Failed to remove layer");

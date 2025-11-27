@@ -9,6 +9,7 @@ import {
   saveFeature,
   updateFeatureInDB,
 } from "@/utils/mapUtils";
+import { getMapFeatureById } from "@/lib/api-maps";
 
 interface UseFeatureManagementParams {
   mapId: string;
@@ -19,6 +20,7 @@ interface UseFeatureManagementParams {
   handleLayerHover: (layer: Layer | null, isEntering: boolean) => void;
   handleLayerClick: (layer: Layer, isShiftKey: boolean) => void;
   resetToOriginalStyle: (layer: Layer) => void;
+  sketch: L.FeatureGroup | null; // Still needed for handleFeatureCreate
 }
 
 /**
@@ -33,9 +35,11 @@ export function useFeatureManagement({
   handleLayerHover,
   handleLayerClick,
   resetToOriginalStyle,
+  sketch,
 }: UseFeatureManagementParams) {
   const lastUpdateRef = useRef<Map<string, number>>(new Map());
   const recentlyCreatedFeatureIdsRef = useRef<Set<string>>(new Set());
+  const recentlyCutFeatureIdsRef = useRef<Set<string>>(new Set());
 
   /**
    * Handle feature creation from Geoman pm:create event
@@ -99,6 +103,12 @@ export function useFeatureManagement({
           // Attach edit/drag/rotate event listeners for the saved feature
           e.layer.on("pm:edit", async () => {
             if (savedFeature.featureId) {
+              // Ignore edit events for recently cut features (Geoman issue #826)
+              if (recentlyCutFeatureIdsRef.current.has(savedFeature.featureId)) {
+                console.log(`Ignoring edit event for recently cut feature ${savedFeature.featureId}`);
+                return;
+              }
+
               const now = Date.now();
               const lastUpdate = lastUpdateRef.current.get(savedFeature.featureId) || 0;
               if (now - lastUpdate < 1000) return;
@@ -198,6 +208,12 @@ export function useFeatureManagement({
 
       const editedFeature = features.find((f) => f.layer === extLayer);
       if (editedFeature && editedFeature.featureId) {
+        // Ignore edit events for recently cut features (Geoman issue #826)
+        if (recentlyCutFeatureIdsRef.current.has(editedFeature.featureId)) {
+          console.log(`Ignoring edit event for recently cut feature ${editedFeature.featureId}`);
+          return;
+        }
+
         const now = Date.now();
         const lastUpdate = lastUpdateRef.current.get(editedFeature.featureId) || 0;
         if (now - lastUpdate < 1000) return; // Skip if updated less than 1 second ago
@@ -286,10 +302,91 @@ export function useFeatureManagement({
     [features, mapId, setFeatures]
   );
 
+  /**
+   * Handle feature cut event
+   */
+  const handleFeatureCut = useCallback(
+    async (e: { layer: Layer; originalLayer: Layer; shape: string }) => {
+      const extLayer = e.layer as ExtendedLayer;
+      const originalExtLayer = e.originalLayer as ExtendedLayer;
+
+      // Log geometry mới của layer sau khi bị cắt
+      if (extLayer) {
+        try {
+          const serialized = serializeFeature(extLayer);
+          console.log("New cut:", {
+            geometryType: serialized.geometryType,
+            coordinates: JSON.parse(serialized.coordinates),
+            annotationType: serialized.annotationType,
+          });
+        } catch (error) {
+          console.error("Error serializing cut layer:", error);
+        }
+      }
+
+      // Log geometry ban đầu (trước khi cắt) nếu có
+      if (originalExtLayer) {
+        try {
+          const originalSerialized = serializeFeature(originalExtLayer);
+          console.log("Before cut:", {
+            geometryType: originalSerialized.geometryType,
+            coordinates: JSON.parse(originalSerialized.coordinates),
+            annotationType: originalSerialized.annotationType,
+          });
+        } catch (error) {
+          console.error("Error serializing original layer:", error);
+        }
+      }
+
+      // Tìm feature bị cắt trong danh sách features
+      const cutFeature = features.find((f) => f.layer === originalExtLayer || f.layer === extLayer);
+      if (cutFeature && cutFeature.featureId) {
+        console.log("Cut feature info:", {
+          featureId: cutFeature.featureId,
+          name: cutFeature.name,
+          type: cutFeature.type,
+        });
+
+        recentlyCutFeatureIdsRef.current.add(cutFeature.featureId);
+        setTimeout(() => {
+          recentlyCutFeatureIdsRef.current.delete(cutFeature.featureId!);
+        }, 5000);
+
+        // Update feature in database với geometry mới
+        const now = Date.now();
+        const lastUpdate = lastUpdateRef.current.get(cutFeature.featureId) || 0;
+        if (now - lastUpdate >= 1000) {
+          lastUpdateRef.current.set(cutFeature.featureId, now);
+
+          try {
+            // Update layer reference to new cut layer
+            const updatedFeature = { ...cutFeature, layer: extLayer };
+            await updateFeatureInDB(mapId, cutFeature.featureId, updatedFeature);
+
+            // Update local state
+            setFeatures((prev) =>
+              prev.map((f) =>
+                f.id === cutFeature.id || f.featureId === cutFeature.featureId
+                  ? updatedFeature
+                  : f
+              )
+            );
+
+            console.log("Successfully updated cut feature");
+          } catch (error) {
+            console.error("Error updating cut feature:", error);
+          }
+        }
+      }
+    },
+    [features, mapId, setFeatures]
+  );
+
   return {
     lastUpdateRef,
     recentlyCreatedFeatureIdsRef,
     handleFeatureCreate,
+    handleFeatureCut,
     handleSketchEdit,
     handleSketchDragEnd,
     handleSketchRotateEnd,

@@ -52,6 +52,7 @@ export interface FeatureData {
   layer: ExtendedLayer;
   isVisible: boolean;
   featureId?: string;
+  layerId?: string | null;
 }
 
 export interface LayerInfo {
@@ -778,6 +779,13 @@ export async function updateFeatureInDB(
     const serialized = serializeFeature(feature.layer);
     const { geometryType, annotationType, coordinates, text } = serialized;
 
+    console.log(`[updateFeatureInDB] Serialized feature ${featureId}:`, {
+      geometryType,
+      annotationType,
+      coordinates,
+      coordinatesLength: coordinates?.length || 0,
+    });
+
     // Extract current style from layer
     const layerStyle = extractLayerStyle(feature.layer);
 
@@ -806,10 +814,14 @@ export async function updateFeatureInDB(
       layerId: null,
     };
 
+    console.log(`[updateFeatureInDB] Request payload for ${featureId}:`, body);
+
     await updateMapFeature(mapId, featureId, body);
+
+    console.log(`[updateFeatureInDB] Successfully updated feature ${featureId}`);
     return true;
   } catch (error) {
-    console.error("Failed to update feature:", error);
+    console.error(`[updateFeatureInDB] Failed to update feature ${featureId}:`, error);
     return false;
   }
 }
@@ -1040,6 +1052,7 @@ export async function loadFeaturesToMap(
           layer,
           isVisible,
           featureId: feature.featureId,
+          layerId: feature.layerId,
         });
       }
     }
@@ -1857,8 +1870,8 @@ export async function addDataLayerToMap(
       layerId,
       isVisible,
       zIndex,
-      customStyle: null,
-      filterConfig: null,
+      layerData: null,
+      layerTypeId: "1",
     });
     return true;
   } catch (error) {
@@ -2472,6 +2485,43 @@ export async function handleLayerVisibilityChange(
       }
     }
   }
+}
+
+export async function handleDeleteLayerWithFeatures(
+  mapId: string,
+  layerId: string,
+  options: { action: 'delete-features' | 'move-to-default'; targetLayerId?: string },
+  allFeatures: MapFeatureResponse[]
+): Promise<void> {
+  const { deleteMapFeature, updateMapFeature, removeLayerFromMap } = await import("@/lib/api-maps");
+
+  // Get all features in this layer
+  const layerFeatures = allFeatures.filter(f => f.layerId === layerId);
+
+  if (options.action === 'move-to-default' && options.targetLayerId) {
+    // Move features to Default Layer
+    for (const feature of layerFeatures) {
+      try {
+        await updateMapFeature(mapId, feature.featureId, {
+          layerId: options.targetLayerId
+        });
+      } catch (error) {
+        console.error(`Failed to move feature ${feature.featureId}:`, error);
+      }
+    }
+  } else if (options.action === 'delete-features') {
+    // Delete all features
+    for (const feature of layerFeatures) {
+      try {
+        await deleteMapFeature(mapId, feature.featureId);
+      } catch (error) {
+        console.error(`Failed to delete feature ${feature.featureId}:`, error);
+      }
+    }
+  }
+
+  // Delete the layer itself
+  await removeLayerFromMap(mapId, layerId);
 }
 
 export async function handleFeatureVisibilityChange(
