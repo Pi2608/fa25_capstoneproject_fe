@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import "leaflet/dist/leaflet.css";
 import type { TileLayer } from "leaflet";
 import type { MapWithPM } from "@/types";
 import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
-import { Segment, type Location } from "@/lib/api-storymap";
+import { Segment, type Location, getRouteAnimationsBySegment, RouteAnimation } from "@/lib/api-storymap";
 import SequentialRoutePlaybackWrapper from "@/components/storymap/SequentialRoutePlaybackWrapper";
 
 type StoryMapViewerProps = {
@@ -19,6 +19,7 @@ type StoryMapViewerProps = {
   controlledPlaying?: boolean;
   controlsEnabled?: boolean;
   onLocationClick?: (location: Location) => void;
+  onPlayingChange?: (isPlaying: boolean) => void; // Callback when play/pause state changes
 };
 
 export default function StoryMapViewer({
@@ -32,19 +33,33 @@ export default function StoryMapViewer({
   controlledPlaying,
   controlsEnabled = true,
   onLocationClick,
+  onPlayingChange,
 }: StoryMapViewerProps) {
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapWithPM | null>(null);
   const baseRef = useRef<TileLayer | null>(null);
+  const [mapInstance, setMapInstance] = useState<MapWithPM | null>(null);
 
   const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
 
-  // Use the powerful segment playback hook
+  // ========== CONTROLLED MODE STATE (for student view) ==========
+  // Separate state for controlled mode - doesn't use playback hook's auto-advance
+  const [controlledRouteAnimations, setControlledRouteAnimations] = useState<RouteAnimation[]>([]);
+  const [controlledSegmentStartTime, setControlledSegmentStartTime] = useState<number>(0);
+  const [isControlledPlaying, setIsControlledPlaying] = useState(false);
+  const [isRouteAnimationsLoaded, setIsRouteAnimationsLoaded] = useState(false); // Track if animations are loaded
+  const pendingPlayRef = useRef(false); // Track if we should play after loading
+  const playStartTimeRef = useRef<number>(0); // Track when playback started to ignore rapid stop signals
+
+  // Determine if we're in controlled mode (student view)
+  const isControlledMode = controlledIndex !== undefined && !controlsEnabled;
+
+  // Use the powerful segment playback hook (only for autonomous mode - teacher/preview)
   const playback = useSegmentPlayback({
     mapId,
     segments,
-    currentMap: mapRef.current,
+    currentMap: mapInstance,
     currentSegmentLayers,
     setCurrentSegmentLayers,
     setActiveSegmentId,
@@ -54,6 +69,16 @@ export default function StoryMapViewer({
     },
     onLocationClick,
   });
+
+  const [playbackTime, setPlaybackTime] = useState(0);
+  const totalDuration = segments.reduce((sum, seg) => sum + (seg.durationMs || 0), 0) / 1000;
+
+  const formatTime = useCallback((seconds: number): string => {
+    const safeSeconds = Math.max(0, seconds);
+    const mins = Math.floor(safeSeconds / 60);
+    const secs = Math.floor(safeSeconds % 60);
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  }, []);
 
   // Initialize Leaflet map
   useEffect(() => {
@@ -74,6 +99,7 @@ export default function StoryMapViewer({
       }) as MapWithPM;
 
       mapRef.current = map;
+      setMapInstance(map);
 
       // Add base layer - support all base layer types
       const baseLayerMap: Record<string, string> = {
@@ -122,29 +148,25 @@ export default function StoryMapViewer({
           subdomains: ["a", "b", "c"],
         },
         terrain: {
-          // Using Esri World Topographic Map for terrain view
           url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
-          attribution: "Tiles © Esri — Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community",
+          attribution: "Tiles © Esri",
           maxZoom: 20,
         },
         toner: {
-          // Using CartoDB Positron No Labels (black and white style) as alternative to Stamen Toner
           url: "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
           attribution: "© OpenStreetMap contributors © CARTO",
           maxZoom: 20,
           subdomains: ["a", "b", "c"],
         },
         watercolor: {
-          // Using Wikimedia style as alternative to Stamen Watercolor
           url: "https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png",
           attribution: "© OpenStreetMap contributors, Tiles style by Wikimedia, under CC BY-SA",
           maxZoom: 19,
           subdomains: [],
         },
         topo: {
-          // Using OpenTopoMap - single tile server without subdomains
           url: "https://tile.opentopomap.org/{z}/{x}/{y}.png",
-          attribution: "Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap (CC-BY-SA)",
+          attribution: "Map data: © OpenStreetMap contributors, SRTM | Map style: © OpenTopoMap (CC-BY-SA)",
           maxZoom: 17,
           subdomains: [],
         },
@@ -156,20 +178,16 @@ export default function StoryMapViewer({
         maxZoom: config.maxZoom || 20,
       };
       
-      // Only add subdomains if specified
       if (config.subdomains !== undefined) {
         tileLayerOptions.subdomains = config.subdomains;
       } else if (baseKey !== "sat" && baseKey !== "terrain") {
-        // Default subdomains for most tile servers
         tileLayerOptions.subdomains = ["a", "b", "c"];
       }
       
       baseRef.current = L.tileLayer(config.url, tileLayerOptions).addTo(map);
       
-      // Wait for map to fully initialize (tiles to load)
       map.whenReady(() => {
         if (alive && mapRef.current === map) {
-          // Map is ready - check if container has valid size
           setTimeout(() => {
             try {
               const size = map.getSize();
@@ -190,8 +208,9 @@ export default function StoryMapViewer({
       setIsMapReady(false);
       mapRef.current?.remove();
       mapRef.current = null;
+      setMapInstance(null);
     };
-  }, [baseMapProvider, initialCenter, initialZoom]);
+  }, [baseMapProvider]); // Only recreate map when baseMapProvider changes, not center/zoom
 
   // Track map ready state
   const [isMapReady, setIsMapReady] = useState(false);
@@ -203,7 +222,6 @@ export default function StoryMapViewer({
       return;
     }
 
-    // Check if map is fully initialized
     const checkMapReady = () => {
       try {
         const map = mapRef.current;
@@ -221,12 +239,10 @@ export default function StoryMapViewer({
       return false;
     };
 
-    // Check immediately
     if (checkMapReady()) {
       return;
     }
 
-    // Retry with interval
     const interval = setInterval(() => {
       if (checkMapReady()) {
         clearInterval(interval);
@@ -234,7 +250,30 @@ export default function StoryMapViewer({
     }, 50);
 
     return () => clearInterval(interval);
-  }, [baseMapProvider, initialCenter, initialZoom]); // Re-check when map config changes
+  }, [baseMapProvider]); // Only check when baseMapProvider changes
+
+  // Track if initial view has been set (to avoid resetting map on prop changes)
+  const initialViewSetRef = useRef(false);
+
+  // Reset initial view flag when base map provider changes (map gets recreated)
+  useEffect(() => {
+    initialViewSetRef.current = false;
+  }, [baseMapProvider]);
+
+  // Set initial view ONLY once when map is first ready
+  // After that, segment changes will control the view
+  useEffect(() => {
+    if (!mapRef.current || !isMapReady || initialViewSetRef.current) return;
+
+    // Only set initial view once when map first becomes ready
+    try {
+      console.log("[StoryMapViewer] Setting initial map view:", initialCenter, initialZoom);
+      mapRef.current.setView(initialCenter, initialZoom, { animate: false });
+      initialViewSetRef.current = true;
+    } catch (e) {
+      console.error("Failed to set initial view:", e);
+    }
+  }, [isMapReady]); // Only depend on isMapReady, not initialCenter/Zoom
 
   // Track last viewed segment index to prevent re-rendering the same segment
   const lastViewedIndexRef = useRef<number | null>(null);
@@ -250,54 +289,283 @@ export default function StoryMapViewer({
     handleViewSegmentRef.current = playback.handleViewSegment;
   }, [playback.handleViewSegment]);
 
-  // Sync with external control (for control page)
+  // ========== CONTROLLED MODE: Sync segment from teacher ==========
   useEffect(() => {
-    // Wait for map to be ready before viewing segment
+    // Only for controlled mode (student view)
+    if (!isControlledMode) return;
+    
     if (
       controlledIndex !== undefined && 
       controlledIndex >= 0 && 
       segmentsRef.current.length > 0 &&
       segmentsRef.current[controlledIndex] && 
       isMapReady && 
-      mapRef.current &&
+      mapInstance &&
       handleViewSegmentRef.current &&
-      lastViewedIndexRef.current !== controlledIndex // Only render if index changed
+      lastViewedIndexRef.current !== controlledIndex
     ) {
       const currentIndex = controlledIndex;
       lastViewedIndexRef.current = currentIndex;
       
-      // Add a small delay to ensure map is fully rendered
+      // Small delay to ensure map is fully rendered
       const timer = setTimeout(() => {
-        if (mapRef.current && mapEl.current && segmentsRef.current[currentIndex] && handleViewSegmentRef.current) {
-          // Use handleViewSegment from ref to avoid dependency issues
-          // Disable two-phase fly for smooth direct transition when teacher controls the view
+        if (mapInstance && mapEl.current && segmentsRef.current[currentIndex] && handleViewSegmentRef.current) {
+          console.log("[StoryMapViewer] Controlled mode: viewing segment", currentIndex);
+          // Use smooth Fly animation matching EditMapPage behavior
           handleViewSegmentRef.current(segmentsRef.current[currentIndex], {
-            disableTwoPhaseFly: true, // Direct flyTo from current position to target (no zoom out first)
+            cameraAnimationType: 'Fly',
+            cameraAnimationDurationMs: 1500,
+            transitionType: 'Ease',
+            durationMs: 800,
           });
         }
       }, 100);
       
       return () => clearTimeout(timer);
     }
-  }, [controlledIndex, isMapReady]); // Removed playback dependency
+  }, [controlledIndex, isMapReady, isControlledMode, mapInstance]);
 
+  // ========== CONTROLLED MODE: Load route animations when segment changes ==========
   useEffect(() => {
+    console.log("[StoryMapViewer] Route animations effect - isControlledMode:", isControlledMode, 
+      "controlledIndex:", controlledIndex, 
+      "segments:", segmentsRef.current.length);
+    
+    if (!isControlledMode) {
+      console.log("[StoryMapViewer] Skipping - not in controlled mode");
+      return;
+    }
+    if (controlledIndex === undefined || controlledIndex < 0) {
+      console.log("[StoryMapViewer] Skipping - invalid controlledIndex");
+      return;
+    }
+    if (!segmentsRef.current[controlledIndex]) {
+      console.log("[StoryMapViewer] Skipping - segment not found at index", controlledIndex);
+      return;
+    }
+
+    const currentSegment = segmentsRef.current[controlledIndex];
+    console.log("[StoryMapViewer] Loading route animations for segment:", currentSegment.segmentId);
+    
+    // Reset loading state
+    setIsRouteAnimationsLoaded(false);
+    
+    let cancelled = false;
+
+    (async () => {
+      try {
+        console.log("[StoryMapViewer] Calling getRouteAnimationsBySegment API...");
+        const animations = await getRouteAnimationsBySegment(mapId, currentSegment.segmentId);
+        console.log("[StoryMapViewer] API returned:", animations?.length || 0, "route animations");
+        
+        if (!cancelled) {
+          const sortedAnimations = (animations || []).sort((a, b) => {
+            if (a.displayOrder !== b.displayOrder) {
+              return a.displayOrder - b.displayOrder;
+            }
+            if (a.startTimeMs !== undefined && b.startTimeMs !== undefined) {
+              return a.startTimeMs - b.startTimeMs;
+            }
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          });
+          console.log("[StoryMapViewer] Controlled mode: loaded", sortedAnimations.length, "route animations");
+          setControlledRouteAnimations(sortedAnimations);
+          setIsRouteAnimationsLoaded(true);
+          
+          // If we have a pending play request, start playing now
+          if (pendingPlayRef.current) {
+            console.log("[StoryMapViewer] Starting pending playback after animations loaded");
+            pendingPlayRef.current = false;
+            setIsControlledPlaying(true);
+            setControlledSegmentStartTime(Date.now());
+            playStartTimeRef.current = Date.now(); // Track start time
+          }
+        }
+      } catch (e) {
+        console.error("[StoryMapViewer] Failed to load route animations:", e);
+        if (!cancelled) {
+          setControlledRouteAnimations([]);
+          setIsRouteAnimationsLoaded(true); // Mark as loaded even on error so playback can proceed
+          
+          if (pendingPlayRef.current) {
+            pendingPlayRef.current = false;
+            setIsControlledPlaying(true);
+            setControlledSegmentStartTime(Date.now());
+            playStartTimeRef.current = Date.now(); // Track start time
+          }
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [mapId, controlledIndex, isControlledMode]);
+
+  // Track previous segment index to detect changes
+  const prevControlledIndexRef = useRef<number | undefined>(undefined);
+
+  // Track previous play state to detect changes
+  const prevControlledPlayingRef = useRef<boolean | undefined>(undefined);
+
+  // ========== CONTROLLED MODE: Handle play/pause from teacher ==========
+  useEffect(() => {
+    if (!isControlledMode) return;
+
+    // Check if segment changed
+    const segmentChanged = prevControlledIndexRef.current !== undefined &&
+                           prevControlledIndexRef.current !== controlledIndex;
+
+    // Check if play state changed
+    const playStateChanged = prevControlledPlayingRef.current !== undefined &&
+                            prevControlledPlayingRef.current !== controlledPlaying;
+
+    // Update refs
+    prevControlledIndexRef.current = controlledIndex;
+    prevControlledPlayingRef.current = controlledPlaying;
+
+    // If segment changed, reset playback state first
+    if (segmentChanged) {
+      console.log("[StoryMapViewer] Controlled mode: segment changed from", prevControlledIndexRef.current, "to", controlledIndex);
+      setIsControlledPlaying(false);
+      setControlledSegmentStartTime(0);
+      pendingPlayRef.current = false;
+      playStartTimeRef.current = 0;
+      return; // Don't process play/pause in same effect run
+    }
+
+    // Only process if play state actually changed
+    if (!playStateChanged) {
+      return;
+    }
+
+    // Handle play/pause from teacher
+    if (controlledPlaying !== undefined) {
+      console.log("[StoryMapViewer] Controlled mode: controlledPlaying changed to", controlledPlaying,
+        "isRouteAnimationsLoaded =", isRouteAnimationsLoaded,
+        "isControlledPlaying =", isControlledPlaying);
+
+      if (controlledPlaying) {
+        // Check if route animations are loaded
+        if (isRouteAnimationsLoaded) {
+          // Start playback immediately
+          console.log("[StoryMapViewer] Starting playback (animations loaded)");
+          setIsControlledPlaying(true);
+          setControlledSegmentStartTime(Date.now());
+          playStartTimeRef.current = Date.now();
+        } else {
+          // Set pending flag - will start when animations are loaded
+          console.log("[StoryMapViewer] Animations not loaded yet, setting pending play");
+          pendingPlayRef.current = true;
+        }
+      } else {
+        // Teacher wants to stop
+        // Only stop if we were actually playing
+        if (isControlledPlaying) {
+          console.log("[StoryMapViewer] Stopping playback");
+          setIsControlledPlaying(false);
+          pendingPlayRef.current = false;
+          playStartTimeRef.current = 0;
+        } else {
+          console.log("[StoryMapViewer] Ignoring stop - not currently playing");
+        }
+        // Don't reset segmentStartTime on pause - allows resume from current position
+      }
+    }
+  }, [controlledPlaying, controlledIndex, isControlledMode, isRouteAnimationsLoaded, isControlledPlaying]);
+
+  // ========== AUTONOMOUS MODE: Sync with external control (for teacher preview) ==========
+  useEffect(() => {
+    // Only for autonomous mode (teacher/control page with controlsEnabled = true)
+    if (isControlledMode) return;
+    
+    if (
+      controlledIndex !== undefined && 
+      controlledIndex >= 0 && 
+      segmentsRef.current.length > 0 &&
+      segmentsRef.current[controlledIndex] && 
+      isMapReady && 
+      mapInstance &&
+      handleViewSegmentRef.current &&
+      lastViewedIndexRef.current !== controlledIndex
+    ) {
+      const currentIndex = controlledIndex;
+      lastViewedIndexRef.current = currentIndex;
+      
+      const timer = setTimeout(() => {
+        if (mapInstance && mapEl.current && segmentsRef.current[currentIndex] && handleViewSegmentRef.current) {
+          // Use smooth Fly animation matching EditMapPage behavior
+          handleViewSegmentRef.current(segmentsRef.current[currentIndex], {
+            cameraAnimationType: 'Fly',
+            cameraAnimationDurationMs: 1500,
+            transitionType: 'Ease',
+            durationMs: 800,
+          });
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [controlledIndex, isMapReady, isControlledMode, mapInstance]);
+
+  // ========== AUTONOMOUS MODE: Handle play/pause ==========
+  useEffect(() => {
+    // Only for autonomous mode
+    if (isControlledMode) return;
+
     if (controlledPlaying !== undefined) {
       if (controlledPlaying && !playback.isPlaying) {
-        playback.handlePlayPreview();
+        playback.handlePlayPreview(controlledIndex);
       } else if (!controlledPlaying && playback.isPlaying) {
         playback.handleStopPreview();
       }
     }
-  }, [controlledPlaying]);
+  }, [controlledPlaying, controlledIndex, playback.isPlaying, isControlledMode]);
+
+  // Notify parent when play/pause state changes (for teacher control page)
+  useEffect(() => {
+    if (controlsEnabled && onPlayingChange) {
+      onPlayingChange(playback.isPlaying);
+    }
+  }, [playback.isPlaying, controlsEnabled, onPlayingChange]);
+
+  // ========== Determine which route animations to use ==========
+  const activeRouteAnimations = isControlledMode ? controlledRouteAnimations : playback.routeAnimations;
+  const activeSegmentStartTime = isControlledMode ? controlledSegmentStartTime : playback.segmentStartTime;
+  const activeIsPlaying = isControlledMode ? isControlledPlaying : playback.isPlaying;
+
+  useEffect(() => {
+    if (!playback.isPlaying || segments.length === 0) {
+      setPlaybackTime(0);
+      return;
+    }
+
+    let rafId: number;
+    let baseTime = 0;
+    for (let i = 0; i < playback.currentPlayIndex && i < segments.length; i++) {
+      baseTime += (segments[i].durationMs ?? 0) / 1000;
+    }
+
+    const updateTime = () => {
+      const elapsed = playback.segmentStartTime ? (Date.now() - playback.segmentStartTime) / 1000 : 0;
+      setPlaybackTime(baseTime + Math.max(0, elapsed));
+      rafId = requestAnimationFrame(updateTime);
+    };
+
+    updateTime();
+
+    return () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [playback.isPlaying, playback.currentPlayIndex, playback.segmentStartTime, segments]);
 
   return (
     <div className="relative w-full h-full">
       {/* Map Container */}
       <div ref={mapEl} className="w-full h-full" />
 
-      {/* Continue Button Overlay (when requireUserAction = true) */}
-      {playback.waitingForUserAction && playback.currentTransition && (
+      {/* Continue Button Overlay (when requireUserAction = true) - Only for autonomous mode */}
+      {!isControlledMode && playback.waitingForUserAction && playback.currentTransition && (
         <div className="absolute inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-zinc-800 border-2 border-zinc-700 rounded-xl p-8 shadow-2xl max-w-lg mx-4 transform transition-all">
             {playback.currentTransition.showOverlay && playback.currentTransition.overlayContent && (
@@ -324,14 +592,17 @@ export default function StoryMapViewer({
         </div>
       )}
 
-      {/* Route Animations with Sequential Playback - Same as edit page */}
-      {playback.routeAnimations && playback.routeAnimations.length > 0 && mapRef.current && (
+      {/* Route Animations with Sequential Playback */}
+      {activeRouteAnimations && activeRouteAnimations.length > 0 && mapInstance && (
         <SequentialRoutePlaybackWrapper
-          map={mapRef.current}
-          routeAnimations={playback.routeAnimations}
-          isPlaying={playback.isPlaying}
-          segmentStartTime={playback.segmentStartTime}
+          map={mapInstance}
+          routeAnimations={activeRouteAnimations}
+          isPlaying={activeIsPlaying}
+          segmentStartTime={activeSegmentStartTime}
           onLocationClick={onLocationClick}
+          // FIXED: Disable camera state changes after route completion in controlled mode
+          // This prevents the map from jumping to a different location after routes complete
+          disableCameraStateAfter={isControlledMode}
         />
       )}
 
@@ -339,7 +610,11 @@ export default function StoryMapViewer({
       {controlsEnabled && (
         <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-[1000] bg-zinc-900/90 backdrop-blur-sm border border-zinc-700 rounded-lg px-6 py-3 flex items-center gap-4 shadow-xl">
           <button
-            onClick={playback.isPlaying ? playback.handleStopPreview : playback.handlePlayPreview}
+            onClick={
+              playback.isPlaying
+                ? playback.handleStopPreview
+                : () => playback.handlePlayPreview()
+            }
             className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
             title={playback.isPlaying ? "Pause" : "Play"}
           >
@@ -352,6 +627,15 @@ export default function StoryMapViewer({
                 <path d="M8 5v14l11-7z" />
               </svg>
             )}
+          </button>
+          <button
+            onClick={playback.handleStopPreview}
+            className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
+            title="Stop"
+          >
+            <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M6 6h12v12H6z" />
+            </svg>
           </button>
 
           <div className="text-white text-sm font-medium">

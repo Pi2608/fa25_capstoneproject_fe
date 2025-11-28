@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { adminGetAnalytics, type AdminAnalytics } from "@/lib/admin-api";
 import s from "../admin.module.css";
+import { FullScreenLoading } from "@/components/common/FullScreenLoading";
 
 export default function AnalyticsPage() {
   const [data, setData] = useState<AdminAnalytics | null>(null);
@@ -46,7 +47,7 @@ export default function AnalyticsPage() {
 
   const renderBody = () => {
     if (loading) {
-      return <div>Đang tải…</div>;
+      return <FullScreenLoading message="Đang tải…" overlay={false} />;
     }
 
     if (error) {

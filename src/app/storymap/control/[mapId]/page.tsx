@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getSegments, type Segment } from "@/lib/api-storymap";
@@ -54,6 +54,7 @@ export default function StoryMapControlPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [isTeacherPlaying, setIsTeacherPlaying] = useState(false);
 
   const [session, setSession] = useState<SessionDto | null>(null);
   const [changingStatus, setChangingStatus] = useState(false);
@@ -74,6 +75,11 @@ export default function StoryMapControlPage() {
 
   const [showShareModal, setShowShareModal] = useState(false);
   const shareOverlayGuardRef = useRef(false);
+  
+  // FIXED: Track last sent segment sync to avoid duplicates
+  const lastSentSyncRef = useRef<{ index: number; isPlaying: boolean } | null>(null);
+  const syncDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  
   useEffect(() => {
     if (!showShareModal || typeof document === "undefined") return;
 
@@ -102,12 +108,14 @@ export default function StoryMapControlPage() {
       shareOverlayGuardRef.current = false;
     };
   }, [showShareModal]);
+  
   const copyToClipboard = (text: string) => {
     if (typeof navigator === "undefined" || !navigator.clipboard) return;
     navigator.clipboard.writeText(text).catch((err) => {
       console.error("Copy to clipboard failed:", err);
     });
   };
+  
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const joinLinkWithCode = `${origin}/session/join`;
   const joinLinkWithQR = session
@@ -303,9 +311,52 @@ export default function StoryMapControlPage() {
     };
   }, [session?.sessionId]);
 
+  // ================== FIXED: Debounced Segment Sync Function ==================
+  const sendSegmentSync = useCallback(async (
+    segmentIndex: number,
+    segmentId: string,
+    segmentName: string,
+    isPlaying: boolean
+  ) => {
+    if (!connection || !session?.sessionId) return;
+    
+    // Check if this is a duplicate
+    const last = lastSentSyncRef.current;
+    if (last && last.index === segmentIndex && last.isPlaying === isPlaying) {
+      console.log("[Control] Skipping duplicate SegmentSync:", { segmentIndex, isPlaying });
+      return;
+    }
+    
+    // Clear any pending debounce
+    if (syncDebounceRef.current) {
+      clearTimeout(syncDebounceRef.current);
+    }
+    
+    // Debounce to avoid rapid successive calls
+    syncDebounceRef.current = setTimeout(async () => {
+      try {
+        const segmentData: SegmentSyncRequest = {
+          segmentIndex,
+          segmentId,
+          segmentName,
+          isPlaying,
+        };
+        
+        console.log("[Control] Sending SegmentSync:", segmentData);
+        await sendSegmentSyncViaSignalR(connection, session.sessionId, segmentData);
+        
+        // Update last sent
+        lastSentSyncRef.current = { index: segmentIndex, isPlaying };
+      } catch (error) {
+        console.error("[Control] Failed to send SegmentSync:", error);
+      }
+    }, 100); // 100ms debounce
+  }, [connection, session?.sessionId]);
+
   // ================== Segment broadcast ==================
   const handleSegmentChange = async (segment: Segment, index: number) => {
     setCurrentIndex(index);
+    setIsTeacherPlaying(false);
     
     // Broadcast via BroadcastChannel (for same-browser testing)
     broadcastRef.current?.postMessage({
@@ -315,21 +366,32 @@ export default function StoryMapControlPage() {
       timestamp: Date.now(),
     });
     
-    // Broadcast via SignalR to students on other devices
+    // Broadcast via SignalR to students
     if (connection && session?.sessionId) {
-      try {
-        const segmentData: SegmentSyncRequest = {
-          segmentIndex: index,
-          segmentId: segment.segmentId,
-          segmentName: segment.name || `Segment ${index + 1}`,
-          isPlaying: true,
-        };
-        await sendSegmentSyncViaSignalR(connection, session.sessionId, segmentData);
-      } catch (error) {
-        console.error("[Control] Failed to broadcast segment via SignalR:", error);
-      }
+      sendSegmentSync(index, segment.segmentId, segment.name || `Segment ${index + 1}`, false);
     }
   };
+
+  // ================== Play/Pause state broadcast ==================
+  const handlePlayingChange = useCallback(async (isPlaying: boolean) => {
+    console.log("[Control] handlePlayingChange called:", isPlaying);
+    
+    // Update local state
+    setIsTeacherPlaying(isPlaying);
+    
+    // Broadcast play/pause state to students
+    if (connection && session?.sessionId && segments.length > 0) {
+      const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
+      const currentSeg = segments[segmentIndex] || segments[0];
+      
+      sendSegmentSync(
+        segmentIndex,
+        currentSeg.segmentId,
+        currentSeg.name || `Segment ${segmentIndex + 1}`,
+        isPlaying
+      );
+    }
+  }, [connection, session?.sessionId, segments, currentIndex, sendSegmentSync]);
 
   const goToSegment = (index: number) => {
     if (index < 0 || index >= segments.length) return;
@@ -371,34 +433,14 @@ export default function StoryMapControlPage() {
       if (action === "start" && connection && segments.length > 0) {
         const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
         const currentSeg = segments[segmentIndex] || segments[0];
-        try {
-          const segmentData: SegmentSyncRequest = {
-            segmentIndex: segmentIndex,
-            segmentId: currentSeg.segmentId,
-            segmentName: currentSeg.name || `Segment ${segmentIndex + 1}`,
-            isPlaying: false, // Not playing yet, just showing the initial segment
-          };
-          await sendSegmentSyncViaSignalR(connection, session.sessionId, segmentData);
-        } catch (error) {
-          console.error("[Control] Failed to sync initial segment:", error);
-        }
+        sendSegmentSync(segmentIndex, currentSeg.segmentId, currentSeg.name || `Segment ${segmentIndex + 1}`, false);
       }
 
       // When pausing, sync with isPlaying = false
       if (action === "pause" && connection && segments.length > 0) {
         const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
         const currentSeg = segments[segmentIndex] || segments[0];
-        try {
-          const segmentData: SegmentSyncRequest = {
-            segmentIndex: segmentIndex,
-            segmentId: currentSeg.segmentId,
-            segmentName: currentSeg.name || `Segment ${segmentIndex + 1}`,
-            isPlaying: false,
-          };
-          await sendSegmentSyncViaSignalR(connection, session.sessionId, segmentData);
-        } catch (error) {
-          console.error("[Control] Failed to sync pause state:", error);
-        }
+        sendSegmentSync(segmentIndex, currentSeg.segmentId, currentSeg.name || `Segment ${segmentIndex + 1}`, false);
       }
     } catch (e: any) {
       console.error("Change session status failed:", e);
@@ -430,7 +472,6 @@ export default function StoryMapControlPage() {
     try {
       setLoadingParticipants(true);
 
-      // Sử dụng leaderboard với limit lớn để lấy tất cả participants
       const data = await getSessionLeaderboard(session.sessionId, 1000);
 
       setParticipants(Array.isArray(data) ? data : []);
@@ -451,7 +492,6 @@ export default function StoryMapControlPage() {
       setQuestionControlLoading(true);
       setCurrentQuestionIndex(index);
 
-      // Broadcast question via SignalR
       await broadcastQuestionViaSignalR(connection, session.sessionId, {
         questionId: question.questionId,
         questionText: question.questionText,
@@ -551,6 +591,15 @@ export default function StoryMapControlPage() {
       hideLoading();
     };
   }, [loading, showLoading, hideLoading]);
+
+  // Cleanup debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (syncDebounceRef.current) {
+        clearTimeout(syncDebounceRef.current);
+      }
+    };
+  }, []);
 
   if (loading) {
     return null;
@@ -851,6 +900,7 @@ export default function StoryMapControlPage() {
               initialCenter={center}
               initialZoom={mapDetail?.defaultZoom || 10}
               onSegmentChange={handleSegmentChange}
+              onPlayingChange={handlePlayingChange}
             />
           </div>
 

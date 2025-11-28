@@ -171,6 +171,44 @@ export type SegmentLayer = {
   exitEffect?: string;
   styleOverride?: string;
   createdAt: string;
+  updatedAt?: string;
+  // Full layer data with GeoJSON and style
+  layer?: {
+    id: string;
+    layerName: string;
+    layerType: string;
+    sourceType: string;
+    filePath: string;
+    layerData: any; // GeoJSON FeatureCollection
+    layerStyle: any; // Layer style object
+    isVisible: boolean;
+    featureCount: number;
+    dataSizeKB: number;
+    dataBounds: string;
+    createdAt: string;
+    updatedAt?: string;
+  };
+  // Map features (annotations, markers, etc.) associated with this layer
+  mapFeatures?: Array<{
+    featureId: string;
+    mapId: string;
+    layerId: string;
+    name?: string;
+    description?: string;
+    featureCategory: string;
+    annotationType?: string;
+    geometryType: string;
+    coordinates: string; // GeoJSON string
+    properties?: string; // JSON string
+    style?: string; // JSON string
+    featureStyle?: string;
+    useIndividualStyle: boolean;
+    isVisible: boolean;
+    zIndex: number;
+    createdBy: string;
+    createdAt: string;
+    updatedAt?: string;
+  }>;
 };
 
 export type AttachLayerRequest = {
@@ -273,6 +311,7 @@ export type RouteAnimation = {
   toName?: string;
   toLocationId?: string; // Link to Location at destination point
   routePath: string; // GeoJSON LineString as string
+  waypoints?: string; // JSON array of waypoints
   
   // Icon configuration
   iconType: "car" | "walking" | "bike" | "plane" | "custom";

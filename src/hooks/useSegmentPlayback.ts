@@ -4,6 +4,7 @@ import { getTimelineTransitions } from "@/lib/api-storymap";
 import {
   renderSegmentZones,
   renderSegmentLocations,
+  renderSegmentLayers,
   applyCameraState,
   autoFitBounds,
   applyLayerCrossFade,
@@ -143,6 +144,11 @@ export function useSegmentPlayback({
       const newLayers = [...zoneResult.layers];
       const allBounds = [...zoneResult.bounds];
 
+      // Render layers and map features using shared function
+      const layerResult = await renderSegmentLayers(segment, currentMap, L, renderOptions);
+      newLayers.push(...layerResult.layers);
+      allBounds.push(...layerResult.bounds);
+
       // Render locations using shared function
       const locationResult = await renderSegmentLocations(segment, currentMap, L, {
         ...renderOptions,
@@ -181,6 +187,7 @@ export function useSegmentPlayback({
     if (isRouteAnimationOnly) return;
     
     if (!isPlaying || segments.length === 0) return;
+    if (!currentMap) return;
 
     let timeoutId: NodeJS.Timeout;
 
@@ -217,6 +224,12 @@ export function useSegmentPlayback({
         cameraAnimationDurationMs: t.animateCamera ? t.cameraAnimationDurationMs : undefined,
       } : undefined;
       
+      if (!currentMap) {
+        console.warn("⚠️ Map not ready yet, retrying segment playback...");
+        timeoutId = setTimeout(playNextSegment, 200);
+        return;
+      }
+
       setActiveSegmentId(segment.segmentId);
       await handleViewSegment(segment, options);
       onSegmentSelect?.(segment);
@@ -243,12 +256,18 @@ export function useSegmentPlayback({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, currentPlayIndex, segments.length]);
+  }, [isPlaying, currentPlayIndex, segments.length, currentMap]);
 
   // ==================== PLAYBACK CONTROLS ====================
-  const handlePlayPreview = () => {
+  const handlePlayPreview = (startIndex?: number) => {
     if (segments.length === 0) return;
-    setCurrentPlayIndex(0);
+    
+    const nextIndex =
+      typeof startIndex === "number" && startIndex >= 0 && startIndex < segments.length
+        ? startIndex
+        : 0;
+    
+    setCurrentPlayIndex(nextIndex);
     setIsPlaying(true);
   };
 

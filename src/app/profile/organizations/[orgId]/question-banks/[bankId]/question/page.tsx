@@ -23,6 +23,7 @@ import {
   QuestionOptionInput,
 } from "@/hooks/useQuestionSets";
 import type { PinLocationPickerProps } from "@/components/question-banks/PinLocationPicker";
+import { FullScreenLoading } from "@/components/common/FullScreenLoading";
 
 function safeMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message;
@@ -485,9 +486,7 @@ export default function QuestionBuilderPage() {
 
   if (loading)
     return (
-      <div className="min-h-[60vh] animate-pulse text-zinc-500 dark:text-zinc-400 px-4">
-        {t("common.loading")}
-      </div>
+        <FullScreenLoading message={t("common.loading")} overlay={false} />
     );
 
   if (err || !workspace || !org || !questionBank)

@@ -40,10 +40,6 @@ import {
   createRouteAnimation,
 } from "@/lib/api-storymap";
 
-import LocationDialog from "@/components/storymap/LocationDialog";
-import ZoneSelectionDialog from "@/components/storymap/ZoneSelectionDialog";
-import LayerAttachDialog from "@/components/storymap/LayerAttachDialog";
-import RouteAnimationDialog from "@/components/storymap/RouteAnimationDialog";
 import { Icon } from "./Icon";
 
 interface LeftSidebarToolboxProps {
@@ -2089,15 +2085,24 @@ function SegmentFormView({
   const [zoneResults, setZoneResults] = useState<Zone[]>([]);
   const [isSearchingZone, setIsSearchingZone] = useState(false);
 
-  const [cameraState, setCameraState] = useState<CameraState>(() => {
-    if (editing?.cameraState) {
-      if (typeof editing.cameraState === "string") {
-        const parsed = parseCameraState(editing.cameraState);
-        if (parsed) return parsed;
-      } else if (editing.cameraState && typeof editing.cameraState === "object") {
-        return editing.cameraState as CameraState;
+  const extractCameraState = useCallback(
+    (source?: Segment | null): CameraState | null => {
+      if (!source?.cameraState) return null;
+      if (typeof source.cameraState === "string") {
+        const parsed = parseCameraState(source.cameraState);
+        return parsed ?? null;
       }
-    }
+      if (typeof source.cameraState === "object") {
+        return source.cameraState as CameraState;
+      }
+      return null;
+    },
+    []
+  );
+
+  const [cameraState, setCameraState] = useState<CameraState>(() => {
+    const fromEditing = extractCameraState(editing);
+    if (fromEditing) return fromEditing;
     if (currentMap) {
       try {
         const current = getCurrentCameraState(currentMap);
@@ -2121,17 +2126,18 @@ function SegmentFormView({
   // Automatically capture camera state when component mounts or map changes
   // Only auto-capture if not editing an existing segment (to preserve existing camera state)
   useEffect(() => {
+    const fromEditing = extractCameraState(editing);
+    if (fromEditing) {
+      setCameraState(fromEditing);
+    }
+  }, [editing?.segmentId, editing?.cameraState, extractCameraState]);
+
+  useEffect(() => {
     if (!currentMap) return;
     if (typeof currentMap.getCenter !== "function" || typeof currentMap.getZoom !== "function") {
       return;
     }
 
-    // If editing an existing segment with camera state, don't auto-capture
-    if (editing?.cameraState) {
-      return;
-    }
-
-    // Capture initial camera state
     const captureCamera = () => {
       try {
         const captured = getCurrentCameraState(currentMap);
@@ -2143,10 +2149,10 @@ function SegmentFormView({
       }
     };
 
-    // Capture immediately
-    captureCamera();
+    if (!editing?.cameraState) {
+      captureCamera();
+    }
 
-    // Also capture when map moves/zooms
     const handleMapMove = () => {
       captureCamera();
     };

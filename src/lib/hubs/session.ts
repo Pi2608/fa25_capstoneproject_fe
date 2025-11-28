@@ -207,7 +207,6 @@ export function createSessionConnection(
     token: authToken || undefined,
     allowGuest: true, // Session hub allows guest connections
     onClose: (error) => {
-      console.error("[SignalR Session] Connection closed with error:", error);
     },
     onReconnecting: (error) => {
       console.warn("[SignalR Session] Reconnecting...", error);

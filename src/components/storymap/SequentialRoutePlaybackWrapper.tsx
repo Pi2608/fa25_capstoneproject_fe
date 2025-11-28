@@ -11,13 +11,18 @@ interface SequentialRoutePlaybackWrapperProps {
   segmentStartTime: number;
   onLocationClick?: (location: Location) => void;
   // Camera follow options
-  enableCameraFollow?: boolean; // Whether camera should follow the moving icon
-  cameraFollowZoom?: number; // Zoom level when following
+  enableCameraFollow?: boolean;
+  cameraFollowZoom?: number;
+  // NEW: Option to disable camera state changes after route completion
+  // Useful for controlled mode (student view) to prevent map from jumping after routes complete
+  disableCameraStateAfter?: boolean;
 }
 
 /**
  * Shared component for rendering sequential route animations
  * Used in both edit page and storymap viewer
+ * 
+ * FIXED: Added disableCameraStateAfter prop to prevent camera jumping after route completion
  */
 export default function SequentialRoutePlaybackWrapper({
   map,
@@ -27,6 +32,7 @@ export default function SequentialRoutePlaybackWrapper({
   onLocationClick,
   enableCameraFollow = true,
   cameraFollowZoom,
+  disableCameraStateAfter = false,
 }: SequentialRoutePlaybackWrapperProps) {
   const sequentialPlayback = useSequentialRoutePlayback({
     map,
@@ -36,6 +42,7 @@ export default function SequentialRoutePlaybackWrapper({
     onLocationClick,
     enableCameraFollow,
     cameraFollowZoom,
+    disableCameraStateAfter,
   });
 
   return (

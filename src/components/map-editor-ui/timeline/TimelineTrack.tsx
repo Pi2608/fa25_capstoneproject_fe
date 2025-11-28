@@ -26,7 +26,7 @@ import { Icon } from "../Icon";
 import { cn } from "@/lib/utils";
 import type { Segment, TimelineTransition, RouteAnimation, Location, SegmentZone, SegmentLayer } from "@/lib/api-storymap";
 import { getRouteAnimationsBySegment, deleteRouteAnimation, deleteLocation, deleteSegmentZone, detachLayerFromSegment, reorderSegments, moveLocationToSegment, moveZoneToSegment, moveLayerToSegment, moveRouteToSegment } from "@/lib/api-storymap";
-import RouteAnimationDialog from "@/components/storymap/RouteAnimationDialog";
+import { FullScreenLoading } from "@/components/common/FullScreenLoading";
 
 interface TimelineTrackProps {
   segments: Segment[];
@@ -542,7 +542,7 @@ function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; map
   };
 
   if (isLoading) {
-    return <div className="text-[10px] text-zinc-500 px-2">Loading...</div>;
+    return <FullScreenLoading message="Đang tải..." overlay={false} />;
   }
 
   if (routeAnimations.length === 0) {
@@ -629,18 +629,6 @@ function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; map
           </div>
         ))}
       </div>
-      {showDialog && typeof window !== "undefined" && createPortal(
-        <RouteAnimationDialog
-          mapId={mapId}
-          segmentId={segment.segmentId}
-          currentMap={currentMap}
-          routeAnimation={editingRoute}
-          isOpen={showDialog}
-          onClose={handleClose}
-          onSave={handleSave}
-        />,
-        document.body
-      )}
     </>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { archiveMap, MapStatus, publishMap, restoreMap, unpublishMap } from "@/lib/api-maps";
+import { ArchiveIcon, RefreshCcwIcon, SendIcon, UndoIcon } from "lucide-react";
 import { useState } from "react";
 
 interface PublishButtonProps {
@@ -31,7 +32,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
     setError(null);
     try {
       await unpublishMap(mapId);
-      onStatusChange("Unpublished");
+      onStatusChange("Draft");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể unpublish map");
     } finally {
@@ -69,12 +70,8 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
     switch (status) {
       case "Draft":
         return { label: "Nháp", color: "bg-gray-600", icon: "📝" };
-      case "UnderReview":
-        return { label: "Đang xem xét", color: "bg-yellow-600", icon: "👀" };
       case "Published":
         return { label: "Đã publish", color: "bg-green-600", icon: "✓" };
-      case "Unpublished":
-        return { label: "Đã unpublish", color: "bg-orange-600", icon: "⊘" };
       case "Archived":
         return { label: "Đã archive", color: "bg-red-600", icon: "🗄️" };
       default:
@@ -95,7 +92,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
       </span>
 
       {/* Action Buttons - Inline with status */}
-      {status === "Draft" || status === "Unpublished" ? (
+      {status === "Draft" ? (
         <button
           onClick={handlePublish}
           disabled={loading}
@@ -108,9 +105,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
             </>
           ) : (
             <>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
+              <SendIcon className="w-3.5 h-3.5" />
               <span>Publish</span>
             </>
           )}
@@ -127,9 +122,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
               <div className="w-3.5 h-3.5 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <UndoIcon className="w-3.5 h-3.5" />
                 <span>Unpublish</span>
               </>
             )}
@@ -144,9 +137,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
               <div className="w-3.5 h-3.5 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
             ) : (
               <>
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-                </svg>
+                <ArchiveIcon className="w-3.5 h-3.5" />
                 <span>Archive</span>
               </>
             )}
@@ -165,9 +156,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
             </>
           ) : (
             <>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+              <RefreshCcwIcon className="w-3.5 h-3.5" />
               <span>Restore</span>
             </>
           )}

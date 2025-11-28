@@ -5,8 +5,59 @@
 
 import type { Segment, Location } from "@/lib/api-storymap";
 import type L from "leaflet";
+import { applyLayerStyle, type ExtendedLayer } from "@/utils/mapUtils";
 
 type LeafletInstance = typeof import("leaflet");
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function isLeafletMapReady(map?: L.Map | null): boolean {
+  try {
+    if (!map) return false;
+
+    const container = map.getContainer();
+    if (!container || !container.parentElement) {
+      return false;
+    }
+
+    if ((container as any)._leaflet_id === undefined) {
+      return false;
+    }
+
+    const size = map.getSize();
+    if (!size || size.x <= 0 || size.y <= 0) {
+      return false;
+    }
+
+    const panes = map.getPanes();
+    if (!panes || !panes.mapPane) {
+      return false;
+    }
+
+    const mapPane = panes.mapPane as any;
+    if (mapPane && mapPane._leaflet_pos === undefined) {
+      try {
+        map.invalidateSize({ animate: false });
+      } catch {
+        // ignore invalidate errors
+      }
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForMapReady(map: L.Map, maxAttempts = 10, delayMs = 50): Promise<boolean> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (isLeafletMapReady(map)) {
+      return true;
+    }
+    await delay(delayMs);
+  }
+  return isLeafletMapReady(map);
+}
 export interface RenderSegmentOptions {
   transitionType?: "Jump" | "Ease" | "Linear";
   durationMs?: number;
@@ -30,6 +81,10 @@ export async function renderSegmentZones(
   L: LeafletInstance,
   options?: RenderSegmentOptions
 ): Promise<RenderResult> {
+  if (!(await waitForMapReady(map))) {
+    console.warn("⚠️ Map not ready for rendering zones, skipping segment", segment.segmentId);
+    return { layers: [], bounds: [] };
+  }
   const layers: any[] = [];
   const bounds: L.LatLngBounds[] = [];
 
@@ -54,27 +109,40 @@ export async function renderSegmentZones(
         continue;
       }
 
+      // Build zone style object
+      const zoneStyle: any = {};
+      
+      if (segmentZone.fillZone) {
+        zoneStyle.fill = true;
+        zoneStyle.fillColor = segmentZone.fillColor || '#FFD700';
+        zoneStyle.fillOpacity = segmentZone.fillOpacity ?? 0.3;
+      } else {
+        zoneStyle.fill = false;
+        zoneStyle.fillOpacity = 0;
+      }
+
+      if (segmentZone.highlightBoundary) {
+        zoneStyle.stroke = true;
+        zoneStyle.color = segmentZone.boundaryColor || '#FFD700';
+        zoneStyle.weight = segmentZone.boundaryWidth || 2;
+        zoneStyle.opacity = 1;
+      } else {
+        zoneStyle.stroke = false;
+        zoneStyle.weight = 0;
+        zoneStyle.opacity = 0;
+      }
+
+      // Set default line properties for better rendering
+      zoneStyle.lineCap = 'round';
+      zoneStyle.lineJoin = 'round';
+
       const geoJsonLayer = L.geoJSON(geoJsonData, {
-        style: () => {
-          const style: any = {};
-          
-          if (segmentZone.fillZone) {
-            style.fillColor = segmentZone.fillColor || '#FFD700';
-            style.fillOpacity = segmentZone.fillOpacity || 0.3;
-          } else {
-            style.fillOpacity = 0;
-          }
-
-          if (segmentZone.highlightBoundary) {
-            style.color = segmentZone.boundaryColor || '#FFD700';
-            style.weight = segmentZone.boundaryWidth || 2;
-          } else {
-            style.weight = 0;
-          }
-
-          return style;
-        },
+        style: zoneStyle,
       });
+
+      // Store target opacity for animation restoration
+      (geoJsonLayer as any)._targetOpacity = zoneStyle.opacity !== undefined ? zoneStyle.opacity : 1;
+      (geoJsonLayer as any)._targetFillOpacity = zoneStyle.fillOpacity !== undefined ? zoneStyle.fillOpacity : 0;
 
       geoJsonLayer.addTo(map);
       if (options?.transitionType && options.transitionType !== 'Jump') {
@@ -211,6 +279,10 @@ export async function renderSegmentLocations(
     onLocationClick?: (location: Location, event?: any) => void;
   }
 ): Promise<RenderResult> {
+  if (!(await waitForMapReady(map))) {
+    console.warn("⚠️ Map not ready for rendering locations, skipping segment", segment.segmentId);
+    return { layers: [], bounds: [] };
+  }
   const layers: any[] = [];
   const bounds: L.LatLngBounds[] = [];
 
@@ -398,57 +470,88 @@ export function applyCameraState(
   const camType = options?.cameraAnimationType || 'Fly';
   const camDurationSec = (options?.cameraAnimationDurationMs ?? 1500) / 1000;
 
-  // Helper function to check if map container is ready
-  const isMapReady = (map: L.Map): boolean => {
-    try {
-      const container = map.getContainer();
-      if (!container || !container.parentElement) {
-        return false;
-      }
-      if ((container as any)._leaflet_id === undefined) {
-        return false;
-      }
-      const size = map.getSize();
-      return size.x > 0 && size.y > 0;
-    } catch {
-      return false;
-    }
-  };
-
   // Wait for map to be ready before applying camera state
   const applyCameraWithRetry = (attempts = 0) => {
-    if (!isMapReady(map)) {
+    if (!isLeafletMapReady(map)) {
       if (attempts < 10) {
         // Retry after a short delay
         setTimeout(() => applyCameraWithRetry(attempts + 1), 50);
         return;
       } else {
         console.warn("⚠️ Map container not ready after multiple attempts, using simple setView");
-        try {
-          map.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
-        } catch (e) {
-          console.error("❌ Failed to set view even with fallback:", e);
+        if (isLeafletMapReady(map)) {
+          try {
+            map.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
+          } catch (e) {
+            console.error("❌ Failed to set view even with fallback:", e);
+          }
         }
         return;
       }
     }
 
     // Map is ready, proceed with camera animation
+    const safeSetView = (latlng: [number, number], zoom: number, opts?: any) => {
+      if (!isLeafletMapReady(map)) {
+        console.warn("⚠️ Map not ready for setView, skipping");
+        return false;
+      }
+      try {
+        // Ensure map is invalidated before setting view
+        try {
+          map.invalidateSize({ animate: false });
+        } catch (e) {
+          // Ignore invalidateSize errors
+        }
+        map.setView(latlng, zoom, opts);
+        return true;
+      } catch (error) {
+        console.error("❌ Failed to setView:", error);
+        return false;
+      }
+    };
+
+    const safeFlyTo = (latlng: [number, number], zoom: number, opts?: any) => {
+      if (!isLeafletMapReady(map)) {
+        console.warn("⚠️ Map not ready for flyTo, trying setView instead");
+        return safeSetView(latlng, zoom, { animate: false });
+      }
+      try {
+        // Ensure map is invalidated before flying
+        try {
+          map.invalidateSize({ animate: false });
+        } catch (e) {
+          // Ignore invalidateSize errors
+        }
+        map.flyTo(latlng, zoom, opts);
+        return true;
+      } catch (error) {
+        console.error("❌ Failed to flyTo, trying setView:", error);
+        return safeSetView(latlng, zoom, { animate: false });
+      }
+    };
+
     try {
       if (camType === 'Jump') {
         // Immediate jump without animation
-        map.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
+        safeSetView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
       } else if (camType === 'Ease') {
         // Smooth pan and zoom separately for an eased feel
         try {
-          map.panTo([targetCenter[1], targetCenter[0]], { animate: true, duration: camDurationSec * 0.6 });
+          if (isLeafletMapReady(map)) {
+            map.panTo([targetCenter[1], targetCenter[0]], { animate: true, duration: camDurationSec * 0.6 });
+          }
           setTimeout(() => {
+            if (!isLeafletMapReady(map)) return;
             try {
               map.setZoom(targetZoom, { animate: true });
-            } catch {}
+            } catch (e) {
+              console.error("❌ Failed to set zoom during ease:", e);
+              safeSetView([targetCenter[1], targetCenter[0]], targetZoom, { animate: true });
+            }
           }, camDurationSec * 600);
         } catch {
-          map.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: true });
+          safeSetView([targetCenter[1], targetCenter[0]], targetZoom, { animate: true });
         }
       } else {
         const zoomDiff = targetZoom - currentZoom;
@@ -460,27 +563,19 @@ export function applyCameraState(
         
         if (shouldUseTwoPhase) {
           const midZoom = Math.min(currentZoom, targetZoom) - 1;
-          map.flyTo([targetCenter[1], targetCenter[0]], midZoom, { duration: Math.max(0.2, camDurationSec * 0.3), animate: true });
+          safeFlyTo([targetCenter[1], targetCenter[0]], midZoom, { duration: Math.max(0.2, camDurationSec * 0.3), animate: true });
           setTimeout(() => {
-            try {
-              map.flyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: Math.max(0.2, camDurationSec * 0.7), animate: true });
-            } catch (e) {
-              console.error("❌ Failed to flyTo in second phase:", e);
-            }
+            safeFlyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: Math.max(0.2, camDurationSec * 0.7), animate: true });
           }, Math.max(150, camDurationSec * 300));
         } else {
           // Direct flyTo - smooth transition from current position to target (always used for teacher-controlled)
-          map.flyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: camDurationSec, animate: true });
+          safeFlyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: camDurationSec, animate: true });
         }
       }
     } catch (error) {
       console.error("❌ Error applying camera state:", error);
       // Fallback to simple setView
-      try {
-        map.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
-      } catch (e) {
-        console.error("❌ Failed to set view as fallback:", e);
-      }
+      safeSetView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
     }
   };
 
@@ -546,32 +641,530 @@ export function applyLayerCrossFade(
       return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
     };
 
-    const setOpacitySafe = (layer: any, value: number) => {
-      try { layer.setOpacity?.(value); } catch {}
-      try { layer.setStyle?.({ opacity: value, fillOpacity: value }); } catch {}
+    const setOpacitySafe = (layer: any, value: number, isNewLayer: boolean = false) => {
+      // For new layers, use target opacity if available, otherwise use animation value
+      if (isNewLayer && layer._targetOpacity !== undefined) {
+        const targetOpacity = layer._targetOpacity;
+        const targetFillOpacity = layer._targetFillOpacity !== undefined ? layer._targetFillOpacity : targetOpacity * 0.2;
+        const finalOpacity = targetOpacity * value;
+        const finalFillOpacity = targetFillOpacity * value;
+        try { layer.setOpacity?.(finalOpacity); } catch {}
+        try { layer.setStyle?.({ opacity: finalOpacity, fillOpacity: finalFillOpacity }); } catch {}
+        // For GeoJSON layers with sub-layers, apply to each sub-layer
+        if (layer.eachLayer) {
+          layer.eachLayer((subLayer: any) => {
+            if (subLayer._targetOpacity !== undefined) {
+              const subTargetOpacity = subLayer._targetOpacity;
+              const subTargetFillOpacity = subLayer._targetFillOpacity !== undefined ? subLayer._targetFillOpacity : subTargetOpacity * 0.2;
+              const subFinalOpacity = subTargetOpacity * value;
+              const subFinalFillOpacity = subTargetFillOpacity * value;
+              try { subLayer.setOpacity?.(subFinalOpacity); } catch {}
+              try { subLayer.setStyle?.({ opacity: subFinalOpacity, fillOpacity: subFinalFillOpacity }); } catch {}
+            } else {
+              try { subLayer.setOpacity?.(value); } catch {}
+              try { subLayer.setStyle?.({ opacity: value, fillOpacity: value }); } catch {}
+            }
+          });
+        }
+      } else {
+        // For old layers or layers without target opacity, use animation value directly
+        try { layer.setOpacity?.(value); } catch {}
+        try { layer.setStyle?.({ opacity: value, fillOpacity: value }); } catch {}
+        // For GeoJSON layers with sub-layers, apply to each sub-layer
+        if (layer.eachLayer) {
+          layer.eachLayer((subLayer: any) => {
+            try { subLayer.setOpacity?.(value); } catch {}
+            try { subLayer.setStyle?.({ opacity: value, fillOpacity: value }); } catch {}
+          });
+        }
+      }
     };
 
     const step = () => {
       const now = performance.now();
       const tRaw = Math.min(1, (now - start) / Math.max(1, totalMs));
       const t = Math.max(0, Math.min(1, easing(tRaw)));
-      oldLayers.forEach(l => setOpacitySafe(l, 1 - t));
-      newLayers.forEach(l => setOpacitySafe(l, t));
+      oldLayers.forEach(l => setOpacitySafe(l, 1 - t, false));
+      newLayers.forEach(l => setOpacitySafe(l, t, true));
       if (tRaw < 1) {
         requestAnimationFrame(step);
       } else {
         oldLayers.forEach(layer => {
           try { map.removeLayer(layer); } catch {}
         });
+        // Restore final opacity for new layers
+        newLayers.forEach(layer => {
+          if (layer._targetOpacity !== undefined) {
+            const targetOpacity = layer._targetOpacity;
+            const targetFillOpacity = layer._targetFillOpacity !== undefined ? layer._targetFillOpacity : targetOpacity * 0.2;
+            try { layer.setOpacity?.(targetOpacity); } catch {}
+            try { layer.setStyle?.({ opacity: targetOpacity, fillOpacity: targetFillOpacity }); } catch {}
+          }
+          // For GeoJSON layers with sub-layers, restore opacity for each sub-layer
+          if (layer.eachLayer) {
+            layer.eachLayer((subLayer: any) => {
+              if (subLayer._targetOpacity !== undefined) {
+                const subTargetOpacity = subLayer._targetOpacity;
+                const subTargetFillOpacity = subLayer._targetFillOpacity !== undefined ? subLayer._targetFillOpacity : subTargetOpacity * 0.2;
+                try { subLayer.setOpacity?.(subTargetOpacity); } catch {}
+                try { subLayer.setStyle?.({ opacity: subTargetOpacity, fillOpacity: subTargetFillOpacity }); } catch {}
+              }
+            });
+          }
+        });
         if (newLayers.length > 0 && onComplete) {
           onComplete(newLayers);
         }
       }
     };
-    oldLayers.forEach(l => setOpacitySafe(l, 1));
-    newLayers.forEach(l => setOpacitySafe(l, 0));
+    oldLayers.forEach(l => setOpacitySafe(l, 1, false));
+    newLayers.forEach(l => setOpacitySafe(l, 0, true));
     requestAnimationFrame(step);
   }
+}
+
+/**
+ * Render layers and map features from a segment onto the map
+ */
+export async function renderSegmentLayers(
+  segment: Segment,
+  map: L.Map,
+  L: LeafletInstance,
+  options?: RenderSegmentOptions
+): Promise<RenderResult> {
+  if (!(await waitForMapReady(map))) {
+    console.warn("⚠️ Map not ready for rendering layers, skipping segment", segment.segmentId);
+    return { layers: [], bounds: [] };
+  }
+  const layers: any[] = [];
+  const bounds: L.LatLngBounds[] = [];
+
+  if (!segment.layers || segment.layers.length === 0) {
+    return { layers, bounds };
+  }
+
+  // Sort layers by displayOrder
+  const sortedLayers = [...segment.layers].sort((a, b) => a.displayOrder - b.displayOrder);
+
+  for (const segmentLayer of sortedLayers) {
+    if (segmentLayer.isVisible === false) {
+      continue;
+    }
+
+    try {
+      // Render layer data (GeoJSON) if available
+      if (segmentLayer.layer?.layerData) {
+        try {
+          const layerData = segmentLayer.layer.layerData;
+          let layerStyle = segmentLayer.layer.layerStyle || {};
+
+          // Apply style override if provided
+          if (segmentLayer.styleOverride) {
+            try {
+              const overrideStyle = JSON.parse(segmentLayer.styleOverride);
+              layerStyle = { ...layerStyle, ...overrideStyle };
+            } catch {
+              // Ignore invalid style override
+            }
+          }
+
+          // Parse layerData if it's a string
+          let geoJsonData = layerData;
+          if (typeof layerData === 'string') {
+            geoJsonData = JSON.parse(layerData);
+          }
+
+          if (geoJsonData && geoJsonData.type === 'FeatureCollection' && geoJsonData.features) {
+            const geoJsonLayer = L.geoJSON(geoJsonData as any, {
+              style: Object.keys(layerStyle).length > 0 ? layerStyle : undefined,
+            });
+
+            // Store target opacity from segment layer config
+            const targetOpacity = segmentLayer.opacity !== undefined ? segmentLayer.opacity : 1;
+            const baseFillOpacity = typeof layerStyle === 'object' && layerStyle.fillOpacity !== undefined ? layerStyle.fillOpacity : 0.2;
+            const targetFillOpacity = targetOpacity * baseFillOpacity;
+            
+            // Store target opacity in layer metadata for later restoration
+            (geoJsonLayer as any)._targetOpacity = targetOpacity;
+            (geoJsonLayer as any)._targetFillOpacity = targetFillOpacity;
+
+            // Apply opacity from segment layer config
+            if (targetOpacity !== 1) {
+              geoJsonLayer.setStyle({ 
+                opacity: targetOpacity,
+                fillOpacity: targetFillOpacity
+              });
+            }
+            
+            // Also store target opacity for each sub-layer in GeoJSON
+            geoJsonLayer.eachLayer((subLayer: any) => {
+              if (subLayer.setStyle) {
+                const subBaseOpacity = typeof layerStyle === 'object' && layerStyle.opacity !== undefined ? layerStyle.opacity : 1;
+                const subBaseFillOpacity = typeof layerStyle === 'object' && layerStyle.fillOpacity !== undefined ? layerStyle.fillOpacity : 0.2;
+                (subLayer as any)._targetOpacity = subBaseOpacity * targetOpacity;
+                (subLayer as any)._targetFillOpacity = subBaseFillOpacity * targetOpacity;
+              }
+            });
+
+            // Set z-index
+            if (segmentLayer.zIndex !== undefined) {
+              (geoJsonLayer as any).setZIndex?.(segmentLayer.zIndex);
+            }
+
+            geoJsonLayer.addTo(map);
+            
+            // Apply entry animation (will be restored by cross-fade)
+            if (options?.transitionType && options.transitionType !== 'Jump') {
+              try {
+                geoJsonLayer.setStyle({ opacity: 0, fillOpacity: 0 });
+              } catch {}
+            }
+
+            layers.push(geoJsonLayer);
+
+            const layerBounds = geoJsonLayer.getBounds();
+            if (layerBounds.isValid()) {
+              bounds.push(layerBounds);
+            }
+          }
+        } catch (layerError) {
+          console.error(`❌ Failed to render layer ${segmentLayer.layerId}:`, layerError);
+        }
+      }
+
+      // Render map features (annotations, markers, etc.)
+      if (segmentLayer.mapFeatures && segmentLayer.mapFeatures.length > 0) {
+        for (const feature of segmentLayer.mapFeatures) {
+          if (feature.isVisible === false) continue;
+
+          try {
+            // Parse feature style
+            let featureStyle: any = {};
+            if (feature.style) {
+              try {
+                featureStyle = typeof feature.style === 'string' 
+                  ? JSON.parse(feature.style) 
+                  : feature.style;
+              } catch {
+                // Use default style
+              }
+            }
+
+            // Parse properties for popup content
+            let properties: any = {};
+            if (feature.properties) {
+              try {
+                properties = typeof feature.properties === 'string' 
+                  ? JSON.parse(feature.properties) 
+                  : feature.properties;
+              } catch {}
+            }
+
+            const geometryType = feature.geometryType?.toLowerCase();
+
+            // Handle Rectangle separately (uses bounds format, not GeoJSON)
+            if (geometryType === 'rectangle') {
+              try {
+                let coordinates: any;
+                try {
+                  coordinates = typeof feature.coordinates === 'string' 
+                    ? JSON.parse(feature.coordinates) 
+                    : feature.coordinates;
+                } catch {
+                  console.warn(`⚠️ Invalid coordinates for Rectangle feature ${feature.featureId}`);
+                  continue;
+                }
+
+                // Rectangle format: [minLng, minLat, maxLng, maxLat]
+                if (!Array.isArray(coordinates) || coordinates.length !== 4) {
+                  console.warn(`⚠️ Invalid Rectangle bounds format for feature ${feature.featureId}`);
+                  continue;
+                }
+
+                const [minLng, minLat, maxLng, maxLat] = coordinates;
+                
+                // L.rectangle expects [[south, west], [north, east]] = [[minLat, minLng], [maxLat, maxLng]]
+                const rectangleLayer = L.rectangle(
+                  [[minLat, minLng], [maxLat, maxLng]]
+                ) as ExtendedLayer;
+
+                // Apply full style using applyLayerStyle (same as edit map)
+                if (Object.keys(featureStyle).length > 0) {
+                  applyLayerStyle(rectangleLayer, featureStyle);
+                }
+
+                // Apply segment layer opacity to feature
+                if (segmentLayer.opacity !== undefined && segmentLayer.opacity !== 1) {
+                  const currentOpacity = featureStyle.opacity !== undefined ? featureStyle.opacity : 1;
+                  const currentFillOpacity = featureStyle.fillOpacity !== undefined ? featureStyle.fillOpacity : 0.2;
+                  rectangleLayer.setStyle({
+                    opacity: currentOpacity * segmentLayer.opacity,
+                    fillOpacity: currentFillOpacity * segmentLayer.opacity
+                  });
+                  // Store target opacity for animation restoration
+                  (rectangleLayer as any)._targetOpacity = currentOpacity * segmentLayer.opacity;
+                  (rectangleLayer as any)._targetFillOpacity = currentFillOpacity * segmentLayer.opacity;
+                } else {
+                  // Store target opacity from feature style
+                  (rectangleLayer as any)._targetOpacity = featureStyle.opacity !== undefined ? featureStyle.opacity : 1;
+                  (rectangleLayer as any)._targetFillOpacity = featureStyle.fillOpacity !== undefined ? featureStyle.fillOpacity : 0.2;
+                }
+
+                if (feature.zIndex !== undefined) {
+                  (rectangleLayer as any).setZIndex?.(feature.zIndex);
+                }
+
+                rectangleLayer.addTo(map);
+
+                // Apply entry animation
+                if (options?.transitionType && options.transitionType !== 'Jump') {
+                  try {
+                    rectangleLayer.setStyle({ opacity: 0, fillOpacity: 0 });
+                  } catch {}
+                }
+
+                layers.push(rectangleLayer);
+
+                const featureBounds = rectangleLayer.getBounds();
+                if (featureBounds.isValid()) {
+                  bounds.push(featureBounds);
+                }
+              } catch (rectError) {
+                console.error(`❌ Failed to render Rectangle feature ${feature.featureId}:`, rectError);
+              }
+              continue; // Skip to next feature
+            }
+
+            // Handle other geometry types (Point, LineString, Polygon, Circle)
+            let coordinates: any;
+            try {
+              coordinates = typeof feature.coordinates === 'string' 
+                ? JSON.parse(feature.coordinates) 
+                : feature.coordinates;
+            } catch {
+              console.warn(`⚠️ Invalid coordinates for feature ${feature.featureId}`);
+              continue;
+            }
+
+            if (!coordinates) {
+              continue;
+            }
+
+            // Handle Point geometry
+            if (geometryType === 'point') {
+              if (!coordinates.coordinates || !Array.isArray(coordinates.coordinates)) {
+                continue;
+              }
+
+              const coords = coordinates.coordinates;
+              const latLng: [number, number] = [coords[1], coords[0]];
+
+              // Create marker with custom icon
+              let iconHtml = '';
+              if (featureStyle.iconUrl) {
+                iconHtml = `<img src="${featureStyle.iconUrl}" style="width: ${featureStyle.iconSize?.[0] || 32}px; height: ${featureStyle.iconSize?.[1] || 32}px;" />`;
+              } else if (properties.text) {
+                iconHtml = properties.text;
+              } else {
+                iconHtml = feature.name || '📍';
+              }
+
+              const marker = L.marker(latLng, {
+                icon: L.divIcon({
+                  className: featureStyle.className || 'map-feature-marker',
+                  html: iconHtml,
+                  iconSize: featureStyle.iconSize || [32, 32],
+                  iconAnchor: featureStyle.iconAnchor || [16, 16],
+                }),
+                zIndexOffset: feature.zIndex || segmentLayer.zIndex || 0,
+              });
+
+              // Add popup if feature has name or description
+              if (feature.name || feature.description || properties.text) {
+                const popupContent = `
+                  <div style="min-width: 200px;">
+                    ${feature.name ? `<h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${feature.name}</h3>` : ''}
+                    ${feature.description ? `<p style="margin: 0; font-size: 14px; color: #666;">${feature.description}</p>` : ''}
+                    ${properties.text ? `<div style="margin-top: 8px;">${properties.text}</div>` : ''}
+                  </div>
+                `;
+                marker.bindPopup(popupContent);
+              }
+
+              marker.addTo(map);
+              
+              // Apply entry animation
+              if (options?.transitionType && options.transitionType !== 'Jump') {
+                try { marker.setOpacity?.(0); } catch {}
+              }
+
+              layers.push(marker);
+              bounds.push(L.latLngBounds([latLng, latLng]));
+            } else if (geometryType === 'circle') {
+              // Handle Circle geometry - can be stored as Polygon in GeoJSON or have radius in style
+              let circleLayer: ExtendedLayer | null = null;
+              
+              // Check if radius is in style
+              if (featureStyle.radius && typeof featureStyle.radius === 'number') {
+                // Circle with explicit radius from style
+                if (coordinates.type === 'Point' && coordinates.coordinates) {
+                  const [lng, lat] = coordinates.coordinates;
+                  circleLayer = L.circle([lat, lng], { radius: featureStyle.radius }) as ExtendedLayer;
+                } else if (coordinates.type === 'Polygon' && coordinates.coordinates) {
+                  // Extract center from polygon and use radius from style
+                  const polygonCoords = coordinates.coordinates[0];
+                  if (polygonCoords && polygonCoords.length > 0) {
+                    const [lng, lat] = polygonCoords[0];
+                    circleLayer = L.circle([lat, lng], { radius: featureStyle.radius }) as ExtendedLayer;
+                  }
+                }
+              } else if (coordinates.type === 'Polygon' && coordinates.coordinates) {
+                // Circle stored as Polygon - calculate center and radius
+                const polygonCoords = coordinates.coordinates[0];
+                if (polygonCoords && polygonCoords.length > 0) {
+                  const [lng, lat] = polygonCoords[0];
+                  // Calculate approximate radius from polygon
+                  const center = L.latLng(lat, lng);
+                  const firstPoint = L.latLng(polygonCoords[0][1], polygonCoords[0][0]);
+                  const radius = center.distanceTo(firstPoint);
+                  circleLayer = L.circle([lat, lng], { radius }) as ExtendedLayer;
+                }
+              }
+
+              if (circleLayer) {
+                // Apply full style using applyLayerStyle (same as edit map)
+                if (Object.keys(featureStyle).length > 0) {
+                  applyLayerStyle(circleLayer, featureStyle);
+                }
+
+                // Apply segment layer opacity to feature
+                if (segmentLayer.opacity !== undefined && segmentLayer.opacity !== 1) {
+                  const currentOpacity = featureStyle.opacity !== undefined ? featureStyle.opacity : 1;
+                  const currentFillOpacity = featureStyle.fillOpacity !== undefined ? featureStyle.fillOpacity : 0.2;
+                  circleLayer.setStyle({
+                    opacity: currentOpacity * segmentLayer.opacity,
+                    fillOpacity: currentFillOpacity * segmentLayer.opacity
+                  });
+                  // Store target opacity for animation restoration
+                  (circleLayer as any)._targetOpacity = currentOpacity * segmentLayer.opacity;
+                  (circleLayer as any)._targetFillOpacity = currentFillOpacity * segmentLayer.opacity;
+                } else {
+                  // Store target opacity from feature style
+                  (circleLayer as any)._targetOpacity = featureStyle.opacity !== undefined ? featureStyle.opacity : 1;
+                  (circleLayer as any)._targetFillOpacity = featureStyle.fillOpacity !== undefined ? featureStyle.fillOpacity : 0.2;
+                }
+
+                if (feature.zIndex !== undefined) {
+                  (circleLayer as any).setZIndex?.(feature.zIndex);
+                }
+
+                circleLayer.addTo(map);
+                
+                // Apply entry animation
+                if (options?.transitionType && options.transitionType !== 'Jump') {
+                  try {
+                    circleLayer.setStyle({ opacity: 0, fillOpacity: 0 });
+                  } catch {}
+                }
+
+                layers.push(circleLayer);
+
+                const featureBounds = circleLayer.getBounds();
+                if (featureBounds.isValid()) {
+                  bounds.push(featureBounds);
+                }
+              } else {
+                console.warn(`⚠️ Failed to render Circle feature ${feature.featureId}`);
+              }
+            } else {
+              // For other geometry types (LineString, Polygon), render as GeoJSON
+              if (!coordinates.type || !coordinates.coordinates) {
+                console.warn(`⚠️ Invalid GeoJSON geometry for feature ${feature.featureId}`);
+                continue;
+              }
+
+              const geoJsonFeature = {
+                type: 'Feature',
+                geometry: coordinates,
+                properties: properties,
+              };
+
+              // Create GeoJSON layer without style first
+              const featureLayer = L.geoJSON(geoJsonFeature as any) as ExtendedLayer;
+
+              // Apply full style using applyLayerStyle (same as edit map)
+              // This ensures all style properties (color, fillColor, stroke, fill, opacity, fillOpacity, weight, dashArray, lineCap, lineJoin, etc.) are applied correctly
+              if (Object.keys(featureStyle).length > 0) {
+                // For GeoJSON layers, we need to apply style to each sub-layer
+                featureLayer.eachLayer((layer: any) => {
+                  if (layer.setStyle) {
+                    applyLayerStyle(layer as ExtendedLayer, featureStyle);
+                    
+                    // Apply segment layer opacity to feature sub-layer
+                    if (segmentLayer.opacity !== undefined && segmentLayer.opacity !== 1) {
+                      const currentOpacity = featureStyle.opacity !== undefined ? featureStyle.opacity : 1;
+                      const currentFillOpacity = featureStyle.fillOpacity !== undefined ? featureStyle.fillOpacity : 0.2;
+                      layer.setStyle({
+                        opacity: currentOpacity * segmentLayer.opacity,
+                        fillOpacity: currentFillOpacity * segmentLayer.opacity
+                      });
+                      // Store target opacity for animation restoration
+                      (layer as any)._targetOpacity = currentOpacity * segmentLayer.opacity;
+                      (layer as any)._targetFillOpacity = currentFillOpacity * segmentLayer.opacity;
+                    } else {
+                      // Store target opacity from feature style
+                      (layer as any)._targetOpacity = featureStyle.opacity !== undefined ? featureStyle.opacity : 1;
+                      (layer as any)._targetFillOpacity = featureStyle.fillOpacity !== undefined ? featureStyle.fillOpacity : 0.2;
+                    }
+                  }
+                });
+              } else {
+                // Even without feature style, apply segment layer opacity
+                if (segmentLayer.opacity !== undefined && segmentLayer.opacity !== 1) {
+                  featureLayer.eachLayer((layer: any) => {
+                    if (layer.setStyle) {
+                      layer.setStyle({
+                        opacity: segmentLayer.opacity,
+                        fillOpacity: segmentLayer.opacity * 0.2
+                      });
+                      (layer as any)._targetOpacity = segmentLayer.opacity;
+                      (layer as any)._targetFillOpacity = segmentLayer.opacity * 0.2;
+                    }
+                  });
+                }
+              }
+
+              if (feature.zIndex !== undefined) {
+                (featureLayer as any).setZIndex?.(feature.zIndex);
+              }
+
+              featureLayer.addTo(map);
+              
+              // Apply entry animation
+              if (options?.transitionType && options.transitionType !== 'Jump') {
+                try {
+                  featureLayer.setStyle({ opacity: 0, fillOpacity: 0 });
+                } catch {}
+              }
+
+              layers.push(featureLayer);
+
+              const featureBounds = featureLayer.getBounds();
+              if (featureBounds.isValid()) {
+                bounds.push(featureBounds);
+              }
+            }
+          } catch (featureError) {
+            console.error(`❌ Failed to render feature ${feature.featureId}:`, featureError);
+          }
+        }
+      }
+    } catch (error) {
+      console.error(`❌ Failed to render segment layer ${segmentLayer.segmentLayerId}:`, error);
+    }
+  }
+
+  return { layers, bounds };
 }
 
 /**
@@ -593,6 +1186,11 @@ export async function renderSegment(
   const zoneResult = await renderSegmentZones(segment, map, L, options);
   newLayers.push(...zoneResult.layers);
   allBounds.push(...zoneResult.bounds);
+
+  // Render layers and map features
+  const layerResult = await renderSegmentLayers(segment, map, L, options);
+  newLayers.push(...layerResult.layers);
+  allBounds.push(...layerResult.bounds);
 
   // Render locations
   const locationResult = await renderSegmentLocations(segment, map, L, options);
