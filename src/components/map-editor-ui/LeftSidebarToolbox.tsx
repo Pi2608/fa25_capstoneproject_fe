@@ -38,6 +38,7 @@ import {
   attachLayerToSegment,
   updateLocation,
   createRouteAnimation,
+  updateRouteAnimation,
 } from "@/lib/api-storymap";
 
 import { Icon } from "./Icon";
@@ -131,6 +132,7 @@ export function LeftSidebarToolbox({
   const [waitingForLocation, setWaitingForLocation] = useState(false);
   const [pickedCoordinates, setPickedCoordinates] = useState<[number, number] | null>(null);
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+  const [editingRoute, setEditingRoute] = useState<RouteAnimation | null>(null);
 
   // Track which inline form is currently showing (replaces segment list)
   const [inlineFormMode, setInlineFormMode] = useState<"list" | "location" | "zone" | "layer" | "route">("list");
@@ -174,6 +176,33 @@ export function LeftSidebarToolbox({
     window.addEventListener('editLocation', handleEditLocation);
     return () => {
       window.removeEventListener('editLocation', handleEditLocation);
+    };
+  }, [segments, activeView, onViewChange]);
+
+  // Listen for editRoute event from TimelineTrack
+  useEffect(() => {
+    const handleEditRoute = (e: Event) => {
+      const customEvent = e as CustomEvent<{ route: RouteAnimation; segmentId: string; mapId: string }>;
+      const { route, segmentId } = customEvent.detail;
+      
+      // Find the segment that contains this route
+      const segment = segments.find(s => s.segmentId === segmentId);
+      if (segment) {
+        setEditingSegment(segment);
+        setEditingRoute(route);
+        setInlineFormMode("route");
+        
+        // Switch to segments view if not already there
+        if (activeView !== "segments") {
+          onViewChange("segments");
+        }
+        setSegmentFormMode("list");
+      }
+    };
+
+    window.addEventListener('editRoute', handleEditRoute);
+    return () => {
+      window.removeEventListener('editRoute', handleEditRoute);
     };
   }, [segments, activeView, onViewChange]);
 
@@ -668,9 +697,16 @@ export function LeftSidebarToolbox({
               <RouteAnimationForm
                 mapId={mapId}
                 segmentId={editingSegment.segmentId}
+                initialRoute={editingRoute || undefined}
                 onSave={async (data: CreateRouteAnimationRequest) => {
                   try {
-                    await createRouteAnimation(mapId, editingSegment.segmentId, data);
+                    if (editingRoute && editingRoute.routeAnimationId) {
+                      // Update existing route
+                      await updateRouteAnimation(mapId, editingSegment.segmentId, editingRoute.routeAnimationId, data);
+                    } else {
+                      // Create new route
+                      await createRouteAnimation(mapId, editingSegment.segmentId, data);
+                    }
                     
                     // Dispatch event to refresh segments and route animations in TimelineWorkspace / RouteTrackItems
                     // NOTE: listeners are currently wired to 'routeAnimationChanged'
@@ -678,14 +714,16 @@ export function LeftSidebarToolbox({
                       detail: { segmentId: editingSegment.segmentId }
                     }));
                     
+                    setEditingRoute(null);
                     setInlineFormMode("list");
                   } catch (error) {
-                    console.error("Failed to create route animation:", error);
+                    console.error("Failed to save route animation:", error);
                     alert("Không thể lưu route animation. Vui lòng thử lại.");
                     throw error; // Re-throw to let form handle error state
                   }
                 }}
                 onCancel={() => {
+                  setEditingRoute(null);
                   setShowRouteAnimationDialog(false);
                   setInlineFormMode("list");
                 }}

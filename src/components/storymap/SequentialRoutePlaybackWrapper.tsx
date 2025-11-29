@@ -19,6 +19,8 @@ interface SequentialRoutePlaybackWrapperProps {
   disableCameraStateAfter?: boolean;
   // Segment camera state for initial zoom
   segmentCameraState?: { center: [number, number]; zoom: number } | null;
+  // NEW: Skip initial camera state application (for controlled mode)
+  skipInitialCameraState?: boolean;
 }
 
 /**
@@ -38,6 +40,7 @@ function SequentialRoutePlaybackWrapper({
   cameraFollowZoom,
   disableCameraStateAfter = false,
   segmentCameraState,
+  skipInitialCameraState = false,
 }: SequentialRoutePlaybackWrapperProps) {
   const sequentialPlayback = useSequentialRoutePlayback({
     map,
@@ -114,7 +117,8 @@ function SequentialRoutePlaybackWrapper({
               isPlaying={isRoutePlaying}
               followCamera={routeFollowCamera}
               followCameraZoom={routeFollowZoom}
-            segmentCameraState={segmentCameraState}
+              segmentCameraState={segmentCameraState}
+              skipInitialCameraState={skipInitialCameraState}
             />
           );
       })}
@@ -132,6 +136,7 @@ export default memo(SequentialRoutePlaybackWrapper, (prevProps, nextProps) => {
     prevProps.enableCameraFollow === nextProps.enableCameraFollow &&
     prevProps.cameraFollowZoom === nextProps.cameraFollowZoom &&
     prevProps.disableCameraStateAfter === nextProps.disableCameraStateAfter &&
+    prevProps.skipInitialCameraState === nextProps.skipInitialCameraState &&
     prevProps.routeAnimations.length === nextProps.routeAnimations.length &&
     prevProps.routeAnimations.every((anim, i) => {
       const nextAnim = nextProps.routeAnimations[i];

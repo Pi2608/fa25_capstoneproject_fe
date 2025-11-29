@@ -1,607 +1,756 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import {
-  CreateRouteAnimationRequest,
-  getMapLocations,
-  Location,
-  searchRouteWithMultipleLocations,
-} from "@/lib/api-storymap";
-import { Icon } from "@/components/map-editor-ui/Icon";
+import { useEffect, useRef, useState } from 'react';
 
-interface RouteAnimationFormProps {
-  mapId: string;
-  segmentId: string;
-  onSave: (data: CreateRouteAnimationRequest) => Promise<void>;
-  onCancel: () => void;
+export interface RouteAnimationProps {
+  map: any; // L.Map instance (using any to avoid SSR issues)
+  routePath: [number, number][]; // Array of [lng, lat] coordinates
+  fromLocation: { lat: number; lng: number };
+  toLocation: { lat: number; lng: number };
+  iconType?: 'car' | 'walking' | 'bike' | 'plane' | 'custom';
+  iconUrl?: string;
+  routeColor?: string; // Color for unvisited route
+  visitedColor?: string; // Color for visited route
+  routeWidth?: number;
+  durationMs: number;
+  isPlaying: boolean;
+  onComplete?: () => void;
+  // Camera follow options
+  followCamera?: boolean; // Whether camera should follow the icon
+  followCameraZoom?: number; // Zoom level when following (null = keep current)
+  onPositionUpdate?: (position: { lat: number; lng: number }, progress: number) => void; // Callback when icon position updates
+  // Segment camera state for initial zoom
+  segmentCameraState?: { center: [number, number]; zoom: number } | null; // Camera state from segment to apply before following
+  // NEW: Skip applying segmentCameraState initially (for controlled mode transitions)
+  skipInitialCameraState?: boolean;
 }
 
-type TabType = "route" | "timing" | "style";
-
-export function RouteAnimationForm({
-  mapId,
-  segmentId,
-  onSave,
-  onCancel,
-}: RouteAnimationFormProps) {
-  const [activeTab, setActiveTab] = useState<TabType>("route");
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-
-  // Route tab
-  const [fromLocationId, setFromLocationId] = useState<string>("");
-  const [toLocationId, setToLocationId] = useState<string>("");
-  const [iconType, setIconType] = useState<"car" | "walking" | "bike" | "plane" | "custom">("car");
-  const [routePath, setRoutePath] = useState<string | null>(null); // GeoJSON LineString
-  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
-  const [useStraightLine, setUseStraightLine] = useState(true);
-  const [routeDistance, setRouteDistance] = useState<number | null>(null); // meters
-
-  // Timing tab
-  const [durationMs, setDurationMs] = useState(5000);
-  const [startTimeMs, setStartTimeMs] = useState<number | undefined>(undefined);
-
-  // Style tab
-  const [lineColor, setLineColor] = useState("#FF0000");
-  const [visitedColor, setVisitedColor] = useState("#3b82f6");
-  const [lineWidth, setLineWidth] = useState(3);
-  const [showMarkers, setShowMarkers] = useState(true);
-  const [iconWidth, setIconWidth] = useState(32);
-  const [iconHeight, setIconHeight] = useState(32);
+/**
+ * RouteAnimation component - Hiển thị icon di chuyển dọc theo route
+ * và highlight phần đường đã đi qua
+ */
+export default function RouteAnimation({
+  map,
+  routePath,
+  fromLocation,
+  toLocation,
+  iconType = 'car',
+  iconUrl,
+  routeColor = '#666666',
+  visitedColor = '#3b82f6',
+  routeWidth = 4,
+  durationMs,
+  isPlaying,
+  onComplete,
+  followCamera = false,
+  followCameraZoom,
+  onPositionUpdate,
+  segmentCameraState,
+  skipInitialCameraState = false,
+}: RouteAnimationProps) {
+  const markerRef = useRef<any>(null);
+  const routeLineRef = useRef<any>(null);
+  const visitedLineRef = useRef<any>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number | null>(null);
+  const [progress, setProgress] = useState(0);
   
-  // Camera follow settings
-  const [followCamera, setFollowCamera] = useState(true);
-  const [followCameraZoom, setFollowCameraZoom] = useState<number | undefined>(undefined);
-  
-  // Animation settings
-  const [autoPlay, setAutoPlay] = useState(true);
-  const [easing, setEasing] = useState<"linear" | "ease-in" | "ease-out" | "ease-in-out">("linear");
-  const [showLocationInfoOnArrival, setShowLocationInfoOnArrival] = useState(true);
+  // Camera follow optimization: smooth gimbal lock on icon
+  const lastCameraUpdateRef = useRef<number>(0);
+  const cameraUpdateThrottleMs = 16; // Update camera every ~16ms (60fps for smooth following)
+  const isMapAnimatingRef = useRef<boolean>(false);
+  const [L, setL] = useState<any>(null);
 
+  // FIX: Track delay for followCameraZoom in controlled mode
+  // This ensures segment viewState is fully applied before route animation changes zoom
+  const followCameraZoomDelayCompleteRef = useRef<boolean>(false);
+
+  // Dynamic import Leaflet only on client-side
   useEffect(() => {
-    loadLocations();
-  }, [mapId]);
-
-  // Reset route when locations change
-  useEffect(() => {
-    setRoutePath(null);
-    setRouteDistance(null);
-    setUseStraightLine(true);
-  }, [fromLocationId, toLocationId]);
-
-  const loadLocations = async () => {
-    setLoading(true);
-    try {
-      const data = await getMapLocations(mapId);
-      setLocations(data || []);
-    } catch (error) {
-      console.error("Failed to load locations:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFindRoute = async () => {
-    if (!fromLocationId || !toLocationId) {
-      alert("Vui lòng chọn cả điểm đi và điểm đến");
-      return;
-    }
-
-    // For plane, only use straight line
-    if (iconType === "plane") {
-      alert("Máy bay chỉ hỗ trợ đường thẳng");
-      return;
-    }
-
-    const allLocationIds = [fromLocationId, toLocationId].filter(id => id);
-
-    if (allLocationIds.length < 2) {
-      alert("Cần ít nhất 2 điểm để tạo route");
-      return;
-    }
-
-    setIsCalculatingRoute(true);
-    try {
-      // Use backend API to search route
-      const result = await searchRouteWithMultipleLocations(allLocationIds, "road");
-      
-      if (result?.routePath) {
-        // Parse routePath from string to verify it's valid
-        const routePathStr = typeof result.routePath === "string" 
-          ? result.routePath 
-          : JSON.stringify(result.routePath);
-        
-        try {
-          const geoJson = JSON.parse(routePathStr);
-          if (geoJson.type === "LineString" && geoJson.coordinates && Array.isArray(geoJson.coordinates)) {
-            setRoutePath(routePathStr);
-            setUseStraightLine(false);
-            
-            // Calculate approximate distance from route coordinates
-            if (geoJson.coordinates.length >= 2) {
-              // Simple distance calculation for display
-              const calculateDistance = (coords: number[][]) => {
-                let totalDistance = 0;
-                for (let i = 1; i < coords.length; i++) {
-                  const [lng1, lat1] = coords[i - 1];
-                  const [lng2, lat2] = coords[i];
-                  const R = 6371000; // Earth radius in meters
-                  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-                  const dLng = ((lng2 - lng1) * Math.PI) / 180;
-                  const a =
-                    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                    Math.cos((lat1 * Math.PI) / 180) *
-                      Math.cos((lat2 * Math.PI) / 180) *
-                      Math.sin(dLng / 2) *
-                      Math.sin(dLng / 2);
-                  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                  totalDistance += R * c;
-                }
-                return totalDistance;
-              };
-              
-              setRouteDistance(calculateDistance(geoJson.coordinates));
-            }
-          } else {
-            throw new Error("Invalid GeoJSON format");
-          }
-        } catch (parseError) {
-          console.error("Failed to parse route path:", parseError);
-          alert("Đường đi không hợp lệ. Vui lòng thử lại.");
-          setUseStraightLine(true);
-          setRoutePath(null);
-          setRouteDistance(null);
-        }
-      } else {
-        alert("Không tìm thấy đường đi giữa các điểm này. Sử dụng đường thẳng thay thế.");
-        setUseStraightLine(true);
-        setRoutePath(null);
-        setRouteDistance(null);
-      }
-    } catch (error: any) {
-      console.error("Failed to search route:", error);
-      alert(error?.message || "Lỗi khi tìm đường đi. Vui lòng thử lại hoặc sử dụng đường thẳng.");
-      setUseStraightLine(true);
-      setRoutePath(null);
-      setRouteDistance(null);
-    } finally {
-      setIsCalculatingRoute(false);
-    }
-  };
-
-  const handleUseStraightLine = () => {
-    setUseStraightLine(true);
-    setRoutePath(null);
-    setRouteDistance(null);
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!fromLocationId || !toLocationId) {
-      alert("Vui lòng chọn cả điểm đi và điểm đến");
-      return;
-    }
-
-    const fromLocation = locations.find(loc => loc.locationId === fromLocationId);
-    const toLocation = locations.find(loc => loc.locationId === toLocationId);
-    
-    if (!fromLocation || !toLocation) {
-      alert("Không tìm thấy location. Vui lòng thử lại.");
-      return;
-    }
-
-    // Parse markerGeometry to get coordinates
-    let fromLat = 0;
-    let fromLng = 0;
-    let toLat = 0;
-    let toLng = 0;
-
-    try {
-      if (fromLocation.markerGeometry) {
-        const fromGeo = JSON.parse(fromLocation.markerGeometry);
-        if (fromGeo.type === "Point" && Array.isArray(fromGeo.coordinates) && fromGeo.coordinates.length >= 2) {
-          fromLng = fromGeo.coordinates[0];
-          fromLat = fromGeo.coordinates[1];
-        }
-      }
-      if (toLocation.markerGeometry) {
-        const toGeo = JSON.parse(toLocation.markerGeometry);
-        if (toGeo.type === "Point" && Array.isArray(toGeo.coordinates) && toGeo.coordinates.length >= 2) {
-          toLng = toGeo.coordinates[0];
-          toLat = toGeo.coordinates[1];
-        }
-      }
-    } catch (error) {
-      console.error("Failed to parse location coordinates:", error);
-      alert("Không thể đọc tọa độ của location. Vui lòng kiểm tra lại.");
-      return;
-    }
-
-    // Use calculated route or create straight line
-    let finalRoutePath: string;
-    if (!useStraightLine && routePath) {
-      finalRoutePath = routePath;
-    } else {
-      // Create straight line route (simple LineString)
-      finalRoutePath = JSON.stringify({
-        type: "LineString",
-        coordinates: [[fromLng, fromLat], [toLng, toLat]]
+    if (typeof window !== 'undefined') {
+      import('leaflet').then((leaflet) => {
+        setL(leaflet.default);
       });
     }
+  }, []);
 
-    setSaving(true);
+  // Create icon based on type
+  const createIcon = (): any => {
+    if (!L) return null;
+    const iconSize: [number, number] = [32, 32];
+    
+    if (iconUrl) {
+      return L.icon({
+        iconUrl,
+        iconSize,
+        iconAnchor: [iconSize[0] / 2, iconSize[1] / 2],
+      });
+    }
+    
+    // Default icons based on type
+    const iconMap: Record<string, string> = {
+      car: '🚗',
+      walking: '🚶',
+      bike: '🚴',
+      plane: '✈️',
+    };
+    
+    return L.divIcon({
+      html: `<div style="font-size: 24px; text-align: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">${iconMap[iconType] || '📍'}</div>`,
+      className: 'route-animation-icon',
+      iconSize,
+      iconAnchor: [iconSize[0] / 2, iconSize[1] / 2],
+    });
+  };
+
+  // Calculate distance between two points using Haversine formula
+  const haversineDistance = (
+    [lng1, lat1]: [number, number],
+    [lng2, lat2]: [number, number]
+  ): number => {
+    const R = 6371; // Earth radius in km
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLng / 2) *
+        Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Calculate total route distance
+  const calculateRouteDistance = (path: [number, number][]): number => {
+    let total = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+      total += haversineDistance(path[i], path[i + 1]);
+    }
+    return total;
+  };
+
+  // Validate coordinates
+  const isValidCoordinate = (coord: number): boolean => {
+    return typeof coord === 'number' && !isNaN(coord) && isFinite(coord);
+  };
+
+  const isValidPoint = (point: [number, number] | undefined): boolean => {
+    if (!point || !Array.isArray(point) || point.length < 2) return false;
+    return isValidCoordinate(point[0]) && isValidCoordinate(point[1]);
+  };
+
+  // Get position along route based on distance traveled
+  const getPositionAlongRoute = (
+    path: [number, number][],
+    distance: number
+  ): { lat: number; lng: number } | null => {
+    if (!path || path.length === 0) return null;
+    
+    let accumulated = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+      const point1 = path[i];
+      const point2 = path[i + 1];
+      
+      // Validate points
+      if (!isValidPoint(point1) || !isValidPoint(point2)) {
+        console.warn(`Invalid point at index ${i} or ${i + 1}`, { point1, point2 });
+        continue;
+      }
+      
+      const segmentDistance = haversineDistance(point1, point2);
+      
+      // Skip if segment distance is invalid
+      if (!isValidCoordinate(segmentDistance) || segmentDistance === 0) {
+        continue;
+      }
+      
+      if (accumulated + segmentDistance >= distance) {
+        const ratio = (distance - accumulated) / segmentDistance;
+        const [lng1, lat1] = point1;
+        const [lng2, lat2] = point2;
+        
+        const lat = lat1 + (lat2 - lat1) * ratio;
+        const lng = lng1 + (lng2 - lng1) * ratio;
+        
+        // Validate calculated position
+        if (isValidCoordinate(lat) && isValidCoordinate(lng)) {
+          return { lat, lng };
+        }
+      }
+      accumulated += segmentDistance;
+    }
+    
+    // Return end position if distance exceeds route length
+    const last = path[path.length - 1];
+    if (isValidPoint(last)) {
+      return { lat: last[1], lng: last[0] };
+    }
+    
+    // Fallback to first valid point
+    for (const point of path) {
+      if (isValidPoint(point)) {
+        return { lat: point[1], lng: point[0] };
+      }
+    }
+    
+    return null;
+  };
+
+  // Get visited path coordinates
+  const getVisitedPath = (
+    path: [number, number][],
+    progress: number
+  ): [number, number][] => {
+    const totalDistance = calculateRouteDistance(path);
+    const visitedDistance = totalDistance * progress;
+    
+    const visitedPath: [number, number][] = [];
+    let accumulated = 0;
+    
+    for (let i = 0; i < path.length - 1; i++) {
+      const segmentDistance = haversineDistance(path[i], path[i + 1]);
+      
+      if (accumulated + segmentDistance <= visitedDistance) {
+        // Entire segment is visited
+        if (visitedPath.length === 0 || 
+            visitedPath[visitedPath.length - 1][0] !== path[i][0] ||
+            visitedPath[visitedPath.length - 1][1] !== path[i][1]) {
+          visitedPath.push(path[i]);
+        }
+        visitedPath.push(path[i + 1]);
+      } else if (accumulated < visitedDistance) {
+        // Partial segment
+        if (visitedPath.length === 0 || 
+            visitedPath[visitedPath.length - 1][0] !== path[i][0] ||
+            visitedPath[visitedPath.length - 1][1] !== path[i][1]) {
+          visitedPath.push(path[i]);
+        }
+        const ratio = (visitedDistance - accumulated) / segmentDistance;
+        const [lng1, lat1] = path[i];
+        const [lng2, lat2] = path[i + 1];
+        visitedPath.push([
+          lng1 + (lng2 - lng1) * ratio,
+          lat1 + (lat2 - lat1) * ratio,
+        ]);
+        break;
+      }
+      accumulated += segmentDistance;
+    }
+    
+    return visitedPath;
+  };
+
+  // Calculate direction angle for icon rotation
+  const calculateDirection = (
+    path: [number, number][],
+    progress: number
+  ): number | null => {
+    const totalDistance = calculateRouteDistance(path);
+    const currentDistance = totalDistance * progress;
+    
+    let accumulated = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+      const segmentDistance = haversineDistance(path[i], path[i + 1]);
+      if (accumulated + segmentDistance >= currentDistance) {
+        const [lng1, lat1] = path[i];
+        const [lng2, lat2] = path[i + 1];
+        const angle = (Math.atan2(lat2 - lat1, lng2 - lng1) * 180) / Math.PI;
+        return angle;
+      }
+      accumulated += segmentDistance;
+    }
+    return null;
+  };
+
+  // Check if map is ready and valid
+  const isMapReady = (mapInstance: any): boolean => {
+    if (!mapInstance || !L) return false;
     try {
-      const data: CreateRouteAnimationRequest = {
-        segmentId,
-        fromLat,
-        fromLng,
-        fromName: fromLocation.title,
-        toLat,
-        toLng,
-        toName: toLocation.title,
-        toLocationId: toLocationId,
-        routePath: finalRoutePath,
-        iconType,
-        iconWidth,
-        iconHeight,
-        routeColor: lineColor,
-        visitedColor,
-        routeWidth: lineWidth,
-        durationMs,
-        startTimeMs,
-        easing,
-        autoPlay,
-        isVisible: true,
-        followCamera,
-        followCameraZoom: followCameraZoom || undefined,
-        showLocationInfoOnArrival,
-      };
-      console.log("Submitting route animation data:", data);
-      await onSave(data);
-      console.log("Route animation saved successfully");
+      // Check if map has container method
+      if (typeof mapInstance.getContainer !== 'function') return false;
+      
+      // Check if map has container and is initialized
+      const container = mapInstance.getContainer();
+      if (!container) return false;
+      
+      // Check if container is an actual DOM element
+      if (!(container instanceof HTMLElement)) return false;
+      
+      // Check if container is in DOM (it might be detached during cleanup)
+      // Use multiple methods to check DOM presence
+      const isInDOM = 
+        container.isConnected !== undefined 
+          ? container.isConnected 
+          : document.body.contains(container);
+      
+      if (!isInDOM) return false;
+      
+      // Check if map is still valid (not destroyed)
+      // Some Leaflet maps might not have these properties, so we check safely
+      if (mapInstance._destroyed === true) return false;
+      
+      return true;
     } catch (error) {
-      console.error("Error saving route animation:", error);
-      // Error is already handled in onSave callback
-    } finally {
-      setSaving(false);
+      // If any error occurs during validation, consider map not ready
+      return false;
     }
   };
 
-  const tabs: { id: TabType; label: string; icon: string }[] = [
-    { id: "route", label: "Route", icon: "🛣️" },
-    { id: "timing", label: "Timing", icon: "⏱️" },
-    { id: "style", label: "Style", icon: "🎨" },
-  ];
+  // Initialize route lines and marker (only once, don't re-init on every render)
+  useEffect(() => {
+    if (!map || routePath.length === 0 || !L) return;
+    
+    // Skip if already initialized (to prevent re-initialization on re-render)
+    if (routeLineRef.current && visitedLineRef.current && markerRef.current) {
+      // Just update route line if path changed, but don't re-create
+      try {
+        const validRoutePath = routePath.filter(point => isValidPoint(point));
+        if (validRoutePath.length > 0 && routeLineRef.current) {
+          routeLineRef.current.setLatLngs(
+            validRoutePath.map(([lng, lat]) => [lat, lng] as [number, number])
+          );
+        }
+      } catch (e) {
+        console.warn('Failed to update route line:', e);
+      }
+      return;
+    }
+    
+    let fullRoute: any = null;
+    let visitedRoute: any = null;
+    let marker: any = null;
+    
+    // Use a small delay to ensure map is fully initialized
+    // This is especially important when component mounts quickly
+    const timeoutId = setTimeout(() => {
+      // Validate map is ready before adding layers
+      if (!isMapReady(map)) {
+        console.warn('Map is not ready, skipping RouteAnimation initialization');
+        return;
+      }
+    
+      // Validate fromLocation and toLocation
+      if (!isValidCoordinate(fromLocation?.lat) || !isValidCoordinate(fromLocation?.lng) ||
+          !isValidCoordinate(toLocation?.lat) || !isValidCoordinate(toLocation?.lng)) {
+        console.error('Invalid fromLocation or toLocation:', { fromLocation, toLocation });
+        return;
+      }
+      
+      // Validate routePath
+      const validPath = routePath.filter(point => isValidPoint(point));
+      if (validPath.length === 0) {
+        console.error('No valid points in routePath:', routePath);
+        return;
+      }
 
-  return (
-    <div className="p-3 space-y-3 border-b border-zinc-800">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-white">Thêm Route Animation</h4>
-        <button
-          onClick={onCancel}
-          className="p-1 hover:bg-zinc-800 rounded transition-colors"
-          disabled={saving}
-        >
-          <Icon icon="mdi:close" className="w-4 h-4 text-zinc-400" />
-        </button>
-      </div>
+      // Full route line (unvisited - gray) - filter invalid points
+      const validRoutePath = routePath.filter(point => isValidPoint(point));
+      if (validRoutePath.length === 0) return;
+      
+      try {
+        // Double-check map is still ready before each addTo call
+        if (!isMapReady(map)) {
+          console.warn('Map became invalid during initialization');
+          return;
+        }
+        
+        // Only create if not already exists
+        if (!routeLineRef.current) {
+        fullRoute = L.polyline(
+          validRoutePath.map(([lng, lat]) => [lat, lng] as [number, number]),
+          {
+            color: routeColor,
+            weight: routeWidth,
+            opacity: 0.6,
+            dashArray: '5, 5', // Dashed line for unvisited
+          }
+        );
+        
+        if (isMapReady(map)) {
+          fullRoute.addTo(map);
+          routeLineRef.current = fullRoute;
+        } else {
+          console.warn('Map became invalid before adding route line');
+          return;
+          }
+        }
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-zinc-800">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            disabled={saving}
-            className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-              activeTab === tab.id
-                ? "text-emerald-400 bg-emerald-500/10 border-b-2 border-emerald-400"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            <span className="mr-1">{tab.icon}</span>
-            {tab.label}
-          </button>
-        ))}
-      </div>
+        // Visited route line (highlighted - colored)
+        if (!visitedLineRef.current) {
+        visitedRoute = L.polyline([], {
+          color: visitedColor,
+          weight: routeWidth + 2, // Slightly thicker
+          opacity: 1,
+        });
+        
+        if (isMapReady(map)) {
+          visitedRoute.addTo(map);
+          visitedLineRef.current = visitedRoute;
+        } else {
+          console.warn('Map became invalid before adding visited route line');
+          if (fullRoute) {
+            try { fullRoute.remove(); } catch (e) {}
+          }
+          return;
+          }
+        }
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-3">
-        {loading ? (
-          <div className="text-xs text-zinc-400">Đang tải locations...</div>
-        ) : (
-          <>
-            {/* Route Tab */}
-            {activeTab === "route" && (
-              <div className="space-y-2">
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Từ Location *</label>
-                  <select
-                    value={fromLocationId}
-                    onChange={(e) => setFromLocationId(e.target.value)}
-                    className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
-                    disabled={saving}
-                  >
-                    <option value="">-- Chọn location --</option>
-                    {locations.map((loc) => (
-                      <option key={loc.locationId} value={loc.locationId}>
-                        {loc.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+        // Create marker at starting position
+        if (!markerRef.current) {
+        const icon = createIcon();
+        if (!icon) {
+          console.warn('Failed to create icon');
+          return;
+        }
+        
+        marker = L.marker([fromLocation.lat, fromLocation.lng], {
+          icon,
+          zIndexOffset: 1000,
+        });
+        
+        if (isMapReady(map)) {
+          marker.addTo(map);
+          markerRef.current = marker;
+        } else {
+          console.warn('Map became invalid before adding marker');
+          if (fullRoute) {
+            try { fullRoute.remove(); } catch (e) {}
+          }
+          if (visitedRoute) {
+            try { visitedRoute.remove(); } catch (e) {}
+          }
+          return;
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing RouteAnimation:', error);
+        // Cleanup on error
+        if (fullRoute) {
+          try { fullRoute.remove(); } catch (e) {}
+        }
+        if (visitedRoute) {
+          try { visitedRoute.remove(); } catch (e) {}
+        }
+        if (marker) {
+          try { marker.remove(); } catch (e) {}
+        }
+      }
+    }, 100); // Small delay to ensure map container is ready
 
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Đến Location *</label>
-                  <select
-                    value={toLocationId}
-                    onChange={(e) => setToLocationId(e.target.value)}
-                    className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
-                    disabled={saving}
-                  >
-                    <option value="">-- Chọn location --</option>
-                    {locations.map((loc) => (
-                      <option key={loc.locationId} value={loc.locationId}>
-                        {loc.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+    return () => {
+      // Clear timeout if component unmounts before timeout executes
+      clearTimeout(timeoutId);
+      
+      // Only cleanup on unmount, not on dependency changes
+      // This prevents route line from being removed when isPlaying changes
+    };
+  }, [map, routePath, fromLocation, toLocation, routeColor, visitedColor, routeWidth, iconType, iconUrl, L]);
+  
+  // Separate cleanup effect that only runs on unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup refs only on component unmount
+      try {
+        if (routeLineRef.current) {
+          routeLineRef.current.remove();
+          routeLineRef.current = null;
+        }
+      } catch (error) {
+        console.warn('Error removing routeLineRef:', error);
+      }
+      
+      try {
+        if (visitedLineRef.current) {
+          visitedLineRef.current.remove();
+          visitedLineRef.current = null;
+        }
+      } catch (error) {
+        console.warn('Error removing visitedLineRef:', error);
+      }
+      
+      try {
+        if (markerRef.current) {
+          markerRef.current.remove();
+          markerRef.current = null;
+        }
+      } catch (error) {
+        console.warn('Error removing markerRef:', error);
+      }
+    };
+  }, []); // Empty dependency array - only cleanup on unmount
 
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Loại Icon</label>
-                  <select
-                    value={iconType}
-                    onChange={(e) => setIconType(e.target.value as "car" | "walking" | "bike" | "plane" | "custom")}
-                    className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
-                    disabled={saving}
-                  >
-                    <option value="car">Xe hơi</option>
-                    <option value="walking">Đi bộ</option>
-                    <option value="bike">Xe đạp</option>
-                    <option value="plane">Máy bay</option>
-                    <option value="custom">Tùy chỉnh</option>
-                  </select>
-                </div>
+  // Apply segment camera state when animation starts (before route animation)
+  const segmentCameraAppliedRef = useRef(false);
+  const cameraAnimationCompleteRef = useRef(false);
+  
+  useEffect(() => {
+    // Skip applying camera state if skipInitialCameraState is true
+    // This is used in controlled mode to prevent camera jumping between segments
+    if (skipInitialCameraState) {
+      // Mark as applied so animation can proceed, but don't actually change camera
+      if (isPlaying && !segmentCameraAppliedRef.current) {
+        segmentCameraAppliedRef.current = true;
+        cameraAnimationCompleteRef.current = true;
+        isMapAnimatingRef.current = false;
+        
+        // FIX: Delay followCameraZoom cho đến khi segment viewState đã settle
+        // handleViewSegment có fly animation 1500ms
+        // Cần đợi trước khi cho phép followCameraZoom
+        followCameraZoomDelayCompleteRef.current = false;
+        
+        const delayTimer = setTimeout(() => {
+          followCameraZoomDelayCompleteRef.current = true;
+          console.log('[RouteAnimation] followCameraZoom delay complete');
+        }, 1800); // 1800ms = 1500ms fly + 300ms buffer
+        
+        // Cleanup timer if component unmounts or isPlaying changes
+        return () => clearTimeout(delayTimer);
+      }
+      if (!isPlaying) {
+        segmentCameraAppliedRef.current = false;
+        cameraAnimationCompleteRef.current = false;
+        isMapAnimatingRef.current = false;
+        followCameraZoomDelayCompleteRef.current = false;
+      }
+      return;
+    }
 
-                {/* Route Options */}
-                <div className="pt-2 border-t border-zinc-800 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs text-zinc-400">Loại đường đi</label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={handleUseStraightLine}
-                        disabled={saving || isCalculatingRoute}
-                        className={`px-2 py-1 text-[10px] rounded transition-colors ${
-                          useStraightLine
-                            ? "bg-emerald-600 text-white"
-                            : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
-                        } disabled:opacity-50`}
-                      >
-                        Đường thẳng
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleFindRoute}
-                        disabled={saving || isCalculatingRoute || !fromLocationId || !toLocationId || iconType === "plane"}
-                        className={`px-2 py-1 text-[10px] rounded transition-colors flex items-center gap-1 ${
-                          !useStraightLine && routePath
-                            ? "bg-emerald-600 text-white"
-                            : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
-                        } disabled:opacity-50 disabled:cursor-not-allowed`}
-                      >
-                        {isCalculatingRoute ? (
-                          <>
-                            <Icon icon="mdi:loading" className="w-3 h-3 animate-spin" />
-                            Đang tìm...
-                          </>
-                        ) : (
-                          <>
-                            <Icon icon="mdi:route" className="w-3 h-3" />
-                            Tìm đường
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  </div>
+    // Original logic - apply camera state (autonomous mode)
+    // In this case, allow followCameraZoom immediately after camera animation
+    if (isPlaying && !segmentCameraAppliedRef.current) {
+      followCameraZoomDelayCompleteRef.current = false;
+    }
 
-                  {/* Route Info */}
-                  {routeDistance !== null && !useStraightLine && (
-                    <div className="bg-zinc-800/50 rounded px-2 py-1.5 space-y-1 text-[10px]">
-                      <div className="flex items-center justify-between text-zinc-300">
-                        <span className="text-zinc-400">Khoảng cách:</span>
-                        <span className="font-medium">
-                          {routeDistance < 1000
-                            ? `${Math.round(routeDistance)}m`
-                            : `${(routeDistance / 1000).toFixed(2)}km`}
-                        </span>
-                      </div>
-                    </div>
-                  )}
+    if (isPlaying && segmentCameraState && map && !segmentCameraAppliedRef.current) {
+      // Apply segment camera state once when animation starts
+      // Wait for camera animation to complete before starting route animation
+      segmentCameraAppliedRef.current = true;
+      cameraAnimationCompleteRef.current = false;
+      
+      // Set flag to prevent camera follow during initial zoom
+      isMapAnimatingRef.current = true;
+      
+      (async () => {
+        try {
+          // segmentCameraState.center is [lng, lat] from segment (GeoJSON format)
+          // Leaflet setView needs [lat, lng] format, so we need to swap
+          const [lng, lat] = segmentCameraState.center;
+          const targetCenter: [number, number] = [lat, lng]; // Convert to [lat, lng] for Leaflet
+          const targetZoom = segmentCameraState.zoom; // Exact zoom from segment (e.g., 12)
 
-                  {useStraightLine && fromLocationId && toLocationId && (
-                    <div className="bg-zinc-800/50 rounded px-2 py-1.5 text-[10px] text-zinc-400 italic">
-                      Sử dụng đường thẳng giữa 2 điểm
-                    </div>
-                  )}
+          // Apply EXACT segment camera state - center and zoom from segment
+          // This is mandatory before route animation starts, regardless of followCamera
+          map.setView(targetCenter, targetZoom, {
+            animate: true,
+            duration: 0.8, // Slightly longer for smooth transition
+            easeLinearity: 0.25,
+          });
+          
+          // Wait for camera animation to complete (duration + small buffer)
+          await new Promise((resolve) => setTimeout(resolve, 900));
+          
+          cameraAnimationCompleteRef.current = true;
+          // Allow camera follow after initial zoom completes (only if followCamera is enabled)
+          isMapAnimatingRef.current = false;
+          
+          // In autonomous mode, allow followCameraZoom immediately after camera animation
+          followCameraZoomDelayCompleteRef.current = true;
+        } catch (e) {
+          console.warn('Failed to apply segment camera state:', e);
+          // If camera animation fails, still allow route animation to proceed
+          cameraAnimationCompleteRef.current = true;
+          isMapAnimatingRef.current = false;
+          followCameraZoomDelayCompleteRef.current = true;
+        }
+      })();
+    }
+    
+    if (!isPlaying) {
+      segmentCameraAppliedRef.current = false;
+      cameraAnimationCompleteRef.current = false;
+      isMapAnimatingRef.current = false;
+      followCameraZoomDelayCompleteRef.current = false;
+    }
+  }, [isPlaying, segmentCameraState, map, followCamera, followCameraZoom, skipInitialCameraState]);
 
-                  {iconType === "plane" && (
-                    <div className="bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1.5 text-[10px] text-amber-400">
-                      <Icon icon="mdi:information" className="w-3 h-3 inline mr-1" />
-                      Máy bay chỉ hỗ trợ đường thẳng
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+  // Animation loop
+  useEffect(() => {
+    // Always ensure marker and route lines exist, even when not playing
+    if (routePath.length === 0 || !L) {
+      return;
+    }
+    
+    // Wait for marker to be initialized
+    if (!markerRef.current) {
+      // Marker will be initialized by the other useEffect, just return here
+      return;
+    }
 
-            {/* Timing Tab */}
-            {activeTab === "timing" && (
-              <div className="space-y-2">
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">
-                    Thời lượng (ms): {durationMs}
-                  </label>
-                  <input
-                    type="range"
-                    min="1000"
-                    max="30000"
-                    step="500"
-                    value={durationMs}
-                    onChange={(e) => setDurationMs(parseInt(e.target.value))}
-                    className="w-full"
-                    disabled={saving}
-                  />
-                </div>
+    if (!isPlaying) {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+      // Reset to start position when not playing (but keep route lines visible)
+      if (markerRef.current && isValidCoordinate(fromLocation?.lat) && isValidCoordinate(fromLocation?.lng)) {
+        markerRef.current.setLatLng([fromLocation.lat, fromLocation.lng]);
+      }
+      if (visitedLineRef.current) {
+        visitedLineRef.current.setLatLngs([]);
+      }
+      setProgress(0);
+      startTimeRef.current = null;
+      return;
+    }
+    
+    // Wait for camera animation to complete before starting route animation
+    // In skipInitialCameraState mode, cameraAnimationCompleteRef is set to true immediately
+    if (segmentCameraState && !skipInitialCameraState && !cameraAnimationCompleteRef.current) {
+      // Check periodically if camera animation is complete, then start route animation
+      const checkCameraComplete = setInterval(() => {
+        if (cameraAnimationCompleteRef.current) {
+          clearInterval(checkCameraComplete);
+          // Camera animation complete, now start route animation
+          // The animation will start in the next render cycle
+        }
+      }, 100);
+      
+      return () => {
+        clearInterval(checkCameraComplete);
+      };
+    }
+    
+    // Only start route animation if camera animation is complete (or no camera state or skip mode)
+    if (segmentCameraState && !skipInitialCameraState && !cameraAnimationCompleteRef.current) {
+      return;
+    }
 
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Thời gian bắt đầu (ms)</label>
-                  <input
-                    type="number"
-                    value={startTimeMs || ""}
-                    onChange={(e) => setStartTimeMs(e.target.value ? parseInt(e.target.value) : undefined)}
-                    className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
-                    placeholder="Để trống để tự động"
-                    disabled={saving}
-                  />
-                </div>
+    const animate = (currentTime: number) => {
+      if (!startTimeRef.current) {
+        startTimeRef.current = currentTime;
+      }
 
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Easing</label>
-                  <select
-                    value={easing}
-                    onChange={(e) => setEasing(e.target.value as "linear" | "ease-in" | "ease-out" | "ease-in-out")}
-                    className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
-                    disabled={saving}
-                  >
-                    <option value="linear">Linear</option>
-                    <option value="ease-in">Ease In</option>
-                    <option value="ease-out">Ease Out</option>
-                    <option value="ease-in-out">Ease In Out</option>
-                  </select>
-                </div>
+      const elapsed = currentTime - startTimeRef.current;
+      const progress = Math.min(elapsed / durationMs, 1);
 
-                <div className="pt-2 border-t border-zinc-800 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={autoPlay}
-                      onChange={(e) => setAutoPlay(e.target.checked)}
-                      className="w-4 h-4 rounded"
-                      disabled={saving}
-                    />
-                    <span className="text-xs text-zinc-300">Tự động phát</span>
-                  </label>
+      setProgress(progress);
 
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showLocationInfoOnArrival}
-                      onChange={(e) => setShowLocationInfoOnArrival(e.target.checked)}
-                      className="w-4 h-4 rounded"
-                      disabled={saving}
-                    />
-                    <span className="text-xs text-zinc-300">Hiển thị thông tin location khi đến</span>
-                  </label>
-                </div>
+      // Calculate position along route
+      const totalDistance = calculateRouteDistance(routePath);
+      const traveledDistance = totalDistance * progress;
+      
+      const currentPosition = getPositionAlongRoute(
+        routePath,
+        traveledDistance
+      );
 
-                <div className="pt-2 border-t border-zinc-800 space-y-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={followCamera}
-                      onChange={(e) => setFollowCamera(e.target.checked)}
-                      className="w-4 h-4 rounded"
-                      disabled={saving}
-                    />
-                    <span className="text-xs text-zinc-300">Camera theo dõi icon</span>
-                  </label>
+      // Update marker position
+      if (markerRef.current && currentPosition) {
+        // Validate position before setting
+        if (isValidCoordinate(currentPosition.lat) && isValidCoordinate(currentPosition.lng)) {
+          markerRef.current.setLatLng([currentPosition.lat, currentPosition.lng]);
+          
+          // Emit position update for camera follow
+          if (onPositionUpdate) {
+            onPositionUpdate(currentPosition, progress);
+          }
+          
+          // Camera follow: gimbal lock - always keep icon centered smoothly
+          // Note: This only affects panning, zoom is ALWAYS from segment camera state
+          if (followCamera && map && !isMapAnimatingRef.current) {
+            const now = Date.now();
+            const timeSinceLastUpdate = now - lastCameraUpdateRef.current;
+            
+            // Update camera every frame for smooth gimbal lock (no threshold, no blocking)
+            if (timeSinceLastUpdate >= cameraUpdateThrottleMs) {
+            try {
+              const currentZoom = map.getZoom();
+                
+                lastCameraUpdateRef.current = now;
+              
+                // Use panTo with very short duration for smooth continuous following
+                // This creates a "gimbal lock" effect where icon stays perfectly centered
+                // Only pan to follow icon, DO NOT change zoom (zoom stays from segment camera state)
+              map.panTo([currentPosition.lat, currentPosition.lng], {
+                animate: true,
+                  duration: 0.15, // Short duration for responsive following
+                  easeLinearity: 0.05, // Very smooth easing
+                  noMoveStart: true, // Don't trigger moveStart event
+              });
+              
+                // FIX: Chỉ apply followCameraZoom SAU KHI delay complete
+                // Điều này đảm bảo segment viewState đã được apply trước khi zoom
+                // IMPORTANT: Only update zoom if:
+                // 1. followCameraZoom is explicitly provided
+                // 2. followCameraZoomDelayCompleteRef is true (delay đã xong)
+                // 3. Zoom difference is significant
+                if (followCameraZoom != null && 
+                    followCameraZoomDelayCompleteRef.current && 
+                    Math.abs(currentZoom - followCameraZoom) > 0.5) {
+                  map.setZoom(followCameraZoom, {
+                    animate: true,
+                    duration: 0.15,
+                  });
+              }
+                // If delay not complete yet, skip zoom changes (keep current zoom from segment viewState)
+            } catch (e) {
+                // Ignore pan errors (map might be in transition or destroyed)
+              }
+            }
+          }
+        } else {
+          console.warn('Invalid currentPosition, skipping update:', currentPosition);
+        }
+        
+        // Calculate rotation based on direction
+        const direction = calculateDirection(routePath, progress);
+        if (direction !== null && markerRef.current.options.icon && L) {
+          // Note: Leaflet doesn't support rotation natively, 
+          // you may need leaflet-rotatedmarker plugin
+          const icon = markerRef.current.options.icon as any;
+          if (icon.options && icon.options.html) {
+            const html = icon.options.html as string;
+            const rotatedHtml = html.replace(
+              /style="([^"]*)"/,
+              `style="$1 transform: rotate(${direction}deg);"`
+            );
+            markerRef.current.setIcon(
+              L.divIcon({
+                ...icon.options,
+                html: rotatedHtml,
+              })
+            );
+          }
+        }
+      }
 
-                  {followCamera && (
-                    <div>
-                      <label className="block text-xs text-zinc-400 mb-1">Zoom khi theo dõi (để trống = giữ zoom hiện tại)</label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="20"
-                        value={followCameraZoom || ""}
-                        onChange={(e) => setFollowCameraZoom(e.target.value ? parseFloat(e.target.value) : undefined)}
-                        className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
-                        placeholder="Để trống để giữ zoom hiện tại"
-                        disabled={saving}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
+      // Update visited route line
+      if (visitedLineRef.current) {
+        const visitedPath = getVisitedPath(routePath, progress);
+        if (visitedPath.length > 0) {
+          visitedLineRef.current.setLatLngs(
+            visitedPath.map(([lng, lat]) => [lat, lng] as [number, number])
+          );
+        }
+      }
 
-            {/* Style Tab */}
-            {activeTab === "style" && (
-              <div className="space-y-2">
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">Màu đường</label>
-                  <input
-                    type="color"
-                    value={lineColor}
-                    onChange={(e) => setLineColor(e.target.value)}
-                    className="w-full h-8 rounded cursor-pointer"
-                    disabled={saving}
-                  />
-                </div>
+      if (progress < 1) {
+        animationFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        if (onComplete) onComplete();
+        startTimeRef.current = null;
+      }
+    };
 
-                <div>
-                  <label className="block text-xs text-zinc-400 mb-1">
-                    Độ dày đường: {lineWidth}px
-                  </label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    value={lineWidth}
-                    onChange={(e) => setLineWidth(parseInt(e.target.value))}
-                    className="w-full"
-                    disabled={saving}
-                  />
-                </div>
+    animationFrameRef.current = requestAnimationFrame(animate);
 
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={showMarkers}
-                    onChange={(e) => setShowMarkers(e.target.checked)}
-                    className="w-4 h-4 rounded"
-                    disabled={saving}
-                  />
-                  <span className="text-xs text-zinc-300">Hiển thị markers</span>
-                </label>
-              </div>
-            )}
-          </>
-        )}
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [isPlaying, routePath, durationMs, fromLocation, onComplete, L, followCamera, followCameraZoom, map, onPositionUpdate, skipInitialCameraState, segmentCameraState]);
 
-        {/* Buttons */}
-        <div className="flex gap-2 pt-2 border-t border-zinc-800">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={saving}
-            className="flex-1 px-2 py-1.5 text-xs rounded bg-zinc-800 hover:bg-zinc-700 text-white transition-colors disabled:opacity-50"
-          >
-            Hủy
-          </button>
-          <button
-            type="submit"
-            disabled={saving || !fromLocationId || !toLocationId}
-            className="flex-1 px-2 py-1.5 text-xs rounded bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {saving ? "Đang lưu..." : "Lưu"}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
+  return null; // This component doesn't render anything visible
 }

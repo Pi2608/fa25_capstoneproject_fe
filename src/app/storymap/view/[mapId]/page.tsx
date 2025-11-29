@@ -223,41 +223,38 @@ export default function StoryMapViewPage() {
     if (typeof idx === "number" && idx >= 0) {
       // Check if segment changed
       setCurrentIndex(prevIndex => {
-        if (prevIndex !== idx) {
+        const segmentChanged = prevIndex !== idx;
+        
+        if (segmentChanged) {
           // When segment changes, stop playing immediately
           setIsTeacherPlaying(false);
+          
+          // Thêm delay để StoryMapViewer có thời gian load route animations
+          if (shouldPlay) {
+            setTimeout(() => {
+              setIsTeacherPlaying(true);
+            }, 500);
+          } else {
+            setIsTeacherPlaying(false);
+          }
+        } else {
+          // Segment không thay đổi, update playing state ngay
+          setIsTeacherPlaying(shouldPlay);
         }
+        
         return idx;
       });
-      setHasReceivedSegmentSync(true); // Mark that we've received a live sync
+      
+      // Always mark that we've received a live sync when we have a valid index
+      setHasReceivedSegmentSync(true);
+    } else {
+      // Update playing state from teacher (khi không có segment change)
+      setIsTeacherPlaying(shouldPlay);
     }
-    
-    // Update playing state from teacher
-    setIsTeacherPlaying(shouldPlay);
     
     // When viewing map, ensure we're in viewing state
     if (viewState === "waiting") {
       setViewState("viewing");
-    }
-
-    // Refresh latest segments from backend to ensure cameraState and routes
-    // are fully up-to-date with teacher side when segment changes
-    if (mapId) {
-      (async () => {
-        try {
-          const segs = await getSegments(mapId);
-          const sortedSegs = (Array.isArray(segs) ? segs : []).sort((a, b) => {
-            if (a.displayOrder !== b.displayOrder) {
-              return a.displayOrder - b.displayOrder;
-            }
-            // Fallback: keep original order if no createdAt field
-            return 0;
-          });
-          setSegments(sortedSegs);
-        } catch (e) {
-          console.error("[Student] Failed to refresh segments after SegmentSync:", e);
-        }
-      })();
     }
   }, [viewState, mapId]);
 

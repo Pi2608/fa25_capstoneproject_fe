@@ -22,6 +22,11 @@ type StoryMapViewerProps = {
   onPlayingChange?: (isPlaying: boolean) => void; // Callback when play/pause state changes
 };
 
+// FIX: Định nghĩa hằng số cho timing
+const SEGMENT_FLY_ANIMATION_MS = 1500; // Thời gian fly animation trong handleViewSegment
+const SEGMENT_TRANSITION_DELAY_MS = 100; // Delay trước khi gọi handleViewSegment
+const ROUTE_ANIMATION_DELAY_MS = 2000; // Tổng delay = 100 + 1500 + buffer 400ms
+
 export default function StoryMapViewer({
   mapId,
   segments,
@@ -49,6 +54,7 @@ export default function StoryMapViewer({
   const [controlledSegmentStartTime, setControlledSegmentStartTime] = useState<number>(0);
   const [isControlledPlaying, setIsControlledPlaying] = useState(false);
   const [isRouteAnimationsLoaded, setIsRouteAnimationsLoaded] = useState(false); // Track if animations are loaded
+  const [isSegmentTransitioning, setIsSegmentTransitioning] = useState(false); // Track if segment is transitioning
   const pendingPlayRef = useRef(false); // Track if we should play after loading
   const playStartTimeRef = useRef<number>(0); // Track when playback started to ignore rapid stop signals
 
@@ -306,18 +312,20 @@ export default function StoryMapViewer({
       const currentIndex = controlledIndex;
       lastViewedIndexRef.current = currentIndex;
       
+      console.log("[StoryMapViewer] Controlled mode: Flying to segment", currentIndex);
+      
       // Small delay to ensure map is fully rendered
       const timer = setTimeout(() => {
         if (mapInstance && mapEl.current && segmentsRef.current[currentIndex] && handleViewSegmentRef.current) {
           // Use smooth Fly animation matching EditMapPage behavior
           handleViewSegmentRef.current(segmentsRef.current[currentIndex], {
             cameraAnimationType: 'Fly',
-            cameraAnimationDurationMs: 1500,
+            cameraAnimationDurationMs: SEGMENT_FLY_ANIMATION_MS,
             transitionType: 'Ease',
             durationMs: 800,
           });
         }
-      }, 100);
+      }, SEGMENT_TRANSITION_DELAY_MS);
       
       return () => clearTimeout(timer);
     }
@@ -349,7 +357,6 @@ export default function StoryMapViewer({
       // Re-render segment with updated data (skip camera to avoid jumping)
       const timer = setTimeout(() => {
         if (mapInstance && mapEl.current && segmentsRef.current[controlledIndex] && handleViewSegmentRef.current) {
-          console.log("[StoryMapViewer] Controlled mode: segments data updated, re-rendering segment", controlledIndex);
           handleViewSegmentRef.current(segmentsRef.current[controlledIndex], {
             skipCameraState: true,
             transitionType: 'Ease',
@@ -363,37 +370,36 @@ export default function StoryMapViewer({
   }, [segments, controlledIndex, isMapReady, isControlledMode, mapInstance]);
 
   // ========== CONTROLLED MODE: Load route animations when segment changes ==========
-  useEffect(() => {
-    console.log("[StoryMapViewer] Route animations effect - isControlledMode:", isControlledMode, 
-      "controlledIndex:", controlledIndex, 
-      "segments:", segmentsRef.current.length);
-    
+  useEffect(() => {    
     if (!isControlledMode) {
-      console.log("[StoryMapViewer] Skipping - not in controlled mode");
       return;
     }
     if (controlledIndex === undefined || controlledIndex < 0) {
-      console.log("[StoryMapViewer] Skipping - invalid controlledIndex");
+      setControlledRouteAnimations([]); // Clear khi invalid
       return;
     }
     if (!segmentsRef.current[controlledIndex]) {
-      console.log("[StoryMapViewer] Skipping - segment not found at index", controlledIndex);
+      setControlledRouteAnimations([]); // Clear khi không tìm thấy
       return;
     }
 
     const currentSegment = segmentsRef.current[controlledIndex];
+    
     console.log("[StoryMapViewer] Loading route animations for segment:", currentSegment.segmentId);
     
-    // Reset loading state
+    // ============================================================
+    // CRITICAL FIX: Clear route animations NGAY LẬP TỨC khi segment thay đổi
+    // Điều này ngăn RouteAnimation cũ apply followCameraZoom
+    // ============================================================
+    setControlledRouteAnimations([]); // Clear ngay!
     setIsRouteAnimationsLoaded(false);
+    setIsSegmentTransitioning(true); // Đánh dấu đang transition
     
     let cancelled = false;
 
     (async () => {
       try {
-        console.log("[StoryMapViewer] Calling getRouteAnimationsBySegment API...");
         const animations = await getRouteAnimationsBySegment(mapId, currentSegment.segmentId);
-        console.log("[StoryMapViewer] API returned:", animations?.length || 0, "route animations");
         
         if (!cancelled) {
           const sortedAnimations = (animations || []).sort((a, b) => {
@@ -405,30 +411,45 @@ export default function StoryMapViewer({
             }
             return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
           });
-          console.log("[StoryMapViewer] Controlled mode: loaded", sortedAnimations.length, "route animations");
-          setControlledRouteAnimations(sortedAnimations);
-          setIsRouteAnimationsLoaded(true);
           
-          // If we have a pending play request, start playing now
-          if (pendingPlayRef.current) {
-            console.log("[StoryMapViewer] Starting pending playback after animations loaded");
-            pendingPlayRef.current = false;
-            setIsControlledPlaying(true);
-            setControlledSegmentStartTime(Date.now());
-            playStartTimeRef.current = Date.now(); // Track start time
-          }
+          console.log("[StoryMapViewer] Loaded", sortedAnimations.length, "route animations, waiting for segment fly animation...");
+
+          // ============================================================
+          // FIX: Tăng delay lên 2000ms để đảm bảo fly animation của segment
+          // đã hoàn thành trước khi render route animations
+          // Timing: 100ms (delay) + 1500ms (fly) + 400ms (buffer) = 2000ms
+          // ============================================================
+          setTimeout(() => {
+            if (cancelled) return;
+            
+            console.log("[StoryMapViewer] Segment fly animation complete, setting route animations");
+            setControlledRouteAnimations(sortedAnimations);
+            setIsRouteAnimationsLoaded(true);
+            setIsSegmentTransitioning(false); // Kết thúc transition
+            
+            // Check pending play
+            if (pendingPlayRef.current) {
+              console.log("[StoryMapViewer] Starting pending playback");
+              pendingPlayRef.current = false;
+              setIsControlledPlaying(true);
+              setControlledSegmentStartTime(Date.now());
+              playStartTimeRef.current = Date.now();
+            }
+          }, ROUTE_ANIMATION_DELAY_MS); // 2000ms delay để fly animation hoàn thành
         }
       } catch (e) {
         console.error("[StoryMapViewer] Failed to load route animations:", e);
         if (!cancelled) {
           setControlledRouteAnimations([]);
-          setIsRouteAnimationsLoaded(true); // Mark as loaded even on error so playback can proceed
+          setIsRouteAnimationsLoaded(true);
+          setIsSegmentTransitioning(false);
           
+          // Still try pending play
           if (pendingPlayRef.current) {
             pendingPlayRef.current = false;
             setIsControlledPlaying(true);
             setControlledSegmentStartTime(Date.now());
-            playStartTimeRef.current = Date.now(); // Track start time
+            playStartTimeRef.current = Date.now();
           }
         }
       }
@@ -461,10 +482,17 @@ export default function StoryMapViewer({
 
     // If segment changed, reset playback state first
     if (segmentChanged) {
-      console.log("[StoryMapViewer] Controlled mode: segment changed from", prevControlledIndexRef.current, "to", controlledIndex);
+      console.log("[StoryMapViewer] Segment changed, resetting playback state");
       setIsControlledPlaying(false);
       setControlledSegmentStartTime(0);
-      pendingPlayRef.current = false;
+      
+      // THÊM: Nếu teacher đang play, set pending để chờ animations load
+      if (controlledPlaying) {
+        pendingPlayRef.current = true;
+      } else {
+        pendingPlayRef.current = false;
+      }
+      
       playStartTimeRef.current = 0;
       return; // Don't process play/pause in same effect run
     }
@@ -476,10 +504,8 @@ export default function StoryMapViewer({
 
     // Handle play/pause from teacher
     if (controlledPlaying !== undefined) {
-      console.log("[StoryMapViewer] Controlled mode: controlledPlaying changed to", controlledPlaying,
-        "isRouteAnimationsLoaded =", isRouteAnimationsLoaded,
-        "isControlledPlaying =", isControlledPlaying);
-
+      console.log("[StoryMapViewer] Play state changed:", controlledPlaying, "isRouteAnimationsLoaded:", isRouteAnimationsLoaded);
+      
       if (controlledPlaying) {
         // Check if route animations are loaded
         if (isRouteAnimationsLoaded) {
@@ -490,7 +516,7 @@ export default function StoryMapViewer({
           playStartTimeRef.current = Date.now();
         } else {
           // Set pending flag - will start when animations are loaded
-          console.log("[StoryMapViewer] Animations not loaded yet, setting pending play");
+          console.log("[StoryMapViewer] Setting pending play (animations not loaded yet)");
           pendingPlayRef.current = true;
         }
       } else {
@@ -501,8 +527,6 @@ export default function StoryMapViewer({
           setIsControlledPlaying(false);
           pendingPlayRef.current = false;
           playStartTimeRef.current = 0;
-        } else {
-          console.log("[StoryMapViewer] Ignoring stop - not currently playing");
         }
         // Don't reset segmentStartTime on pause - allows resume from current position
       }
@@ -628,7 +652,6 @@ export default function StoryMapViewer({
               }
               return null;
             } catch (e) {
-              console.warn('[StoryMapViewer] Failed to parse camera state:', e);
               return null;
             }
           })()
@@ -704,7 +727,7 @@ export default function StoryMapViewer({
       )}
 
       {/* Route Animations with Sequential Playback */}
-      {activeRouteAnimations && activeRouteAnimations.length > 0 && mapInstance && (
+      {activeRouteAnimations && activeRouteAnimations.length > 0 && mapInstance && !isSegmentTransitioning && (
         <SequentialRoutePlaybackWrapper
           map={mapInstance}
           routeAnimations={activeRouteAnimations}
@@ -715,6 +738,8 @@ export default function StoryMapViewer({
           // This prevents the map from jumping to a different location after routes complete
           disableCameraStateAfter={isControlledMode}
           segmentCameraState={segmentCameraState}
+          // NEW: In controlled mode, skip initial camera state since handleViewSegment already handles it
+          skipInitialCameraState={isControlledMode}
         />
       )}
 

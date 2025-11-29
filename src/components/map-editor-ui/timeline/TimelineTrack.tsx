@@ -474,8 +474,6 @@ function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; map
   // Use routes from prop if available, otherwise load from API
   const [routeAnimations, setRouteAnimations] = useState<RouteAnimation[]>(segment.routeAnimations || []);
   const [isLoading, setIsLoading] = useState(false);
-  const [editingRoute, setEditingRoute] = useState<RouteAnimation | null>(null);
-  const [showDialog, setShowDialog] = useState(false);
 
   const loadRoutes = useCallback(async () => {
     setIsLoading(true);
@@ -527,19 +525,6 @@ function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; map
     }
   };
 
-  const handleClose = () => {
-    setShowDialog(false);
-    setEditingRoute(null);
-    // Reload routes data without reloading the page
-    loadRoutes();
-  };
-
-  const handleSave = () => {
-    setShowDialog(false);
-    setEditingRoute(null);
-    // Reload routes data without reloading the page
-    loadRoutes();
-  };
 
   if (isLoading) {
     return <FullScreenLoading message="Đang tải..." overlay={false} />;
@@ -583,8 +568,16 @@ function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; map
               className="px-3 py-2 bg-gradient-to-br from-orange-600/25 via-orange-500/15 to-orange-600/10 backdrop-blur-sm flex items-center gap-2 min-w-[120px] cursor-pointer hover:from-orange-600/35 hover:via-orange-500/25 hover:to-orange-600/20 transition-all"
               onClick={(e) => {
                 e.stopPropagation();
-                setEditingRoute(route);
-                setShowDialog(true);
+                // Dispatch event to show form in LeftSidebarToolbox
+                if (typeof window !== 'undefined') {
+                  window.dispatchEvent(new CustomEvent('editRoute', {
+                    detail: { 
+                      route,
+                      segmentId: segment.segmentId,
+                      mapId
+                    }
+                  }));
+                }
               }}
               title={`${route.fromName || "Start"} → ${route.toName || "End"} - Click to edit`}
             >
@@ -606,8 +599,16 @@ function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; map
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  setEditingRoute(route);
-                  setShowDialog(true);
+                  // Dispatch event to show form in LeftSidebarToolbox
+                  if (typeof window !== 'undefined') {
+                    window.dispatchEvent(new CustomEvent('editRoute', {
+                      detail: { 
+                        route,
+                        segmentId: segment.segmentId,
+                        mapId
+                      }
+                    }));
+                  }
                 }}
                 className="px-2.5 hover:bg-orange-500/30 text-orange-300 hover:text-white transition-all flex items-center justify-center group/btn"
                 title="Edit route"

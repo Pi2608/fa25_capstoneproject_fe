@@ -21,6 +21,8 @@ export interface RouteAnimationProps {
   onPositionUpdate?: (position: { lat: number; lng: number }, progress: number) => void; // Callback when icon position updates
   // Segment camera state for initial zoom
   segmentCameraState?: { center: [number, number]; zoom: number } | null; // Camera state from segment to apply before following
+  // NEW: Skip applying segmentCameraState initially (for controlled mode transitions)
+  skipInitialCameraState?: boolean;
 }
 
 /**
@@ -44,6 +46,7 @@ export default function RouteAnimation({
   followCameraZoom,
   onPositionUpdate,
   segmentCameraState,
+  skipInitialCameraState = false,
 }: RouteAnimationProps) {
   const markerRef = useRef<any>(null);
   const routeLineRef = useRef<any>(null);
@@ -478,7 +481,24 @@ export default function RouteAnimation({
   const cameraAnimationCompleteRef = useRef(false);
   
   useEffect(() => {
-    // ALWAYS apply segment camera state when animation starts, regardless of followCamera
+    // Skip applying camera state if skipInitialCameraState is true
+    // This is used in controlled mode to prevent camera jumping between segments
+    if (skipInitialCameraState) {
+      // Mark as applied so animation can proceed, but don't actually change camera
+      if (isPlaying && !segmentCameraAppliedRef.current) {
+        segmentCameraAppliedRef.current = true;
+        cameraAnimationCompleteRef.current = true;
+        isMapAnimatingRef.current = false;
+      }
+      if (!isPlaying) {
+        segmentCameraAppliedRef.current = false;
+        cameraAnimationCompleteRef.current = false;
+        isMapAnimatingRef.current = false;
+      }
+      return;
+    }
+
+    // Original logic - apply camera state
     if (isPlaying && segmentCameraState && map && !segmentCameraAppliedRef.current) {
       // Apply segment camera state once when animation starts
       // Wait for camera animation to complete before starting route animation
@@ -527,7 +547,7 @@ export default function RouteAnimation({
       cameraAnimationCompleteRef.current = false;
       isMapAnimatingRef.current = false;
     }
-  }, [isPlaying, segmentCameraState, map, followCamera, followCameraZoom]);
+  }, [isPlaying, segmentCameraState, map, followCamera, followCameraZoom, skipInitialCameraState]);
 
   // Animation loop
   useEffect(() => {
