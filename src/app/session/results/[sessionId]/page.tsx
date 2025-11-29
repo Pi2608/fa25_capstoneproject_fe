@@ -24,7 +24,10 @@ export default function SessionResultsPage() {
         ]);
 
         setSession(sessionData);
-        setLeaderboard(leaderboardData);
+        setLeaderboard(leaderboardData.map(entry => ({
+          ...entry,
+          rank: entry.rank ?? 0,
+        })));
       } catch (error) {
         console.error("Failed to fetch results:", error);
       } finally {

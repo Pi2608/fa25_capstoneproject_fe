@@ -38,12 +38,9 @@ import {
   attachLayerToSegment,
   updateLocation,
   createRouteAnimation,
+  updateRouteAnimation,
 } from "@/lib/api-storymap";
 
-import LocationDialog from "@/components/storymap/LocationDialog";
-import ZoneSelectionDialog from "@/components/storymap/ZoneSelectionDialog";
-import LayerAttachDialog from "@/components/storymap/LayerAttachDialog";
-import RouteAnimationDialog from "@/components/storymap/RouteAnimationDialog";
 import { Icon } from "./Icon";
 
 interface LeftSidebarToolboxProps {
@@ -135,6 +132,7 @@ export function LeftSidebarToolbox({
   const [waitingForLocation, setWaitingForLocation] = useState(false);
   const [pickedCoordinates, setPickedCoordinates] = useState<[number, number] | null>(null);
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
+  const [editingRoute, setEditingRoute] = useState<RouteAnimation | null>(null);
 
   // Track which inline form is currently showing (replaces segment list)
   const [inlineFormMode, setInlineFormMode] = useState<"list" | "location" | "zone" | "layer" | "route">("list");
@@ -178,6 +176,33 @@ export function LeftSidebarToolbox({
     window.addEventListener('editLocation', handleEditLocation);
     return () => {
       window.removeEventListener('editLocation', handleEditLocation);
+    };
+  }, [segments, activeView, onViewChange]);
+
+  // Listen for editRoute event from TimelineTrack
+  useEffect(() => {
+    const handleEditRoute = (e: Event) => {
+      const customEvent = e as CustomEvent<{ route: RouteAnimation; segmentId: string; mapId: string }>;
+      const { route, segmentId } = customEvent.detail;
+      
+      // Find the segment that contains this route
+      const segment = segments.find(s => s.segmentId === segmentId);
+      if (segment) {
+        setEditingSegment(segment);
+        setEditingRoute(route);
+        setInlineFormMode("route");
+        
+        // Switch to segments view if not already there
+        if (activeView !== "segments") {
+          onViewChange("segments");
+        }
+        setSegmentFormMode("list");
+      }
+    };
+
+    window.addEventListener('editRoute', handleEditRoute);
+    return () => {
+      window.removeEventListener('editRoute', handleEditRoute);
     };
   }, [segments, activeView, onViewChange]);
 
@@ -672,23 +697,33 @@ export function LeftSidebarToolbox({
               <RouteAnimationForm
                 mapId={mapId}
                 segmentId={editingSegment.segmentId}
+                initialRoute={editingRoute || undefined}
                 onSave={async (data: CreateRouteAnimationRequest) => {
                   try {
-                    await createRouteAnimation(mapId, editingSegment.segmentId, data);
+                    if (editingRoute && editingRoute.routeAnimationId) {
+                      // Update existing route
+                      await updateRouteAnimation(mapId, editingSegment.segmentId, editingRoute.routeAnimationId, data);
+                    } else {
+                      // Create new route
+                      await createRouteAnimation(mapId, editingSegment.segmentId, data);
+                    }
                     
-                    // Dispatch event to refresh segments and route animations
-                    window.dispatchEvent(new CustomEvent("routeAnimationCreated", {
+                    // Dispatch event to refresh segments and route animations in TimelineWorkspace / RouteTrackItems
+                    // NOTE: listeners are currently wired to 'routeAnimationChanged'
+                    window.dispatchEvent(new CustomEvent("routeAnimationChanged", {
                       detail: { segmentId: editingSegment.segmentId }
                     }));
                     
+                    setEditingRoute(null);
                     setInlineFormMode("list");
                   } catch (error) {
-                    console.error("Failed to create route animation:", error);
+                    console.error("Failed to save route animation:", error);
                     alert("Không thể lưu route animation. Vui lòng thử lại.");
                     throw error; // Re-throw to let form handle error state
                   }
                 }}
                 onCancel={() => {
+                  setEditingRoute(null);
                   setShowRouteAnimationDialog(false);
                   setInlineFormMode("list");
                 }}
@@ -2089,15 +2124,24 @@ function SegmentFormView({
   const [zoneResults, setZoneResults] = useState<Zone[]>([]);
   const [isSearchingZone, setIsSearchingZone] = useState(false);
 
-  const [cameraState, setCameraState] = useState<CameraState>(() => {
-    if (editing?.cameraState) {
-      if (typeof editing.cameraState === "string") {
-        const parsed = parseCameraState(editing.cameraState);
-        if (parsed) return parsed;
-      } else if (editing.cameraState && typeof editing.cameraState === "object") {
-        return editing.cameraState as CameraState;
+  const extractCameraState = useCallback(
+    (source?: Segment | null): CameraState | null => {
+      if (!source?.cameraState) return null;
+      if (typeof source.cameraState === "string") {
+        const parsed = parseCameraState(source.cameraState);
+        return parsed ?? null;
       }
-    }
+      if (typeof source.cameraState === "object") {
+        return source.cameraState as CameraState;
+      }
+      return null;
+    },
+    []
+  );
+
+  const [cameraState, setCameraState] = useState<CameraState>(() => {
+    const fromEditing = extractCameraState(editing);
+    if (fromEditing) return fromEditing;
     if (currentMap) {
       try {
         const current = getCurrentCameraState(currentMap);
@@ -2121,17 +2165,18 @@ function SegmentFormView({
   // Automatically capture camera state when component mounts or map changes
   // Only auto-capture if not editing an existing segment (to preserve existing camera state)
   useEffect(() => {
+    const fromEditing = extractCameraState(editing);
+    if (fromEditing) {
+      setCameraState(fromEditing);
+    }
+  }, [editing?.segmentId, editing?.cameraState, extractCameraState]);
+
+  useEffect(() => {
     if (!currentMap) return;
     if (typeof currentMap.getCenter !== "function" || typeof currentMap.getZoom !== "function") {
       return;
     }
 
-    // If editing an existing segment with camera state, don't auto-capture
-    if (editing?.cameraState) {
-      return;
-    }
-
-    // Capture initial camera state
     const captureCamera = () => {
       try {
         const captured = getCurrentCameraState(currentMap);
@@ -2143,10 +2188,10 @@ function SegmentFormView({
       }
     };
 
-    // Capture immediately
-    captureCamera();
+    if (!editing?.cameraState) {
+      captureCamera();
+    }
 
-    // Also capture when map moves/zooms
     const handleMapMove = () => {
       captureCamera();
     };

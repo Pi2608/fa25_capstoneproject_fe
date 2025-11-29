@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useMemo, memo } from "react";
 import { useSequentialRoutePlayback } from "@/hooks/useSequentialRoutePlayback";
 import RouteAnimation from "@/components/storymap/RouteAnimation";
 import type { RouteAnimation as RouteAnimationType, Location } from "@/lib/api-storymap";
@@ -11,15 +12,25 @@ interface SequentialRoutePlaybackWrapperProps {
   segmentStartTime: number;
   onLocationClick?: (location: Location) => void;
   // Camera follow options
-  enableCameraFollow?: boolean; // Whether camera should follow the moving icon
-  cameraFollowZoom?: number; // Zoom level when following
+  enableCameraFollow?: boolean;
+  cameraFollowZoom?: number;
+  // NEW: Option to disable camera state changes after route completion
+  // Useful for controlled mode (student view) to prevent map from jumping after routes complete
+  disableCameraStateAfter?: boolean;
+  // Segment camera state for initial zoom
+  segmentCameraState?: { center: [number, number]; zoom: number } | null;
+  // NEW: Skip initial camera state application (for controlled mode)
+  skipInitialCameraState?: boolean;
 }
 
 /**
  * Shared component for rendering sequential route animations
  * Used in both edit page and storymap viewer
+ * 
+ * FIXED: Added disableCameraStateAfter prop to prevent camera jumping after route completion
+ * OPTIMIZED: Memoized to prevent unnecessary re-renders
  */
-export default function SequentialRoutePlaybackWrapper({
+function SequentialRoutePlaybackWrapper({
   map,
   routeAnimations,
   isPlaying,
@@ -27,6 +38,9 @@ export default function SequentialRoutePlaybackWrapper({
   onLocationClick,
   enableCameraFollow = true,
   cameraFollowZoom,
+  disableCameraStateAfter = false,
+  segmentCameraState,
+  skipInitialCameraState = false,
 }: SequentialRoutePlaybackWrapperProps) {
   const sequentialPlayback = useSequentialRoutePlayback({
     map,
@@ -36,11 +50,12 @@ export default function SequentialRoutePlaybackWrapper({
     onLocationClick,
     enableCameraFollow,
     cameraFollowZoom,
+    disableCameraStateAfter,
   });
 
-  return (
-    <>
-      {routeAnimations.map((anim, index) => {
+  // Memoize parsed route paths to avoid re-parsing on every render
+  const parsedRoutes = useMemo(() => {
+    return routeAnimations.map((anim) => {
         try {
           const geoJson = typeof anim.routePath === "string" 
             ? JSON.parse(anim.routePath) 
@@ -50,7 +65,36 @@ export default function SequentialRoutePlaybackWrapper({
             return null;
           }
 
-          const routePath = geoJson.coordinates as [number, number][];
+        return {
+          anim,
+          routePath: geoJson.coordinates as [number, number][],
+        };
+      } catch (e) {
+        console.error("Failed to parse route path:", e);
+        return null;
+      }
+    }).filter((item): item is { anim: RouteAnimationType; routePath: [number, number][] } => item !== null);
+  }, [routeAnimations]);
+
+  // Debug logging (throttled to avoid spam)
+  const lastLogTimeRef = useRef<number>(0);
+  
+  useEffect(() => {
+    const now = Date.now();
+    if (now - lastLogTimeRef.current > 2000) { // Only log once per 2 seconds
+      console.log("[SequentialRoutePlaybackWrapper] Props:", {
+        routeAnimationsCount: routeAnimations.length,
+        isPlaying,
+        segmentStartTime,
+        mapExists: !!map,
+      });
+      lastLogTimeRef.current = now;
+    }
+  }, [routeAnimations.length, isPlaying, segmentStartTime, map]);
+
+  return (
+    <>
+      {parsedRoutes.map(({ anim, routePath }, index) => {
           const isRoutePlaying = sequentialPlayback.getRoutePlayState(index);
 
           // Use per-route settings if available, otherwise fallback to global settings
@@ -73,13 +117,41 @@ export default function SequentialRoutePlaybackWrapper({
               isPlaying={isRoutePlaying}
               followCamera={routeFollowCamera}
               followCameraZoom={routeFollowZoom}
+              segmentCameraState={segmentCameraState}
+              skipInitialCameraState={skipInitialCameraState}
             />
           );
-        } catch (e) {
-          console.error("Failed to render route animation:", e);
-          return null;
-        }
       })}
     </>
   );
 }
+
+// Memoize component to prevent unnecessary re-renders
+export default memo(SequentialRoutePlaybackWrapper, (prevProps, nextProps) => {
+  // Custom comparison function to prevent re-renders when props haven't meaningfully changed
+  return (
+    prevProps.map === nextProps.map &&
+    prevProps.isPlaying === nextProps.isPlaying &&
+    prevProps.segmentStartTime === nextProps.segmentStartTime &&
+    prevProps.enableCameraFollow === nextProps.enableCameraFollow &&
+    prevProps.cameraFollowZoom === nextProps.cameraFollowZoom &&
+    prevProps.disableCameraStateAfter === nextProps.disableCameraStateAfter &&
+    prevProps.skipInitialCameraState === nextProps.skipInitialCameraState &&
+    prevProps.routeAnimations.length === nextProps.routeAnimations.length &&
+    prevProps.routeAnimations.every((anim, i) => {
+      const nextAnim = nextProps.routeAnimations[i];
+      return (
+        anim.routeAnimationId === nextAnim?.routeAnimationId &&
+        anim.routePath === nextAnim?.routePath &&
+        anim.fromLat === nextAnim?.fromLat &&
+        anim.fromLng === nextAnim?.fromLng &&
+        anim.toLat === nextAnim?.toLat &&
+        anim.toLng === nextAnim?.toLng &&
+        anim.durationMs === nextAnim?.durationMs &&
+        anim.followCamera === nextAnim?.followCamera &&
+        anim.followCameraZoom === nextAnim?.followCameraZoom
+      );
+    }) &&
+    JSON.stringify(prevProps.segmentCameraState) === JSON.stringify(nextProps.segmentCameraState)
+  );
+});

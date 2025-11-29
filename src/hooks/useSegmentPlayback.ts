@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Segment, TimelineTransition, RouteAnimation, getRouteAnimationsBySegment } from "@/lib/api-storymap";
 import { getTimelineTransitions } from "@/lib/api-storymap";
 import {
   renderSegmentZones,
   renderSegmentLocations,
+  renderSegmentLayers,
   applyCameraState,
   autoFitBounds,
   applyLayerCrossFade,
@@ -68,19 +69,20 @@ export function useSegmentPlayback({
     return transitions.find(t => t.fromSegmentId === fromId && t.toSegmentId === toId);
   }, [transitions]);
 
-  // Load route animations for current segment
+  // Load route animations for current segment (always load, not just when playing)
+  // This ensures route lines are visible even when not playing
   useEffect(() => {
-    if (!isPlaying || segments.length === 0 || currentPlayIndex >= segments.length) {
-      // Clear route animations when not playing
-      if (!isPlaying) {
+    if (segments.length === 0 || currentPlayIndex >= segments.length) {
         setRouteAnimations([]);
         setSegmentStartTime(0);
-      }
       return;
     }
     
     const currentSegment = segments[currentPlayIndex];
-    if (!currentSegment?.segmentId) return;
+    if (!currentSegment?.segmentId) {
+      setRouteAnimations([]);
+      return;
+    }
 
     let cancelled = false;
     (async () => {
@@ -101,20 +103,24 @@ export function useSegmentPlayback({
             return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
           });
           setRouteAnimations(sortedAnimations);
-          // Reset start time when segment changes
+          // Reset start time when segment changes (only if playing)
+          if (isPlaying) {
           setSegmentStartTime(Date.now());
+          }
         }
       } catch (e) {
         console.warn("Failed to load route animations:", e);
         if (!cancelled) {
           setRouteAnimations([]);
+          if (isPlaying) {
           setSegmentStartTime(0);
+          }
         }
       }
     })();
     
     return () => { cancelled = true; };
-  }, [mapId, isPlaying, currentPlayIndex, segments]);
+  }, [mapId, currentPlayIndex, segments, isPlaying]);
 
   // ==================== VIEW SEGMENT ON MAP ====================
   // Now using shared render functions from segmentRenderer to avoid code duplication
@@ -143,6 +149,11 @@ export function useSegmentPlayback({
       const newLayers = [...zoneResult.layers];
       const allBounds = [...zoneResult.bounds];
 
+      // Render layers and map features using shared function
+      const layerResult = await renderSegmentLayers(segment, currentMap, L, renderOptions);
+      newLayers.push(...layerResult.layers);
+      allBounds.push(...layerResult.bounds);
+
       // Render locations using shared function
       const locationResult = await renderSegmentLocations(segment, currentMap, L, {
         ...renderOptions,
@@ -152,8 +163,19 @@ export function useSegmentPlayback({
       allBounds.push(...locationResult.bounds);
 
       // Apply camera state or auto-fit bounds using shared functions
+      // FIXED: Always apply camera state when segment has one, even if route animations were playing
+      // This ensures proper transition to next segment's camera state after route animations complete
       if (segment.cameraState && !opts?.skipCameraState) {
-        applyCameraState(segment, currentMap, { ...renderOptions, oldLayersCount: oldLayers.length });
+        // Add a small delay to ensure any route animations have released camera control
+        // This prevents route animation zoom from persisting after animations complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+        applyCameraState(segment, currentMap, { 
+          ...renderOptions, 
+          oldLayersCount: oldLayers.length,
+          // Force camera state application even if map is already at a zoom level
+          cameraAnimationType: renderOptions.cameraAnimationType || 'Fly',
+          cameraAnimationDurationMs: renderOptions.cameraAnimationDurationMs || 1500,
+        });
       } else if (allBounds.length > 0) {
         autoFitBounds(allBounds, currentMap, renderOptions);
       } else {
@@ -173,7 +195,62 @@ export function useSegmentPlayback({
     } catch (error) {
       console.error("❌ Failed to view segment on map:", error);
     }
-  }, [currentMap, currentSegmentLayers, setCurrentSegmentLayers]);
+  }, [currentMap, currentSegmentLayers, setCurrentSegmentLayers, onLocationClick]);
+
+  // Track last segments data hash to detect changes
+  const lastSegmentsDataRef = useRef<string>('');
+  const lastPlayIndexRef = useRef<number>(-1);
+  
+  // Re-render current segment when segments data changes (e.g., after create/delete/update)
+  // BUT NOT when segment index changes (that's handled by auto-play effect)
+  useEffect(() => {
+    // Only re-render if we have a current segment and map is ready, and not playing
+    if (!currentMap || segments.length === 0 || currentPlayIndex >= segments.length || isPlaying) {
+      // Update lastPlayIndexRef even when not re-rendering
+      if (currentPlayIndex !== lastPlayIndexRef.current) {
+        lastPlayIndexRef.current = currentPlayIndex;
+        // Reset segments data hash when index changes (to allow camera state on new segment)
+        lastSegmentsDataRef.current = '';
+      }
+      return;
+    }
+
+    const currentSegment = segments[currentPlayIndex];
+    if (!currentSegment) {
+      return;
+    }
+
+    // Check if index changed - if so, don't skip camera state (let auto-play handle it)
+    const indexChanged = currentPlayIndex !== lastPlayIndexRef.current;
+    if (indexChanged) {
+      lastPlayIndexRef.current = currentPlayIndex;
+      // Reset segments data hash when index changes
+      lastSegmentsDataRef.current = '';
+      // Don't re-render here - let auto-play effect handle segment change with camera state
+      return;
+    }
+
+    // Create a hash of current segment data to detect changes
+    const segmentsDataHash = JSON.stringify({
+      segmentId: currentSegment.segmentId,
+      zonesCount: currentSegment.zones?.length || 0,
+      layersCount: currentSegment.layers?.length || 0,
+      locationsCount: currentSegment.locations?.length || 0,
+      routeAnimationsCount: currentSegment.routeAnimations?.length || 0,
+    });
+
+    // Only re-render if data actually changed (and index didn't change)
+    if (segmentsDataHash !== lastSegmentsDataRef.current) {
+      lastSegmentsDataRef.current = segmentsDataHash;
+      
+      // Re-render current segment with updated data (skip camera state to avoid jumping)
+      handleViewSegment(currentSegment, {
+        skipCameraState: true, // Don't change camera, just update layers
+        transitionType: 'Ease',
+        durationMs: 300, // Quick update
+      });
+    }
+  }, [segments, currentMap, currentPlayIndex, isPlaying, handleViewSegment]); // Re-render when segments change
 
   // ==================== AUTO-PLAY EFFECT ====================
   useEffect(() => {
@@ -181,6 +258,7 @@ export function useSegmentPlayback({
     if (isRouteAnimationOnly) return;
     
     if (!isPlaying || segments.length === 0) return;
+    if (!currentMap) return;
 
     let timeoutId: NodeJS.Timeout;
 
@@ -217,8 +295,21 @@ export function useSegmentPlayback({
         cameraAnimationDurationMs: t.animateCamera ? t.cameraAnimationDurationMs : undefined,
       } : undefined;
       
+      if (!currentMap) {
+        console.warn("⚠️ Map not ready yet, retrying segment playback...");
+        timeoutId = setTimeout(playNextSegment, 200);
+        return;
+      }
+
       setActiveSegmentId(segment.segmentId);
-      await handleViewSegment(segment, options);
+      
+      // FIXED: Always apply camera state when advancing to a new segment
+      // This ensures camera state is applied even after route animations complete
+      await handleViewSegment(segment, {
+        ...options,
+        skipCameraState: false, // Force camera state application
+      });
+      
       onSegmentSelect?.(segment);
       
       // Check if this transition requires user action
@@ -243,13 +334,22 @@ export function useSegmentPlayback({
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, currentPlayIndex, segments.length]);
+  }, [isPlaying, currentPlayIndex, segments.length, currentMap]);
 
   // ==================== PLAYBACK CONTROLS ====================
-  const handlePlayPreview = () => {
+  const handlePlayPreview = (startIndex?: number) => {
     if (segments.length === 0) return;
-    setCurrentPlayIndex(0);
+    
+    const nextIndex =
+      typeof startIndex === "number" && startIndex >= 0 && startIndex < segments.length
+        ? startIndex
+        : 0;
+    
+    setCurrentPlayIndex(nextIndex);
     setIsPlaying(true);
+    // Set segment start time immediately when starting playback
+    // This ensures route animations can start right away
+    setSegmentStartTime(Date.now());
   };
 
   // Play route animation only (without camera state)

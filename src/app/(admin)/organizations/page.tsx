@@ -10,6 +10,7 @@ import {
   type Paged,
   type OrgStatus,
 } from "@/lib/admin-api";
+import { FullScreenLoading } from "@/components/common/FullScreenLoading";
 
 type Organization = {
   orgId: string;
@@ -236,7 +237,7 @@ export default function OrganizationsPage() {
               <tbody>
                 {loading && rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>Đang tải...</td>
+                    <td colSpan={6}><FullScreenLoading message="Đang tải..." overlay={false} /></td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>

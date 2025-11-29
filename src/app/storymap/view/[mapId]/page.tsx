@@ -54,8 +54,6 @@ export default function StoryMapViewPage() {
   const [currentIndex, setCurrentIndex] = useState(-1); // -1 = no segment selected yet
   const [isTeacherPlaying, setIsTeacherPlaying] = useState(false); // Track if teacher is playing
   const [hasReceivedSegmentSync, setHasReceivedSegmentSync] = useState(false); // Track if we've received a live sync from teacher
-  const cachedStateTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Track timeout for using cached state
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Question state
@@ -87,7 +85,6 @@ export default function StoryMapViewPage() {
       setError(
         "Không tìm thấy thông tin học viên. Vui lòng quay lại và tham gia lại bằng mã tiết học."
       );
-      setLoading(false);
     }
   }, [sessionId, participantIdFromUrl]);
 
@@ -134,7 +131,6 @@ export default function StoryMapViewPage() {
 
     (async () => {
       try {
-        setLoading(true);
         setError(null);
 
         const [detail, segs] = await Promise.all([
@@ -143,12 +139,10 @@ export default function StoryMapViewPage() {
         ]);
 
         setMapDetail(detail);
-        setSegments(segs);
+        setSegments(Array.isArray(segs) ? segs : []);
       } catch (e: any) {
         console.error("Load student view failed:", e);
         setError(e?.message || "Không tải được bản đồ.");
-      } finally {
-        setLoading(false);
       }
     })();
   }, [mapId]);
@@ -158,15 +152,10 @@ export default function StoryMapViewPage() {
   // Handle JoinedSession - sent when student joins/rejoins the session
   const handleJoinedSession = useCallback((event: JoinedSessionEvent) => {
     
-    // Clear any existing timeout
-    if (cachedStateTimeoutRef.current) {
-      clearTimeout(cachedStateTimeoutRef.current);
-      cachedStateTimeoutRef.current = null;
-    }
-    
     // Reset sync state when joining/rejoining
     setHasReceivedSegmentSync(false);
     setCurrentIndex(-1); // Reset to no segment selected
+    setIsTeacherPlaying(false);
     
     // Set view state based on session status
     const status = event.status as string;
@@ -174,7 +163,6 @@ export default function StoryMapViewPage() {
       // Session is in progress - show viewing state
       // But don't render segments until teacher sends live sync
       setViewState("viewing");
-      setIsTeacherPlaying(false);
       // Note: We don't use cached segmentState here - wait for live SegmentSync event
     } else if (status === "COMPLETED" || status === "Ended") {
       setViewState("ended");
@@ -200,29 +188,75 @@ export default function StoryMapViewPage() {
     }
   }, []);
 
+  // Track previous segment sync to avoid duplicate processing
+  const prevSegmentSyncRef = useRef<{ index: number; isPlaying: boolean; timestamp: number } | null>(null);
+  
+  // Track play start time to ignore rapid stop signals
+  const playStartTimeRef = useRef<number>(0);
+  const MIN_PLAY_DURATION_MS = 1000; // Minimum 1 second before accepting stop
+
   const handleSegmentSync = useCallback((event: SegmentSyncEvent) => {
-    const idx = event.segmentIndex;
     
-    // Clear any pending cached state timeout - we have a live sync now
-    if (cachedStateTimeoutRef.current) {
-      clearTimeout(cachedStateTimeoutRef.current);
-      cachedStateTimeoutRef.current = null;
+    const idx = event.segmentIndex;
+    const shouldPlay = typeof event.isPlaying === "boolean" ? event.isPlaying : false;
+    const now = Date.now();
+    
+    // Check if this is a duplicate event (same index and same isPlaying)
+    const prev = prevSegmentSyncRef.current;
+    if (prev && prev.index === idx && prev.isPlaying === shouldPlay) {
+      return;
     }
+    
+    // CRITICAL: Ignore rapid stop signals after play
+    // Teacher's playback hook sometimes sends stop right after play
+    if (prev && prev.isPlaying === true && shouldPlay === false) {
+      const timeSincePlay = now - prev.timestamp;
+      if (timeSincePlay < MIN_PLAY_DURATION_MS) {
+        return; // Ignore this stop
+      }
+    }
+    
+    // Update ref with timestamp
+    prevSegmentSyncRef.current = { index: idx, isPlaying: shouldPlay, timestamp: now };
     
     // Only update segment index when receiving live sync from teacher
     if (typeof idx === "number" && idx >= 0) {
-      setCurrentIndex(idx);
-      setHasReceivedSegmentSync(true); // Mark that we've received a live sync
+      // Check if segment changed
+      setCurrentIndex(prevIndex => {
+        const segmentChanged = prevIndex !== idx;
+        
+        if (segmentChanged) {
+          // When segment changes, stop playing immediately
+          setIsTeacherPlaying(false);
+          
+          // Thêm delay để StoryMapViewer có thời gian load route animations
+          if (shouldPlay) {
+            setTimeout(() => {
+              setIsTeacherPlaying(true);
+            }, 500);
+          } else {
+            setIsTeacherPlaying(false);
+          }
+        } else {
+          // Segment không thay đổi, update playing state ngay
+          setIsTeacherPlaying(shouldPlay);
+        }
+        
+        return idx;
+      });
+      
+      // Always mark that we've received a live sync when we have a valid index
+      setHasReceivedSegmentSync(true);
+    } else {
+      // Update playing state from teacher (khi không có segment change)
+      setIsTeacherPlaying(shouldPlay);
     }
-    
-    // Update playing state from teacher
-    setIsTeacherPlaying(event.isPlaying ?? false);
     
     // When viewing map, ensure we're in viewing state
     if (viewState === "waiting") {
       setViewState("viewing");
     }
-  }, [viewState]);
+  }, [viewState, mapId]);
 
   const handleQuestionBroadcast = useCallback((event: QuestionBroadcastEvent) => {
     
@@ -306,9 +340,6 @@ export default function StoryMapViewPage() {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
-      if (cachedStateTimeoutRef.current) {
-        clearTimeout(cachedStateTimeoutRef.current);
-      }
     };
   }, []);
 
@@ -351,17 +382,6 @@ export default function StoryMapViewPage() {
   };
 
   // ================== Render States ==================
-  
-  if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-zinc-950">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-400 mx-auto mb-4" />
-          <p className="text-sm text-zinc-300">Đang tải tiết học…</p>
-        </div>
-      </div>
-    );
-  }
 
   if (error) {
     return (
@@ -524,6 +544,9 @@ export default function StoryMapViewPage() {
           <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
             <span className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"} animate-pulse`} />
             <span>{isConnected ? "Đã kết nối với giáo viên" : "Đang kết nối..."}</span>
+            {isTeacherPlaying && (
+              <span className="ml-2 text-emerald-400">▶ Đang phát</span>
+            )}
           </div>
         </div>
 
@@ -693,25 +716,32 @@ export default function StoryMapViewPage() {
         </div>
       </div>
 
-      {/* MAP AREA */}
-      <div className="flex-1 min-h-0">
-        {/* Only render map when teacher has synced a segment (currentIndex >= 0) AND we've received live sync */}
-        {currentIndex >= 0 && hasReceivedSegmentSync && segments.length > 0 ? (
+      {/* MAP AREA - ALWAYS RENDER MAP, just show overlay when waiting for sync */}
+      <div className="flex-1 min-h-0 relative">
+        {/* Always render the map to avoid unmount/remount issues */}
+        {segments.length > 0 && (
           <StoryMapViewer
             mapId={mapId}
             segments={segments}
             baseMapProvider={mapDetail?.baseMapProvider}
             initialCenter={center}
             initialZoom={mapDetail?.defaultZoom || 10}
-            controlledIndex={safeCurrentIndex}
-            controlledPlaying={isTeacherPlaying}
+            controlledIndex={hasReceivedSegmentSync && currentIndex >= 0 ? safeCurrentIndex : undefined}
+            controlledPlaying={hasReceivedSegmentSync ? isTeacherPlaying : false}
             controlsEnabled={false}
           />
-        ) : (
-          <div className="h-full flex items-center justify-center bg-zinc-900">
+        )}
+        
+        {/* Overlay when waiting for teacher sync */}
+        {(!hasReceivedSegmentSync || currentIndex < 0) && (
+          <div className="absolute inset-0 z-[500] flex items-center justify-center bg-zinc-900/90 backdrop-blur-sm">
             <div className="text-center">
               <div className="text-4xl mb-4">🗺️</div>
               <p className="text-zinc-400">Chờ giáo viên điều khiển bản đồ...</p>
+              <div className="mt-4 flex items-center justify-center gap-2 text-sm text-zinc-500">
+                <span className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"} animate-pulse`} />
+                <span>{isConnected ? "Đã kết nối" : "Đang kết nối..."}</span>
+              </div>
             </div>
           </div>
         )}

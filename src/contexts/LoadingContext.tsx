@@ -28,13 +28,13 @@ const LoadingContext = createContext<LoadingContextValue | undefined>(
 export function LoadingProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<LoadingState>({
     visible: false,
-    message: "Loading...",
+    message: "Đang tải...",
   });
 
   const showLoading = useCallback((message?: string) => {
     setState({
       visible: true,
-      message: message ?? "Loading...",
+      message: message ?? "Đang tải...",
     });
   }, []);
 

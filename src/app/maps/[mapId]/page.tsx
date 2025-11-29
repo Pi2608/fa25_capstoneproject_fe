@@ -6,79 +6,37 @@ import "leaflet/dist/leaflet.css";
 import type { TileLayer, LatLngTuple, FeatureGroup } from "leaflet";
 import type L from "leaflet";
 import { debounce, rafThrottle, BatchUpdater } from "@/utils/performance";
-import type {
-  BaseKey,
-  Layer,
-  LeafletMouseEvent,
-  LeafletMapClickEvent,
-  MapWithPM,
-  PMCreateEvent,
-  LayerStyle,
-  PathLayer,
-  LocationType,
-  GeomanLayer,
-} from "@/types";
+import { type FeatureData, extractLayerStyle, applyLayerStyle, handleLayerVisibilityChange, handleFeatureVisibilityChange, getFeatureType as getFeatureTypeUtil, updateFeatureInDB, deleteFeatureFromDB, loadFeaturesToMap, loadLayerToMap, type ExtendedLayer, saveFeature,} from "@/utils/mapUtils";
+import {  getFeatureName,  getFeatureBounds,  formatCoordinates,  copyToClipboard,  findFeatureIndex,  removeFeatureFromGeoJSON} from "@/utils/zoneOperations";
+import * as mapHelpers from "@/utils/mapHelpers";
+
+import type { BaseKey, Layer, LeafletMouseEvent, LeafletMapClickEvent, MapWithPM, PMCreateEvent, LayerStyle, PathLayer, LocationType, GeomanLayer} from "@/types";
 
 interface CircleLayer extends Layer {
   setRadius(radius: number): void;
 }
+import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions, getRouteAnimationsBySegment, updateSegment, createSegment, deleteSegment, createTimelineTransition, deleteTimelineTransition, type Location } from "@/lib/api-storymap";
+import { getMapDetail, type MapDetail, updateMap, type UpdateMapRequest, type UpdateMapFeatureRequest, uploadGeoJsonToMap, updateLayerData, MapStatus, updateMapFeature, LayerDTO, getMapFeatureById, type BaseLayer} from "@/lib/api-maps";
+import { createMapLocation, deleteLocation, getMapLocations } from "@/lib/api-location";
 
-import {
-  getMapDetail,
-  type MapDetail,
-  updateMap,
-  type UpdateMapRequest,
-  type UpdateMapFeatureRequest,
-  uploadGeoJsonToMap,
-  updateLayerData,
-  MapStatus,
-  updateMapFeature,
-  LayerDTO,
-  getMapFeatureById,
-  type BaseLayer,
-} from "@/lib/api-maps";
-import {
-  type FeatureData,
-  extractLayerStyle,
-  applyLayerStyle,
-  handleLayerVisibilityChange,
-  handleFeatureVisibilityChange,
-  getFeatureType as getFeatureTypeUtil,
-  updateFeatureInDB,
-  deleteFeatureFromDB,
-  loadFeaturesToMap,
-  loadLayerToMap,
-  type ExtendedLayer,
-  saveFeature,
-} from "@/utils/mapUtils";
-import {
-  getFeatureName,
-  getFeatureBounds,
-  formatCoordinates,
-  copyToClipboard,
-  findFeatureIndex,
-  removeFeatureFromGeoJSON
-} from "@/utils/zoneOperations";
 import { MapControls } from "@/components/map";
-import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
+import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator } from "@/components/map-editor-ui";
+import PublishButton from "@/components/map-editor/PublishButton";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
-import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions, getRouteAnimationsBySegment, updateSegment, createSegment, deleteSegment, createTimelineTransition, deleteTimelineTransition } from "@/lib/api-storymap";
-import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator } from "@/components/map-editor-ui";
-import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
 import SequentialRoutePlaybackWrapper from "@/components/storymap/SequentialRoutePlaybackWrapper";
-import type { Location } from "@/lib/api-storymap";
+
+import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
 import { useMapCollaboration, type MapSelection } from "@/hooks/useMapCollaboration";
+import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
 import { useLayerStyles } from "@/hooks/useLayerStyles";
 import { useCollaborationVisualization } from "@/hooks/useCollaborationVisualization";
 import { useFeatureManagement } from "@/hooks/useFeatureManagement";
 import { usePoiMarkers } from "@/hooks/usePoiMarkers";
-
-import { useToast } from "@/contexts/ToastContext";
 import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geojson";
-import * as mapHelpers from "@/utils/mapHelpers";
-import PublishButton from "@/components/map-editor/PublishButton";
-import { createMapLocation, deleteLocation, getMapLocations } from "@/lib/api-location";
+import { SaveIcon, UploadIcon } from "lucide-react";
+import { useToast } from "@/contexts/ToastContext";
+import { FullScreenLoading } from "@/components/common/FullScreenLoading";
 
 
 const normalizeMapStatus = (status: unknown): MapStatus => {
@@ -240,9 +198,10 @@ export default function EditMapPage() {
     copyMode: "existing"
   });
 
-  const mapEl = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<MapWithPM | null>(null);
-  const baseRef = useRef<TileLayer | null>(null);
+const mapEl = useRef<HTMLDivElement | null>(null);
+const mapRef = useRef<MapWithPM | null>(null);
+const baseRef = useRef<TileLayer | null>(null);
+const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
   const sketchRef = useRef<FeatureGroup | null>(null);
   const dataLayerRefs = useRef<Map<string, L.Layer>>(new Map());
   // Icon management refs for performance optimization
@@ -365,7 +324,6 @@ export default function EditMapPage() {
   }, [visualizeOtherUserSelection, removeUserSelectionVisualization, showToast]);
 
   const handleMapDataChangedRef = useRef<(() => Promise<void>) | null>(null);
-  const mapDataChangedTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const collaborationRef = useRef<{
     updateSelection?: (selection: {
       mapId: string;
@@ -1236,6 +1194,7 @@ export default function EditMapPage() {
 
       const map = L.map(el, { zoomControl: false, minZoom: 2, maxZoom: 20 }).setView(initialCenter, initialZoom) as MapWithPM;
       mapRef.current = map;
+      setPlaybackMap(map);
       if (!alive) return;
       setIsMapReady(true);
       setCurrentZoom(initialZoom);
@@ -1345,6 +1304,7 @@ export default function EditMapPage() {
       zoomEndHandler = null;
       zoomHandler = null;
       setIsMapReady(false);
+      setPlaybackMap(null);
     };
 
   }, [detail?.id, applyBaseLayer, sp]);
@@ -1609,7 +1569,16 @@ export default function EditMapPage() {
         })
       );
 
-      setSegments(segmentsWithRoutes);
+      // Sort segments by displayOrder to ensure correct order after reorder
+      const sortedSegments = segmentsWithRoutes.sort((a, b) => {
+        if (a.displayOrder !== b.displayOrder) {
+          return a.displayOrder - b.displayOrder;
+        }
+        // Fallback to createdAt if displayOrder is the same
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+
+      setSegments(sortedSegments);
       setTransitions(transitionsData);
     } catch (error) {
       console.error("Failed to load segments/transitions:", error);
@@ -2985,9 +2954,15 @@ export default function EditMapPage() {
         showToast("success", "Segment created successfully");
       }
 
-      // Reload segments
+      // Reload segments and sort by displayOrder
       const updatedSegments = await getSegments(mapId);
-      setSegments(updatedSegments);
+      const sortedSegments = updatedSegments.sort((a, b) => {
+        if (a.displayOrder !== b.displayOrder) {
+          return a.displayOrder - b.displayOrder;
+        }
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+      setSegments(sortedSegments);
     } catch (error) {
       showToast("error", "Failed to save segment");
     }
@@ -3001,9 +2976,15 @@ export default function EditMapPage() {
       await deleteSegment(mapId, segmentId);
       showToast("success", "Segment deleted successfully");
 
-      // Reload segments
+      // Reload segments and sort by displayOrder
       const updatedSegments = await getSegments(mapId);
-      setSegments(updatedSegments);
+      const sortedSegments = updatedSegments.sort((a, b) => {
+        if (a.displayOrder !== b.displayOrder) {
+          return a.displayOrder - b.displayOrder;
+        }
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+      setSegments(sortedSegments);
     } catch (error) {
       showToast("error", "Failed to delete segment");
     }
@@ -3069,7 +3050,14 @@ export default function EditMapPage() {
 
       try {
         await reorderSegments(mapId, newOrder.map((s) => s.segmentId));
-        setSegments(newOrder);
+        // Sort newOrder by displayOrder to ensure consistency
+        const sortedNewOrder = [...newOrder].sort((a, b) => {
+          if (a.displayOrder !== b.displayOrder) {
+            return a.displayOrder - b.displayOrder;
+          }
+          return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        });
+        setSegments(sortedNewOrder);
         showToast("success", "Segments reordered successfully");
       } catch (error) {
         showToast("error", "Failed to reorder segments");
@@ -3136,41 +3124,85 @@ export default function EditMapPage() {
   }, [playback]);
 
   // Smooth playback time progression - Optimized with requestAnimationFrame
+  // Use refs to avoid dependency issues
+  const playbackRef = useRef(playback);
+  
   useEffect(() => {
-    if (!playback.isPlaying || segments.length === 0) return;
+    playbackRef.current = playback;
+  }, [playback.isPlaying, playback.currentPlayIndex]);
+
+  // Use ref to track last set time to avoid unnecessary updates
+  const lastSetTimeRef = useRef<number>(0);
+  const lastSegmentIndexRef = useRef<number>(-1);
+  
+  useEffect(() => {
+    const currentPlayback = playbackRef.current;
+    const currentSegments = segmentsRef.current;
+    
+    if (!currentPlayback.isPlaying || currentSegments.length === 0) {
+      // Reset time when not playing
+      if (!currentPlayback.isPlaying) {
+        if (lastSetTimeRef.current !== 0) {
+          setCurrentPlaybackTime(0);
+          lastSetTimeRef.current = 0;
+        }
+      }
+      return;
+    }
 
     // Calculate base time from completed segments
     let baseTime = 0;
-    for (let i = 0; i < playback.currentPlayIndex && i < segments.length; i++) {
-      baseTime += segments[i].durationMs / 1000;
+    for (let i = 0; i < currentPlayback.currentPlayIndex && i < currentSegments.length; i++) {
+      baseTime += currentSegments[i].durationMs / 1000;
     }
 
-    // Set initial time when segment changes
+    // Only set initial time when segment changes (not on every render)
+    if (lastSegmentIndexRef.current !== currentPlayback.currentPlayIndex) {
     setCurrentPlaybackTime(baseTime);
+      lastSetTimeRef.current = baseTime;
+      lastSegmentIndexRef.current = currentPlayback.currentPlayIndex;
+    }
 
     // Start smooth time progression using requestAnimationFrame for better performance
     const startTime = Date.now();
-    const currentSegmentDuration = segments[playback.currentPlayIndex]?.durationMs || 0;
+    const currentSegmentDuration = currentSegments[currentPlayback.currentPlayIndex]?.durationMs || 0;
     let animationFrameId: number | null = null;
     let lastUpdateTime = startTime;
+    let isCancelled = false;
 
     const updateTime = () => {
+      const latestPlayback = playbackRef.current;
+      if (isCancelled || !latestPlayback.isPlaying) {
+        return;
+      }
+      
       const now = Date.now();
       const elapsed = (now - startTime) / 1000;
 
       // Stop advancing if we've reached the end of current segment
       if (elapsed >= currentSegmentDuration / 1000) {
-        setCurrentPlaybackTime(baseTime + currentSegmentDuration / 1000);
+        const finalTime = baseTime + currentSegmentDuration / 1000;
+        // Only update if value actually changed
+        if (Math.abs(lastSetTimeRef.current - finalTime) > 0.01) {
+          setCurrentPlaybackTime(finalTime);
+          lastSetTimeRef.current = finalTime;
+        }
         return;
       }
 
       // Throttle state updates to ~60fps (only update every ~16ms)
+      // AND only update if value actually changed significantly
       if (now - lastUpdateTime >= 16) {
-        setCurrentPlaybackTime(baseTime + elapsed);
+        const newTime = baseTime + elapsed;
+        // Only update if value changed by at least 0.01 seconds to avoid unnecessary re-renders
+        if (Math.abs(lastSetTimeRef.current - newTime) >= 0.01) {
+          setCurrentPlaybackTime(newTime);
+          lastSetTimeRef.current = newTime;
         lastUpdateTime = now;
+        }
       }
 
-      if (playback.isPlaying) {
+      if (latestPlayback.isPlaying && !isCancelled) {
         animationFrameId = requestAnimationFrame(updateTime);
       }
     };
@@ -3178,11 +3210,12 @@ export default function EditMapPage() {
     animationFrameId = requestAnimationFrame(updateTime);
 
     return () => {
+      isCancelled = true;
       if (animationFrameId !== null) {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [playback.isPlaying, playback.currentPlayIndex, segments]);
+  }, [playback.isPlaying, playback.currentPlayIndex]);
 
   const onUpdateLayer = useCallback(async (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => {
     if (!detail || !mapRef.current) return;
@@ -3350,8 +3383,8 @@ export default function EditMapPage() {
   }, [detail, name, baseKey, showToast]);
 
 
-  if (loading) return <main className="h-screen w-screen grid place-items-center text-zinc-400">Đang tải…</main>;
-  if (err || !detail) return <main className="h-screen w-screen grid place-items-center text-red-300">{err ?? "Không tải được bản đồ"}</main>;
+  if (loading) return <FullScreenLoading message="Đang tải..." overlay={false} />;
+  if (err || !detail) return <FullScreenLoading message={err ?? "Không tải được bản đồ"} overlay={false} />;
 
   return (
     <main className="relative h-screen w-screen overflow-hidden text-white">
@@ -3469,9 +3502,7 @@ export default function EditMapPage() {
                   className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white cursor-pointer transition-all flex items-center gap-2"
                   title="Upload GeoJSON/KML/GPX file to add as layer"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
+                  <UploadIcon className="w-4 h-4" />
                   Upload
                 </label>
                 
@@ -3490,9 +3521,7 @@ export default function EditMapPage() {
                     </>
                   ) : (
                     <>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
+                      <SaveIcon className="w-4 h-4" />
                       Save
                     </>
                   )}
@@ -3596,8 +3625,16 @@ export default function EditMapPage() {
               })
             );
 
+            // Sort segments by displayOrder to ensure correct order
+            const sortedSegments = segmentsWithRoutes.sort((a, b) => {
+              if (a.displayOrder !== b.displayOrder) {
+                return a.displayOrder - b.displayOrder;
+              }
+              return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+            });
+
             // Force new array reference to ensure React re-renders
-            setSegments([...segmentsWithRoutes]);
+            setSegments([...sortedSegments]);
             setTransitions([...transitionsData]);
           } catch (error) {
             console.error("Failed to refresh segments:", error);
@@ -3613,9 +3650,33 @@ export default function EditMapPage() {
       />
 
       {/* Route Animations with Sequential Playback */}
-      {playback.routeAnimations && playback.routeAnimations.length > 0 && mapRef.current && (
+      {playback.routeAnimations && playback.routeAnimations.length > 0 && playbackMap && (() => {
+        // Get current segment for camera state
+        const currentSegment = playback.currentPlayIndex !== undefined && playback.currentPlayIndex >= 0 && playback.currentPlayIndex < segments.length
+          ? segments[playback.currentPlayIndex]
+          : null;
+        
+        // Parse segment camera state
+        const segmentCameraState = currentSegment?.cameraState 
+          ? (typeof currentSegment.cameraState === 'string' 
+              ? (() => {
+                  try {
+                    const parsed = JSON.parse(currentSegment.cameraState);
+                    return parsed?.center && Array.isArray(parsed.center) && parsed.center.length >= 2
+                      ? { center: [parsed.center[0], parsed.center[1]] as [number, number], zoom: parsed.zoom ?? 10 }
+                      : null;
+                  } catch {
+                    return null;
+                  }
+                })()
+              : (currentSegment.cameraState?.center && Array.isArray(currentSegment.cameraState.center) && currentSegment.cameraState.center.length >= 2
+                  ? { center: [currentSegment.cameraState.center[0], currentSegment.cameraState.center[1]] as [number, number], zoom: currentSegment.cameraState.zoom ?? 10 }
+                  : null))
+          : null;
+        
+        return (
         <SequentialRoutePlaybackWrapper
-          map={mapRef.current}
+          map={playbackMap}
           routeAnimations={playback.routeAnimations}
           isPlaying={playback.isPlaying}
           segmentStartTime={playback.segmentStartTime}
@@ -3625,8 +3686,10 @@ export default function EditMapPage() {
               poi: location,
             });
           }}
+            segmentCameraState={segmentCameraState}
         />
-      )}
+        );
+      })()}
 
       <ZoneContextMenu
         visible={contextMenu.visible}
