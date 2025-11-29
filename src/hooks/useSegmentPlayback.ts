@@ -163,8 +163,19 @@ export function useSegmentPlayback({
       allBounds.push(...locationResult.bounds);
 
       // Apply camera state or auto-fit bounds using shared functions
+      // FIXED: Always apply camera state when segment has one, even if route animations were playing
+      // This ensures proper transition to next segment's camera state after route animations complete
       if (segment.cameraState && !opts?.skipCameraState) {
-        applyCameraState(segment, currentMap, { ...renderOptions, oldLayersCount: oldLayers.length });
+        // Add a small delay to ensure any route animations have released camera control
+        // This prevents route animation zoom from persisting after animations complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+        applyCameraState(segment, currentMap, { 
+          ...renderOptions, 
+          oldLayersCount: oldLayers.length,
+          // Force camera state application even if map is already at a zoom level
+          cameraAnimationType: renderOptions.cameraAnimationType || 'Fly',
+          cameraAnimationDurationMs: renderOptions.cameraAnimationDurationMs || 1500,
+        });
       } else if (allBounds.length > 0) {
         autoFitBounds(allBounds, currentMap, renderOptions);
       } else {
@@ -291,7 +302,14 @@ export function useSegmentPlayback({
       }
 
       setActiveSegmentId(segment.segmentId);
-      await handleViewSegment(segment, options);
+      
+      // FIXED: Always apply camera state when advancing to a new segment
+      // This ensures camera state is applied even after route animations complete
+      await handleViewSegment(segment, {
+        ...options,
+        skipCameraState: false, // Force camera state application
+      });
+      
       onSegmentSelect?.(segment);
       
       // Check if this transition requires user action
