@@ -126,6 +126,15 @@ export async function attachMapToQuestionBank(
   );
 }
 
+export async function getMapsByQuestionBank(
+  questionBankId: string
+): Promise<Array<{ mapId: string; mapName: string }>> {
+  const res = await getJson<Array<{ mapId: string; mapName: string; assignedAt?: string }>>(
+    `/question-banks/${questionBankId}/maps`
+  );
+  return res;
+}
+
 export async function getQuestionBank(
   questionBankId: string
 ): Promise<QuestionBankDto> {
