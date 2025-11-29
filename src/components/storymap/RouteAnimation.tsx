@@ -19,6 +19,8 @@ export interface RouteAnimationProps {
   followCamera?: boolean; // Whether camera should follow the icon
   followCameraZoom?: number; // Zoom level when following (null = keep current)
   onPositionUpdate?: (position: { lat: number; lng: number }, progress: number) => void; // Callback when icon position updates
+  // Segment camera state for initial zoom
+  segmentCameraState?: { center: [number, number]; zoom: number } | null; // Camera state from segment to apply before following
 }
 
 /**
@@ -41,6 +43,7 @@ export default function RouteAnimation({
   followCamera = false,
   followCameraZoom,
   onPositionUpdate,
+  segmentCameraState,
 }: RouteAnimationProps) {
   const markerRef = useRef<any>(null);
   const routeLineRef = useRef<any>(null);
@@ -48,6 +51,11 @@ export default function RouteAnimation({
   const animationFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const [progress, setProgress] = useState(0);
+  
+  // Camera follow optimization: smooth gimbal lock on icon
+  const lastCameraUpdateRef = useRef<number>(0);
+  const cameraUpdateThrottleMs = 16; // Update camera every ~16ms (60fps for smooth following)
+  const isMapAnimatingRef = useRef<boolean>(false);
   const [L, setL] = useState<any>(null);
 
   // Dynamic import Leaflet only on client-side
@@ -282,9 +290,25 @@ export default function RouteAnimation({
     }
   };
 
-  // Initialize route lines and marker
+  // Initialize route lines and marker (only once, don't re-init on every render)
   useEffect(() => {
     if (!map || routePath.length === 0 || !L) return;
+    
+    // Skip if already initialized (to prevent re-initialization on re-render)
+    if (routeLineRef.current && visitedLineRef.current && markerRef.current) {
+      // Just update route line if path changed, but don't re-create
+      try {
+        const validRoutePath = routePath.filter(point => isValidPoint(point));
+        if (validRoutePath.length > 0 && routeLineRef.current) {
+          routeLineRef.current.setLatLngs(
+            validRoutePath.map(([lng, lat]) => [lat, lng] as [number, number])
+          );
+        }
+      } catch (e) {
+        console.warn('Failed to update route line:', e);
+      }
+      return;
+    }
     
     let fullRoute: any = null;
     let visitedRoute: any = null;
@@ -324,6 +348,8 @@ export default function RouteAnimation({
           return;
         }
         
+        // Only create if not already exists
+        if (!routeLineRef.current) {
         fullRoute = L.polyline(
           validRoutePath.map(([lng, lat]) => [lat, lng] as [number, number]),
           {
@@ -340,9 +366,11 @@ export default function RouteAnimation({
         } else {
           console.warn('Map became invalid before adding route line');
           return;
+          }
         }
 
         // Visited route line (highlighted - colored)
+        if (!visitedLineRef.current) {
         visitedRoute = L.polyline([], {
           color: visitedColor,
           weight: routeWidth + 2, // Slightly thicker
@@ -358,9 +386,11 @@ export default function RouteAnimation({
             try { fullRoute.remove(); } catch (e) {}
           }
           return;
+          }
         }
 
         // Create marker at starting position
+        if (!markerRef.current) {
         const icon = createIcon();
         if (!icon) {
           console.warn('Failed to create icon');
@@ -384,6 +414,7 @@ export default function RouteAnimation({
             try { visitedRoute.remove(); } catch (e) {}
           }
           return;
+          }
         }
       } catch (error) {
         console.error('Error initializing RouteAnimation:', error);
@@ -404,11 +435,19 @@ export default function RouteAnimation({
       // Clear timeout if component unmounts before timeout executes
       clearTimeout(timeoutId);
       
-      // Cleanup refs that might have been set (this is the safe way since
-      // local variables might not be set if timeout hasn't executed yet)
+      // Only cleanup on unmount, not on dependency changes
+      // This prevents route line from being removed when isPlaying changes
+    };
+  }, [map, routePath, fromLocation, toLocation, routeColor, visitedColor, routeWidth, iconType, iconUrl, L]);
+  
+  // Separate cleanup effect that only runs on unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup refs only on component unmount
       try {
         if (routeLineRef.current) {
           routeLineRef.current.remove();
+          routeLineRef.current = null;
         }
       } catch (error) {
         console.warn('Error removing routeLineRef:', error);
@@ -417,6 +456,7 @@ export default function RouteAnimation({
       try {
         if (visitedLineRef.current) {
           visitedLineRef.current.remove();
+          visitedLineRef.current = null;
         }
       } catch (error) {
         console.warn('Error removing visitedLineRef:', error);
@@ -425,51 +465,89 @@ export default function RouteAnimation({
       try {
         if (markerRef.current) {
           markerRef.current.remove();
+          markerRef.current = null;
         }
       } catch (error) {
         console.warn('Error removing markerRef:', error);
       }
-      
-      // Also cleanup local variables if they were set
-      try {
-        if (fullRoute) {
-          fullRoute.remove();
-        }
-      } catch (error) {
-        // Ignore errors during cleanup
-      }
-      
-      try {
-        if (visitedRoute) {
-          visitedRoute.remove();
-        }
-      } catch (error) {
-        // Ignore errors during cleanup
-      }
-      
-      try {
-        if (marker) {
-          marker.remove();
-        }
-      } catch (error) {
-        // Ignore errors during cleanup
-      }
-      
-      // Clear refs
-      routeLineRef.current = null;
-      visitedLineRef.current = null;
-      markerRef.current = null;
     };
-  }, [map, routePath, fromLocation, routeColor, visitedColor, routeWidth, iconType, iconUrl, L]);
+  }, []); // Empty dependency array - only cleanup on unmount
+
+  // Apply segment camera state when animation starts (before route animation)
+  const segmentCameraAppliedRef = useRef(false);
+  const cameraAnimationCompleteRef = useRef(false);
+  
+  useEffect(() => {
+    // ALWAYS apply segment camera state when animation starts, regardless of followCamera
+    if (isPlaying && segmentCameraState && map && !segmentCameraAppliedRef.current) {
+      // Apply segment camera state once when animation starts
+      // Wait for camera animation to complete before starting route animation
+      segmentCameraAppliedRef.current = true;
+      cameraAnimationCompleteRef.current = false;
+      
+      // Set flag to prevent camera follow during initial zoom
+      isMapAnimatingRef.current = true;
+      
+      (async () => {
+        try {
+          // segmentCameraState.center is [lng, lat] from segment (GeoJSON format)
+          // Leaflet setView needs [lat, lng] format, so we need to swap
+          const [lng, lat] = segmentCameraState.center;
+          const targetCenter: [number, number] = [lat, lng]; // Convert to [lat, lng] for Leaflet
+          const targetZoom = segmentCameraState.zoom; // Exact zoom from segment (e.g., 12)
+
+          // Apply EXACT segment camera state - center and zoom from segment
+          // This is mandatory before route animation starts, regardless of followCamera
+          map.setView(targetCenter, targetZoom, {
+            animate: true,
+            duration: 0.8, // Slightly longer for smooth transition
+            easeLinearity: 0.25,
+          });
+          
+          // Wait for camera animation to complete (duration + small buffer)
+          await new Promise((resolve) => setTimeout(resolve, 900));
+          
+          const finalCenter = map.getCenter();
+          const finalZoom = map.getZoom();
+
+          cameraAnimationCompleteRef.current = true;
+          // Allow camera follow after initial zoom completes (only if followCamera is enabled)
+          isMapAnimatingRef.current = false;
+        } catch (e) {
+          console.warn('Failed to apply segment camera state:', e);
+          // If camera animation fails, still allow route animation to proceed
+          cameraAnimationCompleteRef.current = true;
+          isMapAnimatingRef.current = false;
+        }
+      })();
+    }
+    
+    if (!isPlaying) {
+      segmentCameraAppliedRef.current = false;
+      cameraAnimationCompleteRef.current = false;
+      isMapAnimatingRef.current = false;
+    }
+  }, [isPlaying, segmentCameraState, map, followCamera, followCameraZoom]);
 
   // Animation loop
   useEffect(() => {
-    if (!isPlaying || routePath.length === 0 || !L) {
+    // Always ensure marker and route lines exist, even when not playing
+    if (routePath.length === 0 || !L) {
+      return;
+    }
+    
+    // Wait for marker to be initialized
+    if (!markerRef.current) {
+      // Marker will be initialized by the other useEffect, just return here
+      return;
+    }
+
+    if (!isPlaying) {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
-      // Reset to start position when not playing
+      // Reset to start position when not playing (but keep route lines visible)
       if (markerRef.current && isValidCoordinate(fromLocation?.lat) && isValidCoordinate(fromLocation?.lng)) {
         markerRef.current.setLatLng([fromLocation.lat, fromLocation.lng]);
       }
@@ -478,6 +556,27 @@ export default function RouteAnimation({
       }
       setProgress(0);
       startTimeRef.current = null;
+      return;
+    }
+    
+    // Wait for camera animation to complete before starting route animation
+    if (segmentCameraState && !cameraAnimationCompleteRef.current) {
+      // Check periodically if camera animation is complete, then start route animation
+      const checkCameraComplete = setInterval(() => {
+        if (cameraAnimationCompleteRef.current) {
+          clearInterval(checkCameraComplete);
+          // Camera animation complete, now start route animation
+          // The animation will start in the next render cycle
+        }
+      }, 100);
+      
+      return () => {
+        clearInterval(checkCameraComplete);
+      };
+    }
+    
+    // Only start route animation if camera animation is complete (or no camera state)
+    if (segmentCameraState && !cameraAnimationCompleteRef.current) {
       return;
     }
 
@@ -511,25 +610,43 @@ export default function RouteAnimation({
             onPositionUpdate(currentPosition, progress);
           }
           
-          // Camera follow: pan map to keep icon centered
-          if (followCamera && map) {
+          // Camera follow: gimbal lock - always keep icon centered smoothly
+          // Note: This only affects panning, zoom is ALWAYS from segment camera state
+          if (followCamera && map && !isMapAnimatingRef.current) {
+            const now = Date.now();
+            const timeSinceLastUpdate = now - lastCameraUpdateRef.current;
+            
+            // Update camera every frame for smooth gimbal lock (no threshold, no blocking)
+            if (timeSinceLastUpdate >= cameraUpdateThrottleMs) {
             try {
               const currentZoom = map.getZoom();
-              const targetZoom = followCameraZoom ?? currentZoom;
+                
+                lastCameraUpdateRef.current = now;
               
-              // Use panTo for smooth following (no animation delay)
+                // Use panTo with very short duration for smooth continuous following
+                // This creates a "gimbal lock" effect where icon stays perfectly centered
+                // Only pan to follow icon, DO NOT change zoom (zoom stays from segment camera state)
               map.panTo([currentPosition.lat, currentPosition.lng], {
                 animate: true,
-                duration: 0.1, // Very short duration for smooth following
-                easeLinearity: 1,
+                  duration: 0.15, // Short duration for responsive following
+                  easeLinearity: 0.05, // Very smooth easing
+                  noMoveStart: true, // Don't trigger moveStart event
               });
               
-              // Adjust zoom if different from target
-              if (followCameraZoom && Math.abs(currentZoom - targetZoom) > 0.5) {
-                map.setZoom(targetZoom, { animate: true });
+                // IMPORTANT: Zoom is ALWAYS from segment camera state, not from followCameraZoom
+                // Only update zoom if followCameraZoom is explicitly provided AND different
+                // Otherwise, keep the zoom that was set from segment camera state (MANDATORY)
+                if (followCameraZoom != null && Math.abs(currentZoom - followCameraZoom) > 0.5) {
+                  // If followCameraZoom is provided, use it (but segment camera state zoom takes priority initially)
+                  map.setZoom(followCameraZoom, {
+                    animate: true,
+                    duration: 0.15,
+                  });
               }
+                // If no followCameraZoom, keep the zoom from segment camera state (MANDATORY - don't change zoom)
             } catch (e) {
-              // Ignore pan errors (map might be in transition)
+                // Ignore pan errors (map might be in transition or destroyed)
+              }
             }
           }
         } else {

@@ -1569,7 +1569,16 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
         })
       );
 
-      setSegments(segmentsWithRoutes);
+      // Sort segments by displayOrder to ensure correct order after reorder
+      const sortedSegments = segmentsWithRoutes.sort((a, b) => {
+        if (a.displayOrder !== b.displayOrder) {
+          return a.displayOrder - b.displayOrder;
+        }
+        // Fallback to createdAt if displayOrder is the same
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+
+      setSegments(sortedSegments);
       setTransitions(transitionsData);
     } catch (error) {
       console.error("Failed to load segments/transitions:", error);
@@ -2945,9 +2954,15 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
         showToast("success", "Segment created successfully");
       }
 
-      // Reload segments
+      // Reload segments and sort by displayOrder
       const updatedSegments = await getSegments(mapId);
-      setSegments(updatedSegments);
+      const sortedSegments = updatedSegments.sort((a, b) => {
+        if (a.displayOrder !== b.displayOrder) {
+          return a.displayOrder - b.displayOrder;
+        }
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+      setSegments(sortedSegments);
     } catch (error) {
       showToast("error", "Failed to save segment");
     }
@@ -2961,9 +2976,15 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
       await deleteSegment(mapId, segmentId);
       showToast("success", "Segment deleted successfully");
 
-      // Reload segments
+      // Reload segments and sort by displayOrder
       const updatedSegments = await getSegments(mapId);
-      setSegments(updatedSegments);
+      const sortedSegments = updatedSegments.sort((a, b) => {
+        if (a.displayOrder !== b.displayOrder) {
+          return a.displayOrder - b.displayOrder;
+        }
+        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+      });
+      setSegments(sortedSegments);
     } catch (error) {
       showToast("error", "Failed to delete segment");
     }
@@ -3029,7 +3050,14 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
 
       try {
         await reorderSegments(mapId, newOrder.map((s) => s.segmentId));
-        setSegments(newOrder);
+        // Sort newOrder by displayOrder to ensure consistency
+        const sortedNewOrder = [...newOrder].sort((a, b) => {
+          if (a.displayOrder !== b.displayOrder) {
+            return a.displayOrder - b.displayOrder;
+          }
+          return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+        });
+        setSegments(sortedNewOrder);
         showToast("success", "Segments reordered successfully");
       } catch (error) {
         showToast("error", "Failed to reorder segments");
@@ -3096,41 +3124,85 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
   }, [playback]);
 
   // Smooth playback time progression - Optimized with requestAnimationFrame
+  // Use refs to avoid dependency issues
+  const playbackRef = useRef(playback);
+  
   useEffect(() => {
-    if (!playback.isPlaying || segments.length === 0) return;
+    playbackRef.current = playback;
+  }, [playback.isPlaying, playback.currentPlayIndex]);
+
+  // Use ref to track last set time to avoid unnecessary updates
+  const lastSetTimeRef = useRef<number>(0);
+  const lastSegmentIndexRef = useRef<number>(-1);
+  
+  useEffect(() => {
+    const currentPlayback = playbackRef.current;
+    const currentSegments = segmentsRef.current;
+    
+    if (!currentPlayback.isPlaying || currentSegments.length === 0) {
+      // Reset time when not playing
+      if (!currentPlayback.isPlaying) {
+        if (lastSetTimeRef.current !== 0) {
+          setCurrentPlaybackTime(0);
+          lastSetTimeRef.current = 0;
+        }
+      }
+      return;
+    }
 
     // Calculate base time from completed segments
     let baseTime = 0;
-    for (let i = 0; i < playback.currentPlayIndex && i < segments.length; i++) {
-      baseTime += segments[i].durationMs / 1000;
+    for (let i = 0; i < currentPlayback.currentPlayIndex && i < currentSegments.length; i++) {
+      baseTime += currentSegments[i].durationMs / 1000;
     }
 
-    // Set initial time when segment changes
+    // Only set initial time when segment changes (not on every render)
+    if (lastSegmentIndexRef.current !== currentPlayback.currentPlayIndex) {
     setCurrentPlaybackTime(baseTime);
+      lastSetTimeRef.current = baseTime;
+      lastSegmentIndexRef.current = currentPlayback.currentPlayIndex;
+    }
 
     // Start smooth time progression using requestAnimationFrame for better performance
     const startTime = Date.now();
-    const currentSegmentDuration = segments[playback.currentPlayIndex]?.durationMs || 0;
+    const currentSegmentDuration = currentSegments[currentPlayback.currentPlayIndex]?.durationMs || 0;
     let animationFrameId: number | null = null;
     let lastUpdateTime = startTime;
+    let isCancelled = false;
 
     const updateTime = () => {
+      const latestPlayback = playbackRef.current;
+      if (isCancelled || !latestPlayback.isPlaying) {
+        return;
+      }
+      
       const now = Date.now();
       const elapsed = (now - startTime) / 1000;
 
       // Stop advancing if we've reached the end of current segment
       if (elapsed >= currentSegmentDuration / 1000) {
-        setCurrentPlaybackTime(baseTime + currentSegmentDuration / 1000);
+        const finalTime = baseTime + currentSegmentDuration / 1000;
+        // Only update if value actually changed
+        if (Math.abs(lastSetTimeRef.current - finalTime) > 0.01) {
+          setCurrentPlaybackTime(finalTime);
+          lastSetTimeRef.current = finalTime;
+        }
         return;
       }
 
       // Throttle state updates to ~60fps (only update every ~16ms)
+      // AND only update if value actually changed significantly
       if (now - lastUpdateTime >= 16) {
-        setCurrentPlaybackTime(baseTime + elapsed);
+        const newTime = baseTime + elapsed;
+        // Only update if value changed by at least 0.01 seconds to avoid unnecessary re-renders
+        if (Math.abs(lastSetTimeRef.current - newTime) >= 0.01) {
+          setCurrentPlaybackTime(newTime);
+          lastSetTimeRef.current = newTime;
         lastUpdateTime = now;
+        }
       }
 
-      if (playback.isPlaying) {
+      if (latestPlayback.isPlaying && !isCancelled) {
         animationFrameId = requestAnimationFrame(updateTime);
       }
     };
@@ -3138,11 +3210,12 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
     animationFrameId = requestAnimationFrame(updateTime);
 
     return () => {
+      isCancelled = true;
       if (animationFrameId !== null) {
         cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [playback.isPlaying, playback.currentPlayIndex, segments]);
+  }, [playback.isPlaying, playback.currentPlayIndex]);
 
   const onUpdateLayer = useCallback(async (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => {
     if (!detail || !mapRef.current) return;
@@ -3552,8 +3625,16 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
               })
             );
 
+            // Sort segments by displayOrder to ensure correct order
+            const sortedSegments = segmentsWithRoutes.sort((a, b) => {
+              if (a.displayOrder !== b.displayOrder) {
+                return a.displayOrder - b.displayOrder;
+              }
+              return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+            });
+
             // Force new array reference to ensure React re-renders
-            setSegments([...segmentsWithRoutes]);
+            setSegments([...sortedSegments]);
             setTransitions([...transitionsData]);
           } catch (error) {
             console.error("Failed to refresh segments:", error);
@@ -3569,7 +3650,31 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
       />
 
       {/* Route Animations with Sequential Playback */}
-      {playback.routeAnimations && playback.routeAnimations.length > 0 && playbackMap && (
+      {playback.routeAnimations && playback.routeAnimations.length > 0 && playbackMap && (() => {
+        // Get current segment for camera state
+        const currentSegment = playback.currentPlayIndex !== undefined && playback.currentPlayIndex >= 0 && playback.currentPlayIndex < segments.length
+          ? segments[playback.currentPlayIndex]
+          : null;
+        
+        // Parse segment camera state
+        const segmentCameraState = currentSegment?.cameraState 
+          ? (typeof currentSegment.cameraState === 'string' 
+              ? (() => {
+                  try {
+                    const parsed = JSON.parse(currentSegment.cameraState);
+                    return parsed?.center && Array.isArray(parsed.center) && parsed.center.length >= 2
+                      ? { center: [parsed.center[0], parsed.center[1]] as [number, number], zoom: parsed.zoom ?? 10 }
+                      : null;
+                  } catch {
+                    return null;
+                  }
+                })()
+              : (currentSegment.cameraState?.center && Array.isArray(currentSegment.cameraState.center) && currentSegment.cameraState.center.length >= 2
+                  ? { center: [currentSegment.cameraState.center[0], currentSegment.cameraState.center[1]] as [number, number], zoom: currentSegment.cameraState.zoom ?? 10 }
+                  : null))
+          : null;
+        
+        return (
         <SequentialRoutePlaybackWrapper
           map={playbackMap}
           routeAnimations={playback.routeAnimations}
@@ -3581,8 +3686,10 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
               poi: location,
             });
           }}
+            segmentCameraState={segmentCameraState}
         />
-      )}
+        );
+      })()}
 
       <ZoneContextMenu
         visible={contextMenu.visible}

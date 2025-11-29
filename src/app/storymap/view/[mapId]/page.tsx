@@ -139,7 +139,7 @@ export default function StoryMapViewPage() {
         ]);
 
         setMapDetail(detail);
-        setSegments(segs);
+        setSegments(Array.isArray(segs) ? segs : []);
       } catch (e: any) {
         console.error("Load student view failed:", e);
         setError(e?.message || "Không tải được bản đồ.");
@@ -151,7 +151,6 @@ export default function StoryMapViewPage() {
 
   // Handle JoinedSession - sent when student joins/rejoins the session
   const handleJoinedSession = useCallback((event: JoinedSessionEvent) => {
-    console.log("[Student] JoinedSession event:", event);
     
     // Reset sync state when joining/rejoining
     setHasReceivedSegmentSync(false);
@@ -173,7 +172,6 @@ export default function StoryMapViewPage() {
   }, []);
   
   const handleSessionStatusChanged = useCallback((event: SessionStatusChangedEvent) => {
-    console.log("[Student] SessionStatusChanged event:", event);
     
     const status = event.status as string;
     if (status === "IN_PROGRESS" || status === "Running") {
@@ -198,7 +196,6 @@ export default function StoryMapViewPage() {
   const MIN_PLAY_DURATION_MS = 1000; // Minimum 1 second before accepting stop
 
   const handleSegmentSync = useCallback((event: SegmentSyncEvent) => {
-    console.log("[Student] SegmentSync event:", event);
     
     const idx = event.segmentIndex;
     const shouldPlay = typeof event.isPlaying === "boolean" ? event.isPlaying : false;
@@ -207,7 +204,6 @@ export default function StoryMapViewPage() {
     // Check if this is a duplicate event (same index and same isPlaying)
     const prev = prevSegmentSyncRef.current;
     if (prev && prev.index === idx && prev.isPlaying === shouldPlay) {
-      console.log("[Student] Ignoring duplicate SegmentSync event");
       return;
     }
     
@@ -216,7 +212,6 @@ export default function StoryMapViewPage() {
     if (prev && prev.isPlaying === true && shouldPlay === false) {
       const timeSincePlay = now - prev.timestamp;
       if (timeSincePlay < MIN_PLAY_DURATION_MS) {
-        console.log("[Student] Ignoring rapid stop signal -", timeSincePlay, "ms since play (min:", MIN_PLAY_DURATION_MS, "ms)");
         return; // Ignore this stop
       }
     }
@@ -229,7 +224,6 @@ export default function StoryMapViewPage() {
       // Check if segment changed
       setCurrentIndex(prevIndex => {
         if (prevIndex !== idx) {
-          console.log("[Student] Segment changed from", prevIndex, "to", idx);
           // When segment changes, stop playing immediately
           setIsTeacherPlaying(false);
         }
@@ -239,17 +233,35 @@ export default function StoryMapViewPage() {
     }
     
     // Update playing state from teacher
-    console.log("[Student] Setting isTeacherPlaying to", shouldPlay);
     setIsTeacherPlaying(shouldPlay);
     
     // When viewing map, ensure we're in viewing state
     if (viewState === "waiting") {
       setViewState("viewing");
     }
-  }, [viewState]);
+
+    // Refresh latest segments from backend to ensure cameraState and routes
+    // are fully up-to-date with teacher side when segment changes
+    if (mapId) {
+      (async () => {
+        try {
+          const segs = await getSegments(mapId);
+          const sortedSegs = (Array.isArray(segs) ? segs : []).sort((a, b) => {
+            if (a.displayOrder !== b.displayOrder) {
+              return a.displayOrder - b.displayOrder;
+            }
+            // Fallback: keep original order if no createdAt field
+            return 0;
+          });
+          setSegments(sortedSegs);
+        } catch (e) {
+          console.error("[Student] Failed to refresh segments after SegmentSync:", e);
+        }
+      })();
+    }
+  }, [viewState, mapId]);
 
   const handleQuestionBroadcast = useCallback((event: QuestionBroadcastEvent) => {
-    console.log("[Student] QuestionBroadcast event:", event);
     
     setCurrentQuestion(event);
     setSelectedOptionId(null);
@@ -284,7 +296,6 @@ export default function StoryMapViewPage() {
   }, []);
 
   const handleQuestionResults = useCallback((event: QuestionResultsEvent) => {
-    console.log("[Student] QuestionResults event:", event);
     
     setQuestionResults(event);
     setViewState("results");
@@ -299,7 +310,6 @@ export default function StoryMapViewPage() {
   }, []);
 
   const handleSessionEnded = useCallback((event: SessionEndedEvent) => {
-    console.log("[Student] SessionEnded event:", event);
     
     setViewState("ended");
     setLeaderboard(event.finalLeaderboard || []);

@@ -173,7 +173,7 @@ export default function StoryMapControlPage() {
         }
 
         setMapDetail(detail);
-        setSegments(segs);
+        setSegments(Array.isArray(segs) ? segs : []);
       } catch (e: any) {
         console.error("Load control page failed:", e);
         setError(e?.message || "Failed to load storymap");

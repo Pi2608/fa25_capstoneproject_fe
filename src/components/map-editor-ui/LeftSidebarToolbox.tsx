@@ -672,8 +672,9 @@ export function LeftSidebarToolbox({
                   try {
                     await createRouteAnimation(mapId, editingSegment.segmentId, data);
                     
-                    // Dispatch event to refresh segments and route animations
-                    window.dispatchEvent(new CustomEvent("routeAnimationCreated", {
+                    // Dispatch event to refresh segments and route animations in TimelineWorkspace / RouteTrackItems
+                    // NOTE: listeners are currently wired to 'routeAnimationChanged'
+                    window.dispatchEvent(new CustomEvent("routeAnimationChanged", {
                       detail: { segmentId: editingSegment.segmentId }
                     }));
                     

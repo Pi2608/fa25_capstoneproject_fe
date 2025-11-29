@@ -237,7 +237,7 @@ export function useSequentialRoutePlayback({
 
   // Sequential route playback logic (fallback when no startTimeMs is used)
   useEffect(() => {
-    if (!isPlaying || routeAnimations.length === 0 || currentRouteIndex >= routeAnimations.length) {
+    if (!isPlaying || routeAnimations.length === 0 || !segmentStartTime || segmentStartTime === 0) {
       setCurrentRoutePlaying(false);
       return;
     }
@@ -253,8 +253,34 @@ export function useSequentialRoutePlayback({
       return;
     }
 
+    // Reset to first route if index is out of bounds
+    if (currentRouteIndex >= routeAnimations.length) {
+      setCurrentRouteIndex(0);
+      return;
+    }
+
     const currentRoute = routeAnimations[currentRouteIndex];
-    if (!currentRoute) return;
+    if (!currentRoute) {
+      // Move to next route if current is invalid
+      if (currentRouteIndex < routeAnimations.length - 1) {
+        setCurrentRouteIndex((prev) => prev + 1);
+      } else {
+        allRoutesCompletedRef.current = true;
+      }
+      return;
+    }
+    
+    // Check if route has autoPlay enabled (default true if not specified)
+    const shouldAutoPlay = currentRoute.autoPlay !== false; // Default to true if not specified
+    if (!shouldAutoPlay) {
+      // If autoPlay is false, skip this route and move to next
+      if (currentRouteIndex < routeAnimations.length - 1) {
+        setCurrentRouteIndex((prev) => prev + 1);
+      } else {
+        allRoutesCompletedRef.current = true;
+      }
+      return;
+    }
 
     let cancelled = false;
 
@@ -348,7 +374,6 @@ export function useSequentialRoutePlayback({
         setCurrentRouteIndex((prev) => prev + 1);
       } else {
         // FIXED: All routes completed - just stop playing, don't reset anything else
-        console.log("[useSequentialRoutePlayback] All sequential routes completed");
         setCurrentRoutePlaying(false);
         allRoutesCompletedRef.current = true;
         // Don't trigger any camera state changes or resets here
@@ -363,12 +388,20 @@ export function useSequentialRoutePlayback({
         clearTimeout(locationPopupTimeout);
       }
     };
-  }, [isPlaying, routeAnimations, currentRouteIndex, map, onLocationClick, disableCameraStateAfter]);
+  }, [isPlaying, routeAnimations, currentRouteIndex, segmentStartTime, map, onLocationClick, disableCameraStateAfter]);
 
   // Determine which route should be playing
   const getRoutePlayState = useCallback(
     (routeIndex: number) => {
-      if (!isPlaying || routeAnimations.length === 0) return false;
+      if (!isPlaying || routeAnimations.length === 0 || routeIndex >= routeAnimations.length) {
+        return false;
+      }
+      
+      // Check if route has autoPlay enabled (default true if not specified)
+      const route = routeAnimations[routeIndex];
+      if (route && route.autoPlay === false) {
+        return false;
+      }
       
       // Check if using time-based scheduling
       const hasStartTimeMs = routeAnimations.some(r => r.startTimeMs !== undefined && r.startTimeMs !== null);
@@ -379,6 +412,12 @@ export function useSequentialRoutePlayback({
         return state?.isPlaying ?? false;
       } else {
         // Sequential: legacy behavior
+        // For the first route, start immediately when isPlaying is true
+        if (routeIndex === 0 && isPlaying && !allRoutesCompletedRef.current) {
+          // Always return true for first route when playing (will trigger playRoute in useEffect)
+          return true;
+        }
+        // For other routes, check if it's the current route and playing
         return currentRouteIndex === routeIndex && currentRoutePlaying;
       }
     },

@@ -267,7 +267,6 @@ export default function StoryMapViewer({
 
     // Only set initial view once when map first becomes ready
     try {
-      console.log("[StoryMapViewer] Setting initial map view:", initialCenter, initialZoom);
       mapRef.current.setView(initialCenter, initialZoom, { animate: false });
       initialViewSetRef.current = true;
     } catch (e) {
@@ -310,7 +309,6 @@ export default function StoryMapViewer({
       // Small delay to ensure map is fully rendered
       const timer = setTimeout(() => {
         if (mapInstance && mapEl.current && segmentsRef.current[currentIndex] && handleViewSegmentRef.current) {
-          console.log("[StoryMapViewer] Controlled mode: viewing segment", currentIndex);
           // Use smooth Fly animation matching EditMapPage behavior
           handleViewSegmentRef.current(segmentsRef.current[currentIndex], {
             cameraAnimationType: 'Fly',
@@ -324,6 +322,45 @@ export default function StoryMapViewer({
       return () => clearTimeout(timer);
     }
   }, [controlledIndex, isMapReady, isControlledMode, mapInstance]);
+  
+  // Track last segments data to detect changes (without causing re-renders)
+  const lastSegmentsDataRef = useRef<string>('');
+  
+  // Update segments data hash when segments change
+  useEffect(() => {
+    if (!isControlledMode) return;
+    
+    const currentSegment = segmentsRef.current[controlledIndex ?? -1];
+    const segmentsDataHash = currentSegment 
+      ? JSON.stringify({
+          segmentId: currentSegment.segmentId,
+          zonesCount: currentSegment.zones?.length || 0,
+          layersCount: currentSegment.layers?.length || 0,
+          locationsCount: currentSegment.locations?.length || 0,
+        })
+      : '';
+    
+    const segmentsChanged = segmentsDataHash !== lastSegmentsDataRef.current;
+    
+    if (segmentsChanged && controlledIndex !== undefined && controlledIndex >= 0 && 
+        segmentsRef.current[controlledIndex] && isMapReady && mapInstance && handleViewSegmentRef.current) {
+      lastSegmentsDataRef.current = segmentsDataHash;
+      
+      // Re-render segment with updated data (skip camera to avoid jumping)
+      const timer = setTimeout(() => {
+        if (mapInstance && mapEl.current && segmentsRef.current[controlledIndex] && handleViewSegmentRef.current) {
+          console.log("[StoryMapViewer] Controlled mode: segments data updated, re-rendering segment", controlledIndex);
+          handleViewSegmentRef.current(segmentsRef.current[controlledIndex], {
+            skipCameraState: true,
+            transitionType: 'Ease',
+            durationMs: 300,
+          });
+        }
+      }, 100);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [segments, controlledIndex, isMapReady, isControlledMode, mapInstance]);
 
   // ========== CONTROLLED MODE: Load route animations when segment changes ==========
   useEffect(() => {
@@ -472,39 +509,58 @@ export default function StoryMapViewer({
     }
   }, [controlledPlaying, controlledIndex, isControlledMode, isRouteAnimationsLoaded, isControlledPlaying]);
 
+  // Track last segments data for autonomous mode
+  const lastSegmentsDataAutonomousRef = useRef<string>('');
+
   // ========== AUTONOMOUS MODE: Sync with external control (for teacher preview) ==========
   useEffect(() => {
     // Only for autonomous mode (teacher/control page with controlsEnabled = true)
     if (isControlledMode) return;
     
+    // Create a hash of current segment data to detect changes
+    const currentSegment = segmentsRef.current[controlledIndex ?? playback.currentPlayIndex ?? -1];
+    const segmentsDataHash = currentSegment 
+      ? JSON.stringify({
+          segmentId: currentSegment.segmentId,
+          zonesCount: currentSegment.zones?.length || 0,
+          layersCount: currentSegment.layers?.length || 0,
+          locationsCount: currentSegment.locations?.length || 0,
+        })
+      : '';
+    
+    const currentIndex = controlledIndex ?? playback.currentPlayIndex;
+    const segmentsChanged = segmentsDataHash !== lastSegmentsDataAutonomousRef.current;
+    const indexChanged = lastViewedIndexRef.current !== currentIndex;
+    
     if (
-      controlledIndex !== undefined && 
-      controlledIndex >= 0 && 
+      currentIndex !== undefined && 
+      currentIndex >= 0 && 
       segmentsRef.current.length > 0 &&
-      segmentsRef.current[controlledIndex] && 
+      segmentsRef.current[currentIndex] && 
       isMapReady && 
       mapInstance &&
       handleViewSegmentRef.current &&
-      lastViewedIndexRef.current !== controlledIndex
+      (indexChanged || segmentsChanged) // Re-render if index changed OR segments data changed
     ) {
-      const currentIndex = controlledIndex;
       lastViewedIndexRef.current = currentIndex;
+      lastSegmentsDataAutonomousRef.current = segmentsDataHash;
       
       const timer = setTimeout(() => {
         if (mapInstance && mapEl.current && segmentsRef.current[currentIndex] && handleViewSegmentRef.current) {
-          // Use smooth Fly animation matching EditMapPage behavior
+          // Use smooth Fly animation only if index changed, otherwise quick update
           handleViewSegmentRef.current(segmentsRef.current[currentIndex], {
-            cameraAnimationType: 'Fly',
-            cameraAnimationDurationMs: 1500,
+            cameraAnimationType: indexChanged ? 'Fly' : 'Jump',
+            cameraAnimationDurationMs: indexChanged ? 1500 : 0,
             transitionType: 'Ease',
-            durationMs: 800,
+            durationMs: indexChanged ? 800 : 300,
+            skipCameraState: segmentsChanged && !indexChanged, // Don't change camera if only data updated
           });
         }
       }, 100);
       
       return () => clearTimeout(timer);
     }
-  }, [controlledIndex, isMapReady, isControlledMode, mapInstance]);
+  }, [controlledIndex, playback.currentPlayIndex, isMapReady, isControlledMode, mapInstance, segments, playback]); // Add segments to dependencies
 
   // ========== AUTONOMOUS MODE: Handle play/pause ==========
   useEffect(() => {
@@ -530,7 +586,62 @@ export default function StoryMapViewer({
   // ========== Determine which route animations to use ==========
   const activeRouteAnimations = isControlledMode ? controlledRouteAnimations : playback.routeAnimations;
   const activeSegmentStartTime = isControlledMode ? controlledSegmentStartTime : playback.segmentStartTime;
-  const activeIsPlaying = isControlledMode ? isControlledPlaying : playback.isPlaying;
+  // In controlled mode (student view), drive route playback directly from teacher's play state
+  const activeIsPlaying = isControlledMode ? !!controlledPlaying : playback.isPlaying;
+  
+  // DEBUG (student): log teacher play state vs actual isPlaying for routes
+  if (isControlledMode) {
+    console.log("[Student Playback] controlledPlaying vs activeIsPlaying:", {
+      controlledPlaying,
+      activeIsPlaying,
+    });
+  }
+  
+  // Get current segment for camera state
+  const currentSegment = isControlledMode 
+    ? (controlledIndex !== undefined ? segments[controlledIndex] : null)
+    : (playback.currentPlayIndex !== undefined ? segments[playback.currentPlayIndex] : null);
+  
+  // DEBUG: on student side, log followCamera & followCameraZoom from active routes
+  if (isControlledMode && activeRouteAnimations && activeRouteAnimations.length > 0) {
+    const debugRoutes = activeRouteAnimations.map((r) => ({
+      routeAnimationId: r.routeAnimationId,
+      followCamera: r.followCamera,
+      followCameraZoom: r.followCameraZoom,
+    }));
+    console.log("[Student Route] followCamera config:", debugRoutes);
+  }
+
+  // Parse segment camera state
+  const segmentCameraState = currentSegment?.cameraState 
+    ? (typeof currentSegment.cameraState === 'string' 
+        ? (() => {
+            try {
+              const parsed = JSON.parse(currentSegment.cameraState);
+              if (parsed?.center && Array.isArray(parsed.center) && parsed.center.length >= 2) {
+                // Use zoom from parsed camera state, or fallback to 10 if not provided
+                const zoom = parsed.zoom != null ? parsed.zoom : 10;
+                return { 
+                  center: [parsed.center[0], parsed.center[1]] as [number, number], 
+                  zoom 
+                };
+              }
+              return null;
+            } catch (e) {
+              console.warn('[StoryMapViewer] Failed to parse camera state:', e);
+              return null;
+            }
+          })()
+        : (currentSegment.cameraState?.center && Array.isArray(currentSegment.cameraState.center) && currentSegment.cameraState.center.length >= 2
+            ? (() => {
+                const zoom = currentSegment.cameraState.zoom != null ? currentSegment.cameraState.zoom : 10;
+                return { 
+                  center: [currentSegment.cameraState.center[0], currentSegment.cameraState.center[1]] as [number, number], 
+                  zoom 
+                };
+              })()
+            : null))
+    : null;
 
   useEffect(() => {
     if (!playback.isPlaying || segments.length === 0) {
@@ -603,6 +714,7 @@ export default function StoryMapViewer({
           // FIXED: Disable camera state changes after route completion in controlled mode
           // This prevents the map from jumping to a different location after routes complete
           disableCameraStateAfter={isControlledMode}
+          segmentCameraState={segmentCameraState}
         />
       )}
 

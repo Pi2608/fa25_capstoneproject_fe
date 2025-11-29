@@ -44,8 +44,20 @@ export function RouteAnimationForm({
 
   // Style tab
   const [lineColor, setLineColor] = useState("#FF0000");
+  const [visitedColor, setVisitedColor] = useState("#3b82f6");
   const [lineWidth, setLineWidth] = useState(3);
   const [showMarkers, setShowMarkers] = useState(true);
+  const [iconWidth, setIconWidth] = useState(32);
+  const [iconHeight, setIconHeight] = useState(32);
+  
+  // Camera follow settings
+  const [followCamera, setFollowCamera] = useState(true);
+  const [followCameraZoom, setFollowCameraZoom] = useState<number | undefined>(undefined);
+  
+  // Animation settings
+  const [autoPlay, setAutoPlay] = useState(true);
+  const [easing, setEasing] = useState<"linear" | "ease-in" | "ease-out" | "ease-in-out">("linear");
+  const [showLocationInfoOnArrival, setShowLocationInfoOnArrival] = useState(true);
 
   useEffect(() => {
     loadLocations();
@@ -231,11 +243,19 @@ export function RouteAnimationForm({
         toLocationId: toLocationId,
         routePath: finalRoutePath,
         iconType,
+        iconWidth,
+        iconHeight,
         routeColor: lineColor,
+        visitedColor,
         routeWidth: lineWidth,
         durationMs,
         startTimeMs,
+        easing,
+        autoPlay,
         isVisible: true,
+        followCamera,
+        followCameraZoom: followCameraZoom || undefined,
+        showLocationInfoOnArrival,
       };
       console.log("Submitting route animation data:", data);
       await onSave(data);
@@ -447,6 +467,74 @@ export function RouteAnimationForm({
                     placeholder="Để trống để tự động"
                     disabled={saving}
                   />
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Easing</label>
+                  <select
+                    value={easing}
+                    onChange={(e) => setEasing(e.target.value as "linear" | "ease-in" | "ease-out" | "ease-in-out")}
+                    className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    disabled={saving}
+                  >
+                    <option value="linear">Linear</option>
+                    <option value="ease-in">Ease In</option>
+                    <option value="ease-out">Ease Out</option>
+                    <option value="ease-in-out">Ease In Out</option>
+                  </select>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-800 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={autoPlay}
+                      onChange={(e) => setAutoPlay(e.target.checked)}
+                      className="w-4 h-4 rounded"
+                      disabled={saving}
+                    />
+                    <span className="text-xs text-zinc-300">Tự động phát</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showLocationInfoOnArrival}
+                      onChange={(e) => setShowLocationInfoOnArrival(e.target.checked)}
+                      className="w-4 h-4 rounded"
+                      disabled={saving}
+                    />
+                    <span className="text-xs text-zinc-300">Hiển thị thông tin location khi đến</span>
+                  </label>
+                </div>
+
+                <div className="pt-2 border-t border-zinc-800 space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={followCamera}
+                      onChange={(e) => setFollowCamera(e.target.checked)}
+                      className="w-4 h-4 rounded"
+                      disabled={saving}
+                    />
+                    <span className="text-xs text-zinc-300">Camera theo dõi icon</span>
+                  </label>
+
+                  {followCamera && (
+                    <div>
+                      <label className="block text-xs text-zinc-400 mb-1">Zoom khi theo dõi (để trống = giữ zoom hiện tại)</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="20"
+                        value={followCameraZoom || ""}
+                        onChange={(e) => setFollowCameraZoom(e.target.value ? parseFloat(e.target.value) : undefined)}
+                        className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                        placeholder="Để trống để giữ zoom hiện tại"
+                        disabled={saving}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             )}
