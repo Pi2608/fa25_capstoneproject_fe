@@ -9,10 +9,10 @@ import { Workspace } from "@/types/workspace";
 import {
     getQuestionBank,
     getQuestionsOfQuestionBank,
+    getMapsByQuestionBank,
     QuestionBankDto,
     QuestionDto,
 } from "@/lib/api-ques";
-import { getMapDetail } from "@/lib/api-maps";
 
 function safeMessage(err: unknown, fallback: string): string {
     if (err instanceof Error) return err.message;
@@ -28,7 +28,7 @@ export function useQuestionBankData(orgId: string, bankId: string) {
     const [org, setOrg] = useState<OrganizationDetailDto | null>(null);
     const [workspace, setWorkspace] = useState<Workspace | null>(null);
     const [questionBank, setQuestionBank] = useState<(QuestionBankDto & { questions: QuestionDto[] }) | null>(null);
-    const [mapName, setMapName] = useState<string | null>(null);
+    const [mapNames, setMapNames] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
 
@@ -59,17 +59,11 @@ export function useQuestionBankData(orgId: string, bankId: string) {
             setOrg(orgRes.organization);
             setWorkspace(workspaceRes);
             setQuestionBank({ ...bankRes, questions: questionsRes });
-
-            const mapId = bankRes.mapId ?? null;
-            if (mapId) {
-                try {
-                    const map = await getMapDetail(mapId);
-                    setMapName(map.name);
-                } catch {
-                    setMapName(String(mapId));
-                }
-            } else {
-                setMapName(null);
+            try {
+                const maps = await getMapsByQuestionBank(bankId);
+                setMapNames(maps.map(m => m.mapName));
+            } catch {
+                setMapNames([]);
             }
         } catch (e) {
             setErr(safeMessage(e, t("workspace_detail.request_failed")));
@@ -101,7 +95,7 @@ export function useQuestionBankData(orgId: string, bankId: string) {
         org,
         workspace,
         questionBank,
-        mapName,
+        mapNames,
         loading,
         err,
         reloadQuestionBank,

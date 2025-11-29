@@ -236,7 +236,7 @@ export function useSegmentPlayback({
       zonesCount: currentSegment.zones?.length || 0,
       layersCount: currentSegment.layers?.length || 0,
       locationsCount: currentSegment.locations?.length || 0,
-      routeAnimationsCount: currentSegment.routeAnimations?.length || 0,
+      routeAnimationsCount: routeAnimations.length || 0,
     });
 
     // Only re-render if data actually changed (and index didn't change)
@@ -250,7 +250,7 @@ export function useSegmentPlayback({
         durationMs: 300, // Quick update
       });
     }
-  }, [segments, currentMap, currentPlayIndex, isPlaying, handleViewSegment]); // Re-render when segments change
+  }, [segments, currentMap, currentPlayIndex, isPlaying, handleViewSegment, routeAnimations]); // Re-render when segments change
 
   // ==================== AUTO-PLAY EFFECT ====================
   useEffect(() => {

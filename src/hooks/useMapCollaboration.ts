@@ -258,7 +258,7 @@ export function useMapCollaboration({
     return connection;
   }, []);
 
-  const stopConnectionRef = useRef<() => Promise<void>>();
+  const stopConnectionRef = useRef<() => Promise<void>>(async () => { return; });
 
   const stopConnection = useCallback(async () => {
     isConnectingRef.current = false;

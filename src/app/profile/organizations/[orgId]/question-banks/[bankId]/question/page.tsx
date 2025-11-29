@@ -132,7 +132,7 @@ export default function QuestionBuilderPage() {
     org,
     workspace,
     questionBank,
-    mapName,
+    mapNames,
     loading,
     err,
     reloadQuestionBank,
