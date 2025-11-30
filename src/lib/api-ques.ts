@@ -604,8 +604,12 @@ export async function extendQuestionTime(
   sessionQuestionId: string,
   additionalSeconds: number
 ) {
+  const query = new URLSearchParams({
+    additionalSeconds: String(additionalSeconds),
+  }).toString();
+
   await postJson<Record<string, never>, void>(
-    `/sessions/questions/${sessionQuestionId}/extend?additionalSeconds=${additionalSeconds}`,
+    `/sessions/questions/${encodeURIComponent(sessionQuestionId)}/extend?${query}`,
     {}
   );
 }
