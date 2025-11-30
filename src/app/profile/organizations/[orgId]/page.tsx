@@ -860,24 +860,49 @@ export default function OrgDetailPage() {
           <h2 className="text-lg font-semibold">{t("org_detail.section_ws")}</h2>
           <div className="flex items-center gap-2">
             <ManageWorkspaces orgId={orgId} canManage={isAdminOrOwner} />
-
             {canAccessQuestionBanks && (
               <>
                 <button
-                  onClick={() => router.push(`/profile/organizations/${orgId}/question-banks`)}
-                  className="px-3 py-2 rounded-lg border border-emerald-400/30 bg-emerald-500/10 text-sm text-emerald-300 hover:bg-emerald-500/20 hover:shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
+                  onClick={() =>
+                    router.push(`/profile/organizations/${orgId}/question-banks`)
+                  }
+                  className="px-3 py-2 rounded-lg text-sm font-semibold
+                 border border-emerald-500 bg-emerald-500 text-white shadow-sm
+                 hover:bg-emerald-600 hover:border-emerald-600
+                 dark:border-emerald-400 dark:bg-emerald-400 dark:text-zinc-900 dark:hover:bg-emerald-300"
                 >
                   Bộ câu hỏi
                 </button>
+
                 <button
-                  onClick={() => router.push(`/profile/organizations/${orgId}/sessions/create`)}
-                  className="px-3 py-2 rounded-lg border border-sky-400/30 bg-sky-500/10 text-sm text-sky-200 hover:bg-sky-500/20 hover:shadow-[0_0_0_2px_rgba(56,189,248,0.25)]"
+                  onClick={() =>
+                    router.push(`/profile/organizations/${orgId}/sessions`)
+                  }
+                  className="px-3 py-2 rounded-lg text-sm font-semibold
+                 border border-emerald-500 bg-emerald-500 text-white shadow-sm
+                 hover:bg-emerald-600 hover:border-emerald-600
+                 dark:border-emerald-400 dark:bg-emerald-400 dark:text-zinc-900 dark:hover:bg-emerald-300"
+                >
+                  Danh sách session
+                </button>
+
+                <button
+                  onClick={() =>
+                    router.push(`/profile/organizations/${orgId}/sessions/create`)
+                  }
+                  className="px-3 py-2 rounded-lg text-sm font-semibold border"
+                  style={{
+                    backgroundColor: "#0ea5e9",
+                    color: "#111827",
+                    borderColor: "#0284c7",
+                    boxShadow: "0 8px 20px rgba(14,165,233,0.45)",
+                  }}
                 >
                   Tạo session
                 </button>
+
               </>
             )}
-
 
             {isOwner && (
               <span className="relative inline-block group">
@@ -885,13 +910,22 @@ export default function OrgDetailPage() {
                   onClick={() => setImportOpen(true)}
                   disabled={disabledImport}
                   aria-disabled={disabledImport}
-                  className={`px-3 py-2 rounded-lg text-sm transition ${disabledImport
-                    ? "border border-white/10 bg-white/5 text-zinc-300 opacity-70 cursor-not-allowed"
-                    : "border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 hover:shadow-[0_0_0_2px_rgba(16,185,129,0.25)]"
+                  className={`px-3 py-2 rounded-lg text-sm font-semibold transition ${disabledImport
+                      ? `
+        border border-emerald-200 bg-emerald-50 text-emerald-500 cursor-not-allowed
+        dark:border-emerald-400/40 dark:bg-emerald-500/10 dark:text-emerald-300
+      `
+                      : `
+        border border-emerald-500 bg-emerald-500 text-zinc-900
+        shadow-[0_8px_20px_rgba(16,185,129,0.45)]
+        hover:bg-emerald-400 hover:border-emerald-400
+        dark:border-emerald-400 dark:bg-emerald-500/15 dark:text-emerald-200 dark:shadow-none
+      `
                     }`}
                 >
                   {t("org_detail.import_students_btn")}
                 </button>
+
 
                 {disabledImport && (
                   <span

@@ -18,6 +18,30 @@ import {
 import { MapDto } from "@/lib/api-maps";
 import { Workspace } from "@/types/workspace";
 
+type HeaderMode = "light" | "dark";
+
+function useThemeMode(): HeaderMode {
+  const [mode, setMode] = useState<HeaderMode>("light");
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const html = document.documentElement;
+
+    const update = () => {
+      setMode(html.classList.contains("dark") ? "dark" : "light");
+    };
+
+    update();
+
+    const observer = new MutationObserver(update);
+    observer.observe(html, { attributes: true, attributeFilter: ["class"] });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return mode;
+}
+
 function formatDateLabel(value?: string | null) {
   if (!value) return "Chưa cập nhật";
   const date = new Date(value);
@@ -35,6 +59,8 @@ export default function OrganizationCreateSessionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const mode = useThemeMode();
+
   const presetWorkspaceId = searchParams?.get("workspaceId") ?? "";
   const presetMapId = searchParams?.get("mapId") ?? "";
 
@@ -48,7 +74,6 @@ export default function OrganizationCreateSessionPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
 
-  // Session settings
   const [sessionName, setSessionName] = useState("");
   const [description, setDescription] = useState("");
   const [sessionType, setSessionType] = useState<"live" | "practice">("live");
@@ -87,10 +112,7 @@ export default function OrganizationCreateSessionPage() {
     async (workspaceId: string, options?: { force?: boolean }) => {
       if (!workspaceId) return;
 
-      if (
-        !options?.force &&
-        loadedWorkspaceIdsRef.current.has(workspaceId)
-      ) {
+      if (!options?.force && loadedWorkspaceIdsRef.current.has(workspaceId)) {
         return;
       }
 
@@ -154,8 +176,7 @@ export default function OrganizationCreateSessionPage() {
           ? ws.find((workspace) => workspace.workspaceId === presetWorkspaceId)
           : undefined;
         const initialWorkspaceId =
-          matchedWorkspace?.workspaceId ??
-          (ws.length ? ws[0].workspaceId : "");
+          matchedWorkspace?.workspaceId ?? (ws.length ? ws[0].workspaceId : "");
 
         if (initialWorkspaceId) {
           setSelectedWorkspaceId(initialWorkspaceId);
@@ -264,7 +285,11 @@ export default function OrganizationCreateSessionPage() {
   }
 
   if (isLoading) {
-    return <div className="min-h-[60vh] px-4 text-zinc-500 animate-pulse">Đang tải...</div>;
+    return (
+      <div className="min-h-[60vh] px-4 text-zinc-500 animate-pulse">
+        Đang tải...
+      </div>
+    );
   }
 
   const mapsErrorMessage = selectedWorkspaceId
@@ -276,14 +301,23 @@ export default function OrganizationCreateSessionPage() {
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => router.push(`/profile/organizations/${orgId}`)}
-            className="rounded-lg border border-zinc-200 px-2 py-2 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-100 dark:hover:bg-white/10"
+            className="px-3 py-1.5 rounded-lg border text-sm border-zinc-300 bg-white hover:bg-zinc-50 hover:border-zinc-400 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+            style={{
+              color: mode === "dark" ? "#e5e7eb" : "#4b5563",
+            }}
           >
-            ←
+            ← Quay lại 
           </button>
-          <div>
-            <h1 className="text-2xl font-semibold sm:text-3xl">Tạo session</h1>
-          </div>
+          <h1
+            className="text-2xl font-semibold sm:text-3xl"
+            style={{
+              color: mode === "dark" ? "#f9fafb" : "#047857",
+            }}
+          >
+            Tạo session
+          </h1>
         </div>
       </div>
 
@@ -334,10 +368,11 @@ export default function OrganizationCreateSessionPage() {
                       key={workspaceId}
                       type="button"
                       onClick={() => handleSelectWorkspace(workspaceId)}
-                      className={`rounded-xl border-2 p-4 text-left transition-all ${isSelected
-                        ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
-                        : "border-zinc-100 hover:border-emerald-200 dark:border-zinc-800 dark:hover:border-emerald-800"
-                        }`}
+                      className={`rounded-xl border-2 p-4 text-left transition-all ${
+                        isSelected
+                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
+                          : "border-zinc-100 hover:border-emerald-200 dark:border-zinc-800 dark:hover:border-emerald-800"
+                      }`}
                     >
                       <div className="mb-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                         {workspace.workspaceName}
@@ -433,10 +468,11 @@ export default function OrganizationCreateSessionPage() {
                         key={map.mapId}
                         type="button"
                         onClick={() => handleSelectMap(map.mapId)}
-                        className={`rounded-xl border-2 p-4 text-left transition-all ${isSelected
-                          ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
-                          : "border-zinc-100 hover:border-sky-200 dark:border-zinc-800 dark:hover:border-sky-800"
-                          }`}
+                        className={`rounded-xl border-2 p-4 text-left transition-all ${
+                          isSelected
+                            ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
+                            : "border-zinc-100 hover:border-sky-200 dark:border-zinc-800 dark:hover:border-sky-800"
+                        }`}
                       >
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">

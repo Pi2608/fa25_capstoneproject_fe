@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
@@ -24,6 +24,30 @@ import {
 } from "@/hooks/useQuestionSets";
 import type { PinLocationPickerProps } from "@/components/question-banks/PinLocationPicker";
 import { FullScreenLoading } from "@/components/common/FullScreenLoading";
+
+type HeaderMode = "light" | "dark";
+
+function useThemeMode(): HeaderMode {
+  const [mode, setMode] = useState<HeaderMode>("light");
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const html = document.documentElement;
+
+    const update = () => {
+      setMode(html.classList.contains("dark") ? "dark" : "light");
+    };
+
+    update();
+
+    const observer = new MutationObserver(update);
+    observer.observe(html, { attributes: true, attributeFilter: ["class"] });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return mode;
+}
 
 function safeMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message;
@@ -55,7 +79,7 @@ const MAX_AUDIO_SIZE_MB = 10;
 const PinLocationPicker = dynamic<PinLocationPickerProps>(
   () =>
     import("@/components/question-banks/PinLocationPicker").then(
-      mod => mod.default
+      (mod) => mod.default
     ),
   {
     ssr: false,
@@ -88,15 +112,16 @@ function summarizeAnswer(question: QuestionDto): string {
   switch (question.questionType) {
     case "MULTIPLE_CHOICE": {
       const correct = question.options
-        ?.filter(opt => opt.isCorrect)
-        .map(opt => opt.optionText)
+        ?.filter((opt) => opt.isCorrect)
+        .map((opt) => opt.optionText)
         .filter(Boolean);
       return correct && correct.length > 0 ? correct.join(", ") : "—";
     }
     case "TRUE_FALSE": {
       const trueIsCorrect =
-        question.options?.find(opt => opt.optionText?.toLowerCase() === "true")
-          ?.isCorrect ?? true;
+        question.options?.find(
+          (opt) => opt.optionText?.toLowerCase() === "true"
+        )?.isCorrect ?? true;
       return trueIsCorrect ? "Đúng" : "Sai";
     }
     case "SHORT_ANSWER":
@@ -123,6 +148,7 @@ export default function QuestionBuilderPage() {
   const { t } = useI18n();
   const router = useRouter();
   const { showToast } = useToast();
+  const mode = useThemeMode();
 
   const params = useParams<{ orgId: string; bankId: string }>();
   const orgId = params?.orgId ?? "";
@@ -152,16 +178,21 @@ export default function QuestionBuilderPage() {
   const [deletingQuestionId, setDeletingQuestionId] = useState<string | null>(
     null
   );
-  const [uploadingImageFor, setUploadingImageFor] = useState<string | null>(null);
-  const [uploadingAudioFor, setUploadingAudioFor] = useState<string | null>(null);
+  const [uploadingImageFor, setUploadingImageFor] =
+    useState<string | null>(null);
+  const [uploadingAudioFor, setUploadingAudioFor] =
+    useState<string | null>(null);
   const [optionalOpen, setOptionalOpen] = useState<Record<string, boolean>>({});
 
   const handleQuestionTypeChange = (index: number, nextType: QuestionType) => {
-    setQuestions(prev => {
+    setQuestions((prev) => {
       const updated = [...prev];
       const current = { ...updated[index], questionType: nextType };
 
-      if (nextType === "MULTIPLE_CHOICE" && current.options.length < MIN_OPTIONS) {
+      if (
+        nextType === "MULTIPLE_CHOICE" &&
+        current.options.length < MIN_OPTIONS
+      ) {
         const missing = MIN_OPTIONS - current.options.length;
         const additions = Array.from({ length: missing }).map((_, idx) =>
           createBlankOption(current.options.length + idx + 1)
@@ -189,7 +220,7 @@ export default function QuestionBuilderPage() {
     optionIndex: number,
     changes: Partial<QuestionOptionInput>
   ) => {
-    setQuestions(prev => {
+    setQuestions((prev) => {
       const updated = [...prev];
       const q = { ...updated[questionIndex] };
       q.options = q.options.map((opt, idx) =>
@@ -200,8 +231,11 @@ export default function QuestionBuilderPage() {
     });
   };
 
-  const handleToggleOptionCorrect = (questionIndex: number, optionIndex: number) => {
-    setQuestions(prev => {
+  const handleToggleOptionCorrect = (
+    questionIndex: number,
+    optionIndex: number
+  ) => {
+    setQuestions((prev) => {
       const updated = [...prev];
       const q = { ...updated[questionIndex] };
       q.options = q.options.map((opt, idx) =>
@@ -213,7 +247,7 @@ export default function QuestionBuilderPage() {
   };
 
   const handleAddOptionRow = (questionIndex: number) => {
-    setQuestions(prev => {
+    setQuestions((prev) => {
       const updated = [...prev];
       const q = { ...updated[questionIndex] };
       const nextOrder = q.options.length + 1;
@@ -224,7 +258,7 @@ export default function QuestionBuilderPage() {
   };
 
   const handleRemoveOptionRow = (questionIndex: number, optionIndex: number) => {
-    setQuestions(prev => {
+    setQuestions((prev) => {
       const updated = [...prev];
       const q = { ...updated[questionIndex] };
       if (q.options.length <= MIN_OPTIONS) {
@@ -318,15 +352,13 @@ export default function QuestionBuilderPage() {
             isCorrect: opt.isCorrect,
             displayOrder: idx + 1,
           }))
-          .filter(opt => opt.optionText.length > 0);
+          .filter((opt) => opt.optionText.length > 0);
 
         if (preparedOptions.length < MIN_OPTIONS) {
-          throw new Error(
-            "Cần ít nhất hai đáp án cho câu hỏi trắc nghiệm."
-          );
+          throw new Error("Cần ít nhất hai đáp án cho câu hỏi trắc nghiệm.");
         }
 
-        if (!preparedOptions.some(opt => opt.isCorrect)) {
+        if (!preparedOptions.some((opt) => opt.isCorrect)) {
           throw new Error("Vui lòng chọn ít nhất một đáp án đúng.");
         }
 
@@ -435,7 +467,6 @@ export default function QuestionBuilderPage() {
         });
       }
 
-      // reload lại metadata + danh sách câu hỏi
       const reloadedQuestions = await reloadQuestionBank();
       if (reloadedQuestions) {
         setQuestions(questionsFromApi(reloadedQuestions));
@@ -443,10 +474,7 @@ export default function QuestionBuilderPage() {
 
       showToast("success", t("workspace_detail.save_success"));
     } catch (e) {
-      showToast(
-        "error",
-        safeMessage(e, t("workspace_detail.save_failed"))
-      );
+      showToast("error", safeMessage(e, t("workspace_detail.save_failed")));
     } finally {
       setSaving(false);
     }
@@ -465,10 +493,7 @@ export default function QuestionBuilderPage() {
 
       showToast("success", t("workspace_detail.delete_success"));
     } catch (e) {
-      showToast(
-        "error",
-        safeMessage(e, t("workspace_detail.delete_failed"))
-      );
+      showToast("error", safeMessage(e, t("workspace_detail.delete_failed")));
     } finally {
       setDeletingQuestionId(null);
     }
@@ -486,7 +511,7 @@ export default function QuestionBuilderPage() {
 
   if (loading)
     return (
-        <FullScreenLoading message={t("common.loading")} overlay={false} />
+      <FullScreenLoading message={t("common.loading")} overlay={false} />
     );
 
   if (err || !workspace || !org || !questionBank)
@@ -499,18 +524,27 @@ export default function QuestionBuilderPage() {
   return (
     <div className="min-w-0 relative px-4 pb-10">
       <div className="max-w-6xl mx-auto text-zinc-900 dark:text-zinc-50">
+        {/* Header */}
         <div className="flex items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-3">
             <button
               onClick={() =>
                 router.push(`/profile/organizations/${orgId}/question-banks`)
               }
-              className="p-2 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 text-sm text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-100 dark:hover:bg-white/10"
+              className="px-3 py-1.5 rounded-lg border text-sm border-zinc-300 bg-white hover:bg-zinc-50 hover:border-zinc-400 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+              style={{
+                color: mode === "dark" ? "#e5e7eb" : "#4b5563",
+              }}
             >
               ←
             </button>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-semibold text-zinc-900 dark:text-zinc-50">
+              <h1
+                className="text-2xl sm:text-3xl font-semibold"
+                style={{
+                  color: mode === "dark" ? "#f9fafb" : "#047857",
+                }}
+              >
                 Tạo câu hỏi cho bộ: {questionBank.bankName}
               </h1>
               <p className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -528,8 +562,9 @@ export default function QuestionBuilderPage() {
           </button>
         </div>
 
+        {/* 1. Thông tin bộ câu hỏi */}
         <section className="mb-8 rounded-2xl border border-zinc-200 bg-white px-4 py-5 shadow-sm dark:border-white/10 dark:bg-white/5 dark:shadow-none">
-          <h2 className="text-lg font-semibold mb-4 text-zinc-900 dark:text-zinc-50">
+          <h2 className="text-lg font-semibold mb-4 text-emerald-600 dark:text-emerald-300">
             1. Thông tin bộ câu hỏi
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -537,7 +572,7 @@ export default function QuestionBuilderPage() {
               <div className="text-xs text-zinc-600 dark:text-zinc-400">
                 Tên bộ câu hỏi
               </div>
-              <div className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+              <div className="text-base font-semibold text-emerald-600 dark:text-emerald-300">
                 {questionBank.bankName}
               </div>
               {questionBank.description && (
@@ -550,16 +585,17 @@ export default function QuestionBuilderPage() {
               <div className="text-xs text-zinc-600 dark:text-zinc-400">
                 Thuộc workspace
               </div>
-              <div className="text-sm text-zinc-900 dark:text-zinc-50">
+              <div className="text-base font-semibold text-emerald-600 dark:text-emerald-300">
                 {workspace.workspaceName}
               </div>
             </div>
           </div>
         </section>
 
+        {/* 2. Nhập nội dung câu hỏi */}
         <section className="mb-8">
           <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+            <h2 className="text-lg font-semibold text-emerald-600 dark:text-emerald-300">
               2. Nhập nội dung câu hỏi
             </h2>
           </div>
@@ -983,16 +1019,17 @@ export default function QuestionBuilderPage() {
             </div>
           </div>
         </section>
-
         <section>
-          <h2 className="text-lg font-semibold mb-3 text-zinc-900 dark:text-zinc-50">
+          {/* tiêu đề block */}
+          <h2 className="mb-3 text-lg font-semibold text-emerald-700 dark:text-emerald-300">
             3. Tổng quan bộ câu hỏi
           </h2>
 
-          <div className="rounded-xl border border-zinc-200 bg-white px-4 py-3 mb-4 shadow-sm dark:border-white/10 dark:bg-white/5 dark:shadow-none">
+          {/* thẻ info tổng quan */}
+          <div className="mb-4 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/5 dark:shadow-none">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-semibold mb-1 text-zinc-900 dark:text-zinc-50">
+                <div className="mb-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
                   {questionBank.bankName}
                 </div>
                 <div className="text-xs text-zinc-600 dark:text-zinc-400">
@@ -1010,8 +1047,9 @@ export default function QuestionBuilderPage() {
             </div>
           </div>
 
+          {/* bảng câu hỏi trong bộ */}
           <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5 dark:shadow-none">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-white/10">
+            <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 dark:border-white/10">
               <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
                 Danh sách câu hỏi trong bộ
               </h3>
@@ -1028,24 +1066,24 @@ export default function QuestionBuilderPage() {
                 <table className="min-w-full text-sm">
                   <thead>
                     <tr className="bg-zinc-50/70 text-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-200">
-                      <th className="px-4 py-2 text-left font-semibold w-16">
+                      <th className="w-16 px-4 py-2 text-left font-semibold">
                         #
                       </th>
                       <th className="px-4 py-2 text-left font-semibold">
                         Nội dung
                       </th>
-                      <th className="px-4 py-2 text-left font-semibold w-32">
+                      <th className="w-32 px-4 py-2 text-left font-semibold">
                         Loại
                       </th>
                       <th className="px-4 py-2 text-left font-semibold">
                         Đáp án
                       </th>
-                      <th className="px-4 py-2 text-right font-semibold w-32">
+                      <th className="w-32 px-4 py-2 text-right font-semibold">
                         Hành động
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="text-zinc-700 dark:text-zinc-50">
                     {questionsFromBank.map((q, idx) => (
                       <tr
                         key={q.questionId}
@@ -1054,9 +1092,13 @@ export default function QuestionBuilderPage() {
                         <td className="px-4 py-2 text-xs text-zinc-600 dark:text-zinc-400">
                           {idx + 1}
                         </td>
-                        <td className="px-4 py-2 text-zinc-800 dark:text-zinc-50">
-                          {q.questionText || q.correctAnswerText || "—"}
+
+                        <td className="px-4 py-2">
+                          <span className="text-zinc-700 dark:text-zinc-50">
+                            {q.questionText || q.correctAnswerText || "—"}
+                          </span>
                         </td>
+
                         <td className="px-4 py-2 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                           {getQuestionTypeLabel(q.questionType)}
                         </td>
@@ -1066,9 +1108,7 @@ export default function QuestionBuilderPage() {
                         <td className="px-4 py-2 text-right">
                           {q.questionId && (
                             <button
-                              onClick={() =>
-                                handleDeleteSingleQuestion(q.questionId as string)
-                              }
+                              onClick={() => handleDeleteSingleQuestion(q.questionId as string)}
                               disabled={deletingQuestionId === q.questionId}
                               className="inline-flex items-center rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-60"
                             >
@@ -1079,11 +1119,13 @@ export default function QuestionBuilderPage() {
                       </tr>
                     ))}
                   </tbody>
+
                 </table>
               </div>
             )}
           </div>
         </section>
+
       </div>
     </div>
   );

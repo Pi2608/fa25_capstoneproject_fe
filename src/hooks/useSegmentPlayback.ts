@@ -73,11 +73,11 @@ export function useSegmentPlayback({
   // This ensures route lines are visible even when not playing
   useEffect(() => {
     if (segments.length === 0 || currentPlayIndex >= segments.length) {
-        setRouteAnimations([]);
-        setSegmentStartTime(0);
+      setRouteAnimations([]);
+      setSegmentStartTime(0);
       return;
     }
-    
+
     const currentSegment = segments[currentPlayIndex];
     if (!currentSegment?.segmentId) {
       setRouteAnimations([]);
@@ -105,7 +105,7 @@ export function useSegmentPlayback({
           setRouteAnimations(sortedAnimations);
           // Reset start time when segment changes (only if playing)
           if (isPlaying) {
-          setSegmentStartTime(Date.now());
+            setSegmentStartTime(Date.now());
           }
         }
       } catch (e) {
@@ -113,12 +113,12 @@ export function useSegmentPlayback({
         if (!cancelled) {
           setRouteAnimations([]);
           if (isPlaying) {
-          setSegmentStartTime(0);
+            setSegmentStartTime(0);
           }
         }
       }
     })();
-    
+
     return () => { cancelled = true; };
   }, [mapId, currentPlayIndex, segments, isPlaying]);
 
@@ -133,7 +133,7 @@ export function useSegmentPlayback({
     try {
       const L = (await import("leaflet")).default;
       const oldLayers = [...currentSegmentLayers];
-      
+
       // Convert TransitionOptions to RenderSegmentOptions
       const renderOptions: RenderSegmentOptions = {
         transitionType: opts?.transitionType,
@@ -169,8 +169,8 @@ export function useSegmentPlayback({
         // Add a small delay to ensure any route animations have released camera control
         // This prevents route animation zoom from persisting after animations complete
         await new Promise(resolve => setTimeout(resolve, 100));
-        applyCameraState(segment, currentMap, { 
-          ...renderOptions, 
+        applyCameraState(segment, currentMap, {
+          ...renderOptions,
           oldLayersCount: oldLayers.length,
           // Force camera state application even if map is already at a zoom level
           cameraAnimationType: renderOptions.cameraAnimationType || 'Fly',
@@ -200,7 +200,7 @@ export function useSegmentPlayback({
   // Track last segments data hash to detect changes
   const lastSegmentsDataRef = useRef<string>('');
   const lastPlayIndexRef = useRef<number>(-1);
-  
+
   // Re-render current segment when segments data changes (e.g., after create/delete/update)
   // BUT NOT when segment index changes (that's handled by auto-play effect)
   useEffect(() => {
@@ -242,7 +242,7 @@ export function useSegmentPlayback({
     // Only re-render if data actually changed (and index didn't change)
     if (segmentsDataHash !== lastSegmentsDataRef.current) {
       lastSegmentsDataRef.current = segmentsDataHash;
-      
+
       // Re-render current segment with updated data (skip camera state to avoid jumping)
       handleViewSegment(currentSegment, {
         skipCameraState: true, // Don't change camera, just update layers
@@ -256,7 +256,7 @@ export function useSegmentPlayback({
   useEffect(() => {
     // Skip playback loop if only playing route animation
     if (isRouteAnimationOnly) return;
-    
+
     if (!isPlaying || segments.length === 0) return;
     if (!currentMap) return;
 
@@ -272,7 +272,7 @@ export function useSegmentPlayback({
       const segment = segments[currentPlayIndex];
       const prevSegment = currentPlayIndex > 0 ? segments[currentPlayIndex - 1] : undefined;
       const t = findTransition(prevSegment?.segmentId ?? null, segment.segmentId);
-      
+
       // Normalize case from backend (linear/ease/jump → Linear/Ease/Jump)
       const normalizeTransitionType = (str: string): "Jump" | "Ease" | "Linear" => {
         const lower = str.toLowerCase();
@@ -280,21 +280,21 @@ export function useSegmentPlayback({
         if (lower === 'ease') return 'Ease';
         return 'Linear';
       };
-      
+
       const normalizeCameraType = (str: string): "Jump" | "Ease" | "Fly" => {
         const lower = str.toLowerCase();
         if (lower === 'jump') return 'Jump';
         if (lower === 'ease') return 'Ease';
         return 'Fly';
       };
-      
+
       const options: TransitionOptions | undefined = t ? {
         transitionType: normalizeTransitionType(t.transitionType),
         durationMs: t.durationMs,
         cameraAnimationType: t.animateCamera ? normalizeCameraType(t.cameraAnimationType) : 'Jump',
         cameraAnimationDurationMs: t.animateCamera ? t.cameraAnimationDurationMs : undefined,
       } : undefined;
-      
+
       if (!currentMap) {
         console.warn("⚠️ Map not ready yet, retrying segment playback...");
         timeoutId = setTimeout(playNextSegment, 200);
@@ -302,16 +302,16 @@ export function useSegmentPlayback({
       }
 
       setActiveSegmentId(segment.segmentId);
-      
+
       // FIXED: Always apply camera state when advancing to a new segment
       // This ensures camera state is applied even after route animations complete
       await handleViewSegment(segment, {
         ...options,
         skipCameraState: false, // Force camera state application
       });
-      
+
       onSegmentSelect?.(segment);
-      
+
       // Check if this transition requires user action
       if (t && t.requireUserAction) {
         setCurrentTransition(t);
@@ -319,7 +319,7 @@ export function useSegmentPlayback({
         setIsPlaying(false); // Pause playback
         return; // Don't schedule next segment
       }
-      
+
       const duration = segment.durationMs || 5000;
       timeoutId = setTimeout(() => {
         setCurrentPlayIndex(prev => prev + 1);
@@ -327,7 +327,7 @@ export function useSegmentPlayback({
     };
 
     playNextSegment();
-    
+
     return () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
@@ -339,18 +339,33 @@ export function useSegmentPlayback({
   // ==================== PLAYBACK CONTROLS ====================
   const handlePlayPreview = (startIndex?: number) => {
     if (segments.length === 0) return;
-    
+
+    if (
+      typeof startIndex !== "number" &&
+      !isPlaying &&
+      currentPlayIndex > 0 &&
+      currentPlayIndex < segments.length
+    ) {
+      setIsPlaying(true);
+      setSegmentStartTime(Date.now());
+      return;
+    }
+
     const nextIndex =
-      typeof startIndex === "number" && startIndex >= 0 && startIndex < segments.length
+      typeof startIndex === "number" &&
+        startIndex >= 0 &&
+        startIndex < segments.length
         ? startIndex
         : 0;
-    
+
     setCurrentPlayIndex(nextIndex);
     setIsPlaying(true);
-    // Set segment start time immediately when starting playback
-    // This ensures route animations can start right away
     setSegmentStartTime(Date.now());
   };
+
+  const handlePausePreview = useCallback(() => {
+    setIsPlaying(false);
+  }, []);
 
   // Play route animation only (without camera state)
   const handlePlayRouteAnimation = useCallback(async (segmentId?: string) => {
@@ -390,7 +405,7 @@ export function useSegmentPlayback({
     setRouteAnimations([]);
     setSegmentStartTime(0);
     setIsRouteAnimationOnly(false); // Reset flag
-    
+
     // Dispatch event to notify UI components
     if (typeof window !== 'undefined' && wasRouteAnimationOnly) {
       window.dispatchEvent(new CustomEvent('routeAnimationStopped'));
@@ -399,7 +414,7 @@ export function useSegmentPlayback({
 
   const handleClearMap = () => {
     if (!currentMap) return;
-    
+
     currentSegmentLayers.forEach(layer => {
       try {
         currentMap.removeLayer(layer);
@@ -407,7 +422,7 @@ export function useSegmentPlayback({
         console.warn("Failed to remove layer:", e);
       }
     });
-    
+
     setCurrentSegmentLayers([]);
     setActiveSegmentId(null);
   };
@@ -428,6 +443,7 @@ export function useSegmentPlayback({
     segmentStartTime,
     handleViewSegment,
     handlePlayPreview,
+    handlePausePreview,
     handlePlayRouteAnimation,
     handleStopPreview,
     handleClearMap,
