@@ -9,7 +9,13 @@ import {
 } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
-import { createSession } from "@/lib/api-ques";
+import {
+  createSession,
+  getMyQuestionBanks,
+  getPublicQuestionBanks,
+  getMapsByQuestionBank,
+  type QuestionBankDto,
+} from "@/lib/api-ques";
 import { getOrganizationById } from "@/lib/api-organizations";
 import {
   getProjectsByOrganization,
@@ -17,6 +23,30 @@ import {
 } from "@/lib/api-workspaces";
 import { MapDto } from "@/lib/api-maps";
 import { Workspace } from "@/types/workspace";
+
+type HeaderMode = "light" | "dark";
+
+function useThemeMode(): HeaderMode {
+  const [mode, setMode] = useState<HeaderMode>("light");
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const html = document.documentElement;
+
+    const update = () => {
+      setMode(html.classList.contains("dark") ? "dark" : "light");
+    };
+
+    update();
+
+    const observer = new MutationObserver(update);
+    observer.observe(html, { attributes: true, attributeFilter: ["class"] });
+
+    return () => observer.disconnect();
+  }, []);
+
+  return mode;
+}
 
 function formatDateLabel(value?: string | null) {
   if (!value) return "Chưa cập nhật";
@@ -35,6 +65,8 @@ export default function OrganizationCreateSessionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const mode = useThemeMode();
+
   const presetWorkspaceId = searchParams?.get("workspaceId") ?? "";
   const presetMapId = searchParams?.get("mapId") ?? "";
 
@@ -47,8 +79,11 @@ export default function OrganizationCreateSessionPage() {
   const [selectedMapId, setSelectedMapId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+const [availableQuestionBanks, setAvailableQuestionBanks] = useState<QuestionBankDto[]>([]);
+const [questionBanksLoading, setQuestionBanksLoading] = useState(false);
+const [questionBanksError, setQuestionBanksError] = useState<string | null>(null);
+const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
 
-  // Session settings
   const [sessionName, setSessionName] = useState("");
   const [description, setDescription] = useState("");
   const [sessionType, setSessionType] = useState<"live" | "practice">("live");
@@ -87,10 +122,7 @@ export default function OrganizationCreateSessionPage() {
     async (workspaceId: string, options?: { force?: boolean }) => {
       if (!workspaceId) return;
 
-      if (
-        !options?.force &&
-        loadedWorkspaceIdsRef.current.has(workspaceId)
-      ) {
+      if (!options?.force && loadedWorkspaceIdsRef.current.has(workspaceId)) {
         return;
       }
 
@@ -154,8 +186,7 @@ export default function OrganizationCreateSessionPage() {
           ? ws.find((workspace) => workspace.workspaceId === presetWorkspaceId)
           : undefined;
         const initialWorkspaceId =
-          matchedWorkspace?.workspaceId ??
-          (ws.length ? ws[0].workspaceId : "");
+          matchedWorkspace?.workspaceId ?? (ws.length ? ws[0].workspaceId : "");
 
         if (initialWorkspaceId) {
           setSelectedWorkspaceId(initialWorkspaceId);
@@ -190,6 +221,82 @@ export default function OrganizationCreateSessionPage() {
     void fetchMapsForWorkspace(selectedWorkspaceId, { force: true });
   };
 
+    // Khi chọn storymap, load các bộ câu hỏi đã gắn với map đó
+  useEffect(() => {
+    // Nếu chưa chọn map thì reset
+    if (!selectedMapId) {
+      setAvailableQuestionBanks([]);
+      setSelectedQuestionBankId("");
+      setQuestionBanksError(null);
+      setQuestionBanksLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadQuestionBanksForMap = async () => {
+      try {
+        setQuestionBanksLoading(true);
+        setQuestionBanksError(null);
+
+        const [myBanks, publicBanks] = await Promise.all([
+          getMyQuestionBanks(),
+          getPublicQuestionBanks(),
+        ]);
+
+        const bankMap = new Map<string, QuestionBankDto>();
+        [...myBanks, ...publicBanks].forEach((bank) => {
+          if (!bankMap.has(bank.questionBankId)) {
+            bankMap.set(bank.questionBankId, bank);
+          }
+        });
+
+        const allBanks = Array.from(bankMap.values());
+
+        const banksForMap: QuestionBankDto[] = [];
+
+        await Promise.all(
+          allBanks.map(async (bank) => {
+            try {
+              const maps = await getMapsByQuestionBank(bank.questionBankId);
+              if (maps.some((m) => m.mapId === selectedMapId)) {
+                banksForMap.push(bank);
+              }
+            } catch (err) {
+              console.error(
+                "Failed to load maps for question bank",
+                bank.questionBankId,
+                err
+              );
+            }
+          })
+        );
+
+        if (cancelled) return;
+
+        setAvailableQuestionBanks(banksForMap);
+        setSelectedQuestionBankId("");
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to load question banks for map:", error);
+        setAvailableQuestionBanks([]);
+        setQuestionBanksError(
+          "Không tải được danh sách bộ câu hỏi cho storymap này"
+        );
+      } finally {
+        if (!cancelled) {
+          setQuestionBanksLoading(false);
+        }
+      }
+    };
+
+    void loadQuestionBanksForMap();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMapId]);
+
   const handleCreateSession = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -207,6 +314,7 @@ export default function OrganizationCreateSessionPage() {
     try {
       const session = await createSession({
         mapId: selectedMapId,
+        questionBankId: selectedQuestionBankId || undefined,
         sessionName:
           sessionName || `${selectedMap.mapName ?? "Storymap"} Session`,
         description,
@@ -264,7 +372,11 @@ export default function OrganizationCreateSessionPage() {
   }
 
   if (isLoading) {
-    return <div className="min-h-[60vh] px-4 text-zinc-500 animate-pulse">Đang tải...</div>;
+    return (
+      <div className="min-h-[60vh] px-4 text-zinc-500 animate-pulse">
+        Đang tải...
+      </div>
+    );
   }
 
   const mapsErrorMessage = selectedWorkspaceId
@@ -276,14 +388,23 @@ export default function OrganizationCreateSessionPage() {
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={() => router.push(`/profile/organizations/${orgId}`)}
-            className="rounded-lg border border-zinc-200 px-2 py-2 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-100 dark:hover:bg-white/10"
+            className="px-3 py-1.5 rounded-lg border text-sm border-zinc-300 bg-white hover:bg-zinc-50 hover:border-zinc-400 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+            style={{
+              color: mode === "dark" ? "#e5e7eb" : "#4b5563",
+            }}
           >
-            ←
+            ← Quay lại 
           </button>
-          <div>
-            <h1 className="text-2xl font-semibold sm:text-3xl">Tạo session</h1>
-          </div>
+          <h1
+            className="text-2xl font-semibold sm:text-3xl"
+            style={{
+              color: mode === "dark" ? "#f9fafb" : "#047857",
+            }}
+          >
+            Tạo session
+          </h1>
         </div>
       </div>
 
@@ -334,10 +455,11 @@ export default function OrganizationCreateSessionPage() {
                       key={workspaceId}
                       type="button"
                       onClick={() => handleSelectWorkspace(workspaceId)}
-                      className={`rounded-xl border-2 p-4 text-left transition-all ${isSelected
-                        ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
-                        : "border-zinc-100 hover:border-emerald-200 dark:border-zinc-800 dark:hover:border-emerald-800"
-                        }`}
+                      className={`rounded-xl border-2 p-4 text-left transition-all ${
+                        isSelected
+                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
+                          : "border-zinc-100 hover:border-emerald-200 dark:border-zinc-800 dark:hover:border-emerald-800"
+                      }`}
                     >
                       <div className="mb-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                         {workspace.workspaceName}
@@ -433,10 +555,11 @@ export default function OrganizationCreateSessionPage() {
                         key={map.mapId}
                         type="button"
                         onClick={() => handleSelectMap(map.mapId)}
-                        className={`rounded-xl border-2 p-4 text-left transition-all ${isSelected
-                          ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
-                          : "border-zinc-100 hover:border-sky-200 dark:border-zinc-800 dark:hover:border-sky-800"
-                          }`}
+                        className={`rounded-xl border-2 p-4 text-left transition-all ${
+                          isSelected
+                            ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
+                            : "border-zinc-100 hover:border-sky-200 dark:border-zinc-800 dark:hover:border-sky-800"
+                        }`}
                       >
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
@@ -462,8 +585,117 @@ export default function OrganizationCreateSessionPage() {
             </section>
           )}
 
-          {selectedMapId && selectedMap && (
+           {selectedMapId && selectedMap && (
             <>
+              {/* 2.5 Bộ câu hỏi cho session (tùy chọn) */}
+              <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <div className="mb-4 flex items-center justify-between gap-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                      Bộ câu hỏi cho session này (tùy chọn)
+                    </h2>
+                    <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                      Chỉ hiển thị những bộ câu hỏi đã được gắn với storymap này. Bạn có thể bỏ qua bước này nếu chưa cần dùng câu hỏi.
+                    </p>
+                  </div>
+                  {availableQuestionBanks.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedQuestionBankId("")}
+                      className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    >
+                      Không dùng bộ câu hỏi
+                    </button>
+                  )}
+                </div>
+
+                {questionBanksLoading ? (
+                  <div className="flex items-center justify-center py-8 text-sm text-zinc-500">
+                    <div className="mr-3 h-6 w-6 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
+                    Đang tải danh sách bộ câu hỏi...
+                  </div>
+                ) : questionBanksError ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600 dark:border-red-900/30 dark:bg-red-900/10 dark:text-red-400">
+                    {questionBanksError}
+                  </div>
+                ) : availableQuestionBanks.length === 0 ? (
+                  <div className="py-6 text-sm text-zinc-500 dark:text-zinc-400">
+                    Storymap này hiện chưa có bộ câu hỏi nào được gắn.
+                    <br />
+                    Bạn có thể tạo session không có câu hỏi, hoặc gắn bộ câu hỏi ở trang{" "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        router.push(`/profile/organizations/${orgId}/question-banks`)
+                      }
+                      className="font-medium text-emerald-600 hover:underline"
+                    >
+                      Bộ câu hỏi
+                    </button>.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    {availableQuestionBanks.map((bank) => {
+                      const isSelected = bank.questionBankId === selectedQuestionBankId;
+                      const tags =
+                        Array.isArray(bank.tags)
+                          ? bank.tags
+                          : typeof bank.tags === "string" && bank.tags.length
+                          ? bank.tags
+                              .split(/[;,]+/)
+                              .map((t) => t.trim())
+                              .filter(Boolean)
+                          : [];
+
+                      return (
+                        <button
+                          key={bank.questionBankId}
+                          type="button"
+                          onClick={() =>
+                            setSelectedQuestionBankId(
+                              bank.questionBankId === selectedQuestionBankId
+                                ? ""
+                                : bank.questionBankId
+                            )
+                          }
+                          className={`rounded-xl border-2 p-4 text-left transition-all ${
+                            isSelected
+                              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
+                              : "border-zinc-100 hover:border-emerald-200 dark:border-zinc-800 dark:hover:border-emerald-800"
+                          }`}
+                        >
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                              {bank.bankName}
+                            </div>
+                            {typeof bank.totalQuestions === "number" && (
+                              <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                                {bank.totalQuestions} câu hỏi
+                              </span>
+                            )}
+                          </div>
+                          <div className="mb-2 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
+                            {bank.description || "Không có mô tả"}
+                          </div>
+                          {tags.length > 0 && (
+                            <div className="mt-1 flex flex-wrap gap-1 text-xs">
+                              {tags.map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+                                >
+                                  #{tag}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+              
               <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <div>

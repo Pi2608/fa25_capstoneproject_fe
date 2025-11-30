@@ -307,7 +307,14 @@ export async function updateQuestion(
 // ======================= SESSIONS =======================
 
 // Trạng thái session
-export type SessionStatus = "Pending" | "Running" | "Paused" | "Ended" | string;
+export type SessionStatus =
+  | "WAITING"
+  | "IN_PROGRESS"
+  | "PAUSED"
+  | "COMPLETED"
+  | "CANCELLED"
+  | string;
+
 
 export interface SessionDto {
   sessionId: string;
@@ -318,6 +325,10 @@ export interface SessionDto {
   questionBankId?: string | null;
   questionBankName?: string | null;
 
+  // Host
+  hostUserId?: string | null;
+  hostUserName?: string | null;
+
   // Thông tin session
   sessionCode: string;
   sessionName?: string | null;
@@ -326,13 +337,24 @@ export interface SessionDto {
 
   status: SessionStatus;
 
+  // Cấu hình
+  maxParticipants?: number | null;
+  allowLateJoin?: boolean;
+  showLeaderboard?: boolean;
+  showCorrectAnswers?: boolean;
+
   // Thời gian & thống kê
   createdAt?: string | null;
+  scheduledStartTime?: string | null;
+  actualStartTime?: string | null;
+  endTime?: string | null;
+
   startedAt?: string | null;
   endedAt?: string | null;
-  totalParticipants?: number | null;
-}
 
+  totalParticipants?: number | null;
+  totalResponses?: number | null;
+}
 
 export interface CreateSessionRequest {
   mapId: string;
@@ -358,6 +380,7 @@ export async function createSession(
 
   const baseBody = {
     mapId: req.mapId,
+    questionBankId: req.questionBankId ?? null,
     sessionName: req.sessionName ?? "New session",
     description: req.description ?? null,
     sessionType: req.sessionType ?? "live",
@@ -581,8 +604,12 @@ export async function extendQuestionTime(
   sessionQuestionId: string,
   additionalSeconds: number
 ) {
+  const query = new URLSearchParams({
+    additionalSeconds: String(additionalSeconds),
+  }).toString();
+
   await postJson<Record<string, never>, void>(
-    `/sessions/questions/${sessionQuestionId}/extend?additionalSeconds=${additionalSeconds}`,
+    `/sessions/questions/${encodeURIComponent(sessionQuestionId)}/extend?${query}`,
     {}
   );
 }
