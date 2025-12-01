@@ -1,14 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import type React from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  getMySessions,
-  getSession,
-  startSession,
-  type SessionDto,
-} from "@/lib/api-ques";
+import { getMySessions, type SessionDto } from "@/lib/api-ques";
 
 type HeaderMode = "light" | "dark";
 
@@ -62,7 +56,6 @@ export default function OrgSessionsPage() {
   const [sessions, setSessions] = useState<SessionDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [openingId, setOpeningId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -87,39 +80,6 @@ export default function OrgSessionsPage() {
     return () => {
       alive = false;
     };
-  }, []);
-
-  const handleOpenSessionFromList = useCallback(
-    async (event: React.MouseEvent, row: SessionDto) => {
-      event.stopPropagation();
-      if (!row.sessionId) return;
-      setOpeningId(row.sessionId);
-      try {
-        await startSession(row.sessionId);
-        const updated = await getSession(row.sessionId);
-        setSessions((prev) =>
-          prev.map((s) =>
-            s.sessionId === updated.sessionId ? { ...s, ...updated } : s
-          )
-        );
-      } catch (e) {
-        console.error("Failed to start session", e);
-        alert("Không mở được session. Vui lòng thử lại.");
-      } finally {
-        setOpeningId(null);
-      }
-    },
-    []
-  );
-
-  const getActionButtonLabel = useCallback((status?: string | null) => {
-    const raw = (status || "").toLowerCase();
-    if (raw === "waiting" || raw === "pending") return "Mở session";
-    if (raw === "in_progress" || raw === "running") return "Đang chạy";
-    if (raw === "paused") return "Tạm dừng";
-    if (raw === "completed" || raw === "ended") return "Đã kết thúc";
-    if (raw === "cancelled" || raw === "canceled") return "Đã hủy";
-    return "Mở session";
   }, []);
 
   return (
@@ -205,9 +165,7 @@ export default function OrgSessionsPage() {
                   <th className="px-3 py-2 font-medium">Trạng thái</th>
                   <th className="px-3 py-2 font-medium">Số người tham gia</th>
                   <th className="px-3 py-2 font-medium">Tạo lúc</th>
-                  <th className="px-3 py-2 text-right font-medium">
-                    Hành động
-                  </th>
+                  <th className="px-3 py-2 font-medium">Bộ câu hỏi</th>
                 </tr>
               </thead>
               <tbody>
@@ -239,17 +197,8 @@ export default function OrgSessionsPage() {
                     <td className="px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">
                       {formatDate(s.createdAt)}
                     </td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => handleOpenSessionFromList(e, s)}
-                        disabled={openingId === s.sessionId}
-                        className="inline-flex items-center rounded-lg border border-sky-500 bg-sky-500 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:border-sky-400 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60 dark:border-sky-400 dark:bg-sky-500/10 dark:text-sky-200 dark:shadow-none dark:hover:bg-sky-500/20"
-                      >
-                        {openingId === s.sessionId
-                          ? "Đang mở..."
-                          : getActionButtonLabel(s.status)}
-                      </button>
+                    <td className="px-3 py-2 text-zinc-700 dark:text-zinc-200">
+                      {s.questionBankName || "—"}
                     </td>
                   </tr>
                 ))}
@@ -258,8 +207,7 @@ export default function OrgSessionsPage() {
           </div>
 
           <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-500">
-            Nhấp vào một dòng để xem chi tiết session. Nút "Mở session" ở cuối
-            mỗi dòng sẽ bắt đầu session đó.
+            Nhấp vào một dòng để xem chi tiết session.
           </p>
         </div>
       )}

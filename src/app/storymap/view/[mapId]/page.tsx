@@ -74,19 +74,29 @@ export default function StoryMapViewPage() {
 
     const storedName = window.sessionStorage.getItem("imos_student_name");
     const storedCode = window.sessionStorage.getItem("imos_session_code");
-    const storedParticipant = window.sessionStorage.getItem("imos_participant_id") || participantIdFromUrl;
+    const storedParticipant = window.sessionStorage.getItem("imos_participant_id");
+    const urlParticipant = participantIdFromUrl;
 
     if (storedName) setDisplayName(storedName);
     if (storedCode) setSessionCode(storedCode);
 
-    if (storedParticipant) {
-      setParticipantId(storedParticipant);
+    // Ưu tiên ID trong sessionStorage, fallback sang URL
+    const candidateParticipantId =
+      storedParticipant && storedParticipant !== "undefined" && storedParticipant !== "null"
+        ? storedParticipant
+        : urlParticipant && urlParticipant !== "undefined" && urlParticipant !== "null"
+          ? urlParticipant
+          : "";
+
+    if (candidateParticipantId) {
+      setParticipantId(candidateParticipantId);
     } else if (sessionId) {
       setError(
         "Không tìm thấy thông tin học viên. Vui lòng quay lại và tham gia lại bằng mã tiết học."
       );
     }
   }, [sessionId, participantIdFromUrl]);
+
 
   // Load session info (only for initial data, viewState is controlled by SignalR)
   useEffect(() => {
@@ -99,7 +109,7 @@ export default function StoryMapViewPage() {
         const sessionData = await getSession(sessionId);
         if (cancelled) return;
         setSession(sessionData);
-        
+
         // Only set ended state from API - other states are controlled by SignalR
         const status = sessionData.status as string;
         if (status === "COMPLETED" || status === "Ended") {
@@ -151,12 +161,12 @@ export default function StoryMapViewPage() {
 
   // Handle JoinedSession - sent when student joins/rejoins the session
   const handleJoinedSession = useCallback((event: JoinedSessionEvent) => {
-    
+
     // Reset sync state when joining/rejoining
     setHasReceivedSegmentSync(false);
     setCurrentIndex(-1); // Reset to no segment selected
     setIsTeacherPlaying(false);
-    
+
     // Set view state based on session status
     const status = event.status as string;
     if (status === "IN_PROGRESS" || status === "Running") {
@@ -170,9 +180,9 @@ export default function StoryMapViewPage() {
       setViewState("waiting");
     }
   }, []);
-  
+
   const handleSessionStatusChanged = useCallback((event: SessionStatusChangedEvent) => {
-    
+
     const status = event.status as string;
     if (status === "IN_PROGRESS" || status === "Running") {
       // Session started - but wait for teacher to sync segment before playing
@@ -190,23 +200,23 @@ export default function StoryMapViewPage() {
 
   // Track previous segment sync to avoid duplicate processing
   const prevSegmentSyncRef = useRef<{ index: number; isPlaying: boolean; timestamp: number } | null>(null);
-  
+
   // Track play start time to ignore rapid stop signals
   const playStartTimeRef = useRef<number>(0);
   const MIN_PLAY_DURATION_MS = 1000; // Minimum 1 second before accepting stop
 
   const handleSegmentSync = useCallback((event: SegmentSyncEvent) => {
-    
+
     const idx = event.segmentIndex;
     const shouldPlay = typeof event.isPlaying === "boolean" ? event.isPlaying : false;
     const now = Date.now();
-    
+
     // Check if this is a duplicate event (same index and same isPlaying)
     const prev = prevSegmentSyncRef.current;
     if (prev && prev.index === idx && prev.isPlaying === shouldPlay) {
       return;
     }
-    
+
     // CRITICAL: Ignore rapid stop signals after play
     // Teacher's playback hook sometimes sends stop right after play
     if (prev && prev.isPlaying === true && shouldPlay === false) {
@@ -215,20 +225,20 @@ export default function StoryMapViewPage() {
         return; // Ignore this stop
       }
     }
-    
+
     // Update ref with timestamp
     prevSegmentSyncRef.current = { index: idx, isPlaying: shouldPlay, timestamp: now };
-    
+
     // Only update segment index when receiving live sync from teacher
     if (typeof idx === "number" && idx >= 0) {
       // Check if segment changed
       setCurrentIndex(prevIndex => {
         const segmentChanged = prevIndex !== idx;
-        
+
         if (segmentChanged) {
           // When segment changes, stop playing immediately
           setIsTeacherPlaying(false);
-          
+
           // Thêm delay để StoryMapViewer có thời gian load route animations
           if (shouldPlay) {
             setTimeout(() => {
@@ -241,17 +251,17 @@ export default function StoryMapViewPage() {
           // Segment không thay đổi, update playing state ngay
           setIsTeacherPlaying(shouldPlay);
         }
-        
+
         return idx;
       });
-      
+
       // Always mark that we've received a live sync when we have a valid index
       setHasReceivedSegmentSync(true);
     } else {
       // Update playing state from teacher (khi không có segment change)
       setIsTeacherPlaying(shouldPlay);
     }
-    
+
     // When viewing map, ensure we're in viewing state
     if (viewState === "waiting") {
       setViewState("viewing");
@@ -259,22 +269,22 @@ export default function StoryMapViewPage() {
   }, [viewState, mapId]);
 
   const handleQuestionBroadcast = useCallback((event: QuestionBroadcastEvent) => {
-    
+
     setCurrentQuestion(event);
     setSelectedOptionId(null);
     setHasSubmitted(false);
     setInfoMessage(null);
     setQuestionResults(null);
     setViewState("question");
-    
+
     // Start countdown timer
     if (event.timeLimit > 0) {
       setTimeRemaining(event.timeLimit);
-      
+
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
-      
+
       timerRef.current = setInterval(() => {
         setTimeRemaining(prev => {
           if (prev === null || prev <= 1) {
@@ -288,35 +298,35 @@ export default function StoryMapViewPage() {
         });
       }, 1000);
     }
-    
+
     toast.success(`Câu hỏi mới! ${event.points} điểm`);
   }, []);
 
   const handleQuestionResults = useCallback((event: QuestionResultsEvent) => {
-    
+
     setQuestionResults(event);
     setViewState("results");
-    
+
     // Clear timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    
+
     toast.info("Xem kết quả câu hỏi!");
   }, []);
 
   const handleSessionEnded = useCallback((event: SessionEndedEvent) => {
-    
+
     setViewState("ended");
     setLeaderboard(event.finalLeaderboard || []);
-    
+
     // Clear timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    
+
     toast.info("Tiết học đã kết thúc!");
   }, []);
 
@@ -422,19 +432,19 @@ export default function StoryMapViewPage() {
           <p className="text-zinc-600 dark:text-zinc-400 mb-4">
             Bạn đã tham gia thành công!
           </p>
-          
+
           {sessionCode && (
             <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 mb-4">
               <p className="text-[11px] text-emerald-400 uppercase tracking-wider">Mã tiết học</p>
               <p className="text-2xl font-mono font-bold text-emerald-300">{sessionCode}</p>
             </div>
           )}
-          
+
           <div className="flex items-center justify-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
             <span className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"} animate-pulse`} />
             <span>{isConnected ? "Đã kết nối" : "Đang kết nối..."}</span>
           </div>
-          
+
           <p className="mt-2 text-[11px] text-zinc-400">
             Xin chào, <span className="font-semibold text-emerald-300">{displayName}</span>
           </p>
@@ -466,19 +476,17 @@ export default function StoryMapViewPage() {
                 {leaderboard.map((entry, idx) => (
                   <div
                     key={entry.participantId}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg ${
-                      entry.participantId === participantId
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg ${entry.participantId === participantId
                         ? "bg-emerald-500/20 border border-emerald-500/40"
                         : "bg-zinc-800/50"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3">
-                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                        idx === 0 ? "bg-yellow-500 text-yellow-900" :
-                        idx === 1 ? "bg-gray-300 text-gray-800" :
-                        idx === 2 ? "bg-amber-600 text-amber-100" :
-                        "bg-zinc-700 text-zinc-300"
-                      }`}>
+                      <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${idx === 0 ? "bg-yellow-500 text-yellow-900" :
+                          idx === 1 ? "bg-gray-300 text-gray-800" :
+                            idx === 2 ? "bg-amber-600 text-amber-100" :
+                              "bg-zinc-700 text-zinc-300"
+                        }`}>
                         {entry.rank ?? idx + 1}
                       </span>
                       <span className="text-zinc-100">{entry.displayName}</span>
@@ -539,7 +547,7 @@ export default function StoryMapViewPage() {
               </div>
             )}
           </div>
-          
+
           {/* Connection status */}
           <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
             <span className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"} animate-pulse`} />
@@ -564,9 +572,8 @@ export default function StoryMapViewPage() {
                     {currentQuestion.points} điểm
                   </span>
                   {viewState === "question" && timeRemaining !== null && (
-                    <span className={`font-mono text-sm font-bold ${
-                      timeRemaining <= 10 ? "text-red-400" : "text-emerald-400"
-                    }`}>
+                    <span className={`font-mono text-sm font-bold ${timeRemaining <= 10 ? "text-red-400" : "text-emerald-400"
+                      }`}>
                       {timeRemaining}s
                     </span>
                   )}
@@ -595,13 +602,12 @@ export default function StoryMapViewPage() {
                     .map((opt) => (
                       <label
                         key={opt.id}
-                        className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer text-[13px] transition ${
-                          hasSubmitted
+                        className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer text-[13px] transition ${hasSubmitted
                             ? "opacity-60 cursor-not-allowed"
                             : selectedOptionId === opt.id
-                            ? "border-emerald-500 bg-emerald-500/10 text-emerald-50"
-                            : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
-                        }`}
+                              ? "border-emerald-500 bg-emerald-500/10 text-emerald-50"
+                              : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
+                          }`}
                       >
                         <input
                           type="radio"
@@ -646,7 +652,7 @@ export default function StoryMapViewPage() {
                       <p className="text-sm text-emerald-100 font-medium">{questionResults.correctAnswer}</p>
                     </div>
                   )}
-                  
+
                   {questionResults.results && questionResults.results.length > 0 && (
                     <div className="rounded-lg bg-zinc-950/70 border border-zinc-800 px-3 py-2">
                       <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">Kết quả các bạn</p>
@@ -654,11 +660,10 @@ export default function StoryMapViewPage() {
                         {questionResults.results.map((result, idx) => (
                           <div
                             key={result.participantId}
-                            className={`flex items-center justify-between text-[11px] ${
-                              result.participantId === participantId
+                            className={`flex items-center justify-between text-[11px] ${result.participantId === participantId
                                 ? "text-emerald-300 font-semibold"
                                 : "text-zinc-300"
-                            }`}
+                              }`}
                           >
                             <span>
                               {result.displayName}
@@ -731,7 +736,7 @@ export default function StoryMapViewPage() {
             controlsEnabled={false}
           />
         )}
-        
+
         {/* Overlay when waiting for teacher sync */}
         {(!hasReceivedSegmentSync || currentIndex < 0) && (
           <div className="absolute inset-0 z-[500] flex items-center justify-center bg-zinc-900/90 backdrop-blur-sm">
@@ -757,9 +762,8 @@ export default function StoryMapViewPage() {
                   {currentQuestion.points} điểm
                 </span>
                 {timeRemaining !== null && (
-                  <span className={`font-mono text-2xl font-bold ${
-                    timeRemaining <= 10 ? "text-red-400 animate-pulse" : "text-white"
-                  }`}>
+                  <span className={`font-mono text-2xl font-bold ${timeRemaining <= 10 ? "text-red-400 animate-pulse" : "text-white"
+                    }`}>
                     {timeRemaining}s
                   </span>
                 )}

@@ -241,8 +241,9 @@ export async function createQuestion(
 export async function getQuestionsOfQuestionBank(
   questionBankId: string
 ): Promise<QuestionDto[]> {
-  const res = await getJson<any[]>(
+  const res = await getJson<QuestionDto[]>(
     `/question-banks/${questionBankId}/questions`
+
   );
   return res;
 }
@@ -634,7 +635,7 @@ export async function getCurrentQuestionForParticipant(
   participantId: string
 ): Promise<SessionRunningQuestionDto | null> {
   const res = await getJson<SessionRunningQuestionDto | null>(
-    `/api/sessions/participants/${participantId}/current-question`
+    `/sessions/participants/${participantId}/current-question`
   );
 
   if (!res) return null;
