@@ -157,7 +157,7 @@ export default function QuestionBuilderPage() {
     org,
     workspace,
     questionBank,
-    mapNames,
+    sessionNames,
     loading,
     err,
     reloadQuestionBank,

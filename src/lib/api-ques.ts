@@ -116,22 +116,22 @@ export async function updateQuestionBank(
   return res;
 }
 
-export async function attachMapToQuestionBank(
+export async function attachSessionToQuestionBank(
   questionBankId: string,
-  mapId: string
+  sessionId: string
 ): Promise<void> {
-  const body = { mapId };
+  const body = { sessionId };
   await postJson<typeof body, void>(
-    `/question-banks/${questionBankId}/maps`,
+    `/question-banks/${questionBankId}/sessions`,
     body
   );
 }
 
-export async function getMapsByQuestionBank(
+export async function getSessionsByQuestionBank(
   questionBankId: string
-): Promise<Array<{ mapId: string; mapName: string }>> {
-  const res = await getJson<Array<{ mapId: string; mapName: string; assignedAt?: string }>>(
-    `/question-banks/${questionBankId}/maps`
+): Promise<Array<{ sessionId: string; sessionName: string; sessionCode: string; attachedAt?: string }>> {
+  const res = await getJson<Array<{ sessionId: string; sessionName: string; sessionCode: string; attachedAt?: string }>>(
+    `/question-banks/${questionBankId}/sessions`
   );
   return res;
 }
