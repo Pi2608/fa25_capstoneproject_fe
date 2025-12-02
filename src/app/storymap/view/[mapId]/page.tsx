@@ -364,7 +364,7 @@ export default function StoryMapViewPage() {
       setInfoMessage(null);
 
       await submitParticipantResponse(participantId, {
-        sessionQuestionId: currentQuestion.questionId,
+        sessionQuestionId: currentQuestion.sessionQuestionId,
         questionOptionId: selectedOptionId,
       });
 
