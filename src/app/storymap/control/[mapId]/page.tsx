@@ -17,6 +17,7 @@ import {
   extendQuestionTime,
   getSession,
   type SessionDto,
+  type SessionRunningQuestionDto,
   type LeaderboardEntryDto,
   type QuestionDto,
 } from "@/lib/api-ques";

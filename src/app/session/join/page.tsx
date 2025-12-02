@@ -10,7 +10,7 @@ function JoinSessionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const codeFromUrl = searchParams?.get("code") || null;
-  
+
   const [step, setStep] = useState<"pin" | "name">(codeFromUrl ? "name" : "pin");
   const [pin, setPin] = useState(codeFromUrl || "");
   const [displayName, setDisplayName] = useState("");
@@ -29,7 +29,7 @@ function JoinSessionContent() {
         setError(null);
         try {
           const session = await getSessionByCode(codeFromUrl);
-          
+
           if (session.status === "Ended") {
             setError("This session has ended");
             setStep("pin");
@@ -62,7 +62,7 @@ function JoinSessionContent() {
     try {
       // Verify session exists
       const session = await getSessionByCode(pinCode);
-      
+
       if (session.status === "Ended") {
         setError("This session has ended");
         setIsLoading(false);
@@ -104,26 +104,45 @@ function JoinSessionContent() {
       });
 
       toast.success(`Welcome, ${participant.displayName}!`);
-      
-      // Get session details to get mapId for redirect
+
       const session = await getSessionByCode(pin);
-      
+
       if (!session.mapId) {
         setError("Session does not have a map attached");
         setIsLoading(false);
         return;
       }
 
-      // Store participant info in sessionStorage for the view page
+      const participantId =
+        (participant as any).sessionParticipantId ??
+        (participant as any).participantId ??
+        (participant as any).id ??
+        "";
+
+      const joinedSessionId =
+        (participant as any).sessionId ??
+        (session as any).sessionId ??
+        (session as any).id ??
+        "";
+
+      if (!participantId || !joinedSessionId) {
+        setError("Không lấy được thông tin tham gia tiết học từ server.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Lưu vào sessionStorage cho trang view
       if (typeof window !== "undefined") {
         window.sessionStorage.setItem("imos_student_name", displayName.trim());
         window.sessionStorage.setItem("imos_session_code", pin);
-        window.sessionStorage.setItem("imos_participant_id", participant.id);
-        window.sessionStorage.setItem("imos_session_id", participant.sessionId);
+        window.sessionStorage.setItem("imos_participant_id", participantId);
+        window.sessionStorage.setItem("imos_session_id", joinedSessionId);
       }
-      
-      // Redirect to storymap view page with session context
-      router.push(`/storymap/view/${session.mapId}?sessionId=${participant.sessionId}&participantId=${participant.id}`);
+
+      router.push(
+        `/storymap/view/${session.mapId}?sessionId=${joinedSessionId}&participantId=${participantId}`
+      );
+
     } catch (err: any) {
       console.error("Failed to join session:", err);
       setError(err?.message || "Failed to join session. Please try again.");

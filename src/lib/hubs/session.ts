@@ -142,6 +142,7 @@ export interface SegmentSyncEvent {
 
 export interface QuestionBroadcastEvent {
   sessionId: string;
+  sessionQuestionId: string;
   questionId: string;
   questionText: string;
   questionType: string;
@@ -475,6 +476,7 @@ export async function sendSegmentSyncViaSignalR(
 // ===================== QUESTION BROADCAST =====================
 
 export interface QuestionBroadcastRequest {
+  sessionQuestionId: string;  
   questionId: string;
   questionText: string;
   questionType: string;
@@ -504,6 +506,7 @@ export async function broadcastQuestionViaSignalR(
     }
 
     await connection.invoke("BroadcastQuestionToStudents", sessionId, {
+      SessionQuestionId: question.sessionQuestionId,
       QuestionId: question.questionId,
       QuestionText: question.questionText,
       QuestionType: question.questionType,
