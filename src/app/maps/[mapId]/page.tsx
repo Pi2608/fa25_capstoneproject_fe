@@ -2267,198 +2267,201 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
     };
 
 
-    const loadExistingIcons = async () => {
-      if (!mapRef.current || !mapIdRef.current || !isMapReady) return;
+    // COMMENTED OUT: Don't load existing location icons on EditMap
+    // This prevents duplicate rendering of location markers
+    // Locations should only be rendered via renderSegmentLocations in StoryMapViewer
+    // const loadExistingIcons = async () => {
+    //   if (!mapRef.current || !mapIdRef.current || !isMapReady) return;
 
-      try {
-        const locations = await getMapLocations(mapIdRef.current);
+    //   try {
+    //     const locations = await getMapLocations(mapIdRef.current);
 
-        if (!locations || locations.length === 0) return;
+    //     if (!locations || locations.length === 0) return;
 
-        const L = (await import("leaflet")).default;
+    //     const L = (await import("leaflet")).default;
 
-        if (!iconLayerGroupRef.current) {
-          iconLayerGroupRef.current = L.layerGroup().addTo(mapRef.current);
-        }
+    //     if (!iconLayerGroupRef.current) {
+    //       iconLayerGroupRef.current = L.layerGroup().addTo(mapRef.current);
+    //     }
 
-        const existingLocationIds = new Set<string>();
-        iconMarkersRef.current.forEach((marker, id) => {
-          const locationId = (marker as any)._locationId || id.replace('icon-', '');
-          if (locationId) {
-            existingLocationIds.add(locationId);
-          }
-        });
+    //     const existingLocationIds = new Set<string>();
+    //     iconMarkersRef.current.forEach((marker, id) => {
+    //       const locationId = (marker as any)._locationId || id.replace('icon-', '');
+    //       if (locationId) {
+    //         existingLocationIds.add(locationId);
+    //       }
+    //     });
 
-        const iconLocations = locations.filter(
-          (loc) =>
-            loc.markerGeometry &&
-            loc.isVisible !== false &&
-            loc.locationId &&
-            !existingLocationIds.has(loc.locationId)
-        );
+    //     const iconLocations = locations.filter(
+    //       (loc) =>
+    //         loc.markerGeometry &&
+    //         loc.isVisible !== false &&
+    //         loc.locationId &&
+    //         !existingLocationIds.has(loc.locationId)
+    //     );
 
-        for (const location of iconLocations) {
-          try {
-            const iconKeyFromMetadata = parseIconKeyFromStoryContent(location.storyContent);
-            const labelKey = location.title ?? "";
-            const iconKey =
-              iconKeyFromMetadata ||
-              location.iconType ||
-              labelToIconKeyMap[labelKey] ||
-              null;
+    //     for (const location of iconLocations) {
+    //       try {
+    //         const iconKeyFromMetadata = parseIconKeyFromStoryContent(location.storyContent);
+    //         const labelKey = location.title ?? "";
+    //         const iconKey =
+    //           iconKeyFromMetadata ||
+    //           location.iconType ||
+    //           labelToIconKeyMap[labelKey] ||
+    //           null;
 
-            if (!iconKey) {
-              continue;
-            }
+    //         if (!iconKey) {
+    //           continue;
+    //         }
 
-            const geoJson = JSON.parse(location.markerGeometry);
-            if (geoJson.type !== "Point" || !geoJson.coordinates) continue;
+    //         const geoJson = JSON.parse(location.markerGeometry);
+    //         if (geoJson.type !== "Point" || !geoJson.coordinates) continue;
 
-            const [lng, lat] = geoJson.coordinates;
+    //         const [lng, lat] = geoJson.coordinates;
 
-            const emoji = iconEmojiMap[iconKey as keyof typeof iconEmojiMap] ?? "📍";
+    //         const emoji = iconEmojiMap[iconKey as keyof typeof iconEmojiMap] ?? "📍";
 
-            const iconCacheKey = `icon-${iconKey}`;
-            if (!(mapRef.current as any)._iconCache) {
-              (mapRef.current as any)._iconCache = new Map<string, L.DivIcon>();
-            }
+    //         const iconCacheKey = `icon-${iconKey}`;
+    //         if (!(mapRef.current as any)._iconCache) {
+    //           (mapRef.current as any)._iconCache = new Map<string, L.DivIcon>();
+    //         }
 
-            let icon: L.DivIcon;
-            if ((mapRef.current as any)._iconCache.has(iconCacheKey)) {
-              icon = (mapRef.current as any)._iconCache.get(iconCacheKey);
-            } else {
-              icon = L.divIcon({
-                className: `custom-marker-icon icon-marker icon-${iconKey}`,
-                html: `<div style="font-size:24px; line-height:24px;">${emoji}</div>`,
-                iconSize: [28, 28],
-                iconAnchor: [14, 14],
-              });
-              (mapRef.current as any)._iconCache.set(iconCacheKey, icon);
-            }
+    //         let icon: L.DivIcon;
+    //         if ((mapRef.current as any)._iconCache.has(iconCacheKey)) {
+    //           icon = (mapRef.current as any)._iconCache.get(iconCacheKey);
+    //         } else {
+    //           icon = L.divIcon({
+    //             className: `custom-marker-icon icon-marker icon-${iconKey}`,
+    //             html: `<div style="font-size:24px; line-height:24px;">${emoji}</div>`,
+    //             iconSize: [28, 28],
+    //             iconAnchor: [14, 14],
+    //           });
+    //           (mapRef.current as any)._iconCache.set(iconCacheKey, icon);
+    //         }
 
-            // Create marker
-            const marker = L.marker([lat, lng], {
-              icon,
-              draggable: true,
-              pane: "markerPane",
-              zIndexOffset: 0,
-              keyboard: false,
-              riseOnHover: false,
-              autoPan: false,
-            });
+    //         // Create marker
+    //         const marker = L.marker([lat, lng], {
+    //           icon,
+    //           draggable: true,
+    //           pane: "markerPane",
+    //           zIndexOffset: 0,
+    //           keyboard: false,
+    //           riseOnHover: false,
+    //           autoPan: false,
+    //         });
 
-            // Store marker ID using locationId from API
-            const markerId = `icon-${location.locationId}`;
-            iconMarkersRef.current.set(markerId, marker);
-            iconMetadataRef.current.set(markerId, {
-              lat,
-              lng,
-              iconKey,
-              timestamp: Date.now() - 10000, // Mark as existing (not recently added)
-            });
+    //         // Store marker ID using locationId from API
+    //         const markerId = `icon-${location.locationId}`;
+    //         iconMarkersRef.current.set(markerId, marker);
+    //         iconMetadataRef.current.set(markerId, {
+    //           lat,
+    //           lng,
+    //           iconKey,
+    //           timestamp: Date.now() - 10000, // Mark as existing (not recently added)
+    //         });
 
-            // Store locationId on marker for deletion
-            (marker as any)._locationId = location.locationId;
+    //         // Store locationId on marker for deletion
+    //         (marker as any)._locationId = location.locationId;
 
-            // Add drag handlers
-            let dragTimeout: NodeJS.Timeout | null = null;
-            marker.on("drag", () => {
-              if (dragTimeout) return;
-              dragTimeout = setTimeout(() => {
-                dragTimeout = null;
-              }, 16);
-            });
+    //         // Add drag handlers
+    //         let dragTimeout: NodeJS.Timeout | null = null;
+    //         marker.on("drag", () => {
+    //           if (dragTimeout) return;
+    //           dragTimeout = setTimeout(() => {
+    //             dragTimeout = null;
+    //           }, 16);
+    //         });
 
-            marker.on("dragend", () => {
-              const latlng = marker.getLatLng();
-              iconMetadataRef.current.set(markerId, {
-                lat: latlng.lat,
-                lng: latlng.lng,
-                iconKey,
-                timestamp: Date.now(),
-              });
-            });
+    //         marker.on("dragend", () => {
+    //           const latlng = marker.getLatLng();
+    //           iconMetadataRef.current.set(markerId, {
+    //             lat: latlng.lat,
+    //             lng: latlng.lng,
+    //             iconKey,
+    //             timestamp: Date.now(),
+    //           });
+    //         });
 
-            // Add context menu for deletion
-            marker.on("contextmenu", (event: any) => {
-              if (event.originalEvent) {
-                event.originalEvent.preventDefault();
-                event.originalEvent.stopPropagation();
-              }
+    //         // Add context menu for deletion
+    //         marker.on("contextmenu", (event: any) => {
+    //           if (event.originalEvent) {
+    //             event.originalEvent.preventDefault();
+    //             event.originalEvent.stopPropagation();
+    //           }
 
-              const leafletId = (marker as any)._leaflet_id;
-              const popupButtonId = `delete-icon-${leafletId}`;
+    //           const leafletId = (marker as any)._leaflet_id;
+    //           const popupButtonId = `delete-icon-${leafletId}`;
 
-              const popupHtml = `
-    <div style="display:flex;align-items:center;gap:6px;">
-      <button
-        id="${popupButtonId}"
-        style="
-          background:#ef4444;
-          border:none;
-          color:white;
-          font-size:11px;
-          padding:4px 8px;
-          border-radius:4px;
-          cursor:pointer;
-          white-space:nowrap;
-        "
-      >
-        Xóa icon
-      </button>
-    </div>
-  `;
+    //           const popupHtml = `
+    // <div style="display:flex;align-items:center;gap:6px;">
+    //   <button
+    //     id="${popupButtonId}"
+    //     style="
+    //       background:#ef4444;
+    //       border:none;
+    //       color:white;
+    //       font-size:11px;
+    //       padding:4px 8px;
+    //       border-radius:4px;
+    //       cursor:pointer;
+    //       white-space:nowrap;
+    //     "
+    //   >
+    //     Xóa icon
+    //   </button>
+    // </div>
+    // `;
 
-              marker
-                .bindPopup(popupHtml, {
-                  closeButton: false,
-                  autoClose: true,
-                  closeOnClick: false,
-                  offset: L.point(0, -20),
-                  className: "icon-delete-popup",
-                })
-                .openPopup();
+    //           marker
+    //             .bindPopup(popupHtml, {
+    //               closeButton: false,
+    //               autoClose: true,
+    //               closeOnClick: false,
+    //               offset: L.point(0, -20),
+    //               className: "icon-delete-popup",
+    //             })
+    //             .openPopup();
 
-              setTimeout(() => {
-                const btn = document.getElementById(popupButtonId);
-                if (btn) {
-                  btn.addEventListener("click", async () => {
-                    await deleteLocation(location.locationId);
-                    iconMarkersRef.current.delete(markerId);
-                    iconMetadataRef.current.delete(markerId);
+    //           setTimeout(() => {
+    //             const btn = document.getElementById(popupButtonId);
+    //             if (btn) {
+    //               btn.addEventListener("click", async () => {
+    //                 await deleteLocation(location.locationId);
+    //                 iconMarkersRef.current.delete(markerId);
+    //                 iconMetadataRef.current.delete(markerId);
 
-                    if (iconLayerGroupRef.current?.hasLayer(marker)) {
-                      iconLayerGroupRef.current.removeLayer(marker);
-                    }
-                    if (mapRef.current?.hasLayer(marker)) {
-                      mapRef.current.removeLayer(marker);
-                    }
-                    mapRef.current?.closePopup();
-                  });
-                }
-              }, 0);
-            });
+    //                 if (iconLayerGroupRef.current?.hasLayer(marker)) {
+    //                   iconLayerGroupRef.current.removeLayer(marker);
+    //                 }
+    //                 if (mapRef.current?.hasLayer(marker)) {
+    //                   mapRef.current.removeLayer(marker);
+    //                 }
+    //                 mapRef.current?.closePopup();
+    //               });
+    //             }
+    //           }, 0);
+    //         });
 
-            // Add to layer group
-            iconLayerGroupRef.current.addLayer(marker);
-          } catch (err) {
-            console.error(`[Icon] Failed to load icon for location ${location.locationId}:`, err);
-          }
-        }
+    //         // Add to layer group
+    //         iconLayerGroupRef.current.addLayer(marker);
+    //       } catch (err) {
+    //         console.error(`[Icon] Failed to load icon for location ${location.locationId}:`, err);
+    //       }
+    //     }
 
-        // Update icon visibility after loading
-        if (mapRef.current) {
-          updateIconVisibility(mapRef.current);
-        }
-      } catch (err) {
-        console.error("[Icon] Failed to load existing icons:", err);
-      }
-    };
+    //     // Update icon visibility after loading
+    //     if (mapRef.current) {
+    //       updateIconVisibility(mapRef.current);
+    //     }
+    //   } catch (err) {
+    //     console.error("[Icon] Failed to load existing icons:", err);
+    //   }
+    // };
 
-    // Load existing icons when map is ready
-    if (isMapReady && mapIdRef.current) {
-      loadExistingIcons();
-    }
+    // COMMENTED OUT: Don't call loadExistingIcons on map ready
+    // if (isMapReady && mapIdRef.current) {
+    //   loadExistingIcons();
+    // }
 
     window.addEventListener(
       "icon:startPlacement",
@@ -3598,6 +3601,7 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
         onReorder={handleTimelineReorder}
         onPlay={handlePlayTimeline}
         onStop={handleStopTimeline}
+        onPlaySingleSegment={playback.handlePlaySingleSegment}
         // onSkipForward={handleSkipForward}
         // onSkipBackward={handleSkipBackward}
         onSegmentClick={handleSegmentClick}

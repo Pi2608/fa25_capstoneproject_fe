@@ -22,6 +22,7 @@ interface TimelineWorkspaceProps {
   onPlay: () => void;
   onStop: () => void;
   onSegmentClick: (segmentId: string) => void;
+  onPlaySingleSegment?: (segmentId: string) => void;
   onRefreshSegments?: () => void;
 }
 
@@ -39,6 +40,7 @@ export function TimelineWorkspace({
   onPlay,
   onStop,
   onSegmentClick,
+  onPlaySingleSegment,
   onRefreshSegments,
 }: TimelineWorkspaceProps) {
   const [height, setHeight] = useState(200); // Default height
@@ -220,6 +222,7 @@ export function TimelineWorkspace({
           mapId={mapId}
           onReorder={onReorder}
           onSegmentClick={onSegmentClick}
+          onPlaySingleSegment={onPlaySingleSegment}
           onRefreshSegments={onRefreshSegments}
         />
       </div>

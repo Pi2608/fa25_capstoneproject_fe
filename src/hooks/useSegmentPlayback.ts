@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Segment, TimelineTransition, RouteAnimation, getRouteAnimationsBySegment } from "@/lib/api-storymap";
+import { Segment, TimelineTransition, RouteAnimation, getRouteAnimationsBySegment, FrontendTransitionType } from "@/lib/api-storymap";
 import { getTimelineTransitions } from "@/lib/api-storymap";
 import {
   renderSegmentZones,
@@ -40,6 +40,7 @@ export function useSegmentPlayback({
   const [routeAnimations, setRouteAnimations] = useState<RouteAnimation[]>([]);
   const [segmentStartTime, setSegmentStartTime] = useState<number>(0);
   const [isRouteAnimationOnly, setIsRouteAnimationOnly] = useState(false); // Flag to skip playback loop
+  const isSingleSegmentPlayRef = useRef(false); // Ref to track single segment play (doesn't trigger re-render)
 
   useEffect(() => {
     let cancelled = false;
@@ -56,7 +57,7 @@ export function useSegmentPlayback({
   }, [mapId]);
 
   type TransitionOptions = {
-    transitionType?: "Jump" | "Ease" | "Linear";
+    transitionType?: FrontendTransitionType;
     durationMs?: number;
     cameraAnimationType?: "Jump" | "Ease" | "Fly";
     cameraAnimationDurationMs?: number;
@@ -254,8 +255,8 @@ export function useSegmentPlayback({
 
   // ==================== AUTO-PLAY EFFECT ====================
   useEffect(() => {
-    // Skip playback loop if only playing route animation
-    if (isRouteAnimationOnly) return;
+    // Skip playback loop if only playing route animation or single segment
+    if (isRouteAnimationOnly || isSingleSegmentPlayRef.current) return;
 
     if (!isPlaying || segments.length === 0) return;
     if (!currentMap) return;
@@ -273,12 +274,16 @@ export function useSegmentPlayback({
       const prevSegment = currentPlayIndex > 0 ? segments[currentPlayIndex - 1] : undefined;
       const t = findTransition(prevSegment?.segmentId ?? null, segment.segmentId);
 
-      // Normalize case from backend (linear/ease/jump → Linear/Ease/Jump)
-      const normalizeTransitionType = (str: string): "Jump" | "Ease" | "Linear" => {
+      // Normalize case from backend (linear/ease/easein/easeout/easeinout → Linear/Ease/EaseIn/EaseOut/EaseInOut)
+      const normalizeTransitionType = (str: string): FrontendTransitionType => {
         const lower = str.toLowerCase();
         if (lower === 'jump') return 'Jump';
         if (lower === 'ease') return 'Ease';
-        return 'Linear';
+        if (lower === 'linear') return 'Linear';
+        if (lower === 'easein') return 'EaseIn';
+        if (lower === 'easeout') return 'EaseOut';
+        if (lower === 'easeinout') return 'EaseInOut';
+        return 'Ease'; // default fallback
       };
 
       const normalizeCameraType = (str: string): "Jump" | "Ease" | "Fly" => {
@@ -339,6 +344,10 @@ export function useSegmentPlayback({
   // ==================== PLAYBACK CONTROLS ====================
   const handlePlayPreview = (startIndex?: number) => {
     if (segments.length === 0) return;
+
+    // Reset single segment play flag when starting full timeline playback
+    isSingleSegmentPlayRef.current = false;
+    setIsRouteAnimationOnly(false);
 
     if (
       typeof startIndex !== "number" &&
@@ -405,6 +414,7 @@ export function useSegmentPlayback({
     setRouteAnimations([]);
     setSegmentStartTime(0);
     setIsRouteAnimationOnly(false); // Reset flag
+    isSingleSegmentPlayRef.current = false; // Reset ref
 
     // Dispatch event to notify UI components
     if (typeof window !== 'undefined' && wasRouteAnimationOnly) {
@@ -434,6 +444,73 @@ export function useSegmentPlayback({
     setIsPlaying(true); // Resume playback
   };
 
+  // Play a single segment's animations without transitions
+  const handlePlaySingleSegment = useCallback(async (segmentId: string) => {
+    if (!currentMap) {
+      console.warn("⚠️ No map instance available");
+      return;
+    }
+
+    // Find the segment by ID
+    const segmentIndex = segments.findIndex(s => s.segmentId === segmentId);
+    if (segmentIndex === -1) {
+      console.warn("⚠️ Segment not found:", segmentId);
+      return;
+    }
+
+    const segment = segments[segmentIndex];
+
+    // IMPORTANT: Set flags FIRST to prevent auto-play effect from running
+    isSingleSegmentPlayRef.current = true;
+    setIsRouteAnimationOnly(true);
+
+    // Set the segment as active
+    setActiveSegmentId(segmentId);
+    setCurrentPlayIndex(segmentIndex);
+
+    // Render the segment on map WITHOUT camera state and transitions
+    await handleViewSegment(segment, {
+      skipCameraState: true,
+      transitionType: 'Jump',
+      durationMs: 0,
+    });
+
+    // Load and play route animations
+    try {
+      const animations = await getRouteAnimationsBySegment(mapId, segmentId);
+      if (animations && animations.length > 0) {
+        setRouteAnimations(animations);
+        setSegmentStartTime(Date.now());
+        // Flags already set above
+        setIsPlaying(true);
+
+        // Automatically stop after segment duration
+        const duration = segment.durationMs || 5000;
+        setTimeout(() => {
+          handleStopPreview();
+          isSingleSegmentPlayRef.current = false;
+        }, duration);
+      } else {
+        // No route animations, just show the segment for its duration
+        setSegmentStartTime(Date.now());
+        // Flags already set above
+        setIsPlaying(true);
+
+        const duration = segment.durationMs || 5000;
+        setTimeout(() => {
+          setIsPlaying(false);
+          setSegmentStartTime(0);
+          setIsRouteAnimationOnly(false);
+          isSingleSegmentPlayRef.current = false;
+        }, duration);
+      }
+    } catch (e) {
+      console.error("Failed to play single segment:", e);
+      setIsRouteAnimationOnly(false);
+      isSingleSegmentPlayRef.current = false;
+    }
+  }, [currentMap, segments, mapId, handleViewSegment, handleStopPreview, setActiveSegmentId]);
+
   return {
     isPlaying,
     currentPlayIndex,
@@ -445,6 +522,7 @@ export function useSegmentPlayback({
     handlePlayPreview,
     handlePausePreview,
     handlePlayRouteAnimation,
+    handlePlaySingleSegment,
     handleStopPreview,
     handleClearMap,
     handleContinueAfterUserAction,

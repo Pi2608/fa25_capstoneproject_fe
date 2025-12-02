@@ -3,7 +3,7 @@
  * Used by both edit page and storymap viewer to avoid code duplication
  */
 
-import type { Segment, Location } from "@/lib/api-storymap";
+import type { Segment, Location, FrontendTransitionType } from "@/lib/api-storymap";
 import type L from "leaflet";
 import { applyLayerStyle, type ExtendedLayer } from "@/utils/mapUtils";
 
@@ -59,7 +59,7 @@ async function waitForMapReady(map: L.Map, maxAttempts = 10, delayMs = 50): Prom
   return isLeafletMapReady(map);
 }
 export interface RenderSegmentOptions {
-  transitionType?: "Jump" | "Ease" | "Linear";
+  transitionType?: FrontendTransitionType;
   durationMs?: number;
   cameraAnimationType?: "Jump" | "Ease" | "Fly";
   cameraAnimationDurationMs?: number;
@@ -315,7 +315,7 @@ export async function renderSegmentLocations(
       // Create marker icon based on config
       const iconSize = location.iconSize || 32;
       const iconColor = location.iconColor || '#FF0000';
-      
+
       // Determine icon content: IconUrl (image), IconType (emoji), or default
       let iconHtml = '';
       if (location.iconUrl) {
@@ -361,34 +361,54 @@ export async function renderSegmentLocations(
         });
       }
 
-      // Add popup if enabled - rich HTML content with media, audio, external link
-      if (location.openPopupOnClick && location.popupContent) {
-        const popupHtml = buildLocationPopupHtml(location);
-        
-        // Use custom modal if callback provided, otherwise use Leaflet popup
-        if (options?.onLocationClick) {
-          marker.on('click', (e: any) => {
-            options.onLocationClick!(location, e);
-          });
-        } else {
-          marker.bindPopup(popupHtml, {
-            maxWidth: 400,
-            className: 'location-popup-custom',
-          });
-        }
-      } else if (options?.onLocationClick && (location.tooltipContent || location.description)) {
-        // If no popup but has tooltip content and callback, allow click to show modal
+      // Add popup that shows when clicked - always show popup for all locations
+      const hasContent = location.tooltipContent || location.subtitle;
+      const popupHtml = `
+        <div style="min-width: 200px; max-width: 400px;">
+          <h3 style="margin: 0 0 ${hasContent ? '8px' : '0'}; font-size: 16px; font-weight: 600; color: #1f2937;">
+            ${location.title || 'Location'}
+          </h3>
+          ${location.subtitle ? `<p style="margin: 0 0 8px 0; font-size: 13px; color: #6b7280; font-style: italic;">${location.subtitle}</p>` : ''}
+          ${location.tooltipContent ? `<div style="margin: 8px 0; font-size: 14px; line-height: 1.6; color: #374151;">${location.tooltipContent}</div>` : ''}
+        </div>
+      `;
+
+      // Use custom modal if callback provided, otherwise use Leaflet popup
+      if (options?.onLocationClick) {
         marker.on('click', (e: any) => {
           options.onLocationClick!(location, e);
+        });
+      } else {
+        // Create popup pane with high z-index if it doesn't exist
+        if (!map.getPane('location-popup-pane')) {
+          const popupPane = map.createPane('location-popup-pane');
+          popupPane.style.zIndex = '10000'; // Very high z-index to ensure it's above everything
+        }
+
+        marker.bindPopup(popupHtml, {
+          maxWidth: 400,
+          minWidth: 200,
+          className: 'location-popup-custom',
+          pane: 'location-popup-pane', // Use custom pane with high z-index
+          closeButton: true,
+          autoClose: false, // Don't auto-close when clicking elsewhere
+          closeOnClick: false, // Don't close on map click
+        });
+
+        // Ensure popup opens on marker click
+        marker.on('click', () => {
+          console.log(`📍 Marker clicked: ${location.title}`);
+          marker.openPopup();
+          console.log(`✅ Popup opened for: ${location.title}`);
         });
       }
 
       const entryEffect = (location as any).entryEffect || 'fade';
       const entryDelayMs = (location as any).entryDelayMs || 0;
       const entryDurationMs = (location as any).entryDurationMs || 400;
-      
+
       marker.addTo(map);
-      
+
       // Apply entry animation (only if not using segment transition)
       if (!options?.transitionType && entryEffect !== 'none') {
         const markerElement = marker.getElement();
@@ -396,7 +416,7 @@ export async function renderSegmentLocations(
           // Initial state
           markerElement.style.transition = 'none';
           markerElement.style.opacity = '0';
-          
+
           if (entryEffect === 'fade') {
             markerElement.style.opacity = '0';
           } else if (entryEffect === 'scale') {
@@ -409,7 +429,7 @@ export async function renderSegmentLocations(
             markerElement.style.transform = 'scale(0.3)';
             markerElement.style.opacity = '0';
           }
-          
+
           // Animate after delay
           setTimeout(() => {
             if (!markerElement) return;
@@ -422,9 +442,9 @@ export async function renderSegmentLocations(
         // Use segment transition fade
         try { marker.setOpacity?.(0); } catch {}
       }
-      
+
       layers.push(marker);
-      
+
       bounds.push(L.latLngBounds([latLng, latLng]));
     } catch (error) {
       console.error(`❌ Failed to render location ${location.locationId}:`, error);
@@ -433,6 +453,7 @@ export async function renderSegmentLocations(
 
   return { layers, bounds };
 }
+
 
 /**
  * Apply camera state to map with animation
@@ -626,7 +647,7 @@ export function applyLayerCrossFade(
 ): void {
   const doFade = options?.transitionType && options.transitionType !== 'Jump';
   const totalMs = options?.durationMs ?? 800;
-  
+
   if (!doFade) {
     oldLayers.forEach(layer => {
       try { map.removeLayer(layer); } catch {}
