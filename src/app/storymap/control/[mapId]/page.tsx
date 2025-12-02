@@ -493,7 +493,13 @@ export default function StoryMapControlPage() {
       setQuestionControlLoading(true);
       setCurrentQuestionIndex(index);
 
+       const sessionQuestionId =
+      typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
       await broadcastQuestionViaSignalR(connection, session.sessionId, {
+        sessionQuestionId,
         questionId: question.questionId,
         questionText: question.questionText,
         questionType: question.questionType,
