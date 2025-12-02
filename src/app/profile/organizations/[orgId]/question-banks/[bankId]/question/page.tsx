@@ -23,7 +23,7 @@ import {
   QuestionOptionInput,
 } from "@/hooks/useQuestionSets";
 import type { PinLocationPickerProps } from "@/components/question-banks/PinLocationPicker";
-import { FullScreenLoading } from "@/components/common/FullScreenLoading";
+// import { FullScreenLoading } from "@/components/common/FullScreenLoading";
 
 type HeaderMode = "light" | "dark";
 
@@ -73,8 +73,7 @@ const TRUE_FALSE_CHOICES: Array<{ value: "TRUE" | "FALSE"; label: string }> = [
 const DEFAULT_POINTS = 100;
 const DEFAULT_TIME_LIMIT = 30;
 const MIN_OPTIONS = 2;
-const MAX_IMAGE_SIZE_MB = 5;
-const MAX_AUDIO_SIZE_MB = 10;
+
 
 const PinLocationPicker = dynamic<PinLocationPickerProps>(
   () =>
@@ -275,11 +274,6 @@ export default function QuestionBuilderPage() {
   };
 
   const handleUploadQuestionImage = async (index: number, file: File) => {
-    if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
-      showToast("error", `Ảnh vượt quá ${MAX_IMAGE_SIZE_MB}MB`);
-      return;
-    }
-
     const questionId = questions[index]?.id;
     if (!questionId) return;
 
@@ -296,11 +290,6 @@ export default function QuestionBuilderPage() {
   };
 
   const handleUploadQuestionAudio = async (index: number, file: File) => {
-    if (file.size > MAX_AUDIO_SIZE_MB * 1024 * 1024) {
-      showToast("error", `Audio vượt quá ${MAX_AUDIO_SIZE_MB}MB`);
-      return;
-    }
-
     const questionId = questions[index]?.id;
     if (!questionId) return;
 
@@ -315,6 +304,7 @@ export default function QuestionBuilderPage() {
       setUploadingAudioFor(null);
     }
   };
+
 
   const buildQuestionPayload = (
     question: (typeof questions)[number],
@@ -509,11 +499,9 @@ export default function QuestionBuilderPage() {
     [questionBank]
   );
 
-  if (loading)
-    return (
-      <FullScreenLoading message={t("common.loading")} overlay={false} />
-    );
-
+ if (loading) {
+    return null;
+  }
   if (err || !workspace || !org || !questionBank)
     return (
       <div className="max-w-3xl px-4 text-red-600 dark:text-red-400">
@@ -921,8 +909,11 @@ export default function QuestionBuilderPage() {
                                 ) : (
                                   <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-600 dark:text-zinc-400 dark:hover:border-emerald-500 dark:hover:text-emerald-400">
                                     <span>
-                                      {uploadingImageFor === q.id ? "Đang tải ảnh..." : "Nhấn để chọn ảnh (JPG, PNG, ≤ 5MB)"}
+                                      {uploadingImageFor === q.id
+                                        ? "Đang tải ảnh..."
+                                        : "Nhấn để chọn ảnh (JPG, PNG)"}
                                     </span>
+
                                     <input
                                       type="file"
                                       accept="image/*"
@@ -965,8 +956,11 @@ export default function QuestionBuilderPage() {
                                 ) : (
                                   <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-600 dark:text-zinc-400 dark:hover:border-emerald-500 dark:hover:text-emerald-400">
                                     <span>
-                                      {uploadingAudioFor === q.id ? "Đang tải audio..." : "Nhấn để chọn file audio (MP3, WAV, ≤ 10MB)"}
+                                      {uploadingAudioFor === q.id
+                                        ? "Đang tải audio..."
+                                        : "Nhấn để chọn file audio (MP3, WAV)"}
                                     </span>
+
                                     <input
                                       type="file"
                                       accept="audio/*"

@@ -8,7 +8,6 @@ import { getMapDetail } from "@/lib/api-maps";
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
 
 import {
-  getCurrentQuestionForParticipant,
   submitParticipantResponse,
   getSession,
   getSessionLeaderboard,
