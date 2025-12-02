@@ -396,10 +396,10 @@ export default function WorkspaceDetailPage() {
                 </div>
                 <div className="flex flex-col gap-2">
                   <button
-                    onClick={() => router.push(`/maps/${map.id}`)}
+                    onClick={() => router.push(`/storymap/${map.id}`)}
                     className="w-full px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
                   >
-                    {t("workspace_detail.open_map")}
+                    Mở storymap
                   </button>
                   <button
                     onClick={() => void handleOpenCreateSession(map.id)}

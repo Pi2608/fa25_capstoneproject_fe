@@ -11,6 +11,7 @@ export interface QuestionOptionDto {
 }
 
 export interface QuestionDto {
+  sessionQuestionId: string;
   questionId: string;
   questionBankId: string;
   locationId?: string | null;

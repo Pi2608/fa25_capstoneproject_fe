@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getSegments, Segment } from "@/lib/api-storymap";
+import { getSegments, type Segment } from "@/lib/api-storymap";
 import { getMapDetail } from "@/lib/api-maps";
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
-import * as signalR from "@microsoft/signalr";
-import { getToken } from "@/lib/api-core";
 
 export default function StoryMapPlayerPage() {
   const params = useParams<{ mapId: string }>();
@@ -17,16 +15,18 @@ export default function StoryMapPlayerPage() {
   const [mapDetail, setMapDetail] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [controlledIndex, setControlledIndex] = useState<number>();
-  const [controlledPlaying, setControlledPlaying] = useState<boolean>();
 
-  // Load data
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  // Load map + segments
   useEffect(() => {
     if (!mapId) return;
 
     (async () => {
       try {
         setLoading(true);
+        setError(null);
+
         const [detail, segs] = await Promise.all([
           getMapDetail(mapId),
           getSegments(mapId),
@@ -38,101 +38,34 @@ export default function StoryMapPlayerPage() {
         }
 
         setMapDetail(detail);
-        setSegments(segs);
+        setSegments(Array.isArray(segs) ? segs : []);
+        setCurrentIndex(0);
       } catch (e: any) {
-        setError(e.message || "Failed to load storymap");
+        console.error("Load storymap failed:", e);
+        setError(e?.message || "Failed to load storymap");
       } finally {
         setLoading(false);
       }
     })();
   }, [mapId]);
 
-  // Broadcast channel for control sync
-  useEffect(() => {
-    if (typeof window === 'undefined' || !mapId) return;
+  // Khi viewer tự chuyển segment
+  const handleSegmentChange = useCallback((segment: Segment, index: number) => {
+    setCurrentIndex(index);
+  }, []);
 
-    const channel = new BroadcastChannel(`storymap-${mapId}`);
-    
-    channel.onmessage = (event) => {
-      if (event.data.type === 'segment-change') {
-        setControlledIndex(event.data.segmentIndex);
-      } else if (event.data.type === 'play-state') {
-        setControlledPlaying(event.data.isPlaying);
-      }
-    };
-
-    return () => channel.close();
-  }, [mapId]);
-
-  // SignalR: join as viewer for cross-device sync
-  useEffect(() => {
-    let connection: signalR.HubConnection | null = null;
-    const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "");
-    // StoryHub is mapped at app root: /hubs/story (not under /api/v1)
-    const hubBase = apiBase ? apiBase.replace(/\/api(\/v\d+)?$/i, "") : undefined;
-    const token = getToken();
-
-    if (!mapId || !hubBase || !token) {
-      return;
-    }
-
-    (async () => {
-      try {
-        connection = new signalR.HubConnectionBuilder()
-          .withUrl(`${hubBase}/hubs/story`, {
-            accessTokenFactory: () => token,
-            withCredentials: true,
-            skipNegotiation: false,
-            transport: signalR.HttpTransportType.WebSockets | signalR.HttpTransportType.LongPolling,
-          })
-          .withAutomaticReconnect()
-          .configureLogging(signalR.LogLevel.Information)
-          .build();
-
-        // listeners
-        connection.on("SessionNotFound", () => {
-          setError("Phiên điều khiển không tồn tại hoặc đã kết thúc");
-        });
-
-        connection.on("StoryStepChanged", (state: any) => {
-          // Expecting { segmentIndex?: number, isPlaying?: boolean } from backend
-          if (typeof state?.segmentIndex === "number") {
-            setControlledIndex(state.segmentIndex);
-          }
-          if (typeof state?.isPlaying === "boolean") {
-            setControlledPlaying(state.isPlaying);
-          }
-        });
-
-        connection.on("SessionEnded", () => {
-          setControlledPlaying(false);
-          setError("Phiên điều khiển đã kết thúc");
-        });
-
-        connection.on("JoinedSession", (_payload: any) => {
-          // Optional: could display viewer count or initial state already handled by StoryStepChanged
-          // Intentionally no-op for viewer UI
-        });
-
-        await connection.start();
-        await connection.invoke("JoinAsViewer", mapId);
-      } catch (e) {
-        console.warn("[StoryMap Viewer] SignalR connection failed:", e);
-      }
-    })();
-
-    return () => {
-      if (connection) {
-        void connection.stop();
-      }
-    };
-  }, [mapId]);
+  // Chuyển segment bằng nút Trước/Sau/Timeline
+  const goToSegment = (index: number) => {
+    if (index < 0 || index >= segments.length) return;
+    // Ở player không cần broadcast, chỉ update state để người dùng biết đang ở segment nào
+    setCurrentIndex(index);
+  };
 
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-zinc-900">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-white mx-auto mb-4" />
           <div className="text-white text-xl">Loading Story Map...</div>
         </div>
       </div>
@@ -142,7 +75,7 @@ export default function StoryMapPlayerPage() {
   if (error) {
     return (
       <div className="h-screen flex items-center justify-center bg-zinc-900">
-        <div className="text-center">
+        <div className="text-center max-w-md px-4">
           <div className="text-red-400 text-2xl mb-4">⚠️ {error}</div>
           <button
             onClick={() => router.back()}
@@ -155,22 +88,80 @@ export default function StoryMapPlayerPage() {
     );
   }
 
-  const center: [number, number] = mapDetail?.center 
+  const center: [number, number] = mapDetail?.center
     ? [mapDetail.center.latitude, mapDetail.center.longitude]
     : [10.8231, 106.6297];
 
   return (
-    <div className="h-screen">
-      <StoryMapViewer
-        mapId={mapId}
-        segments={segments}
-        baseMapProvider={mapDetail?.baseMapProvider}
-        initialCenter={center}
-        initialZoom={mapDetail?.defaultZoom || 10}
-        controlledIndex={controlledIndex}
-        controlledPlaying={controlledPlaying}
-        controlsEnabled={false}
-      />
+    <div className="h-screen flex flex-col bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
+      {/* MAP FULL WIDTH – không có panel trái/phải */}
+      <div className="flex-1 min-h-0">
+        <StoryMapViewer
+          mapId={mapId}
+          segments={segments}
+          baseMapProvider={mapDetail?.baseMapProvider}
+          initialCenter={center}
+          initialZoom={mapDetail?.defaultZoom || 10}
+          onSegmentChange={handleSegmentChange}
+          // KHÔNG set controlledIndex/controlledPlaying, KHÔNG controlsEnabled=false
+          // => UI Play/Stop bên trong StoryMapViewer giống hệt trang control
+        />
+      </div>
+
+      {/* BOTTOM: Timeline panel giống y chang file control */}
+      <div className="h-24 border-t border-zinc-800 bg-zinc-900/95 px-6 flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => goToSegment(currentIndex - 1)}
+            disabled={segments.length === 0 || currentIndex === 0}
+            className="px-3 py-2 rounded-lg bg-zinc-800 text-zinc-100 text-xs disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700"
+          >
+            ◀ Trước
+          </button>
+          <button
+            onClick={() => goToSegment(currentIndex + 1)}
+            disabled={
+              segments.length === 0 || currentIndex >= segments.length - 1
+            }
+            className="px-3 py-2 rounded-lg bg-zinc-800 text-zinc-100 text-xs disabled:opacity-40 disabled:cursor-not-allowed hover:bg-zinc-700"
+          >
+            Sau ▶
+          </button>
+        </div>
+
+        <div className="text-xs text-zinc-300 min-w-[110px]">
+          Segment{" "}
+          <span className="font-semibold text-white">
+            {segments.length === 0 ? 0 : currentIndex + 1}
+          </span>{" "}
+          /{" "}
+          <span className="font-semibold text-white">{segments.length}</span>
+        </div>
+
+        <div className="flex-1 overflow-x-auto">
+          <div className="flex items-center gap-2">
+            {segments.map((seg, index) => (
+              <button
+                key={seg.segmentId}
+                onClick={() => goToSegment(index)}
+                className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition ${
+                  index === currentIndex
+                    ? "bg-blue-500 text-white border-blue-400"
+                    : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700"
+                }`}
+              >
+                {index + 1}. {seg.name || "Untitled"}
+              </button>
+            ))}
+
+            {segments.length === 0 && (
+              <div className="text-xs text-zinc-500">
+                No segments – please add segments in the editor.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
