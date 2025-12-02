@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Segment, CreateTransitionRequest, TimelineTransition } from "@/lib/api-storymap";
+import { Segment, CreateTransitionRequest, TimelineTransition, FrontendTransitionType } from "@/lib/api-storymap";
 import { Button } from "@/components/ui/button";
 
 interface TransitionEditorProps {
@@ -23,7 +23,7 @@ export default function TransitionEditor({
   const [toSegmentId, setToSegmentId] = useState("");
   const [transitionName, setTransitionName] = useState("");
   const [durationMs, setDurationMs] = useState(800);
-  const [transitionType, setTransitionType] = useState<"Jump" | "Ease" | "Linear">("Ease");
+  const [transitionType, setTransitionType] = useState<FrontendTransitionType>("Ease");
   const [animateCamera, setAnimateCamera] = useState(true);
   const [cameraAnimationType, setCameraAnimationType] = useState<"Jump" | "Ease" | "Fly">("Fly");
   const [cameraAnimationDurationMs, setCameraAnimationDurationMs] = useState(1500);
@@ -185,12 +185,15 @@ export default function TransitionEditor({
               </label>
               <select
                 value={transitionType}
-                onChange={(e) => setTransitionType(e.target.value as "Jump" | "Ease" | "Linear")}
+                onChange={(e) => setTransitionType(e.target.value as FrontendTransitionType)}
                 className="w-full px-4 py-3 border border-zinc-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-zinc-800 text-white"
               >
                 <option value="Jump">Jump (instant)</option>
-                <option value="Ease">Ease (smooth)</option>
                 <option value="Linear">Linear (constant speed)</option>
+                <option value="Ease">Ease (smooth)</option>
+                <option value="EaseIn">Ease In (slow start)</option>
+                <option value="EaseOut">Ease Out (slow end)</option>
+                <option value="EaseInOut">Ease In Out (smooth both ends)</option>
               </select>
             </div>
 

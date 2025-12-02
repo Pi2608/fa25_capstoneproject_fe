@@ -29,7 +29,7 @@ export function LocationForm({
   const [activeTab, setActiveTab] = useState<TabType>("basic");
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
-  const [description, setDescription] = useState("");
+  const [tooltipContent, setTooltipContent] = useState("");
   const [locationType, setLocationType] = useState<LocationType>("PointOfInterest");
   const [coordinates, setCoordinates] = useState<[number, number] | null>(null);
   const [selectedIcon, setSelectedIcon] = useState<string>("");
@@ -40,7 +40,7 @@ export function LocationForm({
     if (initialLocation) {
       setTitle(initialLocation.title || "");
       setSubtitle(initialLocation.subtitle || "");
-      setDescription(initialLocation.description || "");
+      setTooltipContent(initialLocation.tooltipContent || "");
       setLocationType(initialLocation.locationType || "PointOfInterest");
       setSelectedIcon(initialLocation.iconId || "");
       setIsVisible(initialLocation.isVisible !== false);
@@ -68,7 +68,7 @@ export function LocationForm({
       const data: CreateLocationRequest = {
         title: title.trim(),
         subtitle: subtitle.trim(),
-        description: description.trim(),
+        tooltipContent: tooltipContent.trim(),
         locationType,
         markerGeometry: JSON.stringify({
           type: "Point",
@@ -154,12 +154,12 @@ export function LocationForm({
               />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Mô tả</label>
+              <label className="block text-xs text-zinc-400 mb-1">Nội dung tooltip (hiển thị khi click)</label>
               <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                value={tooltipContent}
+                onChange={(e) => setTooltipContent(e.target.value)}
                 className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
-                placeholder="Mô tả chi tiết..."
+                placeholder="Nội dung hiển thị khi click vào marker..."
                 rows={3}
                 disabled={saving}
               />
