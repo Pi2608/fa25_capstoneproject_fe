@@ -280,13 +280,38 @@ export type TimelineTransition = {
   createdAt: string;
 };
 
+export type TransitionType = "Linear" | "Ease" | "EaseIn" | "EaseOut" | "EaseInOut";
+
+// Backend enum values (matching C# backend)
+export type BackendTransitionType = "Linear" | "Ease" | "EaseIn" | "EaseOut" | "EaseInOut";
+
+// Frontend uses "Jump" for instant (no animation) transitions
+export type FrontendTransitionType = "Jump" | "Linear" | "Ease" | "EaseIn" | "EaseOut" | "EaseInOut";
+
+export function mapToBackendTransitionType(frontendType?: FrontendTransitionType): BackendTransitionType | undefined {
+  if (!frontendType) return undefined;
+  if (frontendType === "Jump") return "Linear";
+  return frontendType as BackendTransitionType;
+}
+
+export function mapFromBackendTransitionType(backendType?: string): FrontendTransitionType {
+  if (!backendType) return "Ease";
+  const normalized = backendType.charAt(0).toUpperCase() + backendType.slice(1).toLowerCase();
+
+  if (normalized === "Easein") return "EaseIn";
+  if (normalized === "Easeout") return "EaseOut";
+  if (normalized === "Easeinout") return "EaseInOut";
+
+  return normalized as FrontendTransitionType;
+}
+
 export type CreateTransitionRequest = {
   mapId?: string; // Will be enriched
   fromSegmentId: string;
   toSegmentId: string;
   transitionName?: string;
   durationMs?: number;
-  transitionType?: "Jump" | "Ease" | "Linear";
+  transitionType?: BackendTransitionType;
   animateCamera?: boolean;
   cameraAnimationType?: "Jump" | "Ease" | "Fly";
   cameraAnimationDurationMs?: number;
@@ -647,29 +672,40 @@ export async function detachLayerFromSegment(
 
 export type CreateLocationRequest = {
   segmentId?: string;
+  zoneId?: string;
   title: string;
   subtitle?: string;
-  description?: string;
   locationType: LocationType;
   markerGeometry: string; // GeoJSON Point
-  iconType?: string;
-  iconUrl?: string;
-  iconColor?: string;
-  iconSize?: number;
+  storyContent?: string;
+  mediaResources?: string; // JSON string of media resources
   displayOrder: number;
   highlightOnEnter?: boolean;
   showTooltip?: boolean;
   tooltipContent?: string;
+  effectType?: string;
+  openSlideOnClick?: boolean;
+  slideContent?: string;
+  linkedLocationId?: string;
+  playAudioOnClick?: boolean;
+  audioUrl?: string;
+  externalUrl?: string;
+  associatedLayerId?: string;
+  animationPresetId?: string;
+  animationOverrides?: string;
+  isVisible?: boolean;
+  zIndex?: number;
+
+  // Legacy fields for backward compatibility
+  description?: string;
+  iconType?: string;
+  iconUrl?: string;
+  iconColor?: string;
+  iconSize?: number;
   openPopupOnClick?: boolean;
   popupContent?: string;
   mediaUrls?: string;
-  playAudioOnClick?: boolean;
-  audioUrl?: string;
   linkedSegmentId?: string;
-  linkedLocationId?: string;
-  externalUrl?: string;
-  isVisible?: boolean;
-  zIndex?: number;
 };
 
 export async function getSegmentLocations(mapId: string, segmentId: string): Promise<Location[]> {
@@ -718,9 +754,18 @@ export async function getTimelineTransitions(mapId: string): Promise<TimelineTra
 
 export async function createTimelineTransition(
   mapId: string,
-  data: CreateTransitionRequest
+  data: Omit<CreateTransitionRequest, 'transitionType'> & {
+    transitionType?: FrontendTransitionType;
+  }
 ): Promise<TimelineTransition> {
-  return await postJson<CreateTransitionRequest, TimelineTransition>(`/storymaps/${mapId}/timeline-transitions`, data);
+  const backendData: CreateTransitionRequest = {
+    ...data,
+    transitionType: mapToBackendTransitionType(data.transitionType),
+  };
+  return await postJson<CreateTransitionRequest, TimelineTransition>(
+    `/storymaps/${mapId}/timeline-transitions`,
+    backendData
+  );
 }
 
 export async function generateTransition(
@@ -731,6 +776,38 @@ export async function generateTransition(
   return await postJson<{ fromSegmentId: string; toSegmentId: string }, TimelineTransition>(
     `/storymaps/${mapId}/timeline-transitions/generate`,
     { fromSegmentId, toSegmentId }
+  );
+}
+
+export type UpdateTransitionRequest = {
+  transitionName?: string;
+  durationMs?: number;
+  transitionType?: BackendTransitionType;
+  animateCamera?: boolean;
+  cameraAnimationType?: "Jump" | "Ease" | "Fly";
+  cameraAnimationDurationMs?: number;
+  showOverlay?: boolean;
+  overlayContent?: string;
+  autoTrigger?: boolean;
+  requireUserAction?: boolean;
+  triggerButtonText?: string;
+};
+
+export async function updateTimelineTransition(
+  mapId: string,
+  transitionId: string,
+  data: Omit<UpdateTransitionRequest, 'transitionType'> & {
+    transitionType?: FrontendTransitionType;
+  }
+): Promise<TimelineTransition> {
+  // Map frontend type to backend type before sending to API
+  const backendData: UpdateTransitionRequest = {
+    ...data,
+    transitionType: mapToBackendTransitionType(data.transitionType),
+  };
+  return await putJson<UpdateTransitionRequest, TimelineTransition>(
+    `/storymaps/${mapId}/timeline-transitions/${transitionId}`,
+    backendData
   );
 }
 

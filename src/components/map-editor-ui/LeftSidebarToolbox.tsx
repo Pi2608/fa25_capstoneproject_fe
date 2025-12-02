@@ -39,6 +39,9 @@ import {
   updateLocation,
   createRouteAnimation,
   updateRouteAnimation,
+  FrontendTransitionType,
+  mapFromBackendTransitionType,
+  mapToBackendTransitionType,
 } from "@/lib/api-storymap";
 
 import { Icon } from "./Icon";
@@ -2212,6 +2215,18 @@ function SegmentFormView({
 
     setIsSaving(true);
     try {
+      console.log('=== Segment Submit Debug ===');
+      console.log('durationMs state value:', durationMs);
+      console.log('autoAdvance:', autoAdvance);
+      console.log('Full save data:', {
+        name,
+        description,
+        cameraState: stringifyCameraState(cameraState),
+        playbackMode: autoAdvance ? "Auto" : "Manual",
+        durationMs,
+        autoAdvance,
+      });
+
       await onSave({
         name,
         description,
@@ -2298,9 +2313,17 @@ function SegmentFormView({
             <input
               type="number"
               value={durationMs / 1000}
-              onChange={e =>
-                setDurationMs(Math.max(1, parseInt(e.target.value) || 1) * 1000)
-              }
+              onChange={e => {
+                const inputValue = e.target.value;
+                const parsedValue = parseInt(inputValue);
+                const finalValue = Math.max(1, parsedValue || 1) * 1000;
+                console.log('Duration input changed:', {
+                  inputValue,
+                  parsedValue,
+                  finalValue,
+                });
+                setDurationMs(finalValue);
+              }}
               min={1}
               max={60}
               className="w-full bg-zinc-800 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/80"
@@ -2444,8 +2467,8 @@ function TransitionFormView({
   const [toSegmentId, setToSegmentId] = useState(editing?.toSegmentId || "");
   const [transitionName, setTransitionName] = useState(editing?.transitionName || "");
   const [durationMs, setDurationMs] = useState(editing?.durationMs || 3000);
-  const [transitionType, setTransitionType] = useState<"Jump" | "Ease" | "Linear">(
-    editing?.transitionType || "Ease"
+  const [transitionType, setTransitionType] = useState<FrontendTransitionType>(
+    editing?.transitionType ? mapFromBackendTransitionType(editing.transitionType) : "Ease"
   );
 
   const [animateCamera, setAnimateCamera] = useState(editing?.animateCamera ?? true);
@@ -2474,7 +2497,7 @@ function TransitionFormView({
         toSegmentId,
         transitionName: transitionName || undefined,
         durationMs,
-        transitionType,
+        transitionType: mapToBackendTransitionType(transitionType),
         animateCamera,
         cameraAnimationType,
         cameraAnimationDurationMs,
@@ -2554,12 +2577,15 @@ function TransitionFormView({
         <label className="block text-xs text-zinc-400 mb-1">Transition curve</label>
         <select
           value={transitionType}
-          onChange={e => setTransitionType(e.target.value as any)}
+          onChange={e => setTransitionType(e.target.value as FrontendTransitionType)}
           className="w-full bg-zinc-800 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/80"
         >
-          <option value="Jump">Jump</option>
-          <option value="Ease">Ease</option>
-          <option value="Linear">Linear</option>
+          <option value="Jump">Jump (instant)</option>
+          <option value="Linear">Linear (constant speed)</option>
+          <option value="Ease">Ease (smooth)</option>
+          <option value="EaseIn">Ease In (slow start)</option>
+          <option value="EaseOut">Ease Out (slow end)</option>
+          <option value="EaseInOut">Ease In Out (smooth both ends)</option>
         </select>
       </div>
 

@@ -37,6 +37,7 @@ interface TimelineTrackProps {
   currentMap?: any;
   onReorder: (newOrder: Segment[]) => void;
   onSegmentClick: (segmentId: string) => void;
+  onPlaySingleSegment?: (segmentId: string) => void;
   onRefreshSegments?: () => void;
   onAddLocation?: (segmentId: string) => void;
   onAddZone?: (segmentId: string) => void;
@@ -53,6 +54,7 @@ export function TimelineTrack({
   currentMap,
   onReorder,
   onSegmentClick,
+  onPlaySingleSegment,
   onAddLocation,
   onAddZone,
   onAddLayer,
@@ -268,6 +270,7 @@ export function TimelineTrack({
                     <SortableSegmentHeader
                 segment={segment}
                       pixelsPerSecond={pixelsPerSecond}
+                      onPlaySegment={onPlaySingleSegment}
                     />
                     {index < segments.length - 1 && (
                       <div className="w-0.5 flex-shrink-0 bg-zinc-800/50" />
@@ -901,7 +904,15 @@ function ZoneLayerTrackItems({
 }
 
 // Sortable Segment Header Component
-function SortableSegmentHeader({ segment, pixelsPerSecond }: { segment: Segment; pixelsPerSecond: number }) {
+function SortableSegmentHeader({
+  segment,
+  pixelsPerSecond,
+  onPlaySegment
+}: {
+  segment: Segment;
+  pixelsPerSecond: number;
+  onPlaySegment?: (segmentId: string) => void;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `segment-${segment.segmentId}`,
   });
@@ -917,19 +928,34 @@ function SortableSegmentHeader({ segment, pixelsPerSecond }: { segment: Segment;
     <div
       ref={setNodeRef}
       style={style}
-      className="flex-shrink-0 px-2 py-1 rounded bg-zinc-800/50 border border-zinc-700/50 hover:border-zinc-600/50 transition-colors cursor-move"
-      {...attributes}
-      {...listeners}
+      className="flex-shrink-0 px-2 py-1 rounded bg-zinc-800/50 border border-zinc-700/50 hover:border-zinc-600/50 transition-colors group relative"
     >
-      <div className="flex items-center justify-center gap-1">
-        <Icon icon="mdi:drag" className="w-3 h-3 text-zinc-500" />
-        <div className="text-[10px] font-medium text-zinc-300 truncate text-center">
-          {segment.name}
+      {/* Drag handle and content */}
+      <div className="cursor-move" {...attributes} {...listeners}>
+        <div className="flex items-center justify-center gap-1">
+          <Icon icon="mdi:drag" className="w-3 h-3 text-zinc-500" />
+          <div className="text-[10px] font-medium text-zinc-300 truncate text-center">
+            {segment.name}
+          </div>
+        </div>
+        <div className="text-[9px] text-zinc-500 text-center mt-0.5">
+          {(segment.durationMs / 1000).toFixed(1)}s
         </div>
       </div>
-      <div className="text-[9px] text-zinc-500 text-center mt-0.5">
-        {(segment.durationMs / 1000).toFixed(1)}s
-      </div>
+
+      {/* Play button - appears on hover */}
+      {onPlaySegment && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onPlaySegment(segment.segmentId);
+          }}
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center shadow-lg z-10"
+          title={`Play ${segment.name}`}
+        >
+          <Icon icon="mdi:play" className="w-4 h-4 text-white" />
+        </button>
+      )}
     </div>
   );
 }
