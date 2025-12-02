@@ -9,7 +9,7 @@ import {
   createQuestionBank,
   deleteQuestionBank,
   updateQuestionBank,
-  attachMapToQuestionBank,
+  attachSessionToQuestionBank,
   type QuestionBankDto,
 } from "@/lib/api-ques";
 import type { Workspace } from "@/types/workspace";
@@ -478,12 +478,15 @@ export default function QuestionBanksPage() {
 
     setAttachSaving(true);
     try {
-      await attachMapToQuestionBank(bankId, attachDialog.selectedMapId);
-      showToast("success", "Đã gắn storymap thành công");
+      // Note: Changed from attachMapToQuestionBank to attachSessionToQuestionBank
+      // attachDialog.selectedMapId is now treated as sessionId
+      await attachSessionToQuestionBank(bankId, attachDialog.selectedMapId);
+      showToast("success", "Đã gắn question bank vào session thành công");
+      // Note: updateBanksMapId might need to be updated to handle sessions
       data.updateBanksMapId(bankId, attachDialog.selectedMapId);
       attachDialog.close();
     } catch (e) {
-      showToast("error", safeMessage(e, "Không thể gắn storymap"));
+      showToast("error", safeMessage(e, "Không thể gắn question bank vào session"));
     } finally {
       setAttachSaving(false);
     }

@@ -493,7 +493,8 @@ export default function StoryMapControlPage() {
       setQuestionControlLoading(true);
       setCurrentQuestionIndex(index);
 
-      await broadcastQuestionViaSignalR(connection, session.sessionId, {
+     await broadcastQuestionViaSignalR(connection, session.sessionId, {
+        sessionQuestionId: question.sessionQuestionId ?? question.questionId,
         questionId: question.questionId,
         questionText: question.questionText,
         questionType: question.questionType,
@@ -507,7 +508,7 @@ export default function StoryMapControlPage() {
         points: question.points,
         timeLimit: question.timeLimit ?? 30,
       });
-
+      
     } catch (e: any) {
       console.error("Broadcast question failed:", e);
       setError(e?.message || "Không phát được câu hỏi");

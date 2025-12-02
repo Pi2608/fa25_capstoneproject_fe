@@ -1569,16 +1569,7 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
         })
       );
 
-      // Sort segments by displayOrder to ensure correct order after reorder
-      const sortedSegments = segmentsWithRoutes.sort((a, b) => {
-        if (a.displayOrder !== b.displayOrder) {
-          return a.displayOrder - b.displayOrder;
-        }
-        // Fallback to createdAt if displayOrder is the same
-        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-      });
-
-      setSegments(sortedSegments);
+      setSegments(segmentsWithRoutes);
       setTransitions(transitionsData);
     } catch (error) {
       console.error("Failed to load segments/transitions:", error);
@@ -2957,15 +2948,9 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
         showToast("success", "Segment created successfully");
       }
 
-      // Reload segments and sort by displayOrder
       const updatedSegments = await getSegments(mapId);
-      const sortedSegments = updatedSegments.sort((a, b) => {
-        if (a.displayOrder !== b.displayOrder) {
-          return a.displayOrder - b.displayOrder;
-        }
-        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-      });
-      setSegments(sortedSegments);
+
+      setSegments(updatedSegments);
     } catch (error) {
       showToast("error", "Failed to save segment");
     }
@@ -2979,15 +2964,9 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
       await deleteSegment(mapId, segmentId);
       showToast("success", "Segment deleted successfully");
 
-      // Reload segments and sort by displayOrder
       const updatedSegments = await getSegments(mapId);
-      const sortedSegments = updatedSegments.sort((a, b) => {
-        if (a.displayOrder !== b.displayOrder) {
-          return a.displayOrder - b.displayOrder;
-        }
-        return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-      });
-      setSegments(sortedSegments);
+
+      setSegments(updatedSegments);
     } catch (error) {
       showToast("error", "Failed to delete segment");
     }
@@ -3053,14 +3032,7 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
 
       try {
         await reorderSegments(mapId, newOrder.map((s) => s.segmentId));
-        // Sort newOrder by displayOrder to ensure consistency
-        const sortedNewOrder = [...newOrder].sort((a, b) => {
-          if (a.displayOrder !== b.displayOrder) {
-            return a.displayOrder - b.displayOrder;
-          }
-          return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-        });
-        setSegments(sortedNewOrder);
+        setSegments(newOrder);
         showToast("success", "Segments reordered successfully");
       } catch (error) {
         showToast("error", "Failed to reorder segments");
@@ -3629,16 +3601,10 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
               })
             );
 
-            // Sort segments by displayOrder to ensure correct order
-            const sortedSegments = segmentsWithRoutes.sort((a, b) => {
-              if (a.displayOrder !== b.displayOrder) {
-                return a.displayOrder - b.displayOrder;
-              }
-              return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
-            });
+
 
             // Force new array reference to ensure React re-renders
-            setSegments([...sortedSegments]);
+            setSegments([...segmentsWithRoutes]);
             setTransitions([...transitionsData]);
           } catch (error) {
             console.error("Failed to refresh segments:", error);

@@ -9,7 +9,7 @@ import { Workspace } from "@/types/workspace";
 import {
     getQuestionBank,
     getQuestionsOfQuestionBank,
-    getMapsByQuestionBank,
+    getSessionsByQuestionBank,
     QuestionBankDto,
     QuestionDto,
 } from "@/lib/api-ques";
@@ -28,7 +28,7 @@ export function useQuestionBankData(orgId: string, bankId: string) {
     const [org, setOrg] = useState<OrganizationDetailDto | null>(null);
     const [workspace, setWorkspace] = useState<Workspace | null>(null);
     const [questionBank, setQuestionBank] = useState<(QuestionBankDto & { questions: QuestionDto[] }) | null>(null);
-    const [mapNames, setMapNames] = useState<string[]>([]);
+    const [sessionNames, setSessionNames] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
 
@@ -60,10 +60,10 @@ export function useQuestionBankData(orgId: string, bankId: string) {
             setWorkspace(workspaceRes);
             setQuestionBank({ ...bankRes, questions: questionsRes });
             try {
-                const maps = await getMapsByQuestionBank(bankId);
-                setMapNames(maps.map(m => m.mapName));
+                const sessions = await getSessionsByQuestionBank(bankId);
+                setSessionNames(sessions.map(s => s.sessionName || s.sessionCode));
             } catch {
-                setMapNames([]);
+                setSessionNames([]);
             }
         } catch (e) {
             setErr(safeMessage(e, t("workspace_detail.request_failed")));
@@ -95,7 +95,7 @@ export function useQuestionBankData(orgId: string, bankId: string) {
         org,
         workspace,
         questionBank,
-        mapNames,
+        sessionNames,
         loading,
         err,
         reloadQuestionBank,

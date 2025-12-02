@@ -8,7 +8,6 @@ import { getMapDetail } from "@/lib/api-maps";
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
 
 import {
-  getCurrentQuestionForParticipant,
   submitParticipantResponse,
   getSession,
   getSessionLeaderboard,
@@ -364,7 +363,7 @@ export default function StoryMapViewPage() {
       setInfoMessage(null);
 
       await submitParticipantResponse(participantId, {
-        sessionQuestionId: currentQuestion.questionId,
+        sessionQuestionId: currentQuestion.sessionQuestionId,
         questionOptionId: selectedOptionId,
       });
 

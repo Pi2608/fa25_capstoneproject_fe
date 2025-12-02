@@ -13,7 +13,7 @@ import {
   createSession,
   getMyQuestionBanks,
   getPublicQuestionBanks,
-  getMapsByQuestionBank,
+  getSessionsByQuestionBank,
   type QuestionBankDto,
 } from "@/lib/api-ques";
 import { getOrganizationById } from "@/lib/api-organizations";
@@ -114,7 +114,7 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
 
   const selectedMap = useMemo(
     () =>
-      mapsForSelectedWorkspace.find((map) => map.mapId === selectedMapId) ?? null,
+      mapsForSelectedWorkspace.find((map) => map.id === selectedMapId) ?? null,
     [mapsForSelectedWorkspace, selectedMapId]
   );
 
@@ -253,24 +253,10 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
 
         const allBanks = Array.from(bankMap.values());
 
-        const banksForMap: QuestionBankDto[] = [];
-
-        await Promise.all(
-          allBanks.map(async (bank) => {
-            try {
-              const maps = await getMapsByQuestionBank(bank.questionBankId);
-              if (maps.some((m) => m.mapId === selectedMapId)) {
-                banksForMap.push(bank);
-              }
-            } catch (err) {
-              console.error(
-                "Failed to load maps for question bank",
-                bank.questionBankId,
-                err
-              );
-            }
-          })
-        );
+        // Note: Question banks are now attached to sessions, not maps
+        // When creating a new session, we show all available question banks
+        // (filtering by session attachment would require an existing session)
+        const banksForMap: QuestionBankDto[] = allBanks;
 
         if (cancelled) return;
 
@@ -316,7 +302,7 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
         mapId: selectedMapId,
         questionBankId: selectedQuestionBankId || undefined,
         sessionName:
-          sessionName || `${selectedMap.mapName ?? "Storymap"} Session`,
+          sessionName || `${selectedMap.name ?? "Storymap"} Session`,
         description,
         sessionType,
         maxParticipants: maxParticipants || undefined,
@@ -338,7 +324,7 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
 
       params.set("workspaceId", selectedWorkspaceId);
       params.set("mapId", selectedMapId);
-      if (selectedMap.mapName) params.set("mapName", selectedMap.mapName);
+      if (selectedMap.name) params.set("mapName", selectedMap.name);
 
       router.push(`/storymap/control/${selectedMapId}?${params.toString()}`);
     } catch (error: any) {
@@ -354,7 +340,7 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
     if (!selectedWorkspaceId) return;
     const maps = mapsByWorkspace[selectedWorkspaceId];
     if (!maps || maps.length === 0) return;
-    const exists = maps.some((map) => map.mapId === presetMapId);
+    const exists = maps.some((map) => map.id === presetMapId);
     if (exists) {
       setSelectedMapId(presetMapId);
       prefAppliedRef.current = true;
@@ -549,12 +535,12 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
               ) : (
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   {mapsForSelectedWorkspace.map((map) => {
-                    const isSelected = map.mapId === selectedMapId;
+                    const isSelected = map.id === selectedMapId;
                     return (
                       <button
-                        key={map.mapId}
+                        key={map.id}
                         type="button"
-                        onClick={() => handleSelectMap(map.mapId)}
+                        onClick={() => handleSelectMap(map.id)}
                         className={`rounded-xl border-2 p-4 text-left transition-all ${
                           isSelected
                             ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
@@ -563,7 +549,7 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
                       >
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                            {map.mapName}
+                              {map.name}
                           </div>
                           {map.status && (
                             <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
@@ -703,7 +689,7 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
                       3. Thông tin session
                     </h2>
                     <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Storymap: {selectedMap.mapName}
+                      Storymap: {selectedMap.name}
                     </p>
                   </div>
                 </div>
@@ -716,7 +702,7 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
                       type="text"
                       value={sessionName}
                       onChange={(e) => setSessionName(e.target.value)}
-                      placeholder={`${selectedMap?.mapName ?? "Session"}`}
+                      placeholder={`${selectedMap?.name ?? "Session"}`}
                       className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
                     />
                   </div>

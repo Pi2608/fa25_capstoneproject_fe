@@ -116,22 +116,22 @@ export async function updateQuestionBank(
   return res;
 }
 
-export async function attachMapToQuestionBank(
+export async function attachSessionToQuestionBank(
   questionBankId: string,
-  mapId: string
+  sessionId: string
 ): Promise<void> {
-  const body = { mapId };
+  const body = { sessionId };
   await postJson<typeof body, void>(
-    `/question-banks/${questionBankId}/maps`,
+    `/question-banks/${questionBankId}/sessions`,
     body
   );
 }
 
-export async function getMapsByQuestionBank(
+export async function getSessionsByQuestionBank(
   questionBankId: string
-): Promise<Array<{ mapId: string; mapName: string }>> {
-  const res = await getJson<Array<{ mapId: string; mapName: string; assignedAt?: string }>>(
-    `/question-banks/${questionBankId}/maps`
+): Promise<Array<{ sessionId: string; sessionName: string; sessionCode: string; attachedAt?: string }>> {
+  const res = await getJson<Array<{ sessionId: string; sessionName: string; sessionCode: string; attachedAt?: string }>>(
+    `/question-banks/${questionBankId}/sessions`
   );
   return res;
 }
@@ -632,31 +632,31 @@ export interface SessionRunningQuestionDto {
   options: QuestionOptionDto[];
 }
 
-export async function getCurrentQuestionForParticipant(
-  participantId: string
-): Promise<SessionRunningQuestionDto | null> {
-  const res = await getJson<SessionRunningQuestionDto | null>(
-    `/sessions/participants/${participantId}/current-question`
-  );
+// export async function getCurrentQuestionForParticipant(
+//   participantId: string
+// ): Promise<SessionRunningQuestionDto | null> {
+//   const res = await getJson<SessionRunningQuestionDto | null>(
+//     `/sessions/participants/${participantId}/current-question`
+//   );
 
-  if (!res) return null;
+//   if (!res) return null;
 
-  const opts = Array.isArray((res as any).options)
-    ? (res as any).options.map((o: any, idx: number): QuestionOptionDto => ({
-      questionOptionId: o.questionOptionId ?? o.QuestionOptionId ?? "",
-      questionId: o.questionId ?? o.QuestionId ?? "",
-      optionText: o.optionText ?? o.text ?? "",
-      optionImageUrl: o.optionImageUrl ?? o.imageUrl ?? null,
-      isCorrect: !!(o.isCorrect ?? o.correct ?? false),
-      displayOrder: o.displayOrder ?? idx + 1,
-    }))
-    : [];
+//   const opts = Array.isArray((res as any).options)
+//     ? (res as any).options.map((o: any, idx: number): QuestionOptionDto => ({
+//       questionOptionId: o.questionOptionId ?? o.QuestionOptionId ?? "",
+//       questionId: o.questionId ?? o.QuestionId ?? "",
+//       optionText: o.optionText ?? o.text ?? "",
+//       optionImageUrl: o.optionImageUrl ?? o.imageUrl ?? null,
+//       isCorrect: !!(o.isCorrect ?? o.correct ?? false),
+//       displayOrder: o.displayOrder ?? idx + 1,
+//     }))
+//     : [];
 
-  return {
-    ...res,
-    options: opts,
-  };
-}
+//   return {
+//     ...res,
+//     options: opts,
+//   };
+// }
 
 // ---------- Học sinh gửi đáp án ----------
 
