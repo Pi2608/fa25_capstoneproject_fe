@@ -48,6 +48,7 @@ export default function WorkspaceDetailPage() {
   }>({ open: false });
   const [deleteMapLoading, setDeleteMapLoading] = useState(false);
 
+  const [publishedMenuOpenId, setPublishedMenuOpenId] = useState<string | null>(null);
 
   const handleCreateMap = useCallback(async () => {
     try {
@@ -60,7 +61,6 @@ export default function WorkspaceDetailPage() {
       showToast("error", safeMessage(e, t("workspace_detail.request_failed")));
     }
   }, [router, showToast, workspaceId, t]);
-
 
   const loadData = useCallback(async () => {
     try {
@@ -132,31 +132,30 @@ export default function WorkspaceDetailPage() {
 
   const handleDeleteMap = useCallback(async () => {
     if (!deleteMapOpen.mapId) return;
-
     setDeleteMapLoading(true);
     try {
       await deleteMap(deleteMapOpen.mapId);
-      showToast("success", t("workspace_detail.toast_deleted"));
+      showToast("success", "Đã xoá bản đồ.");
       setDeleteMapOpen({ open: false });
       await loadData();
     } catch (e) {
-      showToast("error", safeMessage(e, t("workspace_detail.request_failed")));
+      showToast("error", safeMessage(e, "Yêu cầu thất bại, vui lòng thử lại."));
     } finally {
       setDeleteMapLoading(false);
     }
-  }, [deleteMapOpen.mapId, showToast, loadData, t]);
+  }, [deleteMapOpen.mapId, showToast, loadData]);
 
   const handleRemoveMapFromWorkspace = useCallback(
     async (mapId: string) => {
       try {
         await removeMapFromWorkspace(workspaceId, mapId);
-        showToast("success", t("workspace_detail.toast_removed"));
+        showToast("success", "Đã gỡ bản đồ khỏi workspace.");
         await loadData();
       } catch (e) {
-        showToast("error", safeMessage(e, t("workspace_detail.request_failed")));
+        showToast("error", safeMessage(e, "Yêu cầu thất bại, vui lòng thử lại."));
       }
     },
-    [workspaceId, showToast, loadData, t]
+    [workspaceId, showToast, loadData]
   );
 
   const handleOpenCreateSession = useCallback(
@@ -172,9 +171,10 @@ export default function WorkspaceDetailPage() {
     [orgId, workspaceId, router]
   );
 
-
   if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">{t("workspace_detail.loading")}</div>;
   if (err || !org || !workspace) return <div className="max-w-3xl px-4 text-red-400">{err ?? t("workspace_detail.not_found")}</div>;
+
+  const deleteMapLabel = deleteMapOpen.mapName || "bản đồ này";
 
   return (
     <div className="min-w-0 relative px-4">
@@ -202,7 +202,6 @@ export default function WorkspaceDetailPage() {
             {t("workspace_detail.create_map")}
           </button>
         </div>
-
       </div>
 
       <div className="mb-6 flex items-center justify-between">
@@ -380,30 +379,75 @@ export default function WorkspaceDetailPage() {
       )}
 
       {publishedMaps.length > 0 && (
-        <div className="mt-10">
+        <section className="mt-10">
           <h2 className="text-lg font-semibold mb-4">Bản đồ đã publish</h2>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {publishedMaps.map((map) => (
-              <div key={map.id} className="rounded-xl border border-emerald-500/40 bg-zinc-900/70 p-4">
-                <div className="h-24 w-full rounded-lg bg-gradient-to-br from-emerald-500/20 via-emerald-400/10 to-zinc-900 border border-emerald-400/40 mb-3 grid place-items-center text-emerald-300 text-xs">
+              <div
+                key={map.id}
+                className="group relative rounded-3xl border border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 to-zinc-950/40 hover:border-emerald-400 hover:shadow-[0_0_0_1px_rgba(16,185,129,0.5)] transition-all duration-200 p-4"
+              >
+                <div
+                  className={`absolute top-3 right-3 transition ${
+                    publishedMenuOpenId === map.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  }`}
+                >
+                  <div className="relative">
+                    <button
+                      className="h-7 w-7 flex items-center justify-center rounded-lg border border-emerald-500/40 bg-emerald-900/60 hover:bg-emerald-800/80 text-xs text-zinc-100"
+                      title="Tùy chọn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPublishedMenuOpenId((prev) => (prev === map.id ? null : map.id));
+                      }}
+                    >
+                      <span className="leading-none translate-y-[1px]">⋯</span>
+                    </button>
+                    {publishedMenuOpenId === map.id && (
+                      <div
+                        className="absolute right-0 mt-2 w-44 rounded-xl border border-zinc-700 bg-zinc-900/95 shadow-xl"
+                        onMouseLeave={() => setPublishedMenuOpenId(null)}
+                      >
+                        <button
+                          className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPublishedMenuOpenId(null);
+                            setDeleteMapOpen({
+                              open: true,
+                              mapId: map.id,
+                              mapName: map.name || t("workspace_detail.unnamed"),
+                            });
+                          }}
+                        >
+                          Xoá bản đồ
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mb-4 h-28 w-full rounded-2xl border border-emerald-500/40 bg-[radial-gradient(circle_at_0_0,#22c55e33,transparent_55%),radial-gradient(circle_at_100%_0,#22c55e22,transparent_55%)] bg-emerald-950/40 flex items-center justify-center text-sm font-medium text-emerald-300">
                   Đã publish
                 </div>
-                <div className="min-w-0 mb-2">
-                  <div className="truncate font-semibold text-white">{map.name || t("workspace_detail.unnamed")}</div>
+                <div className="min-w-0 mb-3">
+                  <div className="truncate font-semibold text-zinc-50">
+                    {map.name || t("workspace_detail.unnamed")}
+                  </div>
                   <div className="text-xs text-zinc-400">
                     {map.publishedAt ? `Publish: ${formatDate(map.publishedAt)}` : "Publish: —"}
                   </div>
                 </div>
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 mt-auto">
                   <button
                     onClick={() => router.push(`/storymap/${map.id}`)}
-                    className="w-full px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                    className="w-full px-3 py-2 rounded-xl border border-zinc-700 bg-zinc-900 text-sm text-zinc-100 hover:bg-zinc-800"
                   >
                     Mở storymap
                   </button>
                   <button
                     onClick={() => void handleOpenCreateSession(map.id)}
-                    className="w-full px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
+                    className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
                   >
                     Tạo session
                   </button>
@@ -411,7 +455,7 @@ export default function WorkspaceDetailPage() {
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {publishedMaps.length === 0 && (
@@ -423,23 +467,24 @@ export default function WorkspaceDetailPage() {
       {deleteMapOpen.open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
-            <h2 className="text-xl font-semibold text-white mb-4">{t("workspace_detail.delete_map_title")}</h2>
+            <h2 className="text-xl font-semibold text-white mb-4">Xoá bản đồ?</h2>
             <p className="text-sm text-zinc-300 mb-6">
-              {t("workspace_detail.delete_map_desc", { name: deleteMapOpen.mapName || "" })}
+              Bạn có chắc chắn muốn xoá bản đồ{" "}
+              <span className="font-semibold text-white">"{deleteMapLabel}"</span>? Hành động này không thể hoàn tác.
             </p>
             <div className="flex justify-end gap-2">
               <button
                 className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
                 onClick={() => setDeleteMapOpen({ open: false })}
               >
-                {t("workspace_detail.cancel")}
+                Hủy
               </button>
               <button
                 onClick={() => void handleDeleteMap()}
                 disabled={deleteMapLoading}
                 className="px-4 py-2 rounded-lg bg-red-500 text-zinc-900 text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
               >
-                {deleteMapLoading ? t("workspace_detail.deleting") : t("workspace_detail.delete_map_cta")}
+                {deleteMapLoading ? "Đang xoá..." : "Xoá bản đồ"}
               </button>
             </div>
           </div>
