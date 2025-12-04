@@ -322,14 +322,14 @@ function RowMenu({
         >
           Sửa thông tin
         </MenuButton>
-        <MenuButton
+        {/* <MenuButton
           onClick={() => {
             onAttach(state.bank);
             onClose();
           }}
         >
           Thêm vào storymap
-        </MenuButton>
+        </MenuButton> */}
         <MenuButton
           danger
           disabled={deletingBankId === state.id}

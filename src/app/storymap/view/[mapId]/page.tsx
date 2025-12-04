@@ -474,9 +474,8 @@ export default function StoryMapViewPage() {
 
           <div className="flex items-center justify-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
             <span
-              className={`inline-flex h-2 w-2 rounded-full ${
-                isConnected ? "bg-emerald-400" : "bg-red-400"
-              } animate-pulse`}
+              className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"
+                } animate-pulse`}
             />
             <span>{isConnected ? "Đã kết nối" : "Đang kết nối..."}</span>
           </div>
@@ -510,23 +509,21 @@ export default function StoryMapViewPage() {
                 {leaderboard.map((entry, idx) => (
                   <div
                     key={entry.participantId}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg ${
-                      entry.participantId === participantId
-                        ? "bg-emerald-500/20 border border-emerald-500/40"
-                        : "bg-zinc-800/50"
-                    }`}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg ${entry.participantId === participantId
+                      ? "bg-emerald-500/20 border border-emerald-500/40"
+                      : "bg-zinc-800/50"
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <span
-                        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${
-                          idx === 0
-                            ? "bg-yellow-500 text-yellow-900"
-                            : idx === 1
+                        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${idx === 0
+                          ? "bg-yellow-500 text-yellow-900"
+                          : idx === 1
                             ? "bg-gray-300 text-gray-800"
                             : idx === 2
-                            ? "bg-amber-600 text-amber-100"
-                            : "bg-zinc-700 text-zinc-300"
-                        }`}
+                              ? "bg-amber-600 text-amber-100"
+                              : "bg-zinc-700 text-zinc-300"
+                          }`}
                       >
                         {entry.rank ?? idx + 1}
                       </span>
@@ -592,9 +589,8 @@ export default function StoryMapViewPage() {
           {/* Connection status */}
           <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
             <span
-              className={`inline-flex h-2 w-2 rounded-full ${
-                isConnected ? "bg-emerald-400" : "bg-red-400"
-              } animate-pulse`}
+              className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"
+                } animate-pulse`}
             />
             <span>{isConnected ? "Đã kết nối với giáo viên" : "Đang kết nối..."}</span>
             {isTeacherPlaying && <span className="ml-2 text-emerald-400">▶ Đang phát</span>}
@@ -616,9 +612,8 @@ export default function StoryMapViewPage() {
                   </span>
                   {viewState === "question" && timeRemaining !== null && (
                     <span
-                      className={`font-mono text-sm font-bold ${
-                        timeRemaining <= 10 ? "text-red-400" : "text-emerald-400"
-                      }`}
+                      className={`font-mono text-sm font-bold ${timeRemaining <= 10 ? "text-red-400" : "text-emerald-400"
+                        }`}
                     >
                       {timeRemaining}s
                     </span>
@@ -650,23 +645,29 @@ export default function StoryMapViewPage() {
                       .map((opt) => (
                         <label
                           key={opt.id}
-                          className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer text-[13px] transition ${
-                            hasSubmitted
-                              ? "opacity-60 cursor-not-allowed"
-                              : selectedOptionId === opt.id
+                          className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer text-[13px] transition ${hasSubmitted
+                            ? "opacity-60 cursor-not-allowed"
+                            : selectedOptionId === opt.id
                               ? "border-emerald-500 bg-emerald-500/10 text-emerald-50"
                               : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
-                          }`}
+                            }`}
                         >
                           <input
                             type="radio"
                             name="answer"
                             value={opt.id}
                             checked={selectedOptionId === opt.id}
-                            onChange={() => !hasSubmitted && setSelectedOptionId(opt.id)}
-                            disabled={hasSubmitted}
+                            onChange={() => {
+                              if (!hasSubmitted && (timeRemaining === null || timeRemaining > 0)) {
+                                setSelectedOptionId(opt.id);
+                              }
+                            }}
+                            disabled={
+                              hasSubmitted || (timeRemaining !== null && timeRemaining <= 0)
+                            }
                             className="mt-[3px] h-3 w-3 accent-emerald-500"
                           />
+
                           <span>{opt.optionText || "(Không có nội dung)"}</span>
                         </label>
                       ))}
@@ -678,7 +679,11 @@ export default function StoryMapViewPage() {
                 <button
                   type="button"
                   onClick={handleSubmitAnswer}
-                  disabled={answering || !selectedOptionId}
+                  disabled={
+                    answering ||
+                    !selectedOptionId ||
+                    (timeRemaining !== null && timeRemaining <= 0)
+                  }
                   className="mt-2 inline-flex justify-center w-full rounded-lg px-3 py-2 text-[13px] font-medium border border-emerald-500/70 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {answering ? "Đang gửi..." : "Gửi đáp án"}
@@ -715,11 +720,10 @@ export default function StoryMapViewPage() {
                         {questionResults.results.map((result, idx) => (
                           <div
                             key={result.participantId}
-                            className={`flex items-center justify-between text-[11px] ${
-                              result.participantId === participantId
-                                ? "text-emerald-300 font-semibold"
-                                : "text-zinc-300"
-                            }`}
+                            className={`flex items-center justify-between text-[11px] ${result.participantId === participantId
+                              ? "text-emerald-300 font-semibold"
+                              : "text-zinc-300"
+                              }`}
                           >
                             <span>
                               {result.displayName}
@@ -819,9 +823,8 @@ export default function StoryMapViewPage() {
               <p className="text-zinc-400">Chờ giáo viên điều khiển bản đồ...</p>
               <div className="mt-4 flex items-center justify-center gap-2 text-sm text-zinc-500">
                 <span
-                  className={`inline-flex h-2 w-2 rounded-full ${
-                    isConnected ? "bg-emerald-400" : "bg-red-400"
-                  } animate-pulse`}
+                  className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"
+                    } animate-pulse`}
                 />
                 <span>{isConnected ? "Đã kết nối" : "Đang kết nối..."}</span>
               </div>
@@ -841,9 +844,8 @@ export default function StoryMapViewPage() {
                 </span>
                 {timeRemaining !== null && (
                   <span
-                    className={`font-mono text-2xl font-bold ${
-                      timeRemaining <= 10 ? "text-red-400 animate-pulse" : "text-white"
-                    }`}
+                    className={`font-mono text-2xl font-bold ${timeRemaining <= 10 ? "text-red-400 animate-pulse" : "text-white"
+                      }`}
                   >
                     {timeRemaining}s
                   </span>

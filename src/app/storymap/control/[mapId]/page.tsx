@@ -11,7 +11,7 @@ import {
   resumeSession,
   endSession,
   getSessionLeaderboard,
-  getQuestionsOfQuestionBank,
+  getSessionQuestions,
   activateNextQuestion,
   skipCurrentQuestion,
   extendQuestionTime,
@@ -21,6 +21,9 @@ import {
   type LeaderboardEntryDto,
   type QuestionDto,
 } from "@/lib/api-ques";
+import {
+  showQuestionResultsViaSignalR,
+} from "@/lib/hubs/session";
 
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
 import { useLoading } from "@/contexts/LoadingContext";
@@ -42,6 +45,12 @@ type QuestionBankMeta = {
   mapName?: string;
   createdAt?: string;
   updatedAt?: string;
+};
+
+type SessionQuestionBankInfo = {
+  questionBankId: string;
+  bankName?: string;
+  totalQuestions: number;
 };
 
 export default function StoryMapControlPage() {
@@ -73,14 +82,20 @@ export default function StoryMapControlPage() {
 
   const [questionBankMeta, setQuestionBankMeta] =
     useState<QuestionBankMeta | null>(null);
+  const [sessionQuestionBanks, setSessionQuestionBanks] = useState<SessionQuestionBankInfo[]>([]);
+
+  const totalQuestionsOfAllBanks = sessionQuestionBanks.reduce(
+    (sum, bank) => sum + (bank.totalQuestions ?? 0),
+    0
+  );
 
   const [showShareModal, setShowShareModal] = useState(false);
   const shareOverlayGuardRef = useRef(false);
-  
+
   // FIXED: Track last sent segment sync to avoid duplicates
   const lastSentSyncRef = useRef<{ index: number; isPlaying: boolean } | null>(null);
   const syncDebounceRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   useEffect(() => {
     if (!showShareModal || typeof document === "undefined") return;
 
@@ -109,14 +124,14 @@ export default function StoryMapControlPage() {
       shareOverlayGuardRef.current = false;
     };
   }, [showShareModal]);
-  
+
   const copyToClipboard = (text: string) => {
     if (typeof navigator === "undefined" || !navigator.clipboard) return;
     navigator.clipboard.writeText(text).catch((err) => {
       console.error("Copy to clipboard failed:", err);
     });
   };
-  
+
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const joinLinkWithCode = `${origin}/session/join`;
   const joinLinkWithQR = session
@@ -207,18 +222,24 @@ export default function StoryMapControlPage() {
           mapId: detail.mapId ?? mapId,
         });
 
-        if (detail.questionBankId) {
+        const banks = Array.isArray((detail as any).questionBanks)
+          ? (detail as any).questionBanks
+          : [];
+
+        if (banks.length > 0) {
+          const first = banks[0];
+
           setQuestionBankMeta({
-            id: detail.questionBankId ?? undefined,
-            bankName: detail.questionBankName ?? undefined,
-            description: detail.description ?? undefined,
-            category: undefined,
+            id: first.questionBankId,
+            bankName: first.questionBankName ?? undefined,
+            description: first.description ?? undefined,
+            category: first.category ?? undefined,
             tags: [],
-            totalQuestions: null,
+            totalQuestions: first.totalQuestions ?? null,
             workspaceName: undefined,
             mapName: detail.mapName ?? undefined,
-            createdAt: detail.createdAt ?? undefined,
-            updatedAt: detail.endedAt ?? detail.createdAt ?? undefined,
+            createdAt: first.attachedAt ?? undefined,
+            updatedAt: first.attachedAt ?? undefined,
           });
         } else {
           setQuestionBankMeta(null);
@@ -237,10 +258,10 @@ export default function StoryMapControlPage() {
     };
   }, [searchParams, mapId]);
 
-  // ================== Load questions of question bank ==================
+  // ================== Load question banks + questions of session ==================
   useEffect(() => {
-    const qbId = questionBankMeta?.id;
-    if (!qbId) {
+    if (!session?.sessionId) {
+      setSessionQuestionBanks([]);
       setQuestions([]);
       setCurrentQuestionIndex(null);
       return;
@@ -251,20 +272,69 @@ export default function StoryMapControlPage() {
     (async () => {
       try {
         setLoadingQuestions(true);
-        const data = await getQuestionsOfQuestionBank(qbId);
 
+        const allQuestions = await getSessionQuestions(session.sessionId);
         if (cancelled) return;
 
-        const ordered = Array.isArray(data)
-          ? [...data].sort(
-            (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0)
-          )
-          : [];
+        const list = Array.isArray(allQuestions) ? allQuestions : [];
+
+        const grouped = new Map<string, SessionQuestionBankInfo>();
+
+        for (const q of list) {
+          if (!q.questionBankId) continue;
+
+          const existing = grouped.get(q.questionBankId);
+          if (existing) {
+            existing.totalQuestions += 1;
+          } else {
+            grouped.set(q.questionBankId, {
+              questionBankId: q.questionBankId,
+              totalQuestions: 1,
+            });
+          }
+        }
+        const bankNameMap = new Map<string, string>();
+
+        if (Array.isArray((session as any)?.questionBanks)) {
+          (session as any).questionBanks.forEach((b: any) => {
+            if (b?.questionBankId) {
+              bankNameMap.set(
+                b.questionBankId,
+                b.questionBankName ||
+                `Bank (${b.questionBankId.slice(0, 6)}…)`
+              );
+            }
+          });
+        }
+
+        const result: SessionQuestionBankInfo[] = Array.from(grouped.values()).map(
+          (info) => ({
+            ...info,
+            bankName:
+              bankNameMap.get(info.questionBankId) ||
+              `Bank (${info.questionBankId.slice(0, 6)}…)`,
+          })
+        );
+
+        setSessionQuestionBanks(result);
+
+
+        // Sắp xếp toàn bộ câu hỏi để hiển thị bên dưới
+        const ordered = [...list].sort((a, b) => {
+          if (a.questionBankId === b.questionBankId) {
+            return (a.displayOrder ?? 0) - (b.displayOrder ?? 0);
+          }
+          return (a.questionBankId ?? "").localeCompare(
+            b.questionBankId ?? ""
+          );
+        });
+
         setCurrentQuestionIndex(null);
         setQuestions(ordered);
       } catch (e) {
-        console.error("Load question bank questions failed:", e);
+        console.error("Load question banks of session failed:", e);
         if (!cancelled) {
+          setSessionQuestionBanks([]);
           setQuestions([]);
         }
       } finally {
@@ -277,7 +347,8 @@ export default function StoryMapControlPage() {
     return () => {
       cancelled = true;
     };
-  }, [questionBankMeta?.id]);
+  }, [session?.sessionId, session?.questionBanks]);
+
 
   // ================== Load participants when session changes ==================
   useEffect(() => {
@@ -320,19 +391,19 @@ export default function StoryMapControlPage() {
     isPlaying: boolean
   ) => {
     if (!connection || !session?.sessionId) return;
-    
+
     // Check if this is a duplicate
     const last = lastSentSyncRef.current;
     if (last && last.index === segmentIndex && last.isPlaying === isPlaying) {
       console.log("[Control] Skipping duplicate SegmentSync:", { segmentIndex, isPlaying });
       return;
     }
-    
+
     // Clear any pending debounce
     if (syncDebounceRef.current) {
       clearTimeout(syncDebounceRef.current);
     }
-    
+
     // Debounce to avoid rapid successive calls
     syncDebounceRef.current = setTimeout(async () => {
       try {
@@ -342,10 +413,10 @@ export default function StoryMapControlPage() {
           segmentName,
           isPlaying,
         };
-        
+
         console.log("[Control] Sending SegmentSync:", segmentData);
         await sendSegmentSyncViaSignalR(connection, session.sessionId, segmentData);
-        
+
         // Update last sent
         lastSentSyncRef.current = { index: segmentIndex, isPlaying };
       } catch (error) {
@@ -358,7 +429,7 @@ export default function StoryMapControlPage() {
   const handleSegmentChange = async (segment: Segment, index: number) => {
     setCurrentIndex(index);
     setIsTeacherPlaying(false);
-    
+
     // Broadcast via BroadcastChannel (for same-browser testing)
     broadcastRef.current?.postMessage({
       type: "segment-change",
@@ -366,7 +437,7 @@ export default function StoryMapControlPage() {
       segment,
       timestamp: Date.now(),
     });
-    
+
     // Broadcast via SignalR to students
     if (connection && session?.sessionId) {
       sendSegmentSync(index, segment.segmentId, segment.name || `Segment ${index + 1}`, false);
@@ -376,15 +447,15 @@ export default function StoryMapControlPage() {
   // ================== Play/Pause state broadcast ==================
   const handlePlayingChange = useCallback(async (isPlaying: boolean) => {
     console.log("[Control] handlePlayingChange called:", isPlaying);
-    
+
     // Update local state
     setIsTeacherPlaying(isPlaying);
-    
+
     // Broadcast play/pause state to students
     if (connection && session?.sessionId && segments.length > 0) {
       const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
       const currentSeg = segments[segmentIndex] || segments[0];
-      
+
       sendSegmentSync(
         segmentIndex,
         currentSeg.segmentId,
@@ -493,7 +564,7 @@ export default function StoryMapControlPage() {
       setQuestionControlLoading(true);
       setCurrentQuestionIndex(index);
 
-     await broadcastQuestionViaSignalR(connection, session.sessionId, {
+      await broadcastQuestionViaSignalR(connection, session.sessionId, {
         sessionQuestionId: question.sessionQuestionId ?? question.questionId,
         questionId: question.questionId,
         questionText: question.questionText,
@@ -508,10 +579,34 @@ export default function StoryMapControlPage() {
         points: question.points,
         timeLimit: question.timeLimit ?? 30,
       });
-      
+
     } catch (e: any) {
       console.error("Broadcast question failed:", e);
       setError(e?.message || "Không phát được câu hỏi");
+    } finally {
+      setQuestionControlLoading(false);
+    }
+  };
+
+  const handleShowQuestionResults = async (question: QuestionDto) => {
+    if (!session || questionControlLoading || !connection) return;
+
+    try {
+      setQuestionControlLoading(true);
+
+      const correctOption = question.options?.find((opt) => opt.isCorrect);
+      const correctAnswerText = correctOption?.optionText ?? undefined;
+
+      await showQuestionResultsViaSignalR(
+        connection,
+        session.sessionId,
+        question.questionId,
+        [],
+        correctAnswerText
+      );
+    } catch (e: any) {
+      console.error("Show question results failed:", e);
+      setError(e?.message || "Không hiển thị được đáp án");
     } finally {
       setQuestionControlLoading(false);
     }
@@ -740,11 +835,12 @@ export default function StoryMapControlPage() {
                         {session.status}
                       </span>
                     </span>
-                    {questionBankMeta?.bankName && (
-                      <span>
+
+                    {sessionQuestionBanks.length > 0 && (
+                      <span className="text-right">
                         Bộ câu hỏi:&nbsp;
                         <span className="font-semibold text-emerald-300">
-                          {questionBankMeta.bankName}
+                          {sessionQuestionBanks.length} bộ
                         </span>
                       </span>
                     )}
@@ -916,17 +1012,36 @@ export default function StoryMapControlPage() {
                     <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium">
                       Bộ câu hỏi của session này
                     </p>
-                    <p className="text-xs text-zinc-400">
-                      {questionBankMeta?.bankName
-                        ? `Bộ: ${questionBankMeta.bankName}`
-                        : "Chưa gắn bộ câu hỏi cho session này."}
-                    </p>
+
+                    {/* MÔ TẢ + DANH SÁCH QUESTION_BANK */}
+                    {sessionQuestionBanks.length > 0 ? (
+                      <>
+                        <p className="text-xs text-zinc-400">
+                          Đã gắn {sessionQuestionBanks.length} bộ câu hỏi vào session này:
+                        </p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {sessionQuestionBanks.map((bank, index) => (
+                            <span
+                              key={`${bank.questionBankId}-${index}`}
+                              className="inline-flex items-center rounded-full border border-emerald-500/40 bg-emerald-500/5 px-2 py-[2px] text-[11px] text-emerald-200"
+                            >
+                              {bank.bankName}
+                            </span>
+                          ))}
+                        </div>
+
+                      </>
+                    ) : (
+                      <p className="text-xs text-zinc-400">
+                        Chưa gắn bộ câu hỏi cho session này.
+                      </p>
+                    )}
                   </div>
-                  {typeof questionBankMeta?.totalQuestions === "number" && (
+
+                  {/* TỔNG SỐ CÂU HỎI (CỘNG TỪ CÁC BANK) */}
+                  {totalQuestionsOfAllBanks > 0 && (
                     <div className="text-right text-[11px] text-zinc-300">
-                      <div className="font-semibold">
-                        {questionBankMeta.totalQuestions}
-                      </div>
+                      <div className="font-semibold">{totalQuestionsOfAllBanks}</div>
                       <div className="text-zinc-500">câu hỏi</div>
                     </div>
                   )}
@@ -982,52 +1097,31 @@ export default function StoryMapControlPage() {
                 {/* META BỘ CÂU HỎI + DANH SÁCH CÂU HỎI */}
                 {!questionBankMeta ? (
                   <div className="mt-2 rounded-xl border border-zinc-800 bg-zinc-950/80 px-3 py-2 text-[11px] text-zinc-400">
-                    Session hiện tại chưa gắn bộ câu hỏi hoặc thông tin chưa được
-                    truyền sang.
+                    Session hiện tại chưa gắn bộ câu hỏi hoặc thông tin chưa được truyền sang.
                   </div>
                 ) : (
                   <div className="mt-2 space-y-2">
                     <div>
                       <p className="text-sm font-semibold text-white">
-                        {questionBankMeta.bankName || "Bộ câu hỏi"}
+                        Danh sách câu hỏi
                       </p>
-                      {questionBankMeta.category && (
-                        <p className="text-[11px] text-zinc-400 mt-0.5">
-                          Chủ đề: {questionBankMeta.category}
-                        </p>
-                      )}
                     </div>
 
-                    {(questionBankMeta.mapName ||
-                      questionBankMeta.workspaceName) && (
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-zinc-400">
-                          {questionBankMeta.mapName && (
-                            <span>Map: {questionBankMeta.mapName}</span>
-                          )}
-                          {questionBankMeta.workspaceName && (
-                            <span>Workspace: {questionBankMeta.workspaceName}</span>
-                          )}
+                    {questionBankMeta.tags && questionBankMeta.tags.length > 0 && (
+                      <div className="pt-1">
+                        <p className="text-[11px] text-zinc-400 mb-1">Tags:</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {questionBankMeta.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="px-2 py-0.5 rounded-full border border-zinc-700 bg-zinc-900 text-[11px] text-zinc-100"
+                            >
+                              {tag}
+                            </span>
+                          ))}
                         </div>
-                      )}
-
-                    {questionBankMeta.tags &&
-                      questionBankMeta.tags.length > 0 && (
-                        <div className="pt-1">
-                          <p className="text-[11px] text-zinc-400 mb-1">
-                            Tags:
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {questionBankMeta.tags.map((tag) => (
-                              <span
-                                key={tag}
-                                className="px-2 py-0.5 rounded-full border border-zinc-700 bg-zinc-900 text-[11px] text-zinc-100"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+                      </div>
+                    )}
 
                     {questionBankMeta.description && (
                       <div className="pt-1">
@@ -1038,17 +1132,16 @@ export default function StoryMapControlPage() {
                       </div>
                     )}
 
-                    {(questionBankMeta.createdAt ||
-                      questionBankMeta.updatedAt) && (
-                        <div className="pt-1 border-t border-zinc-800 mt-1 text-[11px] text-zinc-500 space-y-0.5">
-                          {questionBankMeta.createdAt && (
-                            <p>Tạo lúc: {questionBankMeta.createdAt}</p>
-                          )}
-                          {questionBankMeta.updatedAt && (
-                            <p>Cập nhật: {questionBankMeta.updatedAt}</p>
-                          )}
-                        </div>
-                      )}
+                    {(questionBankMeta.createdAt || questionBankMeta.updatedAt) && (
+                      <div className="pt-1 border-t border-zinc-800 mt-1 text-[11px] text-zinc-500 space-y-0.5">
+                        {questionBankMeta.createdAt && (
+                          <p>Tạo lúc: {questionBankMeta.createdAt}</p>
+                        )}
+                        {questionBankMeta.updatedAt && (
+                          <p>Cập nhật: {questionBankMeta.updatedAt}</p>
+                        )}
+                      </div>
+                    )}
 
                     {/* DANH SÁCH CÂU HỎI */}
                     <div className="pt-2 border-t border-zinc-800 mt-2">
@@ -1056,9 +1149,9 @@ export default function StoryMapControlPage() {
                         <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-500 font-medium">
                           Danh sách câu hỏi
                         </p>
-                        {typeof questionBankMeta.totalQuestions === "number" && (
+                        {totalQuestionsOfAllBanks > 0 && (
                           <span className="text-[11px] text-zinc-400">
-                            {questionBankMeta.totalQuestions} câu
+                            {totalQuestionsOfAllBanks} câu
                           </span>
                         )}
                       </div>
@@ -1090,31 +1183,50 @@ export default function StoryMapControlPage() {
                                   <div className="flex-1">
                                     <p className="text-[11px] text-zinc-100">
                                       <span className="font-semibold">
-                                        Câu {q.displayOrder || idx + 1}:
+                                        Câu {idx + 1}:
                                       </span>{" "}
+
                                       {q.questionText}
                                     </p>
                                   </div>
-
                                   <div className="flex flex-col items-end gap-1">
                                     <span className="text-[10px] text-zinc-400 whitespace-nowrap">
                                       {q.points} điểm · {q.timeLimit ?? 0}s
                                     </span>
+
                                     {isActive ? (
-                                      <span className="inline-flex items-center rounded-full bg-emerald-500/15 border border-emerald-400/60 px-1.5 py-[1px] text-[10px] text-emerald-200">
-                                        Đang phát cho HS
-                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <span className="inline-flex items-center rounded-full bg-emerald-500/15 border border-emerald-400/60 px-1.5 py-[1px] text-[10px] text-emerald-200">
+                                          Đang phát cho HS
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleShowQuestionResults(q)}
+                                          disabled={
+                                            !session ||
+                                            questionControlLoading
+                                          }
+                                          className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-400/60 px-2 py-0.5 text-[10px] text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+                                        >
+                                          Hiển thị đáp án
+                                        </button>
+                                      </div>
                                     ) : (
                                       <button
                                         type="button"
                                         onClick={() => handleBroadcastQuestion(q, idx)}
-                                        disabled={!session || session.status !== "Running" || questionControlLoading}
+                                        disabled={
+                                          !session ||
+                                          session.status !== "Running" ||
+                                          questionControlLoading
+                                        }
                                         className="inline-flex items-center gap-1 rounded-full bg-blue-500/15 border border-blue-400/60 px-2 py-0.5 text-[10px] text-blue-200 hover:bg-blue-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
                                       >
                                         📢 Phát câu hỏi
                                       </button>
                                     )}
                                   </div>
+
                                 </div>
 
                                 {q.options && q.options.length > 0 && (
@@ -1127,7 +1239,9 @@ export default function StoryMapControlPage() {
                                       )
                                       .map((opt) => (
                                         <li
-                                          key={opt.questionOptionId ?? opt.optionText}
+                                          key={
+                                            opt.questionOptionId ?? opt.optionText
+                                          }
                                           className="flex items-start gap-2 text-[11px]"
                                         >
                                           <span className="mt-[3px] inline-block h-1.5 w-1.5 rounded-full bg-zinc-500" />
@@ -1138,8 +1252,7 @@ export default function StoryMapControlPage() {
                                                 : "text-zinc-300"
                                             }
                                           >
-                                            {opt.optionText ||
-                                              "(Không có nội dung)"}
+                                            {opt.optionText || "(Không có nội dung)"}
                                           </span>
                                           {opt.isCorrect && (
                                             <span className="ml-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 px-1.5 py-[1px] text-[10px] text-emerald-300">
@@ -1159,6 +1272,7 @@ export default function StoryMapControlPage() {
                   </div>
                 )}
               </section>
+
             </div>
           </div>
         </div>

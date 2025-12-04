@@ -249,6 +249,15 @@ export async function getQuestionsOfQuestionBank(
   return res;
 }
 
+export async function getSessionQuestions(
+  sessionId: string
+): Promise<QuestionDto[]> {
+  const res = await getJson<QuestionDto[]>(
+    `/question-banks/sessions/${sessionId}/question-banks`
+  );
+  return res;
+}
+
 export async function deleteQuestion(questionId: string) {
   return delJson(`/question-banks/questions/${questionId}`);
 }
@@ -360,7 +369,7 @@ export interface SessionDto {
 
 export interface CreateSessionRequest {
   mapId: string;
-  questionBankId?: string;
+  questionBankId?: string | null;
   sessionName?: string;
   description?: string | null;
   sessionType?: "live" | "practice" | string;
