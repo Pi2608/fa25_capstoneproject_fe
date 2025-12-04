@@ -71,8 +71,32 @@ export function deleteWorkspace(workspaceId: string) {
 }
 
 export async function getWorkspaceMaps(workspaceId: string): Promise<MapDto[]> {
-  const res = await getJson<any>(`/workspaces/${workspaceId}/maps`);
-  return Array.isArray(res) ? res : res?.maps ?? [];
+
+  const res = await getJson<{
+    maps: {
+      mapId: string;
+      mapName: string;
+      description?: string | null;
+      previewImage?: string | null;
+      isPublic?: boolean;
+      isActive?: boolean;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+    }[];
+  }>(`/workspaces/${workspaceId}/maps`);
+
+  const raw = Array.isArray(res) ? res : res?.maps ?? [];
+
+  return raw.map((m) => ({
+    id: m.mapId,
+    name: m.mapName,
+    description: m.description ?? "",
+    previewImage: m.previewImage ?? null,
+    isPublic: m.isPublic ?? false,
+    isActive: m.isActive ?? true,
+    createdAt: m.createdAt ?? undefined,
+    updatedAt: m.updatedAt ?? undefined,
+  }));
 }
 
 export function removeMapFromWorkspace(workspaceId: string, mapId: string) {

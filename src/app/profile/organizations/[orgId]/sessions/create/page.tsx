@@ -14,8 +14,10 @@ import {
   getMyQuestionBanks,
   getPublicQuestionBanks,
   getSessionsByQuestionBank,
+  attachSessionToQuestionBank,
   type QuestionBankDto,
 } from "@/lib/api-ques";
+
 import { getOrganizationById } from "@/lib/api-organizations";
 import {
   getProjectsByOrganization,
@@ -79,10 +81,11 @@ export default function OrganizationCreateSessionPage() {
   const [selectedMapId, setSelectedMapId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
-const [availableQuestionBanks, setAvailableQuestionBanks] = useState<QuestionBankDto[]>([]);
-const [questionBanksLoading, setQuestionBanksLoading] = useState(false);
-const [questionBanksError, setQuestionBanksError] = useState<string | null>(null);
-const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
+  const [availableQuestionBanks, setAvailableQuestionBanks] = useState<QuestionBankDto[]>([]);
+  const [questionBanksLoading, setQuestionBanksLoading] = useState(false);
+  const [questionBanksError, setQuestionBanksError] = useState<string | null>(null);
+  const [selectedQuestionBankIds, setSelectedQuestionBankIds] = useState<string[]>([]);
+
 
   const [sessionName, setSessionName] = useState("");
   const [description, setDescription] = useState("");
@@ -140,9 +143,11 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
       try {
         const rawMaps = await getWorkspaceMaps(workspaceId);
 
+        const publicMaps = rawMaps.filter((map) => map.isPublic === true);
+
         setMapsByWorkspace((prev) => ({
           ...prev,
-          [workspaceId]: rawMaps,
+          [workspaceId]: publicMaps,
         }));
         loadedWorkspaceIdsRef.current.add(workspaceId);
       } catch (error) {
@@ -209,6 +214,8 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
   const handleSelectWorkspace = (workspaceId: string) => {
     setSelectedWorkspaceId(workspaceId);
     setSelectedMapId("");
+    setAvailableQuestionBanks([]);
+    setSelectedQuestionBankIds([]);
     void fetchMapsForWorkspace(workspaceId);
   };
 
@@ -221,12 +228,10 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
     void fetchMapsForWorkspace(selectedWorkspaceId, { force: true });
   };
 
-    // Khi chọn storymap, load các bộ câu hỏi đã gắn với map đó
   useEffect(() => {
-    // Nếu chưa chọn map thì reset
     if (!selectedMapId) {
       setAvailableQuestionBanks([]);
-      setSelectedQuestionBankId("");
+      setSelectedQuestionBankIds([]);
       setQuestionBanksError(null);
       setQuestionBanksLoading(false);
       return;
@@ -252,16 +257,13 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
         });
 
         const allBanks = Array.from(bankMap.values());
-
-        // Note: Question banks are now attached to sessions, not maps
-        // When creating a new session, we show all available question banks
-        // (filtering by session attachment would require an existing session)
         const banksForMap: QuestionBankDto[] = allBanks;
 
         if (cancelled) return;
 
         setAvailableQuestionBanks(banksForMap);
-        setSelectedQuestionBankId("");
+        setSelectedQuestionBankIds([]);
+
       } catch (error) {
         if (cancelled) return;
         console.error("Failed to load question banks for map:", error);
@@ -298,9 +300,11 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
 
     setIsCreating(true);
     try {
+      const primaryBankId =
+        selectedQuestionBankIds.length > 0 ? selectedQuestionBankIds[0] : undefined;
+
       const session = await createSession({
         mapId: selectedMapId,
-        questionBankId: selectedQuestionBankId || undefined,
         sessionName:
           sessionName || `${selectedMap.name ?? "Storymap"} Session`,
         description,
@@ -313,7 +317,27 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
         shuffleOptions,
         enableHints,
         pointsForSpeed,
+        questionBankId: primaryBankId,
       });
+
+      if (selectedQuestionBankIds.length > 1) {
+        try {
+          const extraBankIds = selectedQuestionBankIds.filter(
+            (id) => id !== primaryBankId
+          );
+
+          await Promise.all(
+            extraBankIds.map((qbId) =>
+              attachSessionToQuestionBank(qbId, session.sessionId)
+            )
+          );
+        } catch (attachError) {
+          console.error("Failed to attach extra question banks:", attachError);
+          toast.error(
+            "Session đã tạo, nhưng gắn thêm một số bộ câu hỏi bị lỗi. Bạn có thể gắn lại trong trang control."
+          );
+        }
+      }
 
       toast.success("Tạo session thành công!");
 
@@ -334,6 +358,7 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
       setIsCreating(false);
     }
   };
+
 
   useEffect(() => {
     if (!presetMapId || prefAppliedRef.current) return;
@@ -381,7 +406,7 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
               color: mode === "dark" ? "#e5e7eb" : "#4b5563",
             }}
           >
-            ← Quay lại 
+            ← Quay lại
           </button>
           <h1
             className="text-2xl font-semibold sm:text-3xl"
@@ -441,11 +466,10 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
                       key={workspaceId}
                       type="button"
                       onClick={() => handleSelectWorkspace(workspaceId)}
-                      className={`rounded-xl border-2 p-4 text-left transition-all ${
-                        isSelected
-                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
-                          : "border-zinc-100 hover:border-emerald-200 dark:border-zinc-800 dark:hover:border-emerald-800"
-                      }`}
+                      className={`rounded-xl border-2 p-4 text-left transition-all ${isSelected
+                        ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
+                        : "border-zinc-100 hover:border-emerald-200 dark:border-zinc-800 dark:hover:border-emerald-800"
+                        }`}
                     >
                       <div className="mb-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                         {workspace.workspaceName}
@@ -541,15 +565,24 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
                         key={map.id}
                         type="button"
                         onClick={() => handleSelectMap(map.id)}
-                        className={`rounded-xl border-2 p-4 text-left transition-all ${
-                          isSelected
-                            ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
-                            : "border-zinc-100 hover:border-sky-200 dark:border-zinc-800 dark:hover:border-sky-800"
-                        }`}
+                        className={`rounded-xl border-2 p-4 text-left transition-all ${isSelected
+                          ? "border-sky-500 bg-sky-50 dark:bg-sky-900/20"
+                          : "border-zinc-100 hover:border-sky-200 dark:border-zinc-800 dark:hover:border-sky-800"
+                          }`}
                       >
+                        {map.previewImage && (
+                          <div className="mb-3 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
+                            <img
+                              src={map.previewImage}
+                              alt={map.name}
+                              className="h-32 w-full object-cover"
+                            />
+                          </div>
+                        )}
+
                         <div className="mb-1 flex items-center justify-between gap-2">
                           <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                              {map.name}
+                            {map.name}
                           </div>
                           {map.status && (
                             <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
@@ -561,7 +594,9 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
                           {map.description || "Không có mô tả"}
                         </div>
                         <div className="text-xs text-zinc-500">
-                          Cập nhật: {formatDateLabel(map.updatedAt ?? map.createdAt)}
+                          Cập nhật: {formatDateLabel(
+                            map.updatedAt ?? map.createdAt
+                          )}
                         </div>
                       </button>
                     );
@@ -571,9 +606,8 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
             </section>
           )}
 
-           {selectedMapId && selectedMap && (
+          {selectedMapId && selectedMap && (
             <>
-              {/* 2.5 Bộ câu hỏi cho session (tùy chọn) */}
               <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <div>
@@ -581,13 +615,18 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
                       Bộ câu hỏi cho session này (tùy chọn)
                     </h2>
                     <p className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Chỉ hiển thị những bộ câu hỏi đã được gắn với storymap này. Bạn có thể bỏ qua bước này nếu chưa cần dùng câu hỏi.
+                      Dùng các bộ câu hỏi của bạn và bộ public. Bạn có thể chọn nhiều bộ câu hỏi hoặc bỏ qua bước này.
                     </p>
+                    {selectedQuestionBankIds.length > 0 && (
+                      <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
+                        Đã chọn {selectedQuestionBankIds.length} bộ câu hỏi.
+                      </p>
+                    )}
                   </div>
                   {availableQuestionBanks.length > 0 && (
                     <button
                       type="button"
-                      onClick={() => setSelectedQuestionBankId("")}
+                      onClick={() => setSelectedQuestionBankIds([])}
                       className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
                     >
                       Không dùng bộ câu hỏi
@@ -622,43 +661,51 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
                 ) : (
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     {availableQuestionBanks.map((bank) => {
-                      const isSelected = bank.questionBankId === selectedQuestionBankId;
+                      const isSelected = selectedQuestionBankIds.includes(
+                        bank.questionBankId
+                      );
                       const tags =
                         Array.isArray(bank.tags)
                           ? bank.tags
                           : typeof bank.tags === "string" && bank.tags.length
-                          ? bank.tags
+                            ? bank.tags
                               .split(/[;,]+/)
                               .map((t) => t.trim())
                               .filter(Boolean)
-                          : [];
+                            : [];
 
                       return (
                         <button
                           key={bank.questionBankId}
                           type="button"
                           onClick={() =>
-                            setSelectedQuestionBankId(
-                              bank.questionBankId === selectedQuestionBankId
-                                ? ""
-                                : bank.questionBankId
+                            setSelectedQuestionBankIds((prev) =>
+                              prev.includes(bank.questionBankId)
+                                ? prev.filter((id) => id !== bank.questionBankId)
+                                : [...prev, bank.questionBankId]
                             )
                           }
-                          className={`rounded-xl border-2 p-4 text-left transition-all ${
-                            isSelected
-                              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
-                              : "border-zinc-100 hover:border-emerald-200 dark:border-zinc-800 dark:hover:border-emerald-800"
-                          }`}
+                          className={`rounded-xl border-2 p-4 text-left transition-all ${isSelected
+                            ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20"
+                            : "border-zinc-100 hover:border-emerald-200 dark:border-zinc-800 dark:hover:border-emerald-800"
+                            }`}
                         >
                           <div className="mb-1 flex items-center justify-between gap-2">
                             <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                               {bank.bankName}
                             </div>
-                            {typeof bank.totalQuestions === "number" && (
-                              <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                                {bank.totalQuestions} câu hỏi
-                              </span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {typeof bank.totalQuestions === "number" && (
+                                <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                                  {bank.totalQuestions} câu hỏi
+                                </span>
+                              )}
+                              {isSelected && (
+                                <span className="inline-flex items-center rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-medium text-white">
+                                  Đã chọn
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <div className="mb-2 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
                             {bank.description || "Không có mô tả"}
@@ -681,7 +728,7 @@ const [selectedQuestionBankId, setSelectedQuestionBankId] = useState("");
                   </div>
                 )}
               </section>
-              
+
               <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <div>
