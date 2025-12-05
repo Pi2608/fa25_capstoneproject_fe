@@ -1214,7 +1214,7 @@ export const messages = {
             toast_payment_failed: "Thiết lập thanh toán thất bại. Vui lòng thử lại."
         },
         gallery: {
-            hero_eyebrow: "Tài nguyên / Thư viện Bản đồ",
+            hero_eyebrow: "Tài nguyên / Thư viện bản đồ",
             hero_title: "Bộ sưu tập Bản đồ Cộng đồng",
             hero_sub:
                 "Khám phá các bản đồ nổi bật từ cộng đồng — giáo dục, môi trường, quy hoạch đô thị và hơn thế nữa. Mở bất kỳ bản đồ nào, tìm hiểu cách thiết lập hoặc nhân bản nó làm mẫu khởi đầu.",
@@ -1247,7 +1247,6 @@ export const messages = {
             cta_submit: "Gửi bản đồ",
             cta_blog: "Đọc mẹo hay",
 
-            // Tag labels
             tag_All: "Tất cả",
             tag_Education: "Giáo dục",
             tag_Environment: "Môi trường",
@@ -1261,6 +1260,17 @@ export const messages = {
             tag_POI: "Điểm quan tâm (POI)",
             tag_Raster: "Raster",
             tag_Story: "Bản đồ câu chuyện",
+
+            category_general: "Tổng quan",
+            category_business: "Kinh doanh",
+            category_planning: "Quy hoạch",
+            category_logistics: "Logistics",
+            category_research: "Nghiên cứu",
+            category_operations: "Vận hành",
+            category_education: "Giáo dục",
+
+            featured_only: "Chỉ hiển thị bản đồ nổi bật",
+            featured_badge: "Nổi bật",
         },
         developers: {
             title: "Nhà phát triển",
@@ -3432,9 +3442,9 @@ export const messages = {
         },
         gallery: {
             hero_eyebrow: "Resources / Map Library",
-            hero_title: "Community Map Collection",
+            hero_title: "Community Map Gallery",
             hero_sub:
-                "Explore standout maps from the community—education, environment, urban planning and more. Open any map to learn how it’s built, or duplicate it as a starter template.",
+                "Discover standout maps from the community — education, environment, urban planning and more. Open any map, study how it was built, or duplicate it as a starting template.",
 
             search_placeholder: "Search maps (Ctrl K)…",
             sort_popular: "Sort: Most popular",
@@ -3444,7 +3454,7 @@ export const messages = {
 
             results: "results",
             showing: "Showing",
-            searching_for: "Searching",
+            searching_for: "Searching for",
             of: "of",
             by: "By",
             updated: "Updated",
@@ -3456,15 +3466,14 @@ export const messages = {
             reset_filters: "Reset filters",
 
             page: "Page",
-            prev: "Prev",
+            prev: "Previous",
             next: "Next",
 
             cta_title: "Share your project with the community",
-            cta_sub: "Submit your map to inspire others. We feature standout ideas every month.",
+            cta_sub: "Submit your map to inspire others. Every month we highlight outstanding ideas.",
             cta_submit: "Submit a map",
             cta_blog: "Read tips",
 
-            // Tag labels
             tag_All: "All",
             tag_Education: "Education",
             tag_Environment: "Environment",
@@ -3475,9 +3484,20 @@ export const messages = {
             tag_Zones: "Zones",
             tag_Analytics: "Analytics",
             tag_Tourism: "Tourism",
-            tag_POI: "POI",
-            tag_Story: "Story Maps",
+            tag_POI: "Points of interest (POI)",
             tag_Raster: "Raster",
+            tag_Story: "Story map",
+
+            category_general: "General",
+            category_business: "Business",
+            category_planning: "Planning",
+            category_logistics: "Logistics",
+            category_research: "Research",
+            category_operations: "Operations",
+            category_education: "Education",
+
+            featured_only: "Show featured maps only",
+            featured_badge: "Featured",
         },
         cloudSources: {
             heroBadge: "Connect once — use across maps",

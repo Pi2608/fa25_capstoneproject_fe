@@ -1,0 +1,159 @@
+import { getJson, putJson, delJson, postJson } from "./api-core";
+
+export type MapGalleryCategory =
+  | "general"
+  | "business"
+  | "planning"
+  | "logistics"
+  | "research"
+  | "operations"
+  | "education";
+
+export type MapGalleryStatus = "pending" | "approved" | "rejected" | string;
+
+export type MapGallerySummaryResponse = {
+  id: string;
+  mapId: string;
+  mapName: string;
+  description: string;
+  previewImage: string | null;
+  category: MapGalleryCategory;
+  tags: string[];
+  authorName: string;
+  status: MapGalleryStatus;
+  isFeatured: boolean;
+  viewCount: number;
+  likeCount: number;
+  createdAt: string;
+  publishedAt: string | null;
+};
+
+export type MapGalleryDetailResponse = {
+  id: string;
+  mapId: string;
+  userId: string;
+  mapName: string;
+  description: string;
+  previewImage: string | null;
+  category: MapGalleryCategory;
+  tags: string[];
+  authorName: string;
+  authorEmail: string;
+  status: MapGalleryStatus;
+  isFeatured: boolean;
+  viewCount: number;
+  likeCount: number;
+  createdAt: string;
+  publishedAt: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+};
+
+export type MapGallerySubmitRequest = {
+  mapId: string;
+  mapName: string;
+  description: string;
+  previewImage: string | null;
+  category: MapGalleryCategory;
+  tags: string[];
+};
+
+export type MapGalleryUpdateRequest = {
+  mapName: string;
+  description: string;
+  previewImage: string | null;
+  category: MapGalleryCategory;
+  tags: string[];
+};
+
+export type MapGalleryAdminApprovalRequest = {
+  status: MapGalleryStatus;
+  rejectionReason?: string | null;
+  isFeatured?: boolean;
+};
+
+export async function getPublishedGalleryMaps(params?: {
+  category?: MapGalleryCategory;
+  search?: string;
+  featured?: boolean;
+}): Promise<MapGallerySummaryResponse[]> {
+  const sp = new URLSearchParams();
+  if (params?.category) sp.set("category", params.category);
+  if (params?.search) sp.set("search", params.search);
+  if (typeof params?.featured === "boolean") {
+    sp.set("featured", String(params.featured));
+  }
+  const qs = sp.toString();
+  const url = qs ? `/map-gallery/maps?${qs}` : `/map-gallery/maps`;
+  return getJson<MapGallerySummaryResponse[]>(url);
+}
+
+export async function getPublishedGalleryMapById(
+  id: string
+): Promise<MapGalleryDetailResponse> {
+  const url = `/map-gallery/maps/${encodeURIComponent(id)}`;
+  return getJson<MapGalleryDetailResponse>(url);
+}
+
+export async function getPublishedGalleryMapByMapId(
+  mapId: string
+): Promise<MapGalleryDetailResponse> {
+  const url = `/map-gallery/maps/by-map-id/${encodeURIComponent(mapId)}`;
+  return getJson<MapGalleryDetailResponse>(url);
+}
+
+export async function submitMapToGallery(
+  payload: MapGallerySubmitRequest
+): Promise<MapGalleryDetailResponse> {
+  const url = `/map-gallery/submit`;
+    return postJson(url, payload);
+}
+
+export async function getMyGallerySubmission(
+  mapId: string
+): Promise<MapGalleryDetailResponse> {
+  const url = `/map-gallery/my-submission/${encodeURIComponent(mapId)}`;
+  return getJson<MapGalleryDetailResponse>(url);
+}
+
+export async function updateMyGallerySubmission(
+  id: string,
+  payload: MapGalleryUpdateRequest
+): Promise<MapGalleryDetailResponse> {
+  const url = `/map-gallery/my-submission/${encodeURIComponent(id)}`;
+    return putJson(url, payload);
+}
+
+export async function adminGetGallerySubmissions(params?: {
+  status?: MapGalleryStatus;
+}): Promise<MapGallerySummaryResponse[]> {
+  const sp = new URLSearchParams();
+  if (params?.status) sp.set("status", params.status);
+  const qs = sp.toString();
+  const url = qs
+    ? `/map-gallery/admin/submissions?${qs}`
+    : `/map-gallery/admin/submissions`;
+  return getJson<MapGallerySummaryResponse[]>(url);
+}
+
+export async function adminGetGallerySubmissionById(
+  id: string
+): Promise<MapGalleryDetailResponse> {
+  const url = `/map-gallery/admin/submissions/${encodeURIComponent(id)}`;
+  return getJson<MapGalleryDetailResponse>(url);
+}
+
+export async function adminDeleteGallerySubmission(id: string): Promise<void> {
+  const url = `/map-gallery/admin/submissions/${encodeURIComponent(id)}`;
+  await delJson<void>(url);
+}
+
+export async function adminApproveOrRejectGallerySubmission(
+  id: string,
+  payload: MapGalleryAdminApprovalRequest
+): Promise<MapGalleryDetailResponse> {
+  const url = `/map-gallery/admin/submissions/${encodeURIComponent(
+    id
+  )}/approve`;
+    return putJson(url, payload);
+}
