@@ -1214,7 +1214,7 @@ export const messages = {
             toast_payment_failed: "Thiết lập thanh toán thất bại. Vui lòng thử lại."
         },
         gallery: {
-            hero_eyebrow: "Tài nguyên / Thư viện Bản đồ",
+            hero_eyebrow: "Tài nguyên / Thư viện bản đồ",
             hero_title: "Bộ sưu tập Bản đồ Cộng đồng",
             hero_sub:
                 "Khám phá các bản đồ nổi bật từ cộng đồng — giáo dục, môi trường, quy hoạch đô thị và hơn thế nữa. Mở bất kỳ bản đồ nào, tìm hiểu cách thiết lập hoặc nhân bản nó làm mẫu khởi đầu.",
@@ -1247,7 +1247,6 @@ export const messages = {
             cta_submit: "Gửi bản đồ",
             cta_blog: "Đọc mẹo hay",
 
-            // Tag labels
             tag_All: "Tất cả",
             tag_Education: "Giáo dục",
             tag_Environment: "Môi trường",
@@ -1261,53 +1260,17 @@ export const messages = {
             tag_POI: "Điểm quan tâm (POI)",
             tag_Raster: "Raster",
             tag_Story: "Bản đồ câu chuyện",
-        },
-        map_gallery_admin: {
-            title: "Quản lý Bản đồ Gallery",
-            subtitle: "Duyệt và quản lý các bản đồ được submit lên gallery cộng đồng",
-            
-            filter_status_label: "Trạng thái:",
-            filter_all: "Tất cả",
-            filter_pending: "Chờ duyệt",
-            filter_approved: "Đã duyệt",
-            filter_rejected: "Đã từ chối",
-            
-            table_map: "Bản đồ",
-            table_category: "Danh mục",
-            table_author: "Tác giả",
-            table_created: "Ngày tạo",
-            table_views: "Lượt xem",
-            table_status: "Trạng thái",
-            table_actions: "Thao tác",
-            
-            status_pending: "Chờ duyệt",
-            status_approved: "Đã duyệt",
-            status_rejected: "Đã từ chối",
-            featured_badge: "⭐ Nổi bật",
-            
-            action_approve: "Duyệt",
-            action_reject: "Từ chối",
-            action_delete: "Xóa",
-            
-            empty_title: "Chưa có submission nào.",
-            
-            loading: "Đang tải...",
-            error_load: "Không thể tải danh sách submissions.",
-            
-            modal_approve_title: "Duyệt bản đồ",
-            modal_reject_title: "Từ chối bản đồ",
-            modal_map_label: "Bản đồ:",
-            modal_featured_label: "Đánh dấu nổi bật",
-            modal_rejection_reason_label: "Lý do từ chối:",
-            modal_rejection_reason_placeholder: "Nhập lý do từ chối...",
-            modal_cancel: "Hủy",
-            modal_processing: "Đang xử lý...",
-            modal_approve_button: "Duyệt",
-            modal_reject_button: "Từ chối",
-            
-            confirm_delete: "Bạn có chắc chắn muốn xóa submission này?",
-            error_delete: "Xóa submission thất bại.",
-            error_process: "Xử lý submission thất bại.",
+
+            category_general: "Tổng quan",
+            category_business: "Kinh doanh",
+            category_planning: "Quy hoạch",
+            category_logistics: "Logistics",
+            category_research: "Nghiên cứu",
+            category_operations: "Vận hành",
+            category_education: "Giáo dục",
+
+            featured_only: "Chỉ hiển thị bản đồ nổi bật",
+            featured_badge: "Nổi bật",
         },
         developers: {
             title: "Nhà phát triển",
@@ -3479,9 +3442,9 @@ export const messages = {
         },
         gallery: {
             hero_eyebrow: "Resources / Map Library",
-            hero_title: "Community Map Collection",
+            hero_title: "Community Map Gallery",
             hero_sub:
-                "Explore standout maps from the community—education, environment, urban planning and more. Open any map to learn how it's built, or duplicate it as a starter template.",
+                "Discover standout maps from the community — education, environment, urban planning and more. Open any map, study how it was built, or duplicate it as a starting template.",
 
             search_placeholder: "Search maps (Ctrl K)…",
             sort_popular: "Sort: Most popular",
@@ -3491,7 +3454,7 @@ export const messages = {
 
             results: "results",
             showing: "Showing",
-            searching_for: "Searching",
+            searching_for: "Searching for",
             of: "of",
             by: "By",
             updated: "Updated",
@@ -3503,15 +3466,14 @@ export const messages = {
             reset_filters: "Reset filters",
 
             page: "Page",
-            prev: "Prev",
+            prev: "Previous",
             next: "Next",
 
             cta_title: "Share your project with the community",
-            cta_sub: "Submit your map to inspire others. We feature standout ideas every month.",
+            cta_sub: "Submit your map to inspire others. Every month we highlight outstanding ideas.",
             cta_submit: "Submit a map",
             cta_blog: "Read tips",
 
-            // Tag labels
             tag_All: "All",
             tag_Education: "Education",
             tag_Environment: "Environment",
@@ -3522,56 +3484,20 @@ export const messages = {
             tag_Zones: "Zones",
             tag_Analytics: "Analytics",
             tag_Tourism: "Tourism",
-            tag_POI: "POI",
-            tag_Story: "Story Maps",
+            tag_POI: "Points of interest (POI)",
             tag_Raster: "Raster",
-        },
-        map_gallery_admin: {
-            title: "Map Gallery Management",
-            subtitle: "Review and manage maps submitted to the community gallery",
-            
-            filter_status_label: "Status:",
-            filter_all: "All",
-            filter_pending: "Pending",
-            filter_approved: "Approved",
-            filter_rejected: "Rejected",
-            
-            table_map: "Map",
-            table_category: "Category",
-            table_author: "Author",
-            table_created: "Created",
-            table_views: "Views",
-            table_status: "Status",
-            table_actions: "Actions",
-            
-            status_pending: "Pending",
-            status_approved: "Approved",
-            status_rejected: "Rejected",
-            featured_badge: "⭐ Featured",
-            
-            action_approve: "Approve",
-            action_reject: "Reject",
-            action_delete: "Delete",
-            
-            empty_title: "No submissions yet.",
-            
-            loading: "Loading...",
-            error_load: "Failed to load submissions.",
-            
-            modal_approve_title: "Approve map",
-            modal_reject_title: "Reject map",
-            modal_map_label: "Map:",
-            modal_featured_label: "Mark as featured",
-            modal_rejection_reason_label: "Rejection reason:",
-            modal_rejection_reason_placeholder: "Enter rejection reason...",
-            modal_cancel: "Cancel",
-            modal_processing: "Processing...",
-            modal_approve_button: "Approve",
-            modal_reject_button: "Reject",
-            
-            confirm_delete: "Are you sure you want to delete this submission?",
-            error_delete: "Failed to delete submission.",
-            error_process: "Failed to process submission.",
+            tag_Story: "Story map",
+
+            category_general: "General",
+            category_business: "Business",
+            category_planning: "Planning",
+            category_logistics: "Logistics",
+            category_research: "Research",
+            category_operations: "Operations",
+            category_education: "Education",
+
+            featured_only: "Show featured maps only",
+            featured_badge: "Featured",
         },
         cloudSources: {
             heroBadge: "Connect once — use across maps",

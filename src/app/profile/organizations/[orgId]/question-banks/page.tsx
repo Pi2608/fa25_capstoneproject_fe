@@ -275,15 +275,14 @@ const MenuButton = ({
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`flex w-full items-center rounded-lg px-3 py-2 text-left font-medium disabled:opacity-60 ${
-      danger
-        ? (isDark 
-            ? "text-red-400 hover:bg-red-500/10" 
-            : "text-red-600 hover:bg-red-50")
+    className={`flex w-full items-center rounded-lg px-3 py-2 text-left font-medium disabled:opacity-60 ${danger
+        ? (isDark
+          ? "text-red-400 hover:bg-red-500/10"
+          : "text-red-600 hover:bg-red-50")
         : (isDark
-            ? "text-zinc-200 hover:bg-white/10"
-            : "text-gray-700 hover:bg-gray-100")
-    }`}
+          ? "text-zinc-200 hover:bg-white/10"
+          : "text-gray-700 hover:bg-gray-100")
+      }`}
   >
     {children}
   </button>
@@ -415,14 +414,13 @@ export default function QuestionBanksPage() {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`rounded-full px-4 py-1.5 font-medium transition-colors ${
-                  activeTab === tab
-                    ? (isDark 
-                        ? "bg-zinc-800 text-emerald-300 shadow-sm" 
-                        : "bg-white text-emerald-600 shadow-sm")
+                className={`rounded-full px-4 py-1.5 font-medium transition-colors ${activeTab === tab
+                    ? (isDark
+                      ? "bg-zinc-800 text-emerald-300 shadow-sm"
+                      : "bg-white text-emerald-600 shadow-sm")
                     : (isDark
-                        ? "text-zinc-400 hover:bg-zinc-800 hover:text-emerald-300"
-                        : "text-zinc-600 hover:bg-white hover:text-emerald-600")
+                      ? "text-zinc-400 hover:bg-zinc-800 hover:text-emerald-300"
+                      : "text-zinc-600 hover:bg-white hover:text-emerald-600")
                   }`}
               >
                 {tab === "my"
@@ -535,11 +533,10 @@ export default function QuestionBanksPage() {
                             ) : (
                               <button
                                 onClick={() => goToEditQuestions(id)}
-                                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                                  isDark 
-                                    ? "bg-zinc-800 text-zinc-50 hover:bg-zinc-700" 
+                                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${isDark
+                                    ? "bg-zinc-800 text-zinc-50 hover:bg-zinc-700"
                                     : "bg-gray-800 text-white hover:bg-gray-700"
-                                }`}
+                                  }`}
                               >
                                 Xem / sử dụng
                               </button>

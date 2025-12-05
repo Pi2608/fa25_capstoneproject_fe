@@ -1,12 +1,12 @@
 import { getJson, postJson, putJson, delJson } from "./api-core";
 
-export type MapTemplateCategoryEnum = 
-  | "General" 
-  | "Business" 
-  | "Planning" 
-  | "Logistics" 
-  | "Research" 
-  | "Operations" 
+export type MapTemplateCategoryEnum =
+  | "General"
+  | "Business"
+  | "Planning"
+  | "Logistics"
+  | "Research"
+  | "Operations"
   | "Education";
 
 export type MapGalleryStatusEnum = "Pending" | "Approved" | "Rejected";
@@ -82,7 +82,7 @@ export function getPublishedMaps(params?: {
   if (params?.category) qs.append("category", params.category);
   if (params?.search) qs.append("search", params.search);
   if (params?.featured !== undefined) qs.append("featured", String(params.featured));
-  
+
   const query = qs.toString();
   return getJson<MapGallerySummaryResponse[]>(
     `/map-gallery/maps${query ? `?${query}` : ""}`

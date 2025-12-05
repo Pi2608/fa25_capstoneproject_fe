@@ -10,7 +10,7 @@ const ThemeContext = createContext<{
   toggleTheme: () => void;
 }>({
   isDark: true,
-  toggleTheme: () => {},
+  toggleTheme: () => { },
 });
 
 export const useTheme = () => useContext(ThemeContext);
@@ -73,7 +73,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             },
             credentials: "include",
           });
-        } catch {}
+        } catch { }
       }
     } finally {
       clearAllAuthData();
@@ -82,25 +82,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   return (
-    <div className={`flex h-screen transition-colors ${
-      isDark 
-        ? "bg-zinc-950 text-zinc-100" 
+    <div className={`flex h-screen transition-colors ${isDark
+        ? "bg-zinc-950 text-zinc-100"
         : "bg-gray-50 text-gray-900"
-    }`}>
-      <aside className={`flex flex-col transition-all duration-300 ${
-        open ? "w-64" : "w-20"
-      } ${
-        isDark
+      }`}>
+      <aside className={`flex flex-col transition-all duration-300 ${open ? "w-64" : "w-20"
+        } ${isDark
           ? "bg-zinc-900 border-r border-zinc-800"
           : "bg-white border-r border-gray-200"
-      }`}>
-        <div className={`flex items-center gap-2 px-4 py-4 border-b ${
-          isDark ? "border-zinc-800" : "border-gray-200"
         }`}>
+        <div className={`flex items-center gap-2 px-4 py-4 border-b ${isDark ? "border-zinc-800" : "border-gray-200"
+          }`}>
           <span className="w-2 h-2 rounded-full bg-green-500" />
-          <span className={`font-bold text-lg whitespace-nowrap transition-opacity ${
-            open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
-          }`}>IMOS</span>
+          <span className={`font-bold text-lg whitespace-nowrap transition-opacity ${open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+            }`}>IMOS</span>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2 px-2">
@@ -110,65 +105,57 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Link
                 key={href}
                 href={href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 transition-colors ${
-                  active
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 transition-colors ${active
                     ? isDark
                       ? "bg-zinc-800 text-white"
                       : "bg-gray-100 text-gray-900"
                     : isDark
                       ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
                       : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                }`}
+                  }`}
                 aria-current={active ? "page" : undefined}
               >
                 <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">{icon}</span>
-                <span className={`whitespace-nowrap transition-opacity ${
-                  open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
-                }`}>{label}</span>
+                <span className={`whitespace-nowrap transition-opacity ${open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+                  }`}>{label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className={`border-t p-2 space-y-1 ${
-          isDark ? "border-zinc-800" : "border-gray-200"
-        }`}>
+        <div className={`border-t p-2 space-y-1 ${isDark ? "border-zinc-800" : "border-gray-200"
+          }`}>
           <button
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${
-              isDark
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isDark
                 ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
                 : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-            }`}
+              }`}
             onClick={toggleTheme}
           >
             <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
               {isDark ? <SunIcon /> : <MoonIcon />}
             </span>
-            <span className={`whitespace-nowrap transition-opacity ${
-              open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
-            }`}>{isDark ? "Sáng" : "Tối"}</span>
+            <span className={`whitespace-nowrap transition-opacity ${open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+              }`}>{isDark ? "Sáng" : "Tối"}</span>
           </button>
           <button
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50 ${
-              isDark
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50 ${isDark
                 ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
                 : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-            }`}
+              }`}
             onClick={() => router.push("/settings")}
           >
             <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
               <SettingsIcon />
             </span>
-            <span className={`whitespace-nowrap transition-opacity ${
-              open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
-            }`}>Cài đặt</span>
+            <span className={`whitespace-nowrap transition-opacity ${open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+              }`}>Cài đặt</span>
           </button>
           <button
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50 ${
-              isDark
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50 ${isDark
                 ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
                 : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-            }`}
+              }`}
             onClick={onSignOut}
             disabled={signingOut}
             aria-busy={signingOut}
@@ -176,25 +163,22 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
               <SignOutIcon />
             </span>
-            <span className={`whitespace-nowrap transition-opacity ${
-              open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
-            }`}>{signingOut ? "Đang đăng xuất…" : "Đăng xuất"}</span>
+            <span className={`whitespace-nowrap transition-opacity ${open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+              }`}>{signingOut ? "Đang đăng xuất…" : "Đăng xuất"}</span>
           </button>
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className={`h-14 border-b flex items-center gap-4 px-4 ${
-          isDark
+        <header className={`h-14 border-b flex items-center gap-4 px-4 ${isDark
             ? "bg-zinc-900 border-zinc-800"
             : "bg-white border-gray-200"
-        }`}>
+          }`}>
           <button
-            className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
-              isDark
+            className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${isDark
                 ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200"
                 : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
-            }`}
+              }`}
             onClick={() => setOpen((v) => !v)}
             aria-label="Thu gọn/mở rộng menu"
           >
@@ -202,37 +186,33 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
           <div className="flex-1 max-w-md">
             <input
-              className={`w-full h-9 px-3 rounded-lg border outline-none focus:ring-1 ${
-                isDark
+              className={`w-full h-9 px-3 rounded-lg border outline-none focus:ring-1 ${isDark
                   ? "border-zinc-800 bg-zinc-800/50 text-zinc-100 placeholder-zinc-500 focus:border-zinc-700 focus:ring-zinc-700"
                   : "border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:ring-gray-400"
-              }`}
+                }`}
               placeholder="Tìm kiếm…"
               aria-label="Tìm kiếm"
             />
           </div>
           <div className="flex items-center gap-2">
             <button
-              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
-                isDark
+              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${isDark
                   ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200"
                   : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
-              }`}
+                }`}
               aria-label="Thông báo"
             >
               <BellIcon />
             </button>
-            <div className={`w-9 h-9 rounded-full border ${
-              isDark
+            <div className={`w-9 h-9 rounded-full border ${isDark
                 ? "bg-zinc-700 border-zinc-600"
                 : "bg-gray-300 border-gray-400"
-            }`} />
+              }`} />
           </div>
         </header>
 
-        <div className={`flex-1 overflow-y-auto p-5 ${
-          isDark ? "bg-zinc-950" : "bg-gray-50"
-        }`}>
+        <div className={`flex-1 overflow-y-auto p-5 ${isDark ? "bg-zinc-950" : "bg-gray-50"
+          }`}>
           <ThemeContext.Provider value={{ isDark, toggleTheme }}>
             {children}
           </ThemeContext.Provider>
