@@ -19,16 +19,6 @@ function CalendarIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
-function ClockIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-      <path
-        fill="currentColor"
-        d="M12 2a10 10 0 1 0 .001 20.001A10 10 0 0 0 12 2Zm1 5v4.59l3.3 3.3-1.4 1.41L11 12.41V7h2Z"
-      />
-    </svg>
-  );
-}
 function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -60,7 +50,6 @@ export default function BlogClient({
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const { t } = useI18n();
-  const tr = (k: string) => t("blog", k);
 
   const [posts, setPosts] = useState<CommunityPostSummaryResponse[]>([]);
 
@@ -202,20 +191,20 @@ export default function BlogClient({
       <section className="blog-hero relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
         <div className="relative z-10">
           <p className="bh-sub text-sm tracking-wide text-emerald-300/90">
-            {tr("breadcrumb")}
+            {t("blog.breadcrumb")}
           </p>
           <h1 className="bh-title mt-2 text-3xl font-semibold sm:text-4xl">
-            {tr("hero_title")}
+            {t("blog.hero_title")}
           </h1>
           <p className="bh-sub mt-3 max-w-2xl text-zinc-300">
-            {tr("hero_sub")}
+            {t("blog.hero_sub")}
           </p>
           <div className="mt-6">
             <Link
               href="#latest"
               className="bh-cta inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400"
             >
-              {tr("hero_cta")} <ArrowRightIcon className="h-4 w-4" />
+              {t("blog.hero_cta")} <ArrowRightIcon className="h-4 w-4" />
             </Link>
           </div>
         </div>
@@ -225,7 +214,7 @@ export default function BlogClient({
 
       <section className="mt-8 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-4 ring-1 ring-emerald-500/10">
         <div className="section-title text-sm font-medium">
-          {tr("topics")}
+          {t("blog.topics")}
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
           {topicFilters.map((topic) => {
@@ -245,7 +234,7 @@ export default function BlogClient({
                 }`}
                 aria-current={active ? "page" : undefined}
               >
-                {topic === "All" ? tr("filter_all") : topic}
+                {topic === "All" ? t("blog.filter_all") : topic}
               </Link>
             );
           })}
@@ -258,9 +247,6 @@ export default function BlogClient({
             <div className="aspect-[16/9] w-full rounded-xl bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent ring-1 ring-white/5" />
             <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
               {featured.topic && <TagPill>{featured.topic}</TagPill>}
-              {featured.tags?.map((tag) => (
-                <TagPill key={tag}>{tag}</TagPill>
-              ))}
             </div>
             <h2 className="mt-2 text-2xl font-semibold leading-snug">
               {featured.title}
@@ -271,27 +257,23 @@ export default function BlogClient({
                 <CalendarIcon className="h-4 w-4 text-emerald-300" />
                 {fmtDate(featured.publishedAt ?? featured.createdAt)}
               </span>
-              <span className="inline-flex items-center gap-1">
-                <ClockIcon className="h-4 w-4 text-emerald-300" />
-                {featured.readMinutes ?? 5} {tr("minutes_read")}
-              </span>
             </div>
             <div className="mt-4">
               <Link
                 href={`/resources/blog/${featured.slug}`}
                 className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
               >
-                {tr("read_post")}
+                {t("blog.read_post")}
               </Link>
             </div>
           </article>
 
           <aside className="subscribe-card rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
             <h3 className="text-lg font-semibold">
-              {tr("subscribe_title")}
+              {t("blog.subscribe_title")}
             </h3>
             <p className="mt-1 text-sm text-zinc-300">
-              {tr("subscribe_desc")}
+              {t("blog.subscribe_desc")}
             </p>
             <form
               className="mt-4 space-y-3"
@@ -302,15 +284,15 @@ export default function BlogClient({
                 name="email"
                 type="email"
                 required
-                placeholder={tr("subscribe_placeholder")}
+                placeholder={t("blog.subscribe_placeholder")}
                 className="w-full rounded-xl bg-zinc-900/70 ring-1 ring-white/10 px-4 py-2.5 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:ring-emerald-400/50"
               />
               <button className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400">
-                {tr("subscribe_button")}
+                {t("blog.subscribe_button")}
               </button>
             </form>
             <p className="mt-2 text-xs text-zinc-500">
-              {tr("subscribe_note")}
+              {t("blog.subscribe_note")}
             </p>
           </aside>
         </section>
@@ -318,24 +300,17 @@ export default function BlogClient({
 
       <section id="latest" className="mt-10">
         <h2 className="section-title text-xl font-semibold opacity-0 translate-y-[12px]">
-          {tr("latest_posts")}
+          {t("blog.latest_posts")}
         </h2>
         <div className="mt-5 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {others.map((p) => {
             const date = fmtDate(p.publishedAt ?? p.createdAt);
-            const readMins = p.readMinutes ?? 5;
             return (
               <article
                 key={p.slug}
                 className="post-card opacity-0 translate-y-[16px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-5"
               >
                 <div className="aspect-[16/9] w-full rounded-xl bg-zinc-800/70 ring-1 ring-white/5" />
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                  {p.topic && <TagPill>{p.topic}</TagPill>}
-                  {p.tags?.map((tag) => (
-                    <TagPill key={tag}>{tag}</TagPill>
-                  ))}
-                </div>
                 <h3 className="mt-2 text-base font-semibold leading-snug">
                   {p.title}
                 </h3>
@@ -345,17 +320,13 @@ export default function BlogClient({
                     <CalendarIcon className="h-4 w-4 text-emerald-300" />
                     {date}
                   </span>
-                  <span className="inline-flex items-center gap-1">
-                    <ClockIcon className="h-4 w-4 text-emerald-300" />
-                    {readMins} {tr("minutes_read")}
-                  </span>
                 </div>
                 <div className="mt-3">
                   <Link
                     href={`/resources/blog/${p.slug}`}
                     className="inline-flex items-center gap-2 text-sm font-medium text-emerald-300 underline-offset-4 hover:underline"
                   >
-                    {tr("read_more")} <ArrowRightIcon className="h-4 w-4" />
+                    {t("blog.read_more")} <ArrowRightIcon className="h-4 w-4" />
                   </Link>
                 </div>
               </article>
@@ -368,22 +339,22 @@ export default function BlogClient({
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h3 className="text-xl font-semibold">
-              {tr("cta_title")}
+              {t("blog.cta_title")}
             </h3>
-            <p className="mt-1 text-zinc-300">{tr("cta_desc")}</p>
+            <p className="mt-1 text-zinc-300">{t("blog.cta_desc")}</p>
           </div>
           <div className="flex gap-3">
             <Link
               href="/resources/blog/request"
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400"
             >
-              {tr("cta_request")}
+              {t("blog.cta_request")}
             </Link>
             <Link
               href="/resources"
               className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70"
             >
-              {tr("cta_more_resources")}
+              {t("blog.cta_more_resources")}
             </Link>
           </div>
         </div>

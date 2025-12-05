@@ -2,20 +2,21 @@
 
 import { useEffect, useState } from "react";
 import { adminGetAnalytics, type AdminAnalytics } from "@/lib/admin-api";
-import s from "../admin.module.css";
-import { FullScreenLoading } from "@/components/common/FullScreenLoading";
+import { useTheme } from "../layout";
+import { getThemeClasses } from "@/utils/theme-utils";
+import { useLoading } from "@/contexts/LoadingContext";
 
 export default function AnalyticsPage() {
+  const { isDark } = useTheme();
+  const loading = useLoading();
+  const theme = getThemeClasses(isDark);
   const [data, setData] = useState<AdminAnalytics | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>("");
 
   useEffect(() => {
     let mounted = true;
 
     (async () => {
-      setLoading(true);
-      setError("");
+      loading.showLoading();
 
       try {
         const result = await adminGetAnalytics();
@@ -24,11 +25,11 @@ export default function AnalyticsPage() {
         }
       } catch (_err) {
         if (mounted) {
-          setError("Không tải được dữ liệu phân tích.");
+          loading.setLoadingMessage("Không tải được dữ liệu phân tích.");
         }
       } finally {
         if (mounted) {
-          setLoading(false);
+          loading.hideLoading();
         }
       }
     })();
@@ -46,113 +47,140 @@ export default function AnalyticsPage() {
   };
 
   const renderBody = () => {
-    if (loading) {
-      return <FullScreenLoading message="Đang tải…" overlay={false} />;
-    }
-
-    if (error) {
-      return <div className={s.errorBox}>{error}</div>;
-    }
-
     if (!data) {
       return <div>Không có dữ liệu.</div>;
     }
 
     return (
       <>
-        <section className={s.kpis}>
-          <div className={s.kpi}>
-            <div className={s.kpiTop}>
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
+            <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
               <span>Tổng tài khoản</span>
             </div>
-            <div className={s.kpiNum}>{data.total_users}</div>
-            <div className={s.kpiTrend}>
+            <div className="text-2xl font-extrabold tracking-wide">
+              {data.total_users}
+            </div>
+            <div className="text-green-500 font-bold text-xs">
               Active: {data.active_users}
             </div>
           </div>
 
-          <div className={s.kpi}>
-            <div className={s.kpiTop}>
+          <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
+            <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
               <span>Tổ chức</span>
             </div>
-            <div className={s.kpiNum}>{data.total_organizations}</div>
-            <div className={s.kpiTrend}>
+            <div className="text-2xl font-extrabold tracking-wide">
+              {data.total_organizations}
+            </div>
+            <div className="text-green-500 font-bold text-xs">
               Active: {data.active_organizations}
             </div>
           </div>
 
-          <div className={s.kpi}>
-            <div className={s.kpiTop}>
+          <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
+            <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
               <span>Doanh thu (USD)</span>
             </div>
-            <div className={s.kpiNum}>
+            <div className="text-2xl font-extrabold tracking-wide">
               {safeFixed2(data.total_revenue)}
             </div>
-            <div className={s.kpiTrend}>
+            <div className="text-green-500 font-bold text-xs">
               Giao dịch: {data.total_transactions}
             </div>
           </div>
 
-          <div className={s.kpi}>
-            <div className={s.kpiTop}>
+          <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
+            <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
               <span>Giao dịch / Tài khoản</span>
             </div>
-            <div className={s.kpiNum}>
+            <div className="text-2xl font-extrabold tracking-wide">
               {data.total_users > 0
                 ? safeFixed2(
                     data.total_transactions / data.total_users
                   )
                 : "0.00"}
             </div>
-            <div className={s.kpiTrend}>Trung bình 7 ngày</div>
+            <div className="text-green-500 font-bold text-xs">
+              Trung bình 7 ngày
+            </div>
           </div>
         </section>
 
-        <section className={s.panel}>
-          <div className={s.panelHead}>
-            <h3>Chi tiết</h3>
+        <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="m-0 text-base font-extrabold">Chi tiết</h3>
           </div>
 
-          <div className={s.tableWrap}>
-            <table className={s.table}>
+          <div className={`overflow-auto border ${theme.tableBorder} rounded-lg`}>
+            <table className="w-full border-collapse text-sm">
               <thead>
                 <tr>
-                  <th>Chỉ số</th>
-                  <th>Giá trị</th>
+                  <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>
+                    Chỉ số
+                  </th>
+                  <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>
+                    Giá trị
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
-                  <td>Tổng tài khoản</td>
-                  <td>{data.total_users}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    Tổng tài khoản
+                  </td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    {data.total_users}
+                  </td>
                 </tr>
                 <tr>
-                  <td>Tài khoản hoạt động</td>
-                  <td>{data.active_users}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    Tài khoản hoạt động
+                  </td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    {data.active_users}
+                  </td>
                 </tr>
                 <tr>
-                  <td>Tổng tổ chức</td>
-                  <td>{data.total_organizations}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    Tổng tổ chức
+                  </td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    {data.total_organizations}
+                  </td>
                 </tr>
                 <tr>
-                  <td>Tổ chức hoạt động</td>
-                  <td>{data.active_organizations}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    Tổ chức hoạt động
+                  </td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    {data.active_organizations}
+                  </td>
                 </tr>
                 <tr>
-                  <td>Tổng doanh thu (USD)</td>
-                  <td>{safeFixed2(data.total_revenue)}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    Tổng doanh thu (USD)
+                  </td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    {safeFixed2(data.total_revenue)}
+                  </td>
                 </tr>
                 <tr>
-                  <td>Tổng giao dịch</td>
-                  <td>{data.total_transactions}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    Tổng giao dịch
+                  </td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    {data.total_transactions}
+                  </td>
                 </tr>
                 <tr>
-                  <td>Giao dịch / tài khoản</td>
-                  <td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    Giao dịch / tài khoản
+                  </td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
                     {data.total_users > 0
                       ? safeFixed2(
-                          data.total_transactions /
-                            data.total_users
+                          data.total_transactions / data.total_users
                         )
                       : "0.00"}
                   </td>
@@ -166,10 +194,10 @@ export default function AnalyticsPage() {
   };
 
   return (
-    <div className={s.stack}>
-      <section className={s.panel}>
-        <div className={s.panelHead}>
-          <h3>Phân tích hệ thống</h3>
+    <div className="grid gap-5">
+      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3 pt-2 mt-0`}>
+        <div className="flex items-center justify-between gap-3 mb-2">
+          <h3 className="m-0 text-base font-extrabold">Phân tích hệ thống</h3>
         </div>
         {renderBody()}
       </section>

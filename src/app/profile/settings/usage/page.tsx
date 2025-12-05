@@ -7,6 +7,8 @@ import { getMyOrgMembership } from "@/lib/api-membership";
 import { getOrganizationMaps, getMapViews, getMapById, type MapDto } from "@/lib/api-maps";
 import { getUserUsage, checkUserQuota, type UserUsageResponse, type CheckQuotaRequest } from "@/lib/api-user";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 type UsageLimits = {
   viewsMonthly?: number | null;
@@ -85,6 +87,10 @@ function bytesToMB(b: number) {
 
 export default function UsagePage() {
   const { t } = useI18n();
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [orgs, setOrgs] = useState<GetMyOrganizationsResDto["organizations"]>([]);
   const [maps, setMaps] = useState<MapRow[]>([]);
@@ -220,7 +226,7 @@ export default function UsagePage() {
       <div className="mb-1 flex items-center gap-3">
         <label className="text-sm text-zinc-600 dark:text-zinc-400">{t("usage.organization")}</label>
         <select
-          className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          className={`rounded-md border px-2 py-1 text-sm shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${themeClasses.select} ${isDark ? "dark:hover:bg-zinc-800" : ""}`}
           value={orgId ?? ""}
           onChange={(e) => {
             const v = e.target.value || null;
@@ -237,91 +243,91 @@ export default function UsagePage() {
       </div>
 
       {!orgId && (
-        <div className="rounded-lg border border-neutral-800 bg-neutral-900 p-4 text-neutral-300">{t("usage.noOrgSelected")}</div>
+        <div className={`rounded-lg border p-4 ${themeClasses.panel} ${themeClasses.textMuted}`}>{t("usage.noOrgSelected")}</div>
       )}
 
       {orgId && (
         <>
-          <section className="rounded-xl border border-neutral-800 bg-neutral-900 p-4">
+          <section className={`rounded-xl border p-4 ${themeClasses.panel}`}>
             <div className="flex items-center justify-between">
-              <h2 className="text-base font-medium text-neutral-100">{t("usage.limits_overview")}</h2>
+              <h2 className={`text-base font-medium ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("usage.limits_overview")}</h2>
               <button
                 onClick={onCheckQuotaClick}
-                className="rounded-md bg-neutral-800 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-700"
+                className={`rounded-md px-3 py-1.5 text-xs ${isDark ? "bg-zinc-800 text-zinc-200 hover:bg-zinc-700" : "bg-gray-800 text-gray-200 hover:bg-gray-700"}`}
               >
                 {t("usage.limits_checkQuotaPlusOne")}
               </button>
             </div>
             <div className="mt-3 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-lg border border-neutral-800 p-3">
-                <div className="text-xs text-neutral-400">{t("usage.metrics_maps")}</div>
-                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
-                  <div className="h-full bg-neutral-500" style={{ width: `${percent(mapsUsedFromUsage, mapsLimitFromUsage)}%` }} />
+              <div className={`rounded-lg border p-3 ${themeClasses.tableBorder}`}>
+                <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.metrics_maps")}</div>
+                <div className={`mt-1 h-1 w-full overflow-hidden rounded-full ${isDark ? "bg-zinc-800" : "bg-gray-200"}`}>
+                  <div className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`} style={{ width: `${percent(mapsUsedFromUsage, mapsLimitFromUsage)}%` }} />
                 </div>
-                <div className="mt-1 text-sm text-neutral-300">
+                <div className={`mt-1 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
                   {formatNumber(mapsUsedFromUsage)} / {capText(mapsLimitFromUsage)}
                 </div>
               </div>
 
-              <div className="rounded-lg border border-neutral-800 p-3">
-                <div className="text-xs text-neutral-400">{t("usage.metrics_layers")}</div>
-                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
-                  <div className="h-full bg-neutral-500" style={{ width: `${percent(layersUsedFromUsage, layersLimitFromUsage)}%` }} />
+              <div className={`rounded-lg border p-3 ${themeClasses.tableBorder}`}>
+                <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.metrics_layers")}</div>
+                <div className={`mt-1 h-1 w-full overflow-hidden rounded-full ${isDark ? "bg-zinc-800" : "bg-gray-200"}`}>
+                  <div className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`} style={{ width: `${percent(layersUsedFromUsage, layersLimitFromUsage)}%` }} />
                 </div>
-                <div className="mt-1 text-sm text-neutral-300">
+                <div className={`mt-1 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
                   {formatNumber(layersUsedFromUsage)} / {capText(layersLimitFromUsage)}
                 </div>
               </div>
 
-              <div className="rounded-lg border border-neutral-800 p-3">
-                <div className="text-xs text-neutral-400">{t("usage.metrics_members")}</div>
-                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
-                  <div className="h-full bg-neutral-500" style={{ width: `${percent(membersUsedFromUsage, membersLimitFromUsage)}%` }} />
+              <div className={`rounded-lg border p-3 ${themeClasses.tableBorder}`}>
+                <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.metrics_members")}</div>
+                <div className={`mt-1 h-1 w-full overflow-hidden rounded-full ${isDark ? "bg-zinc-800" : "bg-gray-200"}`}>
+                  <div className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`} style={{ width: `${percent(membersUsedFromUsage, membersLimitFromUsage)}%` }} />
                 </div>
-                <div className="mt-1 text-sm text-neutral-300">
+                <div className={`mt-1 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
                   {formatNumber(membersUsedFromUsage)} / {capText(membersLimitFromUsage)}
                 </div>
               </div>
 
-              <div className="rounded-lg border border-neutral-800 p-3">
-                <div className="text-xs text-neutral-400">{t("usage.metrics_storage")}</div>
-                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
+              <div className={`rounded-lg border p-3 ${themeClasses.tableBorder}`}>
+                <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.metrics_storage")}</div>
+                <div className={`mt-1 h-1 w-full overflow-hidden rounded-full ${isDark ? "bg-zinc-800" : "bg-gray-200"}`}>
                   <div
-                    className="h-full bg-neutral-500"
+                    className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`}
                     style={{ width: `${percent(usageBars.hostingUsedMb, usageBars.hostingCapMb == null ? 0 : usageBars.hostingCapMb)}%` }}
                   />
                 </div>
-                <div className="mt-1 text-sm text-neutral-300">
+                <div className={`mt-1 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
                   {capText(usageBars.hostingUsedMb, "MB")} / {capText(usageBars.hostingCapMb, "MB")}
                 </div>
-                {userUsage?.period && <div className="mt-1 text-xs text-neutral-500">{t("usage.period")}: {userUsage.period}</div>}
+                {userUsage?.period && <div className={`mt-1 text-xs ${themeClasses.textMuted}`}>{t("usage.period")}: {userUsage.period}</div>}
                 {userUsage?.lastReset && (
-                  <div className="text-xs text-neutral-500">{t("usage.lastReset")}: {formatDateTime(userUsage.lastReset)}</div>
+                  <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.lastReset")}: {formatDateTime(userUsage.lastReset)}</div>
                 )}
               </div>
             </div>
           </section>
 
-          <section className="rounded-xl border border-neutral-800 bg-neutral-900">
+          <section className={`rounded-xl border ${themeClasses.panel}`}>
             <div className="flex items-center justify-between px-4 pt-4">
-              <h2 className="text-base font-medium text-neutral-100">{t("usage.processing_title")}</h2>
+              <h2 className={`text-base font-medium ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("usage.processing_title")}</h2>
               <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500">
                 {t("usage.actions_upgrade")}
               </button>
             </div>
             <div className="px-4 pb-3">
-              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
-                <div className="h-full bg-neutral-500" style={{ width: `${percent(usageBars.processingUsedMb, usageBars.processingCapMb)}%` }} />
+              <div className={`mt-2 h-1 w-full overflow-hidden rounded-full ${isDark ? "bg-zinc-800" : "bg-gray-200"}`}>
+                <div className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`} style={{ width: `${percent(usageBars.processingUsedMb, usageBars.processingCapMb)}%` }} />
               </div>
-              <div className="mt-2 text-sm text-neutral-300">
+              <div className={`mt-2 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
                 {capText(usageBars.processingUsedMb, "MB")} {t("usage.in")} {capText(usageBars.processingCapMb ?? 0, "MB")}
               </div>
             </div>
-            <div className="px-4 pb-4 text-sm text-neutral-400">{t("usage.processing_emptyHint")}</div>
+            <div className={`px-4 pb-4 text-sm ${themeClasses.textMuted}`}>{t("usage.processing_emptyHint")}</div>
             <div className="overflow-x-auto pb-4">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-t border-neutral-800 bg-neutral-900/40 text-left text-neutral-400">
+                  <tr className={themeClasses.tableHeader}>
                     <th className="py-2 pl-4 pr-4 font-normal">{t("usage.table_dataset")}</th>
                     <th className="py-2 pr-4 font-normal">{t("usage.table_source")}</th>
                     <th className="py-2 pr-4 font-normal">{t("usage.table_type")}</th>
@@ -334,7 +340,7 @@ export default function UsagePage() {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={8}>
+                    <td className={`py-3 pl-4 pr-4 ${themeClasses.textMuted}`} colSpan={8}>
                       {t("usage.table_empty")}
                     </td>
                   </tr>
@@ -343,26 +349,26 @@ export default function UsagePage() {
             </div>
           </section>
 
-          <section className="rounded-xl border border-neutral-800 bg-neutral-900">
+          <section className={`rounded-xl border ${themeClasses.panel}`}>
             <div className="flex items-center justify-between px-4 pt-4">
-              <h2 className="text-base font-medium text-neutral-100">{t("usage.hosting_title")}</h2>
+              <h2 className={`text-base font-medium ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("usage.hosting_title")}</h2>
               <button className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500">
                 {t("usage.actions_upgrade")}
               </button>
             </div>
             <div className="px-4 pb-3">
-              <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-neutral-800">
-                <div className="h-full bg-neutral-500" style={{ width: `${percent(usageBars.hostingUsedMb, usageBars.hostingCapMb)}%` }} />
+              <div className={`mt-2 h-1 w-full overflow-hidden rounded-full ${isDark ? "bg-zinc-800" : "bg-gray-200"}`}>
+                <div className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`} style={{ width: `${percent(usageBars.hostingUsedMb, usageBars.hostingCapMb)}%` }} />
               </div>
-              <div className="mt-2 text-sm text-neutral-300">
+              <div className={`mt-2 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
                 {capText(usageBars.hostingUsedMb, "MB")} {t("usage.in")} {capText(usageBars.hostingCapMb ?? 0, "MB")}
               </div>
             </div>
-            <div className="px-4 pb-4 text-sm text-neutral-400">{t("usage.hosting_emptyHint")}</div>
+            <div className={`px-4 pb-4 text-sm ${themeClasses.textMuted}`}>{t("usage.hosting_emptyHint")}</div>
             <div className="overflow-x-auto pb-4">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-t border-neutral-800 bg-neutral-900/40 text-left text-neutral-400">
+                  <tr className={themeClasses.tableHeader}>
                     <th className="py-2 pl-4 pr-4 font-normal">{t("usage.table_dataset")}</th>
                     <th className="py-2 pr-4 font-normal">{t("usage.table_source")}</th>
                     <th className="py-2 pr-4 font-normal">{t("usage.table_type")}</th>
@@ -374,7 +380,7 @@ export default function UsagePage() {
                 </thead>
                 <tbody>
                   <tr>
-                    <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={7}>
+                    <td className={`py-3 pl-4 pr-4 ${themeClasses.textMuted}`} colSpan={7}>
                       {t("usage.table_empty")}
                     </td>
                   </tr>
@@ -383,25 +389,25 @@ export default function UsagePage() {
             </div>
           </section>
 
-          <section className="rounded-xl border border-neutral-800 bg-neutral-900">
+          <section className={`rounded-xl border ${themeClasses.panel}`}>
             <div className="flex items-center justify-between px-4 py-3">
-              <h2 className="text-base font-medium text-neutral-100">{t("usage.views_title")}</h2>
-              <span className="text-xs text-neutral-400">{resetDateText}</span>
+              <h2 className={`text-base font-medium ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("usage.views_title")}</h2>
+              <span className={`text-xs ${themeClasses.textMuted}`}>{resetDateText}</span>
             </div>
             <div className="px-4 pb-2">
-              <div className="h-1 w-full overflow-hidden rounded-full bg-neutral-800">
+              <div className={`h-1 w-full overflow-hidden rounded-full ${isDark ? "bg-zinc-800" : "bg-gray-200"}`}>
                 <div className="h-full bg-pink-400" style={{ width: `${percent(totalViews, viewsMax)}%` }} />
               </div>
-              <div className="mt-2 text-sm text-neutral-300">
-                <span className="text-pink-300 font-medium">{formatNumber(totalViews)}</span> {t("usage.of")}{" "}
+              <div className={`mt-2 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
+                <span className={`${isDark ? "text-pink-300" : "text-pink-600"} font-medium`}>{formatNumber(totalViews)}</span> {t("usage.of")}{" "}
                 <span className="font-medium">{capText(viewsMax)}</span> {t("usage.perMonth")}
               </div>
-              <p className="mt-1 text-xs text-neutral-400">{t("usage.views_hint")}</p>
+              <p className={`mt-1 text-xs ${themeClasses.textMuted}`}>{t("usage.views_hint")}</p>
             </div>
             <div className="mt-2 overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-t border-neutral-800 bg-neutral-900/40 text-left text-neutral-400">
+                  <tr className={themeClasses.tableHeader}>
                     <th className="py-2 pl-4 pr-4 font-normal">{t("usage.table_map")}</th>
                     <th className="py-2 pr-4 font-normal">{t("usage.table_createdBy")}</th>
                     <th className="py-2 pr-4 font-normal">{t("usage.table_views")}</th>
@@ -410,28 +416,28 @@ export default function UsagePage() {
                 <tbody>
                   {loading && (
                     <tr>
-                      <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={3}>
+                      <td className={`py-3 pl-4 pr-4 ${themeClasses.textMuted}`} colSpan={3}>
                         {t("usage.loading")}
                       </td>
                     </tr>
                   )}
                   {!loading && maps.length === 0 && (
                     <tr>
-                      <td className="py-3 pl-4 pr-4 text-neutral-300" colSpan={3}>
+                      <td className={`py-3 pl-4 pr-4 ${themeClasses.textMuted}`} colSpan={3}>
                         {t("usage.table_empty")}
                       </td>
                     </tr>
                   )}
                   {!loading &&
                     maps.map((m) => (
-                      <tr key={m.id} className="border-t border-neutral-800 text-neutral-200">
+                      <tr key={m.id} className={`border-t ${themeClasses.tableCell}`}>
                         <td className="py-2 pl-4 pr-4">
-                          <a className="text-blue-300 hover:underline" href={`/maps/${m.id}`}>
+                          <a className={`${isDark ? "text-blue-300" : "text-blue-600"} hover:underline`} href={`/maps/${m.id}`}>
                             {m.name || t("usage.untitledMap")}
                           </a>
                         </td>
-                        <td className="py-2 pr-4">{m.createdBy ?? "—"}</td>
-                        <td className="py-2 pr-4">{formatNumber(m.views ?? 0)}</td>
+                        <td className={`py-2 pr-4 ${themeClasses.textMuted}`}>{m.createdBy ?? "—"}</td>
+                        <td className={`py-2 pr-4 ${isDark ? "text-zinc-200" : "text-gray-900"}`}>{formatNumber(m.views ?? 0)}</td>
                       </tr>
                     ))}
                 </tbody>

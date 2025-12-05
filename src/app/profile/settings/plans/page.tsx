@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getMe, type Me } from "@/lib/api-auth";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 import {
     getPlans,
     getMyMembership,
@@ -72,16 +74,16 @@ function HinhTronChuCai({ ten }: { ten?: string }) {
 }
 type ToChuc = { orgId: string; orgName: string };
 function ChonToChuc({
-    orgs, value, onChange, className = ""
-}: { orgs: ToChuc[]; value?: string; onChange: (id: string) => void; className?: string }) {
+    orgs, value, onChange, className = "", themeClasses, isDark
+}: { orgs: ToChuc[]; value?: string; onChange: (id: string) => void; className?: string; themeClasses: ReturnType<typeof getThemeClasses>; isDark: boolean }) {
     const current = orgs.find(o => o.orgId === value);
     return (
         <div className={`flex items-center gap-3 ${className}`}>
-            <span className="text-xs font-medium text-zinc-600 dark:text-zinc-300">Tổ chức</span>
+            <span className={`text-xs font-medium ${themeClasses.textMuted}`}>Tổ chức</span>
             <div className="relative">
-                <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500">▾</div>
+                <div className={`pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 ${themeClasses.textMuted}`}>▾</div>
                 <select
-                    className="min-w-64 appearance-none rounded-md border border-zinc-200 bg-white px-3 py-2 pr-7 text-sm text-zinc-800 outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+                    className={`min-w-64 appearance-none rounded-md border px-3 py-2 pr-7 text-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 ${themeClasses.select}`}
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
                 >
@@ -90,7 +92,7 @@ function ChonToChuc({
                 </select>
             </div>
             {current && (
-                <div className="hidden md:flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-200">
+                <div className={`hidden md:flex items-center gap-2 text-sm ${isDark ? "text-zinc-200" : "text-gray-700"}`}>
                     <HinhTronChuCai ten={current.orgName} />
                     <span className="font-medium">{current.orgName}</span>
                 </div>
@@ -111,6 +113,10 @@ function layVaiTro(orgs: MyOrganizationDto[], orgId: string): string {
 }
 
 export default function TrangGoiThanhVien() {
+    const { resolvedTheme, theme } = useTheme();
+    const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+    const isDark = currentTheme === "dark";
+    const themeClasses = getThemeClasses(isDark);
     const [me, setMe] = useState<Me | null>(null);
     const [orgs, setOrgs] = useState<MyOrganizationDto[]>([]);
     const [orgId, setOrgId] = useState<string>("");
@@ -244,10 +250,10 @@ export default function TrangGoiThanhVien() {
     return (
         <div className="w-full">
             <h1 className="text-2xl font-semibold">Gói & Thành viên</h1>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Quản lý gói thành viên cho tổ chức.</p>
+            <p className={`mt-1 text-sm ${themeClasses.textMuted}`}>Quản lý gói thành viên cho tổ chức.</p>
 
             <div className="mt-3">
-                <ChonToChuc orgs={orgs} value={orgId} onChange={setOrgId} />
+                <ChonToChuc orgs={orgs} value={orgId} onChange={setOrgId} themeClasses={themeClasses} isDark={isDark} />
             </div>
 
             {banner && (
@@ -265,24 +271,24 @@ export default function TrangGoiThanhVien() {
             )}
 
             {orgs.length === 0 ? (
-                <div className="mt-4 rounded-xl border border-zinc-200 bg-white/70 p-6 text-sm text-zinc-600 dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-300">
+                <div className={`mt-4 rounded-xl border p-6 text-sm ${themeClasses.panel} ${themeClasses.textMuted}`}>
                     Bạn chưa có tổ chức nào. Hãy tạo một tổ chức để quản lý gói thành viên.
                 </div>
             ) : (
-                <div className="mt-4 rounded-xl border border-zinc-200/70 bg-white/80 shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-900/60">
-                    <div className="px-6 py-5 rounded-t-xl bg-gradient-to-r from-emerald-50 to-transparent dark:from-emerald-500/10">
+                <div className={`mt-4 rounded-xl border shadow-sm backdrop-blur ${themeClasses.panel}`}>
+                    <div className={`px-6 py-5 rounded-t-xl bg-gradient-to-r ${isDark ? "from-emerald-500/10" : "from-emerald-50"} to-transparent`}>
                         <div className="flex items-center justify-between">
                             <div>
-                                <div className="text-xs text-zinc-500">Gói hiện tại</div>
-                                <div className="text-lg font-semibold">{planHienTaiTen}</div>
+                                <div className={`text-xs ${themeClasses.textMuted}`}>Gói hiện tại</div>
+                                <div className={`text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{planHienTaiTen}</div>
                                 {dangLoadMem ? (
-                                    <div className="text-sm text-zinc-600 dark:text-zinc-400">Đang tải gói…</div>
+                                    <div className={`text-sm ${themeClasses.textMuted}`}>Đang tải gói…</div>
                                 ) : !membership ? (
-                                    <div className="text-sm text-zinc-600 dark:text-zinc-400">
+                                    <div className={`text-sm ${themeClasses.textMuted}`}>
                                         {laOwner ? "Chưa có gói cho tổ chức này. Hãy chọn một gói bên dưới." : "Bạn không phải Owner nên không xem được gói hiện tại. Vui lòng liên hệ Owner nếu cần thay đổi gói."}
                                     </div>
                                 ) : (
-                                    <div className="mt-1 grid grid-cols-1 gap-1 text-sm text-zinc-700 dark:text-zinc-300">
+                                    <div className={`mt-1 grid grid-cols-1 gap-1 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
                                         <div>
                                             Trạng thái: <span className="font-medium">{membership.status}</span>
                                         </div>
@@ -327,19 +333,19 @@ export default function TrangGoiThanhVien() {
                                 return (
                                     <div
                                         key={p.planId}
-                                        className={`rounded-lg border p-4 dark:bg-zinc-900/50 ${laHienTai
-                                            ? "border-emerald-300 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-500/10"
-                                            : "border-zinc-200/70 bg-white dark:border-white/10"
-                                            }`}
+                                        className={`rounded-lg border p-4 ${laHienTai
+                                            ? (isDark ? "border-emerald-500/30 bg-emerald-500/10" : "border-emerald-300 bg-emerald-50/60")
+                                            : themeClasses.tableBorder
+                                            } ${isDark ? "bg-zinc-900/50" : "bg-white"}`}
                                     >
                                         <div className="flex items-baseline justify-between">
-                                            <div className="text-base font-semibold">{p.planName}</div>
-                                            <div className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                                            <div className={`text-base font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{p.planName}</div>
+                                            <div className={`text-sm font-semibold ${isDark ? "text-zinc-100" : "text-gray-800"}`}>
                                                 {dinhDangTien(p.priceMonthly)}/tháng
                                             </div>
 
                                         </div>
-                                        <ul className="mt-3 space-y-1 text-sm text-zinc-600 dark:text-zinc-300">
+                                        <ul className={`mt-3 space-y-1 text-sm ${themeClasses.textMuted}`}>
                                             {features.slice(0, 6).map((f, i) => <li key={i}>• {f}</li>)}
                                         </ul>
                                         {laHienTai ? (
@@ -372,7 +378,7 @@ export default function TrangGoiThanhVien() {
                             })}
                         </div>
 
-                        <div className="mt-8 rounded-lg border border-zinc-200/70 bg-zinc-50 p-4 text-xs text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
+                        <div className={`mt-8 rounded-lg border p-4 text-xs ${themeClasses.tableBorder} ${isDark ? "bg-white/5" : "bg-gray-50"} ${themeClasses.textMuted}`}>
                             Lưu ý: Có thể chuyển hướng sang cổng PayOS để thanh toán. Sau khi hoàn tất, hệ thống sẽ tự cập nhật trạng thái gói.
                         </div>
                     </div>

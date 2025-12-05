@@ -5,6 +5,7 @@ import {
   useContext,
   useMemo,
   useState,
+  useEffect,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -30,8 +31,84 @@ export function LoadingProvider({ children }: { children: ReactNode }) {
     visible: false,
     message: "Đang tải...",
   });
+  const [isDark, setIsDark] = useState<boolean | undefined>(undefined);
+
+  // Try to get theme from admin context or next-themes
+  useEffect(() => {
+    const updateTheme = () => {
+      if (typeof window === "undefined") return;
+      
+      // Priority 1: Check admin theme (for admin section)
+      const adminTheme = localStorage.getItem("admin-theme");
+      if (adminTheme) {
+        setIsDark(adminTheme === "dark");
+        return;
+      }
+      
+      // Priority 2: Check next-themes (for profile section)
+      const nextTheme = localStorage.getItem("theme");
+      if (nextTheme) {
+        // next-themes can store "light", "dark", or "system"
+        if (nextTheme === "dark") {
+          setIsDark(true);
+          return;
+        } else if (nextTheme === "light") {
+          setIsDark(false);
+          return;
+        }
+        // If "system", fall through to system preference check
+      }
+      
+      // Priority 3: Check system preference
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      setIsDark(prefersDark);
+    };
+
+    // Initial theme check
+    updateTheme();
+
+    // Listen for storage changes (when theme is toggled)
+    if (typeof window !== "undefined") {
+      window.addEventListener("storage", updateTheme);
+      
+      // Listen for custom events from admin and profile sections
+      const handleAdminThemeChange = () => updateTheme();
+      const handleNextThemeChange = () => updateTheme();
+      
+      window.addEventListener("admin-theme-change", handleAdminThemeChange);
+      // next-themes also fires storage event, but we can listen for it specifically
+      window.addEventListener("theme-change", handleNextThemeChange);
+
+      return () => {
+        window.removeEventListener("storage", updateTheme);
+        window.removeEventListener("admin-theme-change", handleAdminThemeChange);
+        window.removeEventListener("theme-change", handleNextThemeChange);
+      };
+    }
+  }, []);
 
   const showLoading = useCallback((message?: string) => {
+    // Re-check theme when showing loading to ensure it's up to date
+    if (typeof window !== "undefined") {
+      // Priority 1: Check admin theme
+      const adminTheme = localStorage.getItem("admin-theme");
+      if (adminTheme) {
+        setIsDark(adminTheme === "dark");
+      } else {
+        // Priority 2: Check next-themes
+        const nextTheme = localStorage.getItem("theme");
+        if (nextTheme === "dark") {
+          setIsDark(true);
+        } else if (nextTheme === "light") {
+          setIsDark(false);
+        } else {
+          // Priority 3: System preference
+          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          setIsDark(prefersDark);
+        }
+      }
+    }
+    
     setState({
       visible: true,
       message: message ?? "Đang tải...",
@@ -61,7 +138,7 @@ export function LoadingProvider({ children }: { children: ReactNode }) {
   const portal =
     typeof document !== "undefined" && state.visible && document.getElementById("modal-root")
       ? createPortal(
-        <FullScreenLoading message={state.message} />,
+        <FullScreenLoading message={state.message} isDark={isDark} />,
         document.getElementById("modal-root")!
       )
       : null;

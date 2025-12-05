@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 import {
     SupportTicket,
     SupportTicketMessage,
@@ -47,23 +49,10 @@ function statusBadgeClass(status?: string | null): string {
 
 export default function HelpPage() {
     const { t } = useI18n();
-    const [isDark, setIsDark] = useState(false);
-
-    useEffect(() => {
-        if (typeof document === "undefined") return;
-        const root = document.documentElement;
-
-        const update = () => {
-            setIsDark(root.classList.contains("dark"));
-        };
-
-        update();
-
-        const observer = new MutationObserver(update);
-        observer.observe(root, { attributes: true, attributeFilter: ["class"] });
-
-        return () => observer.disconnect();
-    }, []);
+    const { resolvedTheme, theme } = useTheme();
+    const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+    const isDark = currentTheme === "dark";
+    const themeClasses = getThemeClasses(isDark);
 
     const [tickets, setTickets] = useState<SupportTicket[]>([]);
     const [loadingTickets, setLoadingTickets] = useState(false);
@@ -263,13 +252,11 @@ export default function HelpPage() {
                         <span>{t("support.badgeLabel")}</span>
                     </div>
                     <div className="space-y-1">
-                        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-                            <span style={{ color: isDark ? "#ffffff" : "#000000" }}>
-                                {t("support.title")}
-                            </span>
+                        <h1 className={`text-2xl font-semibold tracking-tight sm:text-3xl ${isDark ? "text-white" : "text-black"}`}>
+                            {t("support.title")}
                         </h1>
 
-                        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+                        <p className={`text-sm ${themeClasses.textMuted}`}>
                             {t("support.subtitle")}
                         </p>
                     </div>
@@ -296,20 +283,24 @@ export default function HelpPage() {
             </div>
 
             {error && (
-                <div className="flex items-start gap-2 rounded-lg border border-red-400/40 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200">
+                <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
+                    isDark 
+                        ? "border-red-400/40 bg-red-500/10 text-red-200" 
+                        : "border-red-400/40 bg-red-50 text-red-700"
+                }`}>
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                     <p>{error}</p>
                 </div>
             )}
 
             <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1.9fr)]">
-                <section className="flex min-h-[420px] flex-col rounded-2xl border border-zinc-200 bg-white text-zinc-900 shadow-xl dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-50">
-                    <header className="flex items-center justify-between border-b border-zinc-100 bg-zinc-50/80 px-4 py-3 dark:border-white/10 dark:bg-white/5">
+                <section className={`flex min-h-[420px] flex-col rounded-2xl border shadow-xl ${themeClasses.panel} ${isDark ? "text-zinc-50" : "text-zinc-900"}`}>
+                    <header className={`flex items-center justify-between border-b px-4 py-3 ${themeClasses.tableBorder} ${isDark ? "bg-white/5" : "bg-zinc-50/80"}`}>
                         <div className="space-y-0.5">
                             <h2 className="text-sm font-semibold">
                                 {t("support.ticketListTitle")}
                             </h2>
-                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                            <p className={`text-xs ${themeClasses.textMuted}`}>
                                 {t("support.ticketListSubtitle")}
                             </p>
                         </div>
@@ -352,10 +343,10 @@ export default function HelpPage() {
                                                     {statusLabel(ticket.status)}
                                                 </span>
                                             </div>
-                                            <p className="line-clamp-2 text-xs text-zinc-600 dark:text-zinc-300">
+                                            <p className={`line-clamp-2 text-xs ${isDark ? "text-zinc-300" : "text-zinc-600"}`}>
                                                 {ticket.description}
                                             </p>
-                                            <p className="text-[11px] text-zinc-500 dark:text-zinc-500">
+                                            <p className={`text-[11px] ${themeClasses.textMuted}`}>
                                                 {t("support.ticketCreatedAt", {
                                                     createdAt: formatDateTime(ticket.createdAt),
                                                 })}
@@ -366,7 +357,7 @@ export default function HelpPage() {
                             })}
 
                             {!loadingTickets && tickets.length === 0 && (
-                                <div className="px-4 py-10 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                                <div className={`px-4 py-10 text-center text-xs ${themeClasses.textMuted}`}>
                                     {t("support.ticketListEmpty")}
                                 </div>
                             )}
@@ -374,8 +365,8 @@ export default function HelpPage() {
                     </ScrollArea>
                 </section>
 
-                <section className="flex min-h-[420px] flex-col rounded-2xl border border-zinc-200 bg-white text-zinc-900 shadow-xl dark:border-white/10 dark:bg-zinc-900/60 dark:text-zinc-50">
-                    <header className="border-b border-zinc-100 bg-zinc-50/80 px-4 py-3 dark:border-white/10 dark:bg-white/5">
+                <section className={`flex min-h-[420px] flex-col rounded-2xl border shadow-xl ${themeClasses.panel} ${isDark ? "text-zinc-50" : "text-zinc-900"}`}>
+                    <header className={`border-b px-4 py-3 ${themeClasses.tableBorder} ${isDark ? "bg-white/5" : "bg-zinc-50/80"}`}>
                         <div className="flex items-start justify-between gap-3">
                             <div className="space-y-1">
                                 <h2 className="text-base font-semibold">
@@ -384,7 +375,7 @@ export default function HelpPage() {
                                         : t("support.detailPlaceholder")}
                                 </h2>
                                 {selectedTicket && (
-                                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                    <p className={`text-xs ${themeClasses.textMuted}`}>
                                         {t("support.detailMeta", {
                                             ticketId: selectedTicket.ticketId,
                                             createdAt: formatDateTime(selectedTicket.createdAt),
@@ -407,7 +398,7 @@ export default function HelpPage() {
                                             variant="outline"
                                             onClick={handleCloseTicket}
                                             disabled={closing}
-                                            className="h-8 border border-zinc-200 bg-zinc-50 text-xs text-zinc-800 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-100 dark:hover:bg-white/10"
+                                            className={`h-8 border text-xs ${themeClasses.button}`}
                                         >
                                             {closing
                                                 ? t("support.detailClosing")
@@ -422,13 +413,13 @@ export default function HelpPage() {
                     <div className="flex flex-1 flex-col">
                         <div className="flex-1">
                             {loadingDetail && selectedId && (
-                                <div className="flex h-full items-center justify-center text-sm text-zinc-500 dark:text-zinc-400">
+                                <div className={`flex h-full items-center justify-center text-sm ${themeClasses.textMuted}`}>
                                     {t("support.detailLoading")}
                                 </div>
                             )}
 
                             {!loadingDetail && !selectedTicket && (
-                                <div className="flex h-full items-center justify-center px-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                                <div className={`flex h-full items-center justify-center px-6 text-center text-sm ${themeClasses.textMuted}`}>
                                     {t("support.detailEmpty")}
                                 </div>
                             )}
@@ -441,13 +432,13 @@ export default function HelpPage() {
                                                 <p className="font-medium">
                                                     {t("support.detailInitialDescriptionTitle")}
                                                 </p>
-                                                <p className="rounded-xl bg-zinc-50 px-3 py-2 text-xs leading-relaxed text-zinc-800 dark:bg-white/5 dark:text-zinc-100">
+                                                <p className={`rounded-xl px-3 py-2 text-xs leading-relaxed ${isDark ? "bg-white/5 text-zinc-100" : "bg-zinc-50 text-zinc-800"}`}>
                                                     {selectedTicket.description}
                                                 </p>
                                             </>
                                         )}
                                     </div>
-                                    <Separator className="bg-zinc-100 dark:bg-white/10" />
+                                    <Separator className={isDark ? "bg-white/10" : "bg-zinc-100"} />
                                     <ScrollArea className="flex-1 px-4 py-3">
                                         <div className="space-y-3">
                                             {messages.map((m) => {
@@ -459,10 +450,13 @@ export default function HelpPage() {
                                                             }`}
                                                     >
                                                         <div
-                                                            className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${fromSupport
-                                                                ? "bg-zinc-100 text-zinc-900 dark:bg-white/5 dark:text-zinc-50"
-                                                                : "bg-emerald-600 text-zinc-950"
-                                                                }`}
+                                                            className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs leading-relaxed shadow-sm ${
+                                                                fromSupport
+                                                                    ? isDark
+                                                                        ? "bg-white/5 text-zinc-50"
+                                                                        : "bg-zinc-100 text-zinc-900"
+                                                                    : "bg-emerald-600 text-zinc-950"
+                                                            }`}
                                                         >
                                                             {m.senderName && (
                                                                 <p className="mb-1 text-[10px] font-semibold opacity-80">
@@ -479,7 +473,7 @@ export default function HelpPage() {
                                             })}
 
                                             {messages.length === 0 && (
-                                                <p className="px-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                                                <p className={`px-2 text-center text-xs ${themeClasses.textMuted}`}>
                                                     {t("support.messagesEmpty")}
                                                 </p>
                                             )}
@@ -489,7 +483,7 @@ export default function HelpPage() {
                             )}
                         </div>
 
-                        <Separator className="bg-zinc-100 dark:bg-white/10" />
+                        <Separator className={isDark ? "bg-white/10" : "bg-zinc-100"} />
 
                         <div className="px-4 pb-4 pt-2">
                             <form onSubmit={handleSendMessage} className="space-y-2">
@@ -505,10 +499,10 @@ export default function HelpPage() {
                                     }
                                     rows={3}
                                     disabled={!canSendMessage || sendingMessage}
-                                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-900/80 dark:text-zinc-100 dark:focus:ring-emerald-500 disabled:bg-zinc-100 dark:disabled:bg-zinc-900/40"
+                                    className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input} ${!canSendMessage || sendingMessage ? (isDark ? "bg-zinc-900/40" : "bg-zinc-100") : ""}`}
                                 />
                                 <div className="flex items-center justify-between gap-2">
-                                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                                    <p className={`text-[11px] ${themeClasses.textMuted}`}>
                                         {t("support.messagesNotice")}
                                     </p>
                                     <Button
@@ -530,20 +524,20 @@ export default function HelpPage() {
 
             {createOpen && (
                 <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 px-4 backdrop-blur-sm">
-                    <div className="w-full max-w-lg rounded-2xl border border-emerald-500/40 bg-white/95 p-6 text-zinc-900 shadow-2xl shadow-emerald-500/20 dark:border-white/10 dark:bg-zinc-950 dark:text-zinc-50">
+                    <div className={`w-full max-w-lg rounded-2xl border p-6 shadow-2xl shadow-emerald-500/20 ${themeClasses.panel} ${isDark ? "text-zinc-50" : "text-zinc-900"}`}>
                         <div className="mb-4 flex items-start justify-between gap-3">
                             <div className="space-y-1">
                                 <h2 className="text-lg font-semibold">
                                     {t("support.createTitle")}
                                 </h2>
-                                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                                <p className={`text-xs ${themeClasses.textMuted}`}>
                                     {t("support.createDescription")}
                                 </p>
                             </div>
                             <button
                                 type="button"
                                 onClick={() => setCreateOpen(false)}
-                                className="rounded-full p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-white/10 dark:hover:text-zinc-50"
+                                className={`rounded-full p-1 ${isDark ? "text-zinc-400 hover:bg-white/10 hover:text-zinc-50" : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700"}`}
                             >
                                 <X className="h-4 w-4" />
                             </button>
@@ -551,31 +545,31 @@ export default function HelpPage() {
 
                         <form onSubmit={handleCreateTicket} className="space-y-3">
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                                <label className={`text-xs font-medium ${isDark ? "text-zinc-200" : "text-zinc-700"}`}>
                                     {t("support.createSubjectLabel")}
                                 </label>
                                 <input
                                     value={newSubject}
                                     onChange={(e) => setNewSubject(e.target.value)}
                                     placeholder={t("support.createSubjectPlaceholder")}
-                                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"
+                                    className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
                                 />
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                                <label className={`text-xs font-medium ${isDark ? "text-zinc-200" : "text-zinc-700"}`}>
                                     {t("support.createPriorityLabel")}
                                 </label>
                                 <input
                                     value={newPriority}
                                     onChange={(e) => setNewPriority(e.target.value)}
                                     placeholder={t("support.createPriorityPlaceholder")}
-                                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"
+                                    className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
                                 />
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-xs font-medium text-zinc-700 dark:text-zinc-200">
+                                <label className={`text-xs font-medium ${isDark ? "text-zinc-200" : "text-zinc-700"}`}>
                                     {t("support.createDescriptionLabel")}
                                 </label>
                                 <textarea
@@ -583,7 +577,7 @@ export default function HelpPage() {
                                     onChange={(e) => setNewDescription(e.target.value)}
                                     placeholder={t("support.createDescriptionPlaceholder")}
                                     rows={4}
-                                    className="w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/15 dark:bg-zinc-900 dark:text-zinc-100"
+                                    className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
                                 />
                             </div>
 
@@ -594,7 +588,7 @@ export default function HelpPage() {
                                         variant="outline"
                                         size="sm"
                                         onClick={() => setCreateOpen(false)}
-                                        className="border border-zinc-200 bg-zinc-50 text-xs text-zinc-800 hover:bg-zinc-100 dark:border-white/10 dark:bg-white/5 dark:text-zinc-100 dark:hover:bg-white/10"
+                                        className={`text-xs ${themeClasses.button}`}
                                         disabled={creating}
                                     >
                                         {t("support.createCancel")}

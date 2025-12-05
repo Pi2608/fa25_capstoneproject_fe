@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import s from "../../admin.module.css";
 import { adminGetSubscriptionPlans } from "@/lib/admin-api";
 
 type Plan = {
@@ -69,17 +68,29 @@ export default function PlanDetailPage() {
     };
   }, [planId]);
 
-  if (loading) return <div className={s.loadingBox}>Đang tải…</div>;
-  if (err) return <div className={s.errorBox}>{err}</div>;
-  if (!data) return <div className={s.emptyBox}>Không có dữ liệu.</div>;
+  if (loading) return <div className="p-5">
+    <section className="bg-zinc-900/50 p-6 rounded-lg">
+      <p>Đang tải dữ liệu...</p>
+    </section>
+  </div>;
+  if (err) return <div className="p-5">
+    <section className="bg-zinc-900/50 p-6 rounded-lg">
+      <p>{err}</p>
+    </section>
+  </div>;
+  if (!data) return <div className="p-5">
+    <section className="bg-zinc-900/50 p-6 rounded-lg">
+      <p>Không tìm thấy gói đăng ký.</p>
+    </section>
+  </div>;
 
   return (
-    <div className={s.stack}>
-      <section className={s.panel}>
-        <div className={s.panelHead}>
+    <div className="p-5">
+      <section className="bg-zinc-900/50 p-6 rounded-lg">
+        <div className="flex items-center justify-between mb-6">
           <h3>Chi tiết gói</h3>
-          <div className={s.actionsRight}>
-            <button className={s.btn} onClick={() => router.back()}>
+          <div className="flex items-center gap-2">
+            <button className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors" onClick={() => router.back()}>
               ← Quay lại
             </button>
           </div>
@@ -87,7 +98,7 @@ export default function PlanDetailPage() {
 
         <div
           style={{
-            background: "white",
+            background: "#070b0b",
             borderRadius: 12,
             padding: 24,
             boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
@@ -99,7 +110,7 @@ export default function PlanDetailPage() {
               justifyContent: "space-between",
               alignItems: "center",
               marginBottom: 12,
-              borderBottom: "1px solid #eee",
+              borderBottom: "1px solid #27272a",
               paddingBottom: 10,
             }}
           >
@@ -114,9 +125,9 @@ export default function PlanDetailPage() {
             </h2>
 
             {data.isActive ? (
-              <span className={s.badgeSuccess}>Đang hoạt động</span>
+              <span className="px-2 py-1 rounded-md bg-green-500/10 text-green-500">Đang hoạt động</span>
             ) : (
-              <span className={s.badgeWarn}>Ngưng</span>
+              <span className="px-2 py-1 rounded-md bg-red-500/10 text-red-500">Ngưng</span>
             )}
           </div>
 

@@ -8,7 +8,7 @@ import {
 } from "@/lib/admin-api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import s from "../admin.module.css";
+import { useTheme } from "../layout";
 
 type TicketStatus = "Open" | "Pending" | "Closed";
 type Priority = "Low" | "Medium" | "High" | string;
@@ -44,6 +44,7 @@ type EditableTicketFields = {
 
 export default function SupportTicketsPage() {
   const router = useRouter();
+  const { isDark } = useTheme();
 
   // List state
   const [rows, setRows] = useState<Ticket[]>([]);
@@ -108,12 +109,12 @@ export default function SupportTicketsPage() {
   // Helpers
   const renderStatusBadge = (status: TicketStatus | string) => {
     if (status === "Closed") {
-      return <span className={s.badgeWarn}>Đã đóng</span>;
+      return <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18">Đã đóng</span>;
     }
     if (status === "Pending") {
-      return <span className={s.badgePending}>Đang chờ</span>;
+      return <span className="px-2 py-1 rounded-full text-xs font-extrabold text-blue-600 bg-blue-500/16">Đang chờ</span>;
     }
-    return <span className={s.badgeSuccess}>Đang mở</span>;
+    return <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16">Đang mở</span>;
   };
 
   const onStatusFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -247,13 +248,17 @@ export default function SupportTicketsPage() {
   };
 
   return (
-    <div className={s.stack}>
-      <section className={s.panel}>
-        <div className={s.panelHead}>
-          <h3>Yêu cầu hỗ trợ</h3>
-          <div className={s.filters}>
+    <div className="grid gap-5">
+      <section className={`${isDark ? "bg-zinc-900/98 border-zinc-800" : "bg-white border-gray-200"} border rounded-xl p-4 shadow-sm grid gap-3`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="m-0 text-base font-extrabold">Yêu cầu hỗ trợ</h3>
+          <div className="flex gap-2 flex-wrap">
             <select
-              className={s.select}
+              className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 ${
+                isDark
+                  ? "border-zinc-800 bg-zinc-800/96 text-zinc-100 focus:border-zinc-700 focus:ring-zinc-700"
+                  : "border-gray-300 bg-white text-gray-900 focus:border-gray-400 focus:ring-gray-400"
+              }`}
               value={statusFilter}
               onChange={onStatusFilterChange}
             >
@@ -265,55 +270,101 @@ export default function SupportTicketsPage() {
           </div>
         </div>
 
-        <div className={s.tableWrap}>
+        <div className={`overflow-auto border rounded-lg mt-2 ${
+          isDark ? "border-zinc-800" : "border-gray-200"
+        }`}>
           {listError ? (
-            <div className={s.errorBox}>{listError}</div>
+            <div className="p-4 text-center text-red-500 font-semibold text-sm">{listError}</div>
           ) : (
-            <table className={s.table}>
+            <table className="w-full border-collapse text-sm">
               <thead>
                 <tr>
-                  <th>Tiêu đề</th>
-                  <th>Người gửi</th>
-                  <th>Danh mục</th>
-                  <th>Độ ưu tiên</th>
-                  <th>Trạng thái</th>
-                  <th></th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}>Tiêu đề</th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}>Người gửi</th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}>Danh mục</th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}>Độ ưu tiên</th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}>Trạng thái</th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}></th>
                 </tr>
               </thead>
               <tbody>
                 {loadingList && rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>Đang tải...</td>
+                    <td colSpan={6} className={`p-8 text-center ${
+                      isDark ? "text-zinc-400" : "text-gray-500"
+                    }`}>Đang tải...</td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>Không có yêu cầu nào.</td>
+                    <td colSpan={6} className={`p-8 text-center ${
+                      isDark ? "text-zinc-400" : "text-gray-500"
+                    }`}>Không có yêu cầu nào.</td>
                   </tr>
                 ) : (
                   rows.map((t) => (
                     <tr key={t.ticketId}>
-                      <td>{t.title}</td>
-                      <td>{t.userName ?? "Ẩn danh"}</td>
-                      <td>{t.category}</td>
-                      <td>{t.priority}</td>
-                      <td>{renderStatusBadge(t.status)}</td>
-                      <td className={s.rowActions}>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>{t.title}</td>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>{t.userName ?? "Ẩn danh"}</td>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>{t.category}</td>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>{t.priority}</td>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>{renderStatusBadge(t.status)}</td>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>
+                        <div className="flex items-center gap-1.5 whitespace-nowrap text-sm font-medium">
                         <button
-                          className={s.linkBtn}
+                            className="text-[#166534] hover:underline cursor-pointer bg-transparent border-0 p-0"
                           onClick={() => goToDetail(t.ticketId)}
                         >
                           Xem
                         </button>
                         {t.status !== "Closed" && (
+                            <>
+                              <span className="text-zinc-400">|</span>
                           <button
-                            className={s.linkBtn}
+                                className="text-[#166534] hover:underline cursor-pointer bg-transparent border-0 p-0"
                             onClick={() => goToEdit(t.ticketId)}
                           >
                             Chỉnh sửa
                           </button>
+                            </>
                         )}
+                        </div>
                       </td>
-
                     </tr>
                   ))
                 )}
@@ -322,19 +373,23 @@ export default function SupportTicketsPage() {
           )}
         </div>
 
-        <div className={s.pager}>
+        <div className="flex items-center justify-center gap-3 pt-3">
           <button
-            className={s.linkBtn}
+            className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50 ${
+              isDark ? "text-[#3f5f36]" : "text-blue-600"
+            }`}
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
             ← Trước
           </button>
-          <span>
+          <span className="text-sm">
             Trang {page}/{totalPages}
           </span>
           <button
-            className={s.linkBtn}
+            className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50 ${
+              isDark ? "text-[#3f5f36]" : "text-blue-600"
+            }`}
             disabled={page >= totalPages}
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
           >
@@ -345,89 +400,92 @@ export default function SupportTicketsPage() {
 
       {/* Panel chi tiết bên phải (nếu bạn vẫn muốn giữ) */}
       {detailOpen && (
-        <section className={s.panel}>
-          <div className={s.panelHead}>
+        <section className={`${isDark ? "bg-zinc-900/98 border-zinc-800" : "bg-white border-gray-200"} border rounded-xl p-4 shadow-sm grid gap-3`}>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
-              <h3>Chi tiết yêu cầu</h3>
+              <h3 className="m-0 text-base font-extrabold">Chi tiết yêu cầu</h3>
               {detailTicket && (
-                <div className={s.subTitle}>
+                <div className="text-zinc-400 text-sm mt-1">
                   <span>
                     #{detailTicket.ticketId} · {detailTicket.title}
                   </span>
                 </div>
               )}
             </div>
-            <div className={s.filters}>
+            <div className="flex gap-2 flex-wrap items-center">
               {detailTicket && renderStatusBadge(detailTicket.status)}
-              <button className={s.linkBtn} onClick={closeDetail}>
+              <button
+                className="text-sm font-bold text-[#3f5f36] hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer"
+                onClick={closeDetail}
+              >
                 Đóng
               </button>
             </div>
           </div>
 
           {detailLoading ? (
-            <div className={s.sectionBox}>Đang tải chi tiết…</div>
+            <div className="p-4 text-center text-zinc-400">Đang tải chi tiết…</div>
           ) : detailError ? (
-            <div className={s.errorBox}>{detailError}</div>
+            <div className="p-4 text-center text-red-500 font-semibold text-sm">{detailError}</div>
           ) : detailTicket && editDraft ? (
-            <div className={s.sectionBoxCol}>
-              <div className={s.fieldRow}>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
-                  className={s.primaryBtn}
+                  className="px-4 py-2 rounded-lg bg-gradient-to-b from-[#2f6a39] to-[#264b30] text-white border-none font-extrabold cursor-pointer disabled:opacity-50"
                   disabled={savingUpdate}
                   onClick={saveUpdate}
                 >
                   {savingUpdate ? "Đang lưu..." : "Lưu thay đổi"}
                 </button>
 
-                <span className={s.divider}>|</span>
+                <span className="text-zinc-400">|</span>
 
                 {detailTicket.status !== "Closed" ? (
                   <button
-                    className={s.dangerBtn}
+                    className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
                     disabled={closingTicket}
                     onClick={performCloseTicket}
                   >
                     {closingTicket ? "Đang đóng..." : "Đóng yêu cầu"}
                   </button>
                 ) : (
-                  <button className={s.dangerBtn} disabled>
+                  <button className="px-4 py-2 rounded-lg bg-gray-500 text-white cursor-not-allowed" disabled>
                     Đã đóng
                   </button>
                 )}
               </div>
 
-              <div className={s.fieldCol}>
-                <label className={s.label}>Tiêu đề</label>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-300">Tiêu đề</label>
                 <input
-                  className={s.input}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/96 text-zinc-100 outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700"
                   value={editDraft.title}
                   onChange={(e) => onDraftChange("title", e.target.value)}
                 />
               </div>
 
-              <div className={s.fieldCol}>
-                <label className={s.label}>Danh mục</label>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-300">Danh mục</label>
                 <input
-                  className={s.input}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/96 text-zinc-100 outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700"
                   value={editDraft.category}
                   onChange={(e) => onDraftChange("category", e.target.value)}
                 />
               </div>
 
-              <div className={s.fieldCol}>
-                <label className={s.label}>Độ ưu tiên</label>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-300">Độ ưu tiên</label>
                 <input
-                  className={s.input}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/96 text-zinc-100 outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700"
                   value={editDraft.priority}
                   onChange={(e) => onDraftChange("priority", e.target.value)}
                 />
               </div>
 
-              <div className={s.fieldCol}>
-                <label className={s.label}>Trạng thái</label>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-300">Trạng thái</label>
                 <select
-                  className={s.select}
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/96 text-zinc-100 outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700"
                   value={editDraft.status}
                   onChange={(e) => onDraftChange("status", e.target.value)}
                 >
@@ -437,57 +495,57 @@ export default function SupportTicketsPage() {
                 </select>
               </div>
 
-              <div className={s.fieldCol}>
-                <label className={s.label}>Mô tả</label>
-                <div className={s.readonlyBox}>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-300">Mô tả</label>
+                <div className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/50 text-zinc-300">
                   {detailTicket.description ?? "(Không có mô tả)"}
                 </div>
               </div>
 
-              <div className={s.fieldCol}>
-                <label className={s.label}>Người gửi</label>
-                <div className={s.readonlyBox}>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-300">Người gửi</label>
+                <div className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/50 text-zinc-300">
                   {detailTicket.userName ?? "Ẩn danh"}
                 </div>
               </div>
 
-              <div className={s.fieldCol}>
-                <label className={s.label}>Email</label>
-                <div className={s.readonlyBox}>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-300">Email</label>
+                <div className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/50 text-zinc-300">
                   {detailTicket.userEmail ?? "—"}
                 </div>
               </div>
 
-              <div className={s.fieldCol}>
-                <label className={s.label}>Tạo lúc</label>
-                <div className={s.readonlyBox}>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-300">Tạo lúc</label>
+                <div className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/50 text-zinc-300">
                   {detailTicket.createdAt ?? "—"}
                 </div>
               </div>
 
-              <div className={s.fieldCol}>
-                <label className={s.label}>Cập nhật gần nhất</label>
-                <div className={s.readonlyBox}>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-300">Cập nhật gần nhất</label>
+                <div className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/50 text-zinc-300">
                   {detailTicket.updatedAt ?? "—"}
                 </div>
               </div>
 
-              <div className={s.fieldCol}>
-                <label className={s.label}>Đã giải quyết lúc</label>
-                <div className={s.readonlyBox}>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-300">Đã giải quyết lúc</label>
+                <div className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/50 text-zinc-300">
                   {detailTicket.resolvedAt ?? "—"}
                 </div>
               </div>
 
               {(detailTicket.messageCount ?? 0) > 0 && (
-                <div className={s.fieldCol}>
-                  <label className={s.label}>Hoạt động gần đây</label>
-                  <div className={s.readonlyBox}>
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-zinc-300">Hoạt động gần đây</label>
+                  <div className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/50 text-zinc-300">
                     <div>
                       <strong>Số tin nhắn:</strong> {detailTicket.messageCount}
                     </div>
                     {detailTicket.lastMessage && (
-                      <div style={{ marginTop: 4 }}>
+                      <div className="mt-1">
                         <strong>Tin cuối:</strong> {detailTicket.lastMessage}
                       </div>
                     )}
@@ -496,7 +554,7 @@ export default function SupportTicketsPage() {
               )}
             </div>
           ) : (
-            <div className={s.sectionBox}>Không có dữ liệu.</div>
+            <div className="p-4 text-center text-zinc-400">Không có dữ liệu.</div>
           )}
         </section>
       )}

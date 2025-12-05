@@ -2,13 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import s from "../admin.module.css";
 import {
   adminGetSubscriptionPlans,
   adminCreateSubscriptionPlan,
   adminDeleteSubscriptionPlan,
   type CreateSubscriptionPlanRequest,
 } from "@/lib/admin-api";
+import { useTheme } from "../layout";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 type PlanStatus = "active" | "inactive" | string;
 
@@ -40,6 +41,8 @@ const fmtNum = (n: number) =>
   n < 0 ? "Không giới hạn" : n.toLocaleString("vi-VN");
 
 export default function PlansPage() {
+  const { isDark } = useTheme();
+  const theme = getThemeClasses(isDark);
   const [rows, setRows] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -186,21 +189,21 @@ export default function PlansPage() {
   };
 
   return (
-    <div className={s.stack}>
-      <section className={s.panel}>
-        <div className={s.panelHead}>
-          <h3>Gói đăng ký</h3>
+    <div className="grid gap-5">
+      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="m-0 text-base font-extrabold">Gói đăng ký</h3>
 
-          <div className={s.filters} style={{ gap: 8 }}>
+          <div className="flex gap-2 flex-wrap">
             <input
-              className={s.input}
+              className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 min-w-[160px] ${theme.input}`}
               placeholder="Tìm theo tên gói…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
 
             <select
-              className={s.select}
+              className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 ${theme.select}`}
               value={status}
               onChange={(e) => setStatus(e.target.value as StatusFilter)}
             >
@@ -210,7 +213,7 @@ export default function PlansPage() {
             </select>
 
             <button
-              className={s.primaryBtn}
+              className="px-3 py-2 rounded-lg bg-gradient-to-b from-[#2f6a39] to-[#264b30] text-white border-none font-extrabold cursor-pointer"
               onClick={() => {
                 setCreateErr(null);
                 setOpenCreate((v) => !v);
@@ -221,63 +224,58 @@ export default function PlansPage() {
           </div>
         </div>
 
-        <div style={{ overflowX: "auto", width: "100%" }}>
+        <div className="overflow-x-auto w-full">
           <table
-            className={s.table}
+            className="w-full border-collapse text-sm"
             style={{
               minWidth: 1300,
-              borderCollapse: "collapse",
               tableLayout: "fixed",
             }}
           >
             <thead>
               <tr>
-                <th style={{ width: "22%" }}>Tên gói</th>
-                <th style={{ width: "9%" }}>Giá / tháng</th>
-                <th style={{ width: "9%" }}>Giá / năm</th>
-                <th style={{ width: "9%" }}>Bản đồ</th>
-                <th style={{ width: "9%" }}>Xuất file</th>
-                <th style={{ width: "9%" }}>Layer tùy chỉnh</th>
-                <th style={{ width: "9%" }}>Token / tháng</th>
-                <th style={{ width: "10%" }}>Trạng thái</th>
-                <th style={{ width: "7%" }}>Người dùng</th>
-                <th style={{ width: "7%" }}>Chi tiết</th>
-                <th style={{ width: "9%" }}>Hành động</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "22%" }}>Tên gói</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Giá / tháng</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Giá / năm</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Bản đồ</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Xuất file</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Layer tùy chỉnh</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Token / tháng</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "10%" }}>Trạng thái</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "7%" }}>Người dùng</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "7%" }}>Chi tiết</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Hành động</th>
               </tr>
             </thead>
 
             <tbody>
               {loading && rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: "center" }}>
+                  <td colSpan={11} className={`p-8 text-center ${theme.textMuted}`}>
                     Đang tải…
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ textAlign: "center" }}>
+                  <td colSpan={11} className={`p-8 text-center ${theme.textMuted}`}>
                     Không có dữ liệu.
                   </td>
                 </tr>
               ) : (
                 filtered.map((p) => (
                   <tr key={p.planId}>
-                    <td>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 8,
-                        }}
-                      >
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                      <div className="flex items-center gap-2">
                         <b>{p.name}</b>
                         {p.isPopular && (
-                          <span className={s.badgeInfo}>Phổ biến</span>
+                          <span className="px-2 py-1 rounded-full text-xs font-extrabold text-blue-600 bg-blue-500/16">
+                            Phổ biến
+                          </span>
                         )}
                       </div>
 
                       <div
-                        className={s.muted}
+                        className={`${theme.textMuted} text-sm`}
                         style={{
                           maxWidth: 420,
                           overflow: "hidden",
@@ -289,61 +287,58 @@ export default function PlansPage() {
                       </div>
                     </td>
 
-                    <td>{fmtMoney(p.priceMonthly)}</td>
-                    <td>{fmtMoney(p.priceYearly)}</td>
-                    <td>{fmtNum(p.mapsLimit)}</td>
-                    <td>{fmtNum(p.exportsLimit)}</td>
-                    <td>{fmtNum(p.customLayersLimit)}</td>
-                    <td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{fmtMoney(p.priceMonthly)}</td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{fmtMoney(p.priceYearly)}</td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{fmtNum(p.mapsLimit)}</td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{fmtNum(p.exportsLimit)}</td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{fmtNum(p.customLayersLimit)}</td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
                       {p.monthlyTokenLimit.toLocaleString("vi-VN")}
                     </td>
 
-                    <td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
                       {p.isActive ? (
-                        <span className={s.badgeSuccess}>
+                        <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16">
                           Đang hoạt động
                         </span>
                       ) : (
-                        <span className={s.badgeWarn}>Ngưng</span>
+                        <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18">
+                          Ngưng
+                        </span>
                       )}
                     </td>
 
-                    <td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
                       {p.totalSubscribers.toLocaleString("vi-VN")}
                     </td>
 
-                    <td style={{ textAlign: "center" }}>
+                    <td className={`p-3 border-b ${theme.tableCell} text-center`}>
                       <Link
-                        className={s.linkBtn}
+                        className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer ${
+                          isDark ? "text-[#3f5f36]" : "text-blue-600"
+                        }`}
                         href={`/subscription-plans/${p.planId}`}
                       >
                         Chi tiết
                       </Link>
                     </td>
 
-                    <td style={{ textAlign: "center" }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 8,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
+                    <td className={`p-3 border-b ${theme.tableCell} text-center`}>
+                      <div className="flex items-center justify-center gap-2 whitespace-nowrap">
                         <Link
-                          className={s.linkBtn}
+                          className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer ${
+                            isDark ? "text-[#3f5f36]" : "text-blue-600"
+                          }`}
                           href={`/subscription-plans/${p.planId}/edit`}
                           aria-label={`Chỉnh sửa gói ${p.name}`}
                         >
                           Chỉnh sửa
                         </Link>
 
-                        <span style={{ color: "#9ca3af" }}>|</span>
+                        <span className={theme.textMuted}>|</span>
 
                         <button
-                          className={s.linkBtn}
-                          style={{ color: "#dc2626" }}
+                          className="text-sm font-bold text-red-600 hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50"
                           onClick={() => confirmDelete(p.planId)}
                           disabled={deleting && pendingDeleteId === p.planId}
                         >
@@ -361,40 +356,23 @@ export default function PlansPage() {
         </div>
 
         {openCreate && (
-          <div className={s.panel} style={{ marginTop: 20 }}>
-            <div className={s.panelHead}>
-              <h4>Tạo gói mới</h4>
+          <div className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3 mt-5`}>
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <h4 className="m-0 text-base font-extrabold">Tạo gói mới</h4>
             </div>
 
-            <div
-              style={{
-                padding: 20,
-                display: "grid",
-                gap: 18,
-              }}
-            >
-              {createErr && <div className={s.errorBox}>{createErr}</div>}
+            <div className="p-5 grid gap-4">
+              {createErr && (
+                <div className="p-4 text-center text-red-500 font-semibold text-sm rounded-lg border border-red-300 bg-red-50">
+                  {createErr}
+                </div>
+              )}
 
-              <div
-                style={{
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 12,
-                  padding: 20,
-                  background: "#fff",
-                  display: "grid",
-                  gap: 16,
-                }}
-              >
-                <label
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  <span className={s.formLabel}>Tên gói *</span>
+              <div className={`border ${theme.tableBorder} rounded-xl p-5 ${isDark ? "bg-zinc-800/50" : "bg-gray-50"} grid gap-4`}>
+                <label className="flex flex-col gap-2">
+                  <span className={`block text-sm font-medium ${isDark ? "text-zinc-300" : "text-gray-700"}`}>Tên gói *</span>
                   <input
-                    className={s.input}
+                    className={`w-full px-3 py-2 rounded-lg border outline-none focus:ring-1 ${theme.input}`}
                     value={form.name}
                     onChange={(e) =>
                       setForm((f) => ({
@@ -403,20 +381,13 @@ export default function PlansPage() {
                       }))
                     }
                     placeholder="Ví dụ: Free, Pro, Enterprise…"
-                    style={{ padding: "10px 12px" }}
                   />
                 </label>
 
-                <label
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 8,
-                  }}
-                >
-                  <span className={s.formLabel}>Mô tả</span>
+                <label className="flex flex-col gap-2">
+                  <span className={`block text-sm font-medium ${isDark ? "text-zinc-300" : "text-gray-700"}`}>Mô tả</span>
                   <textarea
-                    className={s.input}
+                    className={`w-full px-3 py-2 rounded-lg border outline-none focus:ring-1 resize-y min-h-[120px] ${theme.input}`}
                     value={form.description ?? ""}
                     onChange={(e) =>
                       setForm((f) => ({
@@ -426,45 +397,18 @@ export default function PlansPage() {
                     }
                     placeholder="Chức năng chính, nhóm người dùng mục tiêu…"
                     rows={5}
-                    style={{
-                      borderRadius: 12,
-                      padding: "10px 12px",
-                      resize: "vertical",
-                      minHeight: 120,
-                    }}
                   />
                 </label>
               </div>
 
-              <div
-                style={{
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 12,
-                  padding: 20,
-                  background: "#fff",
-                  display: "grid",
-                  gap: 16,
-                }}
-              >
-                <b style={{ marginBottom: 4 }}>💰 Giá</b>
+              <div className={`border ${theme.tableBorder} rounded-xl p-5 ${isDark ? "bg-zinc-800/50" : "bg-gray-50"} grid gap-4`}>
+                <b className="mb-1">💰 Giá</b>
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr",
-                    gap: 16,
-                  }}
-                >
-                  <label
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                    }}
-                  >
-                    <span className={s.formLabel}>Giá / tháng (USD)</span>
+                <div className="grid grid-cols-2 gap-4">
+                  <label className="flex flex-col gap-2">
+                    <span className={`block text-sm font-medium ${isDark ? "text-zinc-300" : "text-gray-700"}`}>Giá / tháng (USD)</span>
                     <input
-                      className={s.input}
+                      className={`w-full px-3 py-2 rounded-lg border outline-none focus:ring-1 ${theme.input}`}
                       type="number"
                       min={0}
                       value={form.priceMonthly}
@@ -478,16 +422,10 @@ export default function PlansPage() {
                     />
                   </label>
 
-                  <label
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                    }}
-                  >
-                    <span className={s.formLabel}>Giá / năm (USD)</span>
+                  <label className="flex flex-col gap-2">
+                    <span className={`block text-sm font-medium ${isDark ? "text-zinc-300" : "text-gray-700"}`}>Giá / năm (USD)</span>
                     <input
-                      className={s.input}
+                      className={`w-full px-3 py-2 rounded-lg border outline-none focus:ring-1 ${theme.input}`}
                       type="number"
                       min={0}
                       value={form.priceYearly}
@@ -503,35 +441,14 @@ export default function PlansPage() {
                 </div>
               </div>
 
-              <div
-                style={{
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 12,
-                  padding: 20,
-                  background: "#fff",
-                  display: "grid",
-                  gap: 16,
-                }}
-              >
+              <div className={`border ${theme.tableBorder} rounded-xl p-5 ${isDark ? "bg-zinc-800/50" : "bg-gray-50"} grid gap-4`}>
                 <b>📊 Giới hạn</b>
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1fr 1fr 1fr",
-                    gap: 16,
-                  }}
-                >
-                  <label
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                    }}
-                  >
-                    <span className={s.formLabel}>Giới hạn bản đồ</span>
+                <div className="grid grid-cols-3 gap-4">
+                  <label className="flex flex-col gap-2">
+                    <span className={`block text-sm font-medium ${isDark ? "text-zinc-300" : "text-gray-700"}`}>Giới hạn bản đồ</span>
                     <input
-                      className={s.input}
+                      className={`w-full px-3 py-2 rounded-lg border outline-none focus:ring-1 ${theme.input}`}
                       type="number"
                       value={form.mapsLimit}
                       onChange={(e) =>
@@ -541,19 +458,13 @@ export default function PlansPage() {
                         }))
                       }
                     />
-                    <small className={s.muted}>-1 = Không giới hạn</small>
+                    <small className={`${theme.textMuted} text-xs`}>-1 = Không giới hạn</small>
                   </label>
 
-                  <label
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                    }}
-                  >
-                    <span className={s.formLabel}>Giới hạn xuất file</span>
+                  <label className="flex flex-col gap-2">
+                    <span className={`block text-sm font-medium ${isDark ? "text-zinc-300" : "text-gray-700"}`}>Giới hạn xuất file</span>
                     <input
-                      className={s.input}
+                      className={`w-full px-3 py-2 rounded-lg border outline-none focus:ring-1 ${theme.input}`}
                       type="number"
                       value={form.exportsLimit}
                       onChange={(e) =>
@@ -563,19 +474,13 @@ export default function PlansPage() {
                         }))
                       }
                     />
-                    <small className={s.muted}>-1 = Không giới hạn</small>
+                    <small className={`${theme.textMuted} text-xs`}>-1 = Không giới hạn</small>
                   </label>
 
-                  <label
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                    }}
-                  >
-                    <span className={s.formLabel}>Layer tùy chỉnh</span>
+                  <label className="flex flex-col gap-2">
+                    <span className={`block text-sm font-medium ${isDark ? "text-zinc-300" : "text-gray-700"}`}>Layer tùy chỉnh</span>
                     <input
-                      className={s.input}
+                      className={`w-full px-3 py-2 rounded-lg border outline-none focus:ring-1 ${theme.input}`}
                       type="number"
                       value={form.customLayersLimit}
                       onChange={(e) =>
@@ -585,21 +490,15 @@ export default function PlansPage() {
                         }))
                       }
                     />
-                    <small className={s.muted}>-1 = Không giới hạn</small>
+                    <small className={`${theme.textMuted} text-xs`}>-1 = Không giới hạn</small>
                   </label>
                 </div>
 
-                <div style={{ maxWidth: 360 }}>
-                  <label
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: 8,
-                    }}
-                  >
-                    <span className={s.formLabel}>Token / tháng</span>
+                <div className="max-w-[360px]">
+                  <label className="flex flex-col gap-2">
+                    <span className={`block text-sm font-medium ${isDark ? "text-zinc-300" : "text-gray-700"}`}>Token / tháng</span>
                     <input
-                      className={s.input}
+                      className={`w-full px-3 py-2 rounded-lg border outline-none focus:ring-1 ${theme.input}`}
                       type="number"
                       min={0}
                       value={form.monthlyTokenLimit}
@@ -614,35 +513,11 @@ export default function PlansPage() {
                 </div>
               </div>
 
-              <div
-                style={{
-                  border: "1px solid #e5e7eb",
-                  borderRadius: 12,
-                  padding: 20,
-                  background: "#fff",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 14,
-                }}
-              >
+              <div className={`border ${theme.tableBorder} rounded-xl p-5 ${isDark ? "bg-zinc-800/50" : "bg-gray-50"} flex flex-col gap-3`}>
                 <b>⚙️ Cờ trạng thái</b>
 
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 20,
-                    flexWrap: "wrap",
-                    marginLeft: 10,
-                  }}
-                >
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
+                <div className="flex items-center gap-5 flex-wrap ml-2">
+                  <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={form.isPopular}
@@ -658,13 +533,7 @@ export default function PlansPage() {
                     </span>
                   </label>
 
-                  <label
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
+                  <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={form.isActive}
@@ -678,21 +547,15 @@ export default function PlansPage() {
                     <span>Đang hoạt động</span>
                   </label>
 
-                  <span className={s.muted}>
+                  <span className={`${theme.textMuted} text-sm`}>
                     Tắt để ngừng bán / ẩn khỏi danh sách mua
                   </span>
                 </div>
               </div>
 
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: 10,
-                }}
-              >
+              <div className="flex justify-end gap-2">
                 <button
-                  className={s.ghostBtn}
+                  className={`px-4 py-2 rounded-lg border transition-colors disabled:opacity-50 ${theme.button}`}
                   onClick={() => {
                     resetForm();
                     setOpenCreate(false);
@@ -703,7 +566,7 @@ export default function PlansPage() {
                 </button>
 
                 <button
-                  className={s.primaryBtn}
+                  className="px-4 py-2 rounded-lg bg-gradient-to-b from-[#2f6a39] to-[#264b30] text-white border-none font-extrabold cursor-pointer disabled:opacity-50"
                   onClick={submitCreate}
                   disabled={creating}
                 >
@@ -715,37 +578,45 @@ export default function PlansPage() {
         )}
 
         {pendingDeleteId !== null && (
-          <div className={s.modalOverlay}>
-            <div className={s.modalCardDanger}>
-              <div className={s.modalHeadDanger}>
-                <div className={s.modalHeadLeft}>
-                  <div className={s.iconCircleDanger}>!</div>
-                  <div className={s.titleBlock}>
-                    <div className={s.modalTitleProDanger}>Xóa gói đăng ký</div>
-                    <div className={s.modalSubtitleProDanger}>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+            <div className={`${isDark ? "bg-zinc-900" : "bg-white"} rounded-2xl shadow-xl border border-red-500/20 max-w-lg w-full mx-4`}>
+              <div className={`p-6 border-b ${isDark ? "border-zinc-800" : "border-gray-200"}`}>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-500/18 border border-red-500/40 flex-shrink-0">
+                    <span className="text-red-600 font-semibold">!</span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="m-0 text-lg font-semibold leading-tight text-red-600">
+                      Xóa gói đăng ký
+                    </div>
+                    <div className={`${theme.textMuted} text-sm mt-1`}>
                       Hành động này không thể hoàn tác. Gói chỉ có thể xóa nếu không còn người đăng ký.
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className={s.modalBodyDanger}>
+              <div className={`p-6 border-b ${isDark ? "border-zinc-800" : "border-gray-200"}`}>
                 {deleteErr && (
-                  <div className={s.dangerBox} style={{ marginBottom: 12 }}>
+                  <div className="p-3 mb-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
                     {deleteErr}
                   </div>
                 )}
-                <p style={{ marginBottom: 6 }}>
-                  Bạn có chắc muốn xóa <span className={s.orgNameHighlight}>gói này</span> không?
+                <p className="mb-2">
+                  Bạn có chắc muốn xóa <span className={`font-semibold ${isDark ? "text-zinc-200" : "text-gray-900"}`}>gói này</span> không?
                 </p>
-                <p style={{ color: "#6b6b6b", fontSize: 13, lineHeight: 1.4 }}>
+                <p className={`${theme.textMuted} text-sm leading-relaxed`}>
                   Hành động này sẽ xóa vĩnh viễn thông tin gói nếu đủ điều kiện.
                 </p>
               </div>
 
-              <div className={s.modalFootDanger}>
+              <div className="p-6 flex justify-end gap-3">
                 <button
-                  className={s.btnGhost}
+                  className={`px-4 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700"
+                      : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
                   onClick={cancelDelete}
                   disabled={deleting}
                 >
@@ -753,7 +624,7 @@ export default function PlansPage() {
                 </button>
 
                 <button
-                  className={s.btnDangerOutline}
+                  className="px-4 py-2 rounded-lg border border-red-500/40 bg-white text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 shadow-sm"
                   onClick={doDelete}
                   disabled={deleting}
                 >

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import GalleryClient, { MapItem } from "./GalleryClient";
+import GalleryClient from "./GalleryClient";
+import { MapGallerySummaryResponse } from "@/lib/api-map-gallery";
 
 export const metadata: Metadata = {
   title: "Map Gallery — IMOS",
@@ -16,39 +17,54 @@ function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-const MAPS: MapItem[] = [
+const MAPS: MapGallerySummaryResponse[] = [
   {
     id: "story-maps-history",
-    title: "Vietnam History Story Map",
-    author: "Lan Pham",
+    mapId: "story-maps-history",
+    mapName: "Vietnam History Story Map",
+    description: "A story map of Vietnam's history",
+    previewImage: "/images/story-maps-history.png",
+    category: "education",
     tags: ["Education", "History", "Story Maps"],
-    views: 2540,
-    likes: 188,
-    updated: "2025-08-21",
-    href: "/maps/story-maps-history",
-    duplicateHref: "/templates/duplicate?src=story-maps-history",
+    authorName: "Lan Pham",
+    status: "approved",
+    isFeatured: true,
+    viewCount: 2540,
+    likeCount: 188,
+    createdAt: "2025-08-21",
+    publishedAt: "2025-08-21",
   },
   {
     id: "urban-green-space",
-    title: "Urban Green Space Access",
-    author: "Minh Tran",
+    mapId: "urban-green-space",
+    mapName: "Urban Green Space Access",
+    description: "A map of urban green space access",
+    previewImage: "/images/urban-green-space.png",
+    category: "education",
     tags: ["Urban", "Environment"],
-    views: 1320,
-    likes: 96,
-    updated: "2025-07-12",
-    href: "/maps/urban-green-space",
-    duplicateHref: "/templates/duplicate?src=urban-green-space",
+    authorName: "Minh Tran",
+    status: "approved",
+    isFeatured: true,
+    viewCount: 1320,
+    likeCount: 96,
+    createdAt: "2025-07-12",
+    publishedAt: "2025-07-12",
   },
   {
     id: "disaster-response-flood",
-    title: "Flood Response – Evacuation Zones",
-    author: "Quang Nguyen",
+    mapId: "disaster-response-flood",
+    mapName: "Flood Response – Evacuation Zones",
+    description: "A map of flood response evacuation zones",
+    previewImage: "/images/disaster-response-flood.png",
+    category: "education",
     tags: ["Disaster", "Zones"],
-    views: 3110,
-    likes: 241,
-    updated: "2025-06-30",
-    href: "/maps/disaster-response-flood",
-    duplicateHref: "/templates/duplicate?src=disaster-response-flood",
+    authorName: "Quang Nguyen",
+    status: "approved",
+    isFeatured: true,
+    viewCount: 3110,
+    likeCount: 241,
+    createdAt: "2025-06-30",
+    publishedAt: "2025-06-30",
   },
 ];
 
@@ -85,7 +101,7 @@ export default function MapGalleryPage() {
       </section>
 
       <section id="gallery" className="mt-10">
-        <GalleryClient maps={MAPS} />
+        <GalleryClient />
       </section>
     </main>
   );

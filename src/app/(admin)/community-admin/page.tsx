@@ -12,7 +12,6 @@ import {
   type CommunityPostAdminCreateRequest,
   type CommunityPostAdminUpdateRequest,
 } from "@/lib/api-community";
-import s from "../admin.module.css";
 
 type FormState = {
   id?: string;
@@ -373,14 +372,18 @@ export default function AdminCommunityPage() {
       </div>
 
       {pendingDelete && (
-        <div className={s.modalOverlay}>
-          <div className={s.modalCardDanger}>
-            <div className={s.modalHeadDanger}>
-              <div className={s.modalHeadLeft}>
-                <div className={s.iconCircleDanger}>!</div>
-                <div className={s.titleBlock}>
-                  <div className={s.modalTitleProDanger}>Xóa bài viết</div>
-                  <div className={s.modalSubtitleProDanger}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="w-full max-w-md rounded-lg border border-red-200 bg-white shadow-xl">
+            <div className="border-b border-red-100 bg-red-50 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-500 text-sm font-bold text-white">
+                  !
+                </div>
+                <div className="flex-1">
+                  <div className="text-sm font-semibold text-red-900">
+                    Xóa bài viết
+                  </div>
+                  <div className="mt-1 text-xs text-red-700">
                     Hành động này không thể hoàn tác. Bài viết chỉ có thể xóa nếu
                     phù hợp điều kiện hệ thống.
                   </div>
@@ -388,33 +391,35 @@ export default function AdminCommunityPage() {
               </div>
             </div>
 
-            <div className={s.modalBodyDanger}>
+            <div className="p-4">
               {deleteErr && (
-                <div className={s.dangerBox} style={{ marginBottom: 12 }}>
+                <div className="mb-3 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
                   {deleteErr}
                 </div>
               )}
-              <p style={{ marginBottom: 6 }}>
+              <p className="mb-1.5 text-sm text-zinc-900">
                 Bạn có chắc muốn xóa{" "}
-                <span className={s.orgNameHighlight}>bài viết này</span> không?
+                <span className="font-semibold text-red-600">bài viết này</span> không?
               </p>
-              <p style={{ color: "#6b6b6b", fontSize: 13, lineHeight: 1.4 }}>
+              <p className="text-xs leading-relaxed text-zinc-600">
                 Bài viết{" "}
-                <span className={s.orgNameHighlight}>{pendingDelete.title}</span>{" "}
+                <span className="font-semibold text-red-600">{pendingDelete.title}</span>{" "}
                 sẽ bị xóa vĩnh viễn khỏi hệ thống nếu đủ điều kiện.
               </p>
             </div>
 
-            <div className={s.modalFootDanger}>
+            <div className="flex justify-end gap-2 border-t border-zinc-200 p-4">
               <button
-                className={s.btnGhost}
+                type="button"
+                className="rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
                 onClick={cancelDelete}
                 disabled={deleting}
               >
                 Hủy
               </button>
               <button
-                className={s.btnDangerOutline}
+                type="button"
+                className="rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
                 onClick={doDelete}
                 disabled={deleting}
               >

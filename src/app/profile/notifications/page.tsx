@@ -11,6 +11,8 @@ import {
 } from "@/lib/api-user";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useNotifications } from "@/contexts/NotificationContext";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 function fmtTime(iso: string | undefined, locale: string) {
   if (!iso) return "—";
@@ -101,6 +103,10 @@ function translateMessage(item: NotificationItem, lang: "vi" | "en") {
 export default function NotificationsPage() {
   const { t, lang } = useI18n();
   const tr = (k: string) => (t as (ns: string, key: string) => string)("notifications", k);
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -239,38 +245,21 @@ export default function NotificationsPage() {
           <h1 className="text-xl font-semibold">{tr("title")}</h1>
           <span
             className={[
-              "inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium",
+              "inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-medium border",
               unreadCount > 0
-                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-400/30"
-                : "bg-white/5 text-zinc-300 border border-white/10",
+                ? (isDark ? "bg-emerald-500/15 text-emerald-300 border-emerald-400/30" : "bg-emerald-100 text-emerald-700 border-emerald-200")
+                : `${themeClasses.textMuted} ${themeClasses.tableBorder}`,
             ].join(" ")}
             aria-label={tr("unread_aria")}
             title={tr("unread_title")}
           >
             {unreadCount}
           </span>
-          <span
-            className={[
-              "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs border",
-              isConnected
-                ? "bg-green-500/10 text-green-400 border-green-400/30"
-                : "bg-yellow-500/10 text-yellow-400 border-yellow-400/30",
-            ].join(" ")}
-            title={isConnected ? "Real-time notifications connected" : "Real-time notifications disconnected"}
-          >
-            <span
-              className={[
-                "h-1.5 w-1.5 rounded-full",
-                isConnected ? "bg-green-400 animate-pulse" : "bg-yellow-400",
-              ].join(" ")}
-            />
-            {isConnected ? "Live" : "Offline"}
-          </span>
-          <p className="text-sm text-zinc-400 ml-1">{tr("subtitle")}</p>
+          <p className={`text-sm ml-1 ${themeClasses.textMuted}`}>{tr("subtitle")}</p>
         </div>
         <div className="flex items-center gap-2">
           <select
-            className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-sm"
+            className={`rounded-md border px-2 py-1 text-sm ${themeClasses.select}`}
             value={pageSize}
             onChange={(e) => {
               const v = Number(e.target.value) || 20;
@@ -286,7 +275,7 @@ export default function NotificationsPage() {
           </select>
           <button
             onClick={() => load(page, pageSize)}
-            className="rounded-md border border-white/10 bg-white/5 px-3 py-1.5 text-sm hover:bg-white/10"
+            className={`rounded-md border px-3 py-1.5 text-sm ${themeClasses.button}`}
           >
             {tr("refresh")}
           </button>
@@ -296,8 +285,8 @@ export default function NotificationsPage() {
             className={[
               "rounded-md px-3 py-1.5 text-sm",
               unreadCount === 0
-                ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                : "bg-emerald-600 text-zinc-950 hover:bg-emerald-500",
+                ? (isDark ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gray-300 text-gray-500 cursor-not-allowed")
+                : "bg-emerald-600 text-white hover:bg-emerald-500",
             ].join(" ")}
           >
             {tr("mark_all_read")}
@@ -306,18 +295,18 @@ export default function NotificationsPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-red-200 text-sm">
+        <div className={`rounded-lg border px-3 py-2 text-sm ${isDark ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-800"}`}>
           {error}
         </div>
       )}
 
-      <div className="rounded-xl border border-white/10 bg-zinc-900/60">
-        <div className="grid grid-cols-12 px-4 py-3 text-left text-xs uppercase tracking-wider text-zinc-400">
+      <div className={`rounded-xl border ${themeClasses.panel}`}>
+        <div className={`grid grid-cols-12 px-4 py-3 text-left text-xs uppercase tracking-wider ${themeClasses.textMuted}`}>
           <div className="col-span-5">{tr("table_title")}</div>
           <div className="col-span-5">{tr("table_message")}</div>
           <div className="col-span-2">{tr("table_time")}</div>
         </div>
-        <div className="divide-y divide-white/10">
+        <div className={`divide-y ${themeClasses.tableBorder}`}>
           {loading && (
             <>
               {Array.from({ length: 5 }).map((_, i) => (
@@ -330,7 +319,7 @@ export default function NotificationsPage() {
           )}
 
           {!loading && data.notifications.length === 0 && (
-            <div className="px-4 py-6 text-sm text-zinc-300">{tr("empty")}</div>
+            <div className={`px-4 py-6 text-sm ${themeClasses.textMuted}`}>{tr("empty")}</div>
           )}
 
           {!loading &&
@@ -360,11 +349,11 @@ export default function NotificationsPage() {
                     {wrap(
                       <div className="flex items-center gap-2">
                         {!n.isRead && <span className="inline-block h-2 w-2 rounded-full bg-emerald-400" />}
-                        <span className="font-medium text-zinc-100">
+                        <span className={`font-medium ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
                           {n.title || tr("fallback_title")}
                         </span>
                         {label && (
-                          <span className="ml-1 rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-zinc-300">
+                          <span className={`ml-1 rounded border px-1.5 py-0.5 text-[10px] ${themeClasses.tableBorder} ${themeClasses.textMuted}`}>
                             {label}
                           </span>
                         )}
@@ -373,13 +362,13 @@ export default function NotificationsPage() {
                   </div>
 
                   <div className="col-span-5 pr-4">
-                    <div className="text-sm text-zinc-300">
+                    <div className={`text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
                       {translateMessage(n, lang === "en" ? "en" : "vi")}
                     </div>
                     {n.linkUrl && (
                       <Link
                         href={n.linkUrl}
-                        className="mt-1 inline-flex text-xs text-emerald-300 hover:underline"
+                        className={`mt-1 inline-flex text-xs hover:underline ${isDark ? "text-emerald-300" : "text-emerald-600"}`}
                         onClick={() => onMarkRead(n)}
                       >
                         {tr("open_link")}
@@ -388,11 +377,11 @@ export default function NotificationsPage() {
                   </div>
 
                   <div className="col-span-2">
-                    <div className="text-xs text-zinc-400">{fmtTime(n.createdAt, lang)}</div>
+                    <div className={`text-xs ${themeClasses.textMuted}`}>{fmtTime(n.createdAt, lang)}</div>
                     {!n.isRead && (
                       <button
                         onClick={() => onMarkRead(n)}
-                        className="mt-2 rounded border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-200 hover:bg-white/10"
+                        className={`mt-2 rounded border px-2 py-1 text-xs hover:bg-white/10 ${themeClasses.button}`}
                       >
                         {tr("mark_read")}
                       </button>
@@ -404,9 +393,9 @@ export default function NotificationsPage() {
         </div>
       </div>
 
-      {data.totalPages && data.totalPages > 1 && (
+      {(data.totalPages ?? 0) > 1 && (
         <div className="flex items-center justify-between">
-          <div className="text-sm text-zinc-400">
+          <div className={`text-sm ${themeClasses.textMuted}`}>
             {tr("page")} {data.page} / {data.totalPages} • {data.totalItems?.toLocaleString(lang === "en" ? "en-US" : "vi-VN")} {tr("total_suffix")}
           </div>
           <div className="flex items-center gap-2">
@@ -416,8 +405,8 @@ export default function NotificationsPage() {
               className={[
                 "rounded-md px-3 py-1.5 text-sm",
                 data.page <= 1 || loading
-                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                  : "bg-white/5 text-zinc-200 hover:bg-white/10 border border-white/10",
+                  ? (isDark ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gray-300 text-gray-500 cursor-not-allowed")
+                  : themeClasses.button,
               ].join(" ")}
             >
               {tr("prev")}
@@ -428,8 +417,8 @@ export default function NotificationsPage() {
               className={[
                 "rounded-md px-3 py-1.5 text-sm",
                 data.page >= (data.totalPages ?? 1) || loading
-                  ? "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                  : "bg-white/5 text-zinc-200 hover:bg-white/10 border border-white/10",
+                  ? (isDark ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gray-300 text-gray-500 cursor-not-allowed")
+                  : themeClasses.button,
               ].join(" ")}
             >
               {tr("next")}
