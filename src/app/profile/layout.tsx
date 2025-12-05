@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPlans, type Plan, getMyMembership } from "@/lib/api-membership";
-import { getMyOrganizations, type MyOrganizationDto } from "@/lib/api-organizations";
+import { getMyOrganizations, type MyOrganizationDto, getMyInvitations } from "@/lib/api-organizations";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -131,6 +131,8 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
   const [planStatus, setPlanStatus] = useState<string | null>(null);
   const [orgs, setOrgs] = useState<MyOrganizationDto[] | null>(null);
   const [orgsErr, setOrgsErr] = useState<string | null>(null);
+  const [invitationCount, setInvitationCount] = useState<number>(0);
+  const [orgPlanLabels, setOrgPlanLabels] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let alive = true;
@@ -155,10 +157,29 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
       }
     };
 
+    const loadInvitations = async () => {
+      if (!isLoggedIn) {
+        setInvitationCount(0);
+        return;
+      }
+      try {
+        const res = await getMyInvitations();
+        if (!alive) return;
+        const pending = (res.invitations ?? []).filter(
+          (i) => !i.isAccepted && !(i as { isRejected?: boolean }).isRejected
+        );
+        setInvitationCount(pending.length);
+      } catch {
+        if (!alive) return;
+        setInvitationCount(0);
+      }
+    };
+
     const loadOrgs = async (plansData?: Plan[] | null) => {
       if (!isLoggedIn) {
         setOrgs(null);
         setOrgsErr(null);
+        setOrgPlanLabels({});
         return;
       }
       try {
@@ -179,42 +200,58 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
         setOrgs(items);
         setOrgsErr(null);
 
-        if (items.length > 0) {
+        // Load plan labels for all organizations
+        const planLabelsMap: Record<string, string> = {};
+        for (const org of items) {
           try {
-            const membership = (await getMyMembership(items[0].orgId)) as MyMembership;
+            const membership = (await getMyMembership(org.orgId)) as MyMembership;
             if (!alive) return;
             if (membership && plansData) {
               const found = plansData.find((p) => (p as unknown as { planId: number }).planId === membership.planId);
               if (found) {
                 const name = (found as unknown as { planName?: string; name?: string }).planName ?? (found as any).name;
-                setPlanLabel(name ?? t("profilelayout.plan_free"));
-                setPlanStatus(membership.status ?? "active");
+                planLabelsMap[org.orgId] = name ?? "";
+              } else {
+                planLabelsMap[org.orgId] = "";
               }
+            } else {
+              planLabelsMap[org.orgId] = "";
             }
           } catch {
-            const free = plansData?.find((p: any) => p.priceMonthly === 0) ?? null;
-            const name = (free as any)?.planName ?? (free as any)?.name;
-            setPlanLabel(name ?? t("profilelayout.plan_free"));
-            setPlanStatus("active");
+            planLabelsMap[org.orgId] = "";
           }
+        }
+
+        if (!alive) return;
+        setOrgPlanLabels(planLabelsMap);
+
+        // Set the first organization's plan as the current plan
+        if (items.length > 0 && planLabelsMap[items[0].orgId]) {
+          setPlanLabel(planLabelsMap[items[0].orgId]);
+          setPlanStatus("active");
         }
       } catch {
         if (!alive) return;
         setOrgsErr(t("profilelayout.orgs_load_error"));
         setOrgs([]);
+        setOrgPlanLabels({});
       }
     };
 
     loadPlans().then((ps) => loadOrgs(ps));
+    loadInvitations();
 
     const onAuthChanged = () => {
       loadPlans().then((ps) => loadOrgs(ps));
+      loadInvitations();
     };
     const onOrgsChanged = () => loadOrgs(plansRef.current);
+    const onInvitationsChanged = () => loadInvitations();
 
     if (typeof window !== "undefined") {
       window.addEventListener("auth-changed", onAuthChanged);
       window.addEventListener("orgs-changed", onOrgsChanged as EventListener);
+      window.addEventListener("invitations-changed", onInvitationsChanged);
     }
 
     return () => {
@@ -222,6 +259,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
       if (typeof window !== "undefined") {
         window.removeEventListener("auth-changed", onAuthChanged);
         window.removeEventListener("orgs-changed", onOrgsChanged as EventListener);
+        window.removeEventListener("invitations-changed", onInvitationsChanged);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -287,6 +325,10 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                         <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
                           {unread > 99 ? "99+" : unread}
                         </Badge>
+                      ) : n.href === "/profile/invite" && invitationCount > 0 ? (
+                        <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
+                          {invitationCount > 99 ? "99+" : invitationCount}
+                        </Badge>
                       ) : undefined
                     }
                   />
@@ -320,15 +362,24 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                   </div>
                 )}
 
-                {(orgs ?? []).slice(0, 5).map((o) => (
-                  <NavItem
-                    key={o.orgId}
-                    href={`/profile/organizations/${o.orgId}`}
-                    label={o.orgName}
-                    icon={Building2}
-                    active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
-                  />
-                ))}
+                {(orgs ?? []).slice(0, 5).map((o) => {
+                  const planLabel = orgPlanLabels[o.orgId];
+                  const isActive = pathname.startsWith(`/profile/organizations/${o.orgId}`)
+                  return (
+                    <NavItem
+                      key={o.orgId}
+                      href={`/profile/organizations/${o.orgId}`}
+                      label={o.orgName}
+                      icon={Building2}
+                      active={isActive}
+                      right={
+                        <Badge variant="secondary" className="text-[11px] font-semibold">
+                          <span className={`text-sm font-semibold ${isDark ? "text-emerald-300" : isActive ? "text-emerald-500" : "text-emerald-600"}`}>{planLabel}</span>
+                        </Badge>
+                      }
+                    />
+                  );
+                })}
 
                 {(orgs ?? []).length > 5 && (
                   <NavItem
@@ -346,8 +397,9 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
             </ScrollArea>
 
             <Separator className="my-2" />
+            
             <div className="space-y-3">
-              <div className={`rounded-xl border p-3 ${themeClasses.tableBorder}`}>
+              {/* <div className={`rounded-xl border p-3 ${themeClasses.tableBorder}`}>
                 <div className="flex items-center justify-between">
                   <span className={`text-[12px] ${themeClasses.textMuted}`}>{t("profilelayout.current_plan")}</span>
                   {planLabel ? (
@@ -363,9 +415,9 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                     <span className={`text-[12px] ${themeClasses.textMuted}`}>—</span>
                   )}
                 </div>
-              </div>
+              </div> */}
 
-              <Link href="/profile/select-plan">
+              <Link href="/profile/settings/plans">
                 <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white">{t("profilelayout.select_plan")}</Button>
               </Link>
 
@@ -413,6 +465,10 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                                 <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
                                   {unread > 99 ? "99+" : unread}
                                 </Badge>
+                              ) : n.href === "/profile/invite" && invitationCount > 0 ? (
+                                <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
+                                  {invitationCount > 99 ? "99+" : invitationCount}
+                                </Badge>
                               ) : undefined
                             }
                           />
@@ -429,15 +485,19 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                           active={pathname === "/register/organization"}
                         />
 
-                        {(orgs ?? []).slice(0, 5).map((o) => (
-                          <NavItem
-                            key={o.orgId}
-                            href={`/profile/organizations/${o.orgId}`}
-                            label={o.orgName}
-                            icon={Building2}
-                            active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
-                          />
-                        ))}
+                        {(orgs ?? []).slice(0, 5).map((o) => {
+                          const planLabel = orgPlanLabels[o.orgId];
+                          // const displayLabel = planLabel ? `${o.orgName} - ${planLabel}` : o.orgName;
+                          return (
+                            <NavItem
+                              key={o.orgId}
+                              href={`/profile/organizations/${o.orgId}`}
+                              label={o.orgName}
+                              icon={Building2}
+                              active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
+                            />
+                          );
+                        })}
 
                         <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} />
                         <div className="h-3" />
