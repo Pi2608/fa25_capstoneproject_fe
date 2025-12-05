@@ -5,11 +5,12 @@ import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 import {
   createQuestionBank,
   deleteQuestionBank,
   updateQuestionBank,
-  attachSessionToQuestionBank,
   type QuestionBankDto,
 } from "@/lib/api-ques";
 import type { Workspace } from "@/types/workspace";
@@ -26,32 +27,8 @@ import {
 } from "@/hooks/question-bank-common";
 import { useQuestionBanksData } from "@/hooks/useQuestionBanksData";
 import { useBankForm } from "@/hooks/useBankForm";
-import { useAttachDialog } from "@/hooks/useAttachDialog";
 import { useRowMenu } from "@/hooks/useRowMenu";
 
-type HeaderMode = "light" | "dark";
-
-function useThemeMode(): HeaderMode {
-  const [mode, setMode] = useState<HeaderMode>("light");
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const html = document.documentElement;
-
-    const update = () => {
-      setMode(html.classList.contains("dark") ? "dark" : "light");
-    };
-
-    update();
-
-    const observer = new MutationObserver(update);
-    observer.observe(html, { attributes: true, attributeFilter: ["class"] });
-
-    return () => observer.disconnect();
-  }, []);
-
-  return mode;
-}
 
 function BankFormDialog({
   isOpen,
@@ -76,69 +53,74 @@ function BankFormDialog({
   onSave: () => void;
   onClose: () => void;
 }) {
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-xl dark:bg-zinc-900">
+      <div className={`w-full max-w-lg rounded-2xl p-5 shadow-xl ${themeClasses.panel}`}>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold">
+          <h2 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
             {isEditMode ? "Chỉnh sửa bộ câu hỏi" : "Tạo bộ câu hỏi mới"}
           </h2>
           <button
             onClick={onClose}
-            className="text-sm text-zinc-500 hover:text-zinc-800"
+            className={`text-sm ${isDark ? "text-zinc-500 hover:text-white" : "text-gray-500 hover:text-gray-900"}`}
           >
             ✕
           </button>
         </div>
 
         <div className="space-y-4">
-          <Field label="Tên bộ câu hỏi">
+          <Field label="Tên bộ câu hỏi" isDark={isDark} themeClasses={themeClasses}>
             <input
               name="bankName"
               value={form.bankName}
               onChange={onChange}
-              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50"
+              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
               placeholder="VD: Bộ câu hỏi chương 1..."
             />
           </Field>
 
-          <Field label="Mô tả">
+          <Field label="Mô tả" isDark={isDark} themeClasses={themeClasses}>
             <textarea
               name="description"
               value={form.description}
               onChange={onChange}
-              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50 min-h-[80px]"
+              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 min-h-[80px] ${themeClasses.input}`}
               placeholder="Mô tả ngắn..."
             />
           </Field>
 
-          <Field label="Danh mục">
+          <Field label="Danh mục" isDark={isDark} themeClasses={themeClasses}>
             <input
               name="category"
               value={form.category}
               onChange={onChange}
-              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50"
+              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
               placeholder="VD: Lịch sử, Địa lý..."
             />
           </Field>
 
-          <Field label="Tags (phân cách bằng dấu phẩy)">
+          <Field label="Tags (phân cách bằng dấu phẩy)" isDark={isDark} themeClasses={themeClasses}>
             <input
               name="tags"
               value={form.tags}
               onChange={onChange}
-              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50"
+              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
               placeholder="VD: ôn tập, giữa kỳ"
             />
           </Field>
 
-          <Field label="Workspace">
+          <Field label="Workspace" isDark={isDark} themeClasses={themeClasses}>
             <select
               value={selectedWorkspaceId}
               onChange={(e) => onWorkspaceChange(e.target.value)}
-              className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50"
+              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.select}`}
             >
               <option value="">Chọn workspace</option>
               {workspaces.map((ws) => (
@@ -155,12 +137,16 @@ function BankFormDialog({
               checked={form.isTemplate}
               onChange={onChange}
               label="Dùng như template"
+              isDark={isDark}
+              themeClasses={themeClasses}
             />
             <Checkbox
               name="isPublic"
               checked={form.isPublic}
               onChange={onChange}
               label="Công khai trong tổ chức"
+              isDark={isDark}
+              themeClasses={themeClasses}
             />
           </div>
         </div>
@@ -168,14 +154,14 @@ function BankFormDialog({
         <div className="mt-5 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-100 dark:hover:bg-white/10"
+            className={`rounded-lg border px-3 py-1.5 text-sm ${themeClasses.button}`}
           >
             Hủy
           </button>
           <button
             onClick={onSave}
             disabled={saving}
-            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
+            className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-60"
           >
             {saving
               ? "Đang lưu..."
@@ -189,127 +175,30 @@ function BankFormDialog({
   );
 }
 
-function AttachDialog({
-  isOpen,
-  bank,
-  maps,
-  selectedMapId,
-  saving,
-  getWorkspaceName,
-  bankDetails,
-  onMapChange,
-  onAttach,
-  onClose,
-}: {
-  isOpen: boolean;
-  bank: QuestionBankDto | null;
-  maps: MapOption[];
-  selectedMapId: string;
-  saving: boolean;
-  getWorkspaceName: (id?: string | null) => string;
-  bankDetails: Record<string, BankExtra>;
-  onMapChange: (id: string) => void;
-  onAttach: () => void;
-  onClose: () => void;
-}) {
-  if (!isOpen || !bank) return null;
-
-  const questionCount = bankDetails[resolveBankId(bank)]?.totalQuestions ?? 0;
-
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl dark:bg-zinc-900">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-zinc-500">
-              Gắn vào Storymap
-            </p>
-            <h2 className="text-lg font-semibold">{bank.bankName}</h2>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-sm text-zinc-500 hover:text-zinc-800"
-          >
-            ✕
-          </button>
-        </div>
-
-        <div className="space-y-4 text-sm">
-          <div className="rounded-lg border border-zinc-200 bg-zinc-50/80 p-3 dark:border-white/10 dark:bg-white/5">
-            <div className="flex items-center justify-between">
-              <span className="font-medium">Workspace</span>
-              <span className="text-xs text-zinc-500">
-                {getWorkspaceName((bank as any).workspaceId)}
-              </span>
-            </div>
-            <div className="mt-2 text-xs text-zinc-500">
-              Số câu hỏi: {questionCount}
-            </div>
-          </div>
-
-          {maps.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-500">
-              Workspace này chưa có storymap nào.
-            </div>
-          ) : (
-            <Field label="Chọn storymap">
-              <select
-                value={selectedMapId}
-                onChange={(e) => onMapChange(e.target.value)}
-                className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50"
-              >
-                <option value="">Chọn storymap</option>
-                {maps.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          )}
-        </div>
-
-        <div className="mt-6 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-100 dark:hover:bg-white/10"
-          >
-            Hủy
-          </button>
-          <button
-            onClick={onAttach}
-            disabled={!selectedMapId || saving}
-            className="rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
-          >
-            {saving ? "Đang xử lý..." : "Thêm vào storymap"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function RowMenu({
   state,
   deletingBankId,
   onEdit,
-  onAttach,
   onDelete,
   onClose,
 }: {
   state: RowMenuState | null;
   deletingBankId: string | null;
   onEdit: (bank: QuestionBankDto) => void;
-  onAttach: (bank: QuestionBankDto) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
 }) {
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
+
   if (!state || typeof document === "undefined") return null;
 
   return createPortal(
     <div className="fixed inset-0 z-40" onClick={onClose}>
       <div
-        className="absolute z-50 rounded-2xl border border-zinc-200 bg-white p-2 text-xs shadow-2xl dark:border-white/10 dark:bg-zinc-900"
+        className={`absolute z-50 rounded-2xl border p-2 text-xs shadow-2xl ${themeClasses.panel}`}
         style={{ top: state.top, left: state.left, width: 208 }}
         onClick={(e) => e.stopPropagation()}
         role="menu"
@@ -319,16 +208,9 @@ function RowMenu({
             onEdit(state.bank);
             onClose();
           }}
+          isDark={isDark}
         >
           Sửa thông tin
-        </MenuButton>
-        <MenuButton
-          onClick={() => {
-            onAttach(state.bank);
-            onClose();
-          }}
-        >
-          Thêm vào storymap
         </MenuButton>
         <MenuButton
           danger
@@ -337,6 +219,7 @@ function RowMenu({
             onDelete(state.id);
             onClose();
           }}
+          isDark={isDark}
         >
           {deletingBankId === state.id ? "Đang xóa..." : "Xóa"}
         </MenuButton>
@@ -346,9 +229,9 @@ function RowMenu({
   );
 }
 
-const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
+const Field = ({ label, children, isDark, themeClasses }: { label: string; children: React.ReactNode; isDark: boolean; themeClasses: ReturnType<typeof getThemeClasses> }) => (
   <div>
-    <label className="mb-1 block text-xs font-medium text-zinc-700 dark:text-zinc-300">
+    <label className={`mb-1 block text-xs font-medium ${themeClasses.textMuted}`}>
       {label}
     </label>
     {children}
@@ -360,13 +243,17 @@ const Checkbox = ({
   checked,
   onChange,
   label,
+  isDark,
+  themeClasses,
 }: {
   name: string;
   checked: boolean;
   onChange: (e: ChangeEvent<HTMLInputElement>) => void;
   label: string;
+  isDark: boolean;
+  themeClasses: ReturnType<typeof getThemeClasses>;
 }) => (
-  <label className="inline-flex items-center gap-2 text-xs text-zinc-700 dark:text-zinc-300">
+  <label className={`inline-flex items-center gap-2 text-xs ${themeClasses.textMuted}`}>
     <input type="checkbox" name={name} checked={checked} onChange={onChange} />
     <span>{label}</span>
   </label>
@@ -377,19 +264,26 @@ const MenuButton = ({
   danger,
   disabled,
   onClick,
+  isDark,
 }: {
   children: React.ReactNode;
   danger?: boolean;
   disabled?: boolean;
   onClick: () => void;
+  isDark: boolean;
 }) => (
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`flex w-full items-center rounded-lg px-3 py-2 text-left font-medium ${danger
-      ? "text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
-      : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-white/10"
-      } disabled:opacity-60`}
+    className={`flex w-full items-center rounded-lg px-3 py-2 text-left font-medium disabled:opacity-60 ${
+      danger
+        ? (isDark 
+            ? "text-red-400 hover:bg-red-500/10" 
+            : "text-red-600 hover:bg-red-50")
+        : (isDark
+            ? "text-zinc-200 hover:bg-white/10"
+            : "text-gray-700 hover:bg-gray-100")
+    }`}
   >
     {children}
   </button>
@@ -399,28 +293,21 @@ export default function QuestionBanksPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const { t } = useI18n();
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
   const params = useParams<{ orgId: string }>();
   const orgId = params?.orgId ?? "";
-  const mode = useThemeMode();
 
   const [activeTab, setActiveTab] = useState<TabKey>("my");
   const [deletingBankId, setDeletingBankId] = useState<string | null>(null);
-  const [attachSaving, setAttachSaving] = useState(false);
 
   const data = useQuestionBanksData(orgId);
   const bankForm = useBankForm(data.workspaces);
-  const attachDialog = useAttachDialog();
   const rowMenu = useRowMenu();
 
   const displayBanks = activeTab === "my" ? data.myBanks : data.publicBanks;
-
-  const getWorkspaceName = (workspaceId?: string | null) => {
-    if (!workspaceId) return "—";
-    return (
-      data.workspaces.find((w) => w.workspaceId === workspaceId)
-        ?.workspaceName ?? workspaceId
-    );
-  };
 
   const handleSave = async () => {
     if (!bankForm.form.bankName.trim())
@@ -472,33 +359,13 @@ export default function QuestionBanksPage() {
     }
   };
 
-  const handleAttach = async () => {
-    if (!attachDialog.bank || !attachDialog.selectedMapId) return;
-    const bankId = resolveBankId(attachDialog.bank);
-
-    setAttachSaving(true);
-    try {
-      // Note: Changed from attachMapToQuestionBank to attachSessionToQuestionBank
-      // attachDialog.selectedMapId is now treated as sessionId
-      await attachSessionToQuestionBank(bankId, attachDialog.selectedMapId);
-      showToast("success", "Đã gắn question bank vào session thành công");
-      // Note: updateBanksMapId might need to be updated to handle sessions
-      data.updateBanksMapId(bankId, attachDialog.selectedMapId);
-      attachDialog.close();
-    } catch (e) {
-      showToast("error", safeMessage(e, "Không thể gắn question bank vào session"));
-    } finally {
-      setAttachSaving(false);
-    }
-  };
-
   const goToEditQuestions = (id: string) => {
     router.push(`/profile/organizations/${orgId}/question-banks/${id}/question`);
   };
 
   if (data.loading) {
     return (
-      <div className="min-h-[60vh] px-4 text-zinc-500 animate-pulse">
+      <div className={`min-h-[60vh] px-4 animate-pulse ${themeClasses.textMuted}`}>
         Đang tải...
       </div>
     );
@@ -506,7 +373,7 @@ export default function QuestionBanksPage() {
 
   if (data.err || !data.org) {
     return (
-      <div className="max-w-3xl px-4 text-red-600">
+      <div className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"}`}>
         {data.err ?? "Không tìm thấy tổ chức"}
       </div>
     );
@@ -514,29 +381,21 @@ export default function QuestionBanksPage() {
 
   return (
     <div className="min-w-0 px-4 pb-10">
-      <div className="mx-auto max-w-6xl text-zinc-900 dark:text-zinc-50">
+      <div className={`mx-auto max-w-6xl ${isDark ? "text-zinc-50" : "text-zinc-900"}`}>
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => router.push(`/profile/organizations/${orgId}`)}
-              className="px-3 py-1.5 rounded-lg border text-sm border-zinc-300 bg-white hover:bg-zinc-50 hover:border-zinc-400 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
-              style={{
-                color: mode === "dark" ? "#e5e7eb" : "#4b5563",
-              }}
+              className={`px-3 py-1.5 rounded-lg border text-sm ${themeClasses.button}`}
             >
               ← Quay lại
             </button>
             <div>
-              <h1
-                className="text-2xl font-semibold sm:text-3xl"
-                style={{
-                  color: mode === "dark" ? "#f9fafb" : "#047857",
-                }}
-              >
+              <h1 className={`text-2xl font-semibold sm:text-3xl ${isDark ? "text-zinc-100" : "text-emerald-700"}`}>
                 Bộ câu hỏi
               </h1>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              <p className={`text-sm ${themeClasses.textMuted}`}>
                 {data.org.orgName}
               </p>
             </div>
@@ -550,16 +409,20 @@ export default function QuestionBanksPage() {
         </div>
 
         {/* Tabs */}
-        {/* Tabs */}
         <div className="mb-4">
-          <div className="inline-flex rounded-full bg-zinc-100 p-1 text-xs dark:bg-zinc-900">
+          <div className={`inline-flex rounded-full p-1 text-xs ${isDark ? "bg-zinc-900" : "bg-zinc-100"}`}>
             {(["my", "public"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`rounded-full px-4 py-1.5 font-medium transition-colors ${activeTab === tab
-                    ? "bg-white text-emerald-600 shadow-sm dark:bg-zinc-800 dark:text-emerald-300"
-                    : "text-zinc-600 hover:bg-white hover:text-emerald-600 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-emerald-300"
+                className={`rounded-full px-4 py-1.5 font-medium transition-colors ${
+                  activeTab === tab
+                    ? (isDark 
+                        ? "bg-zinc-800 text-emerald-300 shadow-sm" 
+                        : "bg-white text-emerald-600 shadow-sm")
+                    : (isDark
+                        ? "text-zinc-400 hover:bg-zinc-800 hover:text-emerald-300"
+                        : "text-zinc-600 hover:bg-white hover:text-emerald-600")
                   }`}
               >
                 {tab === "my"
@@ -571,21 +434,21 @@ export default function QuestionBanksPage() {
         </div>
 
         {/* Table */}
-        <section className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 text-sm font-semibold dark:border-white/10">
-            <h2 className="font-semibold text-emerald-600 dark:text-emerald-300">
+        <section className={`rounded-2xl border shadow-sm ${themeClasses.panel}`}>
+          <div className={`flex items-center justify-between border-b px-4 py-3 text-sm font-semibold ${themeClasses.tableBorder}`}>
+            <h2 className={`font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
               {activeTab === "my"
                 ? "Bộ câu hỏi của tôi"
                 : "Bộ câu hỏi công khai"}
             </h2>
-            <span className="text-xs text-zinc-500">
+            <span className={`text-xs ${themeClasses.textMuted}`}>
               {displayBanks.length} bộ
             </span>
           </div>
 
 
           {displayBanks.length === 0 ? (
-            <div className="px-4 py-6 text-sm text-zinc-500">
+            <div className={`px-4 py-6 text-sm ${themeClasses.textMuted}`}>
               {activeTab === "my"
                 ? "Chưa có bộ câu hỏi nào."
                 : "Chưa có bộ câu hỏi công khai nào."}
@@ -594,7 +457,7 @@ export default function QuestionBanksPage() {
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="bg-zinc-50/70 text-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-200">
+                  <tr className={`${isDark ? "bg-zinc-900/70" : "bg-zinc-50/70"} ${themeClasses.tableHeader}`}>
                     {[
                       "Tên bộ",
                       "Mô tả",
@@ -625,29 +488,29 @@ export default function QuestionBanksPage() {
                     return (
                       <tr
                         key={id}
-                        className="border-t border-zinc-100 dark:border-white/10"
+                        className={`border-t ${themeClasses.tableBorder}`}
                       >
-                        <td className="px-4 py-2 font-semibold text-emerald-600 dark:text-emerald-300">
+                        <td className={`px-4 py-2 font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
                           {bank.bankName}
                         </td>
-                        <td className="px-4 py-2 text-zinc-600 dark:text-zinc-400">
+                        <td className={`px-4 py-2 ${themeClasses.tableCell}`}>
                           {bank.description || "—"}
                         </td>
                         <td className="px-4 py-2">
                           <span
                             className={
                               count === 0
-                                ? "text-zinc-400"
-                                : "font-semibold text-emerald-600"
+                                ? themeClasses.textMuted
+                                : `font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`
                             }
                           >
                             {labelFromCount(count)}
                           </span>
                         </td>
-                        <td className="px-4 py-2 text-zinc-600">
+                        <td className={`px-4 py-2 ${isDark ? "text-zinc-400" : "text-zinc-600"}`}>
                           {tags.length ? tags.join(", ") : "—"}
                         </td>
-                        <td className="px-4 py-2 text-xs text-zinc-500">
+                        <td className={`px-4 py-2 text-xs ${themeClasses.textMuted}`}>
                           {bank.bankName}
                         </td>
                         <td className="px-4 py-2">
@@ -663,17 +526,7 @@ export default function QuestionBanksPage() {
                                 <button
                                   onClick={(e) => rowMenu.toggle(bank, e.currentTarget)}
                                   aria-haspopup="menu"
-                                  className="
-    inline-flex items-center justify-center
-    rounded-full border border-sky-500
-    px-4 py-1.5 text-xs font-semibold
-    bg-sky-500 text-white
-    shadow-[0_8px_20px_rgba(56,189,248,0.45)]
-    hover:bg-sky-400 hover:border-sky-400
-    focus:outline-none focus:ring-2 focus:ring-sky-300
-    dark:bg-sky-500 dark:border-sky-400 dark:text-white
-    dark:hover:bg-sky-400
-  "
+                                  className="inline-flex items-center justify-center rounded-full border border-sky-500 px-4 py-1.5 text-xs font-semibold bg-sky-500 text-white shadow-[0_8px_20px_rgba(56,189,248,0.45)] hover:bg-sky-400 hover:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-300"
                                 >
                                   Tùy chọn ▾
                                 </button>
@@ -682,7 +535,11 @@ export default function QuestionBanksPage() {
                             ) : (
                               <button
                                 onClick={() => goToEditQuestions(id)}
-                                className="inline-flex items-center rounded-full bg-zinc-800 px-3 py-1 text-xs font-semibold text-zinc-50 hover:bg-zinc-700"
+                                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                                  isDark 
+                                    ? "bg-zinc-800 text-zinc-50 hover:bg-zinc-700" 
+                                    : "bg-gray-800 text-white hover:bg-gray-700"
+                                }`}
                               >
                                 Xem / sử dụng
                               </button>
@@ -703,7 +560,6 @@ export default function QuestionBanksPage() {
           state={rowMenu.state}
           deletingBankId={deletingBankId}
           onEdit={bankForm.openEdit}
-          onAttach={attachDialog.open}
           onDelete={handleDelete}
           onClose={rowMenu.close}
         />
@@ -719,19 +575,6 @@ export default function QuestionBanksPage() {
           onWorkspaceChange={bankForm.setSelectedWorkspaceId}
           onSave={handleSave}
           onClose={bankForm.close}
-        />
-
-        <AttachDialog
-          isOpen={attachDialog.isOpen}
-          bank={attachDialog.bank}
-          maps={attachDialog.maps}
-          selectedMapId={attachDialog.selectedMapId}
-          saving={attachSaving}
-          getWorkspaceName={getWorkspaceName}
-          bankDetails={data.bankDetails}
-          onMapChange={attachDialog.setSelectedMapId}
-          onAttach={handleAttach}
-          onClose={attachDialog.close}
         />
       </div>
     </div>

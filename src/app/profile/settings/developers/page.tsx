@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 type TokenScope = "read" | "write" | "admin";
 type ApiToken = {
@@ -62,6 +64,10 @@ const WHS_KEY = "cmosm:dev:webhooks";
 
 export default function DevelopersPage() {
   const { t } = useI18n();
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const [tokens, setTokens] = useState<ApiToken[]>([]);
   const [webhooks, setWebhooks] = useState<Webhook[]>([]);
@@ -173,8 +179,8 @@ export default function DevelopersPage() {
     <div className="p-4 md:p-6 space-y-6">
       <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-white">{t("developers.title")}</h1>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          <h1 className={`text-2xl font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{t("developers.title")}</h1>
+          <p className={`text-sm ${themeClasses.textMuted}`}>
             {t("developers.subtitle")}
           </p>
         </div>
@@ -187,7 +193,7 @@ export default function DevelopersPage() {
           </button>
           <button
             onClick={() => setShowNewWebhook(true)}
-            className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-emerald-700 ring-1 ring-emerald-300 hover:bg-emerald-50 dark:bg-transparent dark:text-emerald-300 dark:ring-emerald-400/40 dark:hover:bg-emerald-500/10"
+            className={`rounded-lg px-3 py-2 text-sm font-medium text-emerald-700 ring-1 ring-emerald-300 hover:bg-emerald-50 ${isDark ? "bg-transparent text-emerald-300 ring-emerald-400/40 hover:bg-emerald-500/10" : "bg-white"}`}
           >
             {t("developers.btn_create_webhook")}
           </button>
@@ -196,11 +202,11 @@ export default function DevelopersPage() {
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Tokens */}
-        <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-950 lg:col-span-2">
+        <div className={`rounded-2xl border shadow-sm lg:col-span-2 ${themeClasses.panel} ${isDark ? "border-white/10" : "border-gray-200"}`}>
           <div className="flex items-center justify-between px-4 py-3">
             <div className="space-y-0.5">
-              <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{t("developers.tokens_title")}</h2>
-              <p className="text-xs text-zinc-600 dark:text-zinc-400">
+              <h2 className={`text-base font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("developers.tokens_title")}</h2>
+              <p className={`text-xs ${themeClasses.textMuted}`}>
                 {t("developers.tokens_desc")}
               </p>
             </div>
@@ -211,19 +217,19 @@ export default function DevelopersPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-t border-zinc-200 bg-zinc-50 text-left text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
-                  <th className="px-4 py-2 font-medium">{t("developers.tokens_th_name")}</th>
-                  <th className="px-4 py-2 font-medium">{t("developers.tokens_th_scope")}</th>
-                  <th className="px-4 py-2 font-medium">{t("developers.tokens_th_token")}</th>
-                  <th className="px-4 py-2 font-medium">{t("developers.tokens_th_created")}</th>
-                  <th className="px-4 py-2 font-medium">{t("developers.tokens_th_status")}</th>
-                  <th className="px-4 py-2 font-medium">{t("developers.tokens_th_actions")}</th>
+                <tr className={themeClasses.tableHeader}>
+                  <th className="px-4 py-2 font-medium text-left">{t("developers.tokens_th_name")}</th>
+                  <th className="px-4 py-2 font-medium text-left">{t("developers.tokens_th_scope")}</th>
+                  <th className="px-4 py-2 font-medium text-left">{t("developers.tokens_th_token")}</th>
+                  <th className="px-4 py-2 font-medium text-left">{t("developers.tokens_th_created")}</th>
+                  <th className="px-4 py-2 font-medium text-left">{t("developers.tokens_th_status")}</th>
+                  <th className="px-4 py-2 font-medium text-left">{t("developers.tokens_th_actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {tokens.length === 0 && (
                   <tr>
-                    <td className="px-4 py-8 text-center text-zinc-600 dark:text-zinc-400" colSpan={6}>
+                    <td className={`px-4 py-8 text-center ${themeClasses.textMuted}`} colSpan={6}>
                       {t("developers.tokens_empty")}{" "}
                       <span className="font-medium">{t("developers.btn_generate")}</span>{" "}
                       {t("developers.tokens_empty_after")}
@@ -233,8 +239,8 @@ export default function DevelopersPage() {
                 {tokens.map((t0) => {
                   const revealed = !!tokReveal[t0.id];
                   return (
-                    <tr key={t0.id} className="border-t border-zinc-200 dark:border-white/5">
-                      <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100">{t0.name}</td>
+                    <tr key={t0.id} className={`border-t ${themeClasses.tableCell}`}>
+                      <td className={`px-4 py-3 ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t0.name}</td>
                       <td className="px-4 py-3">
                         <span
                           className={cls(
@@ -250,10 +256,10 @@ export default function DevelopersPage() {
                           {scopeLabel[t0.scope]}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-zinc-800 dark:text-zinc-200">
+                      <td className={`px-4 py-3 font-mono text-xs ${isDark ? "text-zinc-200" : "text-gray-800"}`}>
                         {revealed ? t0.value : maskMiddle(t0.value)}
                       </td>
-                      <td className="px-4 py-3 text-zinc-700 dark:text-zinc-300">
+                      <td className={`px-4 py-3 ${themeClasses.textMuted}`}>
                         {new Date(t0.createdAt).toLocaleString()}
                       </td>
                       <td className="px-4 py-3">
@@ -272,20 +278,20 @@ export default function DevelopersPage() {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setTokReveal((s) => ({ ...s, [t0.id]: !s[t0.id] }))}
-                            className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-transparent dark:text-zinc-200 dark:hover:bg-white/5"
+                            className={`rounded-md border px-2 py-1 text-xs hover:bg-zinc-50 ${themeClasses.button} ${isDark ? "dark:hover:bg-white/5" : ""}`}
                           >
                             {revealed ? t("developers.btn_hide") : t("developers.btn_reveal")}
                           </button>
                           <button
                             onClick={() => copy(t0.value)}
-                            className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-transparent dark:text-zinc-200 dark:hover:bg-white/5"
+                            className={`rounded-md border px-2 py-1 text-xs hover:bg-zinc-50 ${themeClasses.button} ${isDark ? "dark:hover:bg-white/5" : ""}`}
                           >
                             {t("developers.btn_copy")}
                           </button>
                           <button
                             disabled={!t0.active}
-                            onClick={() => revokeToken(t0.id)}
                             className="rounded-md bg-rose-600 px-2 py-1 text-xs font-medium text-white hover:bg-rose-500 disabled:opacity-50"
+                            onClick={() => revokeToken(t0.id)}
                           >
                             {t("developers.btn_revoke")}
                           </button>
@@ -300,13 +306,13 @@ export default function DevelopersPage() {
         </div>
 
         {/* Quickstart */}
-        <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-950">
+        <div className={`rounded-2xl border shadow-sm ${themeClasses.panel} ${isDark ? "border-white/10" : "border-gray-200"}`}>
           <div className="px-4 py-3">
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{t("developers.quickstart_title")}</h2>
-            <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">{t("developers.quickstart_desc")}</p>
+            <h2 className={`text-base font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("developers.quickstart_title")}</h2>
+            <p className={`mt-1 text-xs ${themeClasses.textMuted}`}>{t("developers.quickstart_desc")}</p>
           </div>
           <div className="px-4 pb-4">
-            <div className="rounded-lg bg-zinc-900/95 p-3 text-xs text-zinc-100 ring-1 ring-white/10">
+            <div className={`rounded-lg p-3 text-xs ring-1 ${isDark ? "bg-zinc-900/95 text-zinc-100 ring-white/10" : "bg-gray-900/95 text-gray-100 ring-gray-700/50"}`}>
               <pre className="whitespace-pre-wrap leading-relaxed">
 {`# Replace with your token
 export IMOS_TOKEN=cmk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -314,7 +320,7 @@ curl -H "Authorization: Bearer $IMOS_TOKEN" \\
      https://api.imos.app/v1/me`}
               </pre>
             </div>
-            <div className="mt-3 rounded-lg bg-zinc-900/95 p-3 text-xs text-zinc-100 ring-1 ring-white/10">
+            <div className={`mt-3 rounded-lg p-3 text-xs ring-1 ${isDark ? "bg-zinc-900/95 text-zinc-100 ring-white/10" : "bg-gray-900/95 text-gray-100 ring-gray-700/50"}`}>
               <pre className="whitespace-pre-wrap leading-relaxed">
 {`// Verify webhook (Node/TypeScript)
 import crypto from "crypto";
@@ -330,11 +336,11 @@ function verify(body: string, signature: string, secret: string) {
       </section>
 
       {/* Webhooks */}
-      <section className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-950">
+      <section className={`rounded-2xl border shadow-sm ${themeClasses.panel} ${isDark ? "border-white/10" : "border-gray-200"}`}>
         <div className="flex items-center justify-between px-4 py-3">
           <div className="space-y-0.5">
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{t("developers.webhooks_title")}</h2>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+            <h2 className={`text-base font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("developers.webhooks_title")}</h2>
+            <p className={`text-xs ${themeClasses.textMuted}`}>
               {t("developers.webhooks_desc")}
             </p>
           </div>
@@ -346,19 +352,19 @@ function verify(body: string, signature: string, secret: string) {
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-t border-zinc-200 bg-zinc-50 text-left text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
-                <th className="px-4 py-2 font-medium">{t("developers.webhooks_th_name")}</th>
-                <th className="px-4 py-2 font-medium">{t("developers.webhooks_th_url")}</th>
-                <th className="px-4 py-2 font-medium">{t("developers.webhooks_th_events")}</th>
-                <th className="px-4 py-2 font-medium">{t("developers.webhooks_th_secret")}</th>
-                <th className="px-4 py-2 font-medium">{t("developers.webhooks_th_status")}</th>
-                <th className="px-4 py-2 font-medium">{t("developers.webhooks_th_actions")}</th>
+              <tr className={themeClasses.tableHeader}>
+                <th className="px-4 py-2 font-medium text-left">{t("developers.webhooks_th_name")}</th>
+                <th className="px-4 py-2 font-medium text-left">{t("developers.webhooks_th_url")}</th>
+                <th className="px-4 py-2 font-medium text-left">{t("developers.webhooks_th_events")}</th>
+                <th className="px-4 py-2 font-medium text-left">{t("developers.webhooks_th_secret")}</th>
+                <th className="px-4 py-2 font-medium text-left">{t("developers.webhooks_th_status")}</th>
+                <th className="px-4 py-2 font-medium text-left">{t("developers.webhooks_th_actions")}</th>
               </tr>
             </thead>
             <tbody>
               {webhooks.length === 0 && (
                 <tr>
-                  <td className="px-4 py-8 text-center text-zinc-600 dark:text-zinc-400" colSpan={6}>
+                  <td className={`px-4 py-8 text-center ${themeClasses.textMuted}`} colSpan={6}>
                     {t("developers.webhooks_empty")}{" "}
                     <span className="font-medium">{t("developers.btn_create_webhook")}</span>{" "}
                     {t("developers.webhooks_empty_after")}
@@ -366,10 +372,10 @@ function verify(body: string, signature: string, secret: string) {
                 </tr>
               )}
               {webhooks.map((w) => (
-                <tr key={w.id} className="border-t border-zinc-200 dark:border-white/5">
-                  <td className="px-4 py-3 text-zinc-900 dark:text-zinc-100">{w.name}</td>
+                <tr key={w.id} className={`border-t ${themeClasses.tableCell}`}>
+                  <td className={`px-4 py-3 ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{w.name}</td>
                   <td className="px-4 py-3">
-                    <a href={w.url} target="_blank" className="text-sky-600 hover:underline dark:text-sky-300">
+                    <a href={w.url} target="_blank" className={`${isDark ? "text-sky-300" : "text-sky-600"} hover:underline`}>
                       {w.url}
                     </a>
                   </td>
@@ -385,7 +391,7 @@ function verify(body: string, signature: string, secret: string) {
                       ))}
                     </div>
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-800 dark:text-zinc-200">
+                  <td className={`px-4 py-3 font-mono text-xs ${isDark ? "text-zinc-200" : "text-gray-800"}`}>
                     {maskMiddle(w.secret, 4, 3)}
                   </td>
                   <td className="px-4 py-3">
@@ -404,7 +410,7 @@ function verify(body: string, signature: string, secret: string) {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => copy(w.secret)}
-                        className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-transparent dark:text-zinc-200 dark:hover:bg-white/5"
+                        className={`rounded-md border px-2 py-1 text-xs hover:bg-zinc-50 ${themeClasses.button} ${isDark ? "dark:hover:bg-white/5" : ""}`}
                       >
                         {t("developers.btn_copy_secret")}
                       </button>
@@ -424,7 +430,7 @@ function verify(body: string, signature: string, secret: string) {
         </div>
 
         <div className="px-4 pb-4">
-          <div className="mt-3 rounded-lg bg-zinc-900/95 p-3 text-xs text-zinc-100 ring-1 ring-white/10">
+          <div className={`mt-3 rounded-lg p-3 text-xs ring-1 ${isDark ? "bg-zinc-900/95 text-zinc-100 ring-white/10" : "bg-gray-900/95 text-gray-100 ring-gray-700/50"}`}>
             <pre className="whitespace-pre-wrap leading-relaxed">
 {`POST ${"<your-webhook-url>"}
 Headers:
@@ -442,24 +448,24 @@ Body:
       {/* Modal: New Token */}
       {showNewToken && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-white/10 dark:bg-zinc-950">
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t("developers.modal_token_title")}</h3>
+          <div className={`w-full max-w-md rounded-2xl border p-5 shadow-xl ${themeClasses.panel} ${isDark ? "border-white/10" : "border-gray-200"}`}>
+            <h3 className={`text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("developers.modal_token_title")}</h3>
             <div className="mt-4 space-y-3">
               <div>
-                <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">{t("developers.label_name")}</label>
+                <label className={`mb-1 block text-xs ${themeClasses.textMuted}`}>{t("developers.label_name")}</label>
                 <input
                   value={tokName}
                   onChange={(e) => setTokName(e.target.value)}
                   placeholder={t("developers.ph_token_name")}
-                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${themeClasses.input}`}
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">{t("developers.label_scope")}</label>
+                <label className={`mb-1 block text-xs ${themeClasses.textMuted}`}>{t("developers.label_scope")}</label>
                 <select
                   value={tokScope}
                   onChange={(e) => setTokScope(e.target.value as TokenScope)}
-                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${themeClasses.select}`}
                 >
                   <option value="read">{t("developers.scope_read")}</option>
                   <option value="write">{t("developers.scope_write")}</option>
@@ -470,7 +476,7 @@ Body:
             <div className="mt-5 flex items-center justify-end gap-2">
               <button
                 onClick={() => setShowNewToken(false)}
-                className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-transparent dark:text-zinc-200 dark:hover:bg-white/5"
+                className={`rounded-md border px-3 py-2 text-sm hover:bg-zinc-50 ${themeClasses.button} ${isDark ? "dark:hover:bg-white/5" : ""}`}
               >
                 {t("developers.btn_cancel")}
               </button>
@@ -488,45 +494,45 @@ Body:
       {/* Modal: New Webhook */}
       {showNewWebhook && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
-          <div className="w-full max-w-xl rounded-2xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-white/10 dark:bg-zinc-950">
-            <h3 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{t("developers.modal_webhook_title")}</h3>
+          <div className={`w-full max-w-xl rounded-2xl border p-5 shadow-xl ${themeClasses.panel} ${isDark ? "border-white/10" : "border-gray-200"}`}>
+            <h3 className={`text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("developers.modal_webhook_title")}</h3>
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">{t("developers.label_name")}</label>
+                <label className={`mb-1 block text-xs ${themeClasses.textMuted}`}>{t("developers.label_name")}</label>
                 <input
                   value={whName}
                   onChange={(e) => setWhName(e.target.value)}
                   placeholder={t("developers.ph_webhook_name")}
-                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${themeClasses.input}`}
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">{t("developers.label_url")}</label>
+                <label className={`mb-1 block text-xs ${themeClasses.textMuted}`}>{t("developers.label_url")}</label>
                 <input
                   value={whUrl}
                   onChange={(e) => setWhUrl(e.target.value)}
                   placeholder="https://your-app.com/webhooks/imos"
-                  className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+                  className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${themeClasses.input}`}
                 />
               </div>
               <div className="md:col-span-2">
-                <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">{t("developers.label_secret")}</label>
+                <label className={`mb-1 block text-xs ${themeClasses.textMuted}`}>{t("developers.label_secret")}</label>
                 <div className="flex gap-2">
                   <input
                     value={whSecret}
                     onChange={(e) => setWhSecret(e.target.value)}
-                    className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs text-zinc-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+                    className={`w-full rounded-md border px-3 py-2 font-mono text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${themeClasses.input}`}
                   />
                   <button
                     onClick={() => setWhSecret(genSecret())}
-                    className="whitespace-nowrap rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-transparent dark:text-zinc-200 dark:hover:bg-white/5"
+                    className={`whitespace-nowrap rounded-md border px-3 py-2 text-sm hover:bg-zinc-50 ${themeClasses.button} ${isDark ? "dark:hover:bg-white/5" : ""}`}
                   >
                     {t("developers.btn_regen")}
                   </button>
                 </div>
               </div>
               <div className="md:col-span-2">
-                <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">{t("developers.label_events")}</label>
+                <label className={`mb-1 block text-xs ${themeClasses.textMuted}`}>{t("developers.label_events")}</label>
                 <div className="flex flex-wrap gap-2">
                   {(
                     [
@@ -556,7 +562,7 @@ Body:
             <div className="mt-5 flex items-center justify-end gap-2">
               <button
                 onClick={() => setShowNewWebhook(false)}
-                className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:bg-transparent dark:text-zinc-200 dark:hover:bg-white/5"
+                className={`rounded-md border px-3 py-2 text-sm hover:bg-zinc-50 ${themeClasses.button} ${isDark ? "dark:hover:bg-white/5" : ""}`}
               >
                 {t("developers.btn_cancel")}
               </button>

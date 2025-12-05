@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import s from "../../admin.module.css";
 import { adminGetOrganizationById } from "@/lib/admin-api";
 
 type OrgStatus = "Active" | "Suspended";
@@ -52,57 +51,36 @@ export default function OrganizationDetailPage() {
     };
   }, [orgId]);
 
-  if (loading) return <div className={s.loadingBox}>Đang tải thông tin tổ chức...</div>;
-  if (err) return <div className={s.errorBox}>{err}</div>;
-  if (!data) return <div className={s.emptyBox}>Không tìm thấy tổ chức.</div>;
+  if (loading) return <div className="p-5">Đang tải thông tin tổ chức...</div>;
+  if (err) return <div className="p-5">Không tìm thấy tổ chức.</div>;
+  if (!data) return <div className="p-5">Không tìm thấy tổ chức.</div>;
 
   const StatusBadge =
     data.status === "Suspended" ? (
-      <span className={s.badgeWarn}>Đã khóa</span>
+      <span className="px-2 py-1 rounded-md bg-red-500/10 text-red-500">Đã khóa</span>
     ) : (
-      <span className={s.badgeSuccess}>Hoạt động</span>
+      <span className="px-2 py-1 rounded-md bg-green-500/10 text-green-500">Hoạt động</span>
     );
 
   return (
-    <div className={s.stack}>
-      <section className={s.panel}>
-        <div className={s.panelHead}>
+    <div className="p-5">
+      <section className="bg-zinc-900/50 p-6 rounded-lg">
+        <div className="flex items-center justify-between mb-6">
           <h3>Chi tiết tổ chức</h3>
-          <div className={s.actionsRight}>
-            <button className={s.btn} onClick={() => router.back()}>← Quay lại</button>
+          <div className="flex items-center gap-2">
+            <button className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors" onClick={() => router.back()}>← Quay lại</button>
           </div>
         </div>
 
         <div
-          style={{
-            background: "white",
-            borderRadius: 12,
-            padding: 24,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-          }}
+          className="bg-white rounded-lg p-6 shadow-sm"
         >
           <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 16,
-              paddingBottom: 12,
-              borderBottom: "1px solid #eee",
-              marginBottom: 20,
-            }}
+            className="flex items-center justify-between gap-4 pb-3 border-b border-zinc-800 mb-5"
           >
-            <div style={{ minWidth: 0 }}>
+            <div className="min-w-0">
               <h2
-                style={{
-                  margin: 0,
-                  fontWeight: 700,
-                  fontSize: 20,
-                  lineHeight: 1.3,
-                  whiteSpace: "nowrap",
-                  textOverflow: "ellipsis",
-                  overflow: "hidden",
-                }}
+                className="m-0 text-2xl font-bold leading-none whitespace-nowrap text-ellipsis overflow-hidden"
                 title={data.name}
               >
                 {data.name}
@@ -120,7 +98,7 @@ export default function OrganizationDetailPage() {
           >
             <Field label="Chủ sở hữu">
               {data.ownerName}{" "}
-              <span style={{ color: "#6b7280" }}>({data.ownerEmail})</span>
+              <span className="text-zinc-400">({data.ownerEmail})</span>
             </Field>
 
             <Field label="Gói chính">{data.primaryPlanName ?? "—"}</Field>

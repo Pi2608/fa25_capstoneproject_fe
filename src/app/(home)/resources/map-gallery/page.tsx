@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import GalleryClient, { MapItem } from "./GalleryClient";
+import { getPublishedMaps, type MapGallerySummaryResponse } from "@/lib/api-map-gallery";
 
 export const metadata: Metadata = {
   title: "Map Gallery — IMOS",
@@ -16,43 +17,25 @@ function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-const MAPS: MapItem[] = [
-  {
-    id: "story-maps-history",
-    title: "Vietnam History Story Map",
-    author: "Lan Pham",
-    tags: ["Education", "History", "Story Maps"],
-    views: 2540,
-    likes: 188,
-    updated: "2025-08-21",
-    href: "/maps/story-maps-history",
-    duplicateHref: "/templates/duplicate?src=story-maps-history",
-  },
-  {
-    id: "urban-green-space",
-    title: "Urban Green Space Access",
-    author: "Minh Tran",
-    tags: ["Urban", "Environment"],
-    views: 1320,
-    likes: 96,
-    updated: "2025-07-12",
-    href: "/maps/urban-green-space",
-    duplicateHref: "/templates/duplicate?src=urban-green-space",
-  },
-  {
-    id: "disaster-response-flood",
-    title: "Flood Response – Evacuation Zones",
-    author: "Quang Nguyen",
-    tags: ["Disaster", "Zones"],
-    views: 3110,
-    likes: 241,
-    updated: "2025-06-30",
-    href: "/maps/disaster-response-flood",
-    duplicateHref: "/templates/duplicate?src=disaster-response-flood",
-  },
-];
+function mapApiResponseToMapItem(response: MapGallerySummaryResponse): MapItem {
+  return {
+    id: response.id,
+    title: response.mapName,
+    author: response.authorName || "Unknown",
+    tags: response.tags || [],
+    views: response.viewCount || 0,
+    likes: response.likeCount || 0,
+    updated: response.publishedAt || response.createdAt,
+    href: `/maps/${response.mapId}`,
+    duplicateHref: `/templates/duplicate?src=${response.mapId}`,
+  };
+}
 
-export default function MapGalleryPage() {
+export default async function MapGalleryPage() {
+  let maps: MapItem[] = [];
+  const apiMaps = await getPublishedMaps();
+  maps = apiMaps.map(mapApiResponseToMapItem);
+
   return (
     <main className="mx-auto max-w-7xl px-6 py-12 text-zinc-100">
       <section className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
@@ -85,7 +68,7 @@ export default function MapGalleryPage() {
       </section>
 
       <section id="gallery" className="mt-10">
-        <GalleryClient maps={MAPS} />
+        <GalleryClient maps={maps} />
       </section>
     </main>
   );

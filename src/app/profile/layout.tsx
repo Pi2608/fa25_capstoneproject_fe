@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { NotificationProvider, useNotifications } from "@/contexts/NotificationContext";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 export type MyMembership = {
   planId: number;
@@ -73,27 +74,26 @@ function ThemeToggle() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  
+  const current = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = current === "dark";
+  const themeClasses = getThemeClasses(isDark);
+
   if (!mounted) {
     return (
-      <div className="inline-flex h-8 w-[100px] items-center justify-center rounded-md border border-zinc-300 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-800/80" />
+      <div className={`inline-flex h-8 w-[100px] items-center justify-center rounded-md border shadow-sm ${themeClasses.button}`} />
     );
   }
 
-  const current = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
-  const isDark = current === "dark";
-
   const base =
     "inline-flex items-center gap-2 h-8 px-3 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60";
-
-  const lightCls = "bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50 shadow-sm";
-  const darkCls = "bg-zinc-800/80 text-zinc-50 border border-white/10 hover:bg-zinc-700/80 shadow-sm";
 
   return (
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
       aria-label={t("profilelayout.theme_toggle_aria")}
       title={isDark ? t("profilelayout.switch_to_light") : t("profilelayout.switch_to_dark")}
-      className={`${base} ${isDark ? darkCls : lightCls}`}
+      className={`${base} ${themeClasses.button}`}
     >
       {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
       <span>{isDark ? t("profilelayout.theme_dark") : t("profilelayout.theme_light")}</span>
@@ -107,6 +107,8 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
   const { isLoggedIn } = useAuthStatus();
   const { resolvedTheme, theme } = useTheme();
   const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
   const { unreadCount: unread } = useNotifications();
 
   const [mounted, setMounted] = useState(false);
@@ -114,7 +116,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
 
   const mainClass = !mounted
     ? "min-h-screen text-zinc-900 bg-gradient-to-b from-emerald-100 via-white to-emerald-50"
-    : currentTheme === "dark"
+    : isDark
       ? "min-h-screen text-zinc-100 bg-gradient-to-b from-[#0b0f0e] via-emerald-900/10 to-[#0b0f0e]"
       : "min-h-screen text-zinc-900 bg-gradient-to-b from-emerald-100 via-white to-emerald-50";
 
@@ -292,7 +294,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
               </div>
 
               <div className="px-1 mt-5">
-                <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">{t("profilelayout.orgs_title")}</div>
+                <div className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}>{t("profilelayout.orgs_title")}</div>
 
                 <NavItem
                   href="/register/organization"
@@ -313,7 +315,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                 )}
 
                 {orgs && !orgsErr && orgs.length === 0 && (
-                  <div className="px-3 py-2 text-xs rounded-md border bg-muted/30 text-muted-foreground">
+                  <div className={`px-3 py-2 text-xs rounded-md border ${themeClasses.tableBorder} ${themeClasses.textMuted}`}>
                     {t("profilelayout.no_orgs")}
                   </div>
                 )}
@@ -345,12 +347,12 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
 
             <Separator className="my-2" />
             <div className="space-y-3">
-              <div className="rounded-xl border p-3">
+              <div className={`rounded-xl border p-3 ${themeClasses.tableBorder}`}>
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-muted-foreground">{t("profilelayout.current_plan")}</span>
+                  <span className={`text-[12px] ${themeClasses.textMuted}`}>{t("profilelayout.current_plan")}</span>
                   {planLabel ? (
                     <div className="flex itemscenter gap-2">
-                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">{planLabel}</span>
+                      <span className={`text-sm font-semibold ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>{planLabel}</span>
                       {planStatus === "active" && (
                         <Badge variant="secondary" className="text-[11px] font-semibold">
                           {t("profilelayout.active_status")}
@@ -358,7 +360,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                       )}
                     </div>
                   ) : (
-                    <span className="text-[12px] text-muted-foreground">—</span>
+                    <span className={`text-[12px] ${themeClasses.textMuted}`}>—</span>
                   )}
                 </div>
               </div>
@@ -418,7 +420,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                       </div>
 
                       <div className="px-1 mt-5">
-                        <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">{t("profilelayout.orgs_title")}</div>
+                        <div className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}>{t("profilelayout.orgs_title")}</div>
 
                         <NavItem
                           href="/register/organization"

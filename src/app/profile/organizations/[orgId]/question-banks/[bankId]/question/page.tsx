@@ -6,6 +6,8 @@ import { useParams, useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 import {
   createQuestion,
   deleteQuestion,
@@ -25,29 +27,6 @@ import {
 import type { PinLocationPickerProps } from "@/components/question-banks/PinLocationPicker";
 // import { FullScreenLoading } from "@/components/common/FullScreenLoading";
 
-type HeaderMode = "light" | "dark";
-
-function useThemeMode(): HeaderMode {
-  const [mode, setMode] = useState<HeaderMode>("light");
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const html = document.documentElement;
-
-    const update = () => {
-      setMode(html.classList.contains("dark") ? "dark" : "light");
-    };
-
-    update();
-
-    const observer = new MutationObserver(update);
-    observer.observe(html, { attributes: true, attributeFilter: ["class"] });
-
-    return () => observer.disconnect();
-  }, []);
-
-  return mode;
-}
 
 function safeMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message;
@@ -82,11 +61,14 @@ const PinLocationPicker = dynamic<PinLocationPickerProps>(
     ),
   {
     ssr: false,
-    loading: () => (
-      <div className="mt-4 flex h-64 items-center justify-center rounded-xl border border-dashed border-zinc-300 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-        Đang tải bản đồ...
-      </div>
-    ),
+    loading: () => {
+      // We'll need to handle theme in the component itself since this is a static loading component
+      return (
+        <div className="mt-4 flex h-64 items-center justify-center rounded-xl border border-dashed text-sm">
+          Đang tải bản đồ...
+        </div>
+      );
+    },
   }
 );
 
@@ -147,7 +129,10 @@ export default function QuestionBuilderPage() {
   const { t } = useI18n();
   const router = useRouter();
   const { showToast } = useToast();
-  const mode = useThemeMode();
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const params = useParams<{ orgId: string; bankId: string }>();
   const orgId = params?.orgId ?? "";
@@ -504,14 +489,14 @@ export default function QuestionBuilderPage() {
   }
   if (err || !workspace || !org || !questionBank)
     return (
-      <div className="max-w-3xl px-4 text-red-600 dark:text-red-400">
+      <div className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"}`}>
         {err ?? t("common.not_found")}
       </div>
     );
 
   return (
     <div className="min-w-0 relative px-4 pb-10">
-      <div className="max-w-6xl mx-auto text-zinc-900 dark:text-zinc-50">
+      <div className={`max-w-6xl mx-auto ${isDark ? "text-zinc-50" : "text-zinc-900"}`}>
         {/* Header */}
         <div className="flex items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-3">
@@ -519,23 +504,15 @@ export default function QuestionBuilderPage() {
               onClick={() =>
                 router.push(`/profile/organizations/${orgId}/question-banks`)
               }
-              className="px-3 py-1.5 rounded-lg border text-sm border-zinc-300 bg-white hover:bg-zinc-50 hover:border-zinc-400 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
-              style={{
-                color: mode === "dark" ? "#e5e7eb" : "#4b5563",
-              }}
+              className={`px-3 py-1.5 rounded-lg border text-sm ${themeClasses.button}`}
             >
               ←
             </button>
             <div>
-              <h1
-                className="text-2xl sm:text-3xl font-semibold"
-                style={{
-                  color: mode === "dark" ? "#f9fafb" : "#047857",
-                }}
-              >
+              <h1 className={`text-2xl sm:text-3xl font-semibold ${isDark ? "text-zinc-100" : "text-emerald-700"}`}>
                 Tạo câu hỏi cho bộ: {questionBank.bankName}
               </h1>
-              <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              <p className={`text-sm ${themeClasses.textMuted}`}>
                 {workspace.workspaceName} · {org.orgName}
               </p>
             </div>
@@ -551,29 +528,29 @@ export default function QuestionBuilderPage() {
         </div>
 
         {/* 1. Thông tin bộ câu hỏi */}
-        <section className="mb-8 rounded-2xl border border-zinc-200 bg-white px-4 py-5 shadow-sm dark:border-white/10 dark:bg-white/5 dark:shadow-none">
-          <h2 className="text-lg font-semibold mb-4 text-emerald-600 dark:text-emerald-300">
+        <section className={`mb-8 rounded-2xl border px-4 py-5 shadow-sm ${themeClasses.panel}`}>
+          <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
             1. Thông tin bộ câu hỏi
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1">
-              <div className="text-xs text-zinc-600 dark:text-zinc-400">
+              <div className={`text-xs ${themeClasses.textMuted}`}>
                 Tên bộ câu hỏi
               </div>
-              <div className="text-base font-semibold text-emerald-600 dark:text-emerald-300">
+              <div className={`text-base font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
                 {questionBank.bankName}
               </div>
               {questionBank.description && (
-                <p className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                <p className={`text-xs mt-1 ${themeClasses.textMuted}`}>
                   {questionBank.description}
                 </p>
               )}
             </div>
             <div className="space-y-1">
-              <div className="text-xs text-zinc-600 dark:text-zinc-400">
+              <div className={`text-xs ${themeClasses.textMuted}`}>
                 Thuộc workspace
               </div>
-              <div className="text-base font-semibold text-emerald-600 dark:text-emerald-300">
+              <div className={`text-base font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
                 {workspace.workspaceName}
               </div>
             </div>
@@ -583,19 +560,19 @@ export default function QuestionBuilderPage() {
         {/* 2. Nhập nội dung câu hỏi */}
         <section className="mb-8">
           <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
-            <h2 className="text-lg font-semibold text-emerald-600 dark:text-emerald-300">
+            <h2 className={`text-lg font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
               2. Nhập nội dung câu hỏi
             </h2>
           </div>
 
-          <div className="rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5 shadow-sm dark:border-white/10 dark:bg-white/5 dark:shadow-none">
+          <div className={`rounded-2xl border p-4 sm:p-5 shadow-sm ${themeClasses.panel}`}>
             <div className="mb-4 flex items-center justify-between">
-              <div className="text-sm text-zinc-700 dark:text-zinc-300">
+              <div className={`text-sm ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                 <span className="font-semibold">Tổng số câu hỏi:</span>{" "}
-                <span className="font-semibold text-emerald-600 dark:text-emerald-300">
+                <span className={`font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
                   {questions.length} câu
                 </span>
-                <span className="ml-2 text-xs text-zinc-500 dark:text-zinc-400">
+                <span className={`ml-2 text-xs ${themeClasses.textMuted}`}>
                   ({overview.filled} đã nhập)
                 </span>
               </div>
@@ -612,14 +589,14 @@ export default function QuestionBuilderPage() {
               {questions.map((q, idx) => (
                 <div
                   key={q.id}
-                  className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 sm:p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900/80 dark:shadow-none"
+                  className={`rounded-xl border p-3 sm:p-4 shadow-sm ${isDark ? "border-white/10 bg-zinc-900/80" : "border-zinc-200 bg-zinc-50"}`}
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                    <div className={`text-sm font-semibold ${isDark ? "text-zinc-50" : "text-zinc-900"}`}>
                       Câu {idx + 1}
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">
+                      <div className={`text-xs ${themeClasses.textMuted}`}>
                         {q.text.trim() || q.answer.trim()
                           ? "Đã nhập"
                           : "Chưa nhập"}
@@ -627,7 +604,11 @@ export default function QuestionBuilderPage() {
                       {questions.length > 1 && (
                         <button
                           onClick={() => handleRemoveQuestion(idx)}
-                          className="text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300 text-xs font-semibold p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                          className={`text-xs font-semibold p-1.5 rounded transition-colors ${
+                            isDark 
+                              ? "text-red-400 hover:text-red-300 hover:bg-red-900/20" 
+                              : "text-red-500 hover:text-red-600 hover:bg-red-50"
+                          }`}
                           title="Xóa câu hỏi này"
                         >
                           <X className="w-4 h-4" />
@@ -638,7 +619,7 @@ export default function QuestionBuilderPage() {
 
                   <div className="grid gap-3 lg:grid-cols-2">
                     <div>
-                      <label className="block text-xs text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                      <label className={`block text-xs font-semibold mb-1 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                         Nội dung câu hỏi
                       </label>
                       <textarea
@@ -650,13 +631,13 @@ export default function QuestionBuilderPage() {
                             e.target.value
                           )
                         }
-                        className="w-full rounded-lg bg-white border border-zinc-200 px-3 py-2 text-sm text-zinc-900 min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-800 dark:border-white/10 dark:text-zinc-50"
+                        className={`w-full rounded-lg border px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
                         placeholder="Nhập nội dung câu hỏi..."
                       />
                     </div>
 
                     <div>
-                      <label className="block text-xs text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                      <label className={`block text-xs font-semibold mb-1 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                         Loại câu hỏi
                       </label>
                       <select
@@ -667,7 +648,7 @@ export default function QuestionBuilderPage() {
                             e.target.value as QuestionType
                           )
                         }
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-800 dark:border-white/10 dark:text-zinc-50"
+                        className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.select}`}
                       >
                         {QUESTION_TYPES.map(type => (
                           <option key={type} value={type}>
@@ -680,7 +661,7 @@ export default function QuestionBuilderPage() {
 
                   {q.questionType === "SHORT_ANSWER" && (
                     <div className="mt-4">
-                      <label className="block text-xs text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                      <label className={`block text-xs font-semibold mb-1 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                         Đáp án / Gợi ý trả lời
                       </label>
                       <textarea
@@ -688,7 +669,7 @@ export default function QuestionBuilderPage() {
                         onChange={e =>
                           handleChangeQuestion(idx, "answer", e.target.value)
                         }
-                        className="w-full rounded-lg bg-white border border-zinc-200 px-3 py-2 text-sm text-zinc-900 min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-800 dark:border-white/10 dark:text-zinc-50"
+                        className={`w-full rounded-lg border px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
                         placeholder="Nhập đáp án đúng hoặc lời giải thích..."
                       />
                     </div>
@@ -697,12 +678,12 @@ export default function QuestionBuilderPage() {
                   {q.questionType === "MULTIPLE_CHOICE" && (
                     <div className="mt-4 space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                        <span className={`text-xs font-semibold ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                           Danh sách lựa chọn
                         </span>
                         <button
                           onClick={() => handleAddOptionRow(idx)}
-                          className="text-xs font-semibold text-emerald-600 hover:text-emerald-500"
+                          className={`text-xs font-semibold ${isDark ? "text-emerald-300 hover:text-emerald-200" : "text-emerald-600 hover:text-emerald-500"}`}
                         >
                           + Thêm lựa chọn
                         </button>
@@ -710,15 +691,15 @@ export default function QuestionBuilderPage() {
                       {q.options.map((opt, optIdx) => (
                         <div
                           key={opt.id}
-                          className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-white/10 dark:bg-zinc-800"
+                          className={`rounded-lg border p-3 ${isDark ? "border-white/10 bg-zinc-800" : "border-zinc-200 bg-white"}`}
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                            <span className={`text-xs font-semibold ${themeClasses.textMuted}`}>
                               Phương án {optIdx + 1}
                             </span>
                             {q.options.length > MIN_OPTIONS && (
                               <button
-                                className="text-xs text-red-500 hover:text-red-400"
+                                className={`text-xs ${isDark ? "text-red-400 hover:text-red-300" : "text-red-500 hover:text-red-400"}`}
                                 onClick={() => handleRemoveOptionRow(idx, optIdx)}
                                 type="button"
                               >
@@ -733,10 +714,10 @@ export default function QuestionBuilderPage() {
                                 optionText: e.target.value,
                               })
                             }
-                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
+                            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
                             placeholder="Nhập nội dung lựa chọn..."
                           />
-                          <label className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-300">
+                          <label className={`mt-2 inline-flex items-center gap-2 text-xs font-medium ${themeClasses.textMuted}`}>
                             <input
                               type="checkbox"
                               checked={opt.isCorrect}
@@ -752,14 +733,14 @@ export default function QuestionBuilderPage() {
 
                   {q.questionType === "TRUE_FALSE" && (
                     <div className="mt-4">
-                      <span className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                      <span className={`block text-xs font-semibold mb-2 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                         Đáp án đúng
                       </span>
                       <div className="flex gap-4">
                         {TRUE_FALSE_CHOICES.map(choice => (
                           <label
                             key={choice.value}
-                            className="inline-flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-200"
+                            className={`inline-flex items-center gap-2 text-sm ${isDark ? "text-zinc-200" : "text-zinc-700"}`}
                           >
                             <input
                               type="radio"
@@ -784,12 +765,12 @@ export default function QuestionBuilderPage() {
 
                   {q.questionType === "PIN_ON_MAP" && (
                     <div className="mt-4">
-                      <span className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-2">
+                      <span className={`block text-xs font-semibold mb-2 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                         Toạ độ chính xác
                       </span>
                       <div className="grid gap-3 sm:grid-cols-3">
                         <div>
-                          <label className="block text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1">
+                          <label className={`block text-[11px] uppercase tracking-wide mb-1 ${themeClasses.textMuted}`}>
                             Vĩ độ
                           </label>
                           <input
@@ -798,12 +779,12 @@ export default function QuestionBuilderPage() {
                             onChange={e =>
                               handleChangeQuestion(idx, "correctLatitude", e.target.value)
                             }
-                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
+                            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
                             placeholder="Ví dụ: 10.762622"
                           />
                         </div>
                         <div>
-                          <label className="block text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1">
+                          <label className={`block text-[11px] uppercase tracking-wide mb-1 ${themeClasses.textMuted}`}>
                             Kinh độ
                           </label>
                           <input
@@ -812,12 +793,12 @@ export default function QuestionBuilderPage() {
                             onChange={e =>
                               handleChangeQuestion(idx, "correctLongitude", e.target.value)
                             }
-                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
+                            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
                             placeholder="Ví dụ: 106.660172"
                           />
                         </div>
                         <div>
-                          <label className="block text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-1">
+                          <label className={`block text-[11px] uppercase tracking-wide mb-1 ${themeClasses.textMuted}`}>
                             Bán kính (m)
                           </label>
                           <input
@@ -831,7 +812,7 @@ export default function QuestionBuilderPage() {
                                 e.target.value
                               )
                             }
-                            className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-900 dark:border-white/10 dark:text-zinc-50"
+                            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
                             placeholder="Ví dụ: 100"
                           />
                         </div>
@@ -858,7 +839,7 @@ export default function QuestionBuilderPage() {
                     const isOpen = optionalOpen[q.id] ?? hasOptionalData;
 
                     return (
-                      <div className="mt-6 rounded-xl border border-dashed border-zinc-200 bg-white dark:border-white/10 dark:bg-white/5">
+                      <div className={`mt-6 rounded-xl border border-dashed ${isDark ? "border-white/10 bg-white/5" : "border-zinc-200 bg-white"}`}>
                         <button
                           type="button"
                           onClick={() =>
@@ -867,25 +848,25 @@ export default function QuestionBuilderPage() {
                           className="flex w-full items-center justify-between px-4 py-3 text-left"
                         >
                           <div>
-                            <span className="block text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                            <span className={`block text-sm font-semibold ${isDark ? "text-zinc-100" : "text-zinc-800"}`}>
                               Nội dung bổ trợ (tùy chọn)
                             </span>
-                            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                            <p className={`text-xs ${themeClasses.textMuted}`}>
                               {hasOptionalData
                                 ? "Đã thêm nội dung bổ trợ"
                                 : "Thêm ảnh minh hoạ, audio, gợi ý hoặc giải thích khi cần."}
                             </p>
                           </div>
-                          <span className="text-xs font-semibold text-emerald-600">
+                          <span className={`text-xs font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
                             {isOpen ? "Thu gọn" : "Thêm"}
                           </span>
                         </button>
 
                         {isOpen && (
-                          <div className="space-y-4 border-t border-dashed border-zinc-200 px-4 py-4 dark:border-white/10">
+                          <div className={`space-y-4 border-t border-dashed px-4 py-4 ${themeClasses.tableBorder}`}>
                             <div className="grid gap-4 md:grid-cols-2">
                               <div className="space-y-2">
-                                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                                <label className={`text-xs font-semibold ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                                   Ảnh minh hoạ
                                 </label>
                                 {q.questionImageUrl ? (
@@ -893,12 +874,12 @@ export default function QuestionBuilderPage() {
                                     <img
                                       src={q.questionImageUrl}
                                       alt={`Question ${idx + 1} illustration`}
-                                      className="w-full rounded-lg border border-zinc-200 object-cover dark:border-white/10"
+                                      className={`w-full rounded-lg border object-cover ${themeClasses.tableBorder}`}
                                     />
                                     <div className="flex gap-2">
                                       <button
                                         type="button"
-                                        className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/10"
+                                        className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${themeClasses.button}`}
                                         onClick={() => handleChangeQuestion(idx, "questionImageUrl", "")}
                                         disabled={uploadingImageFor === q.id}
                                       >
@@ -907,7 +888,7 @@ export default function QuestionBuilderPage() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-600 dark:text-zinc-400 dark:hover:border-emerald-500 dark:hover:text-emerald-400">
+                                  <label className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-4 text-center text-xs ${themeClasses.textMuted} ${isDark ? "border-white/10 hover:border-emerald-500 hover:text-emerald-400" : "border-gray-300 hover:border-emerald-400 hover:text-emerald-600"}`}>
                                     <span>
                                       {uploadingImageFor === q.id
                                         ? "Đang tải ảnh..."
@@ -932,7 +913,7 @@ export default function QuestionBuilderPage() {
                               </div>
 
                               <div className="space-y-2">
-                                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                                <label className={`text-xs font-semibold ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                                   Audio (thuyết minh / gợi ý)
                                 </label>
                                 {q.questionAudioUrl ? (
@@ -940,12 +921,12 @@ export default function QuestionBuilderPage() {
                                     <audio
                                       src={q.questionAudioUrl}
                                       controls
-                                      className="w-full rounded-lg bg-zinc-100 p-2 dark:bg-zinc-800"
+                                      className={`w-full rounded-lg p-2 ${isDark ? "bg-zinc-800" : "bg-zinc-100"}`}
                                     />
                                     <div className="flex gap-2">
                                       <button
                                         type="button"
-                                        className="flex-1 rounded-lg border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-white/10 dark:text-zinc-200 dark:hover:bg-white/10"
+                                        className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${themeClasses.button}`}
                                         onClick={() => handleChangeQuestion(idx, "questionAudioUrl", "")}
                                         disabled={uploadingAudioFor === q.id}
                                       >
@@ -954,7 +935,7 @@ export default function QuestionBuilderPage() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <label className="flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-zinc-300 p-4 text-center text-xs text-zinc-500 hover:border-emerald-400 hover:text-emerald-600 dark:border-zinc-600 dark:text-zinc-400 dark:hover:border-emerald-500 dark:hover:text-emerald-400">
+                                  <label className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-4 text-center text-xs ${themeClasses.textMuted} ${isDark ? "border-white/10 hover:border-emerald-500 hover:text-emerald-400" : "border-gray-300 hover:border-emerald-400 hover:text-emerald-600"}`}>
                                     <span>
                                       {uploadingAudioFor === q.id
                                         ? "Đang tải audio..."
@@ -981,24 +962,24 @@ export default function QuestionBuilderPage() {
 
                             <div className="grid gap-4 md:grid-cols-2">
                               <div>
-                                <label className="mb-1 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                                <label className={`mb-1 block text-xs font-semibold ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                                   Gợi ý (Hint)
                                 </label>
                                 <textarea
                                   value={q.hintText}
                                   onChange={e => handleChangeQuestion(idx, "hintText", e.target.value)}
-                                  className="min-h-[80px] w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50"
+                                  className={`min-h-[80px] w-full rounded-lg border px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
                                   placeholder="Nhập gợi ý để giúp học sinh (tùy chọn)..."
                                 />
                               </div>
                               <div>
-                                <label className="mb-1 block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                                <label className={`mb-1 block text-xs font-semibold ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
                                   Giải thích sau khi trả lời
                                 </label>
                                 <textarea
                                   value={q.explanation}
                                   onChange={e => handleChangeQuestion(idx, "explanation", e.target.value)}
-                                  className="min-h-[80px] w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-50"
+                                  className={`min-h-[80px] w-full rounded-lg border px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
                                   placeholder="Nhập lời giải thích sẽ hiển thị sau khi trả lời..."
                                 />
                               </div>
@@ -1015,26 +996,26 @@ export default function QuestionBuilderPage() {
         </section>
         <section>
           {/* tiêu đề block */}
-          <h2 className="mb-3 text-lg font-semibold text-emerald-700 dark:text-emerald-300">
+          <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>
             3. Tổng quan bộ câu hỏi
           </h2>
 
           {/* thẻ info tổng quan */}
-          <div className="mb-4 rounded-xl border border-zinc-200 bg-white px-4 py-3 shadow-sm dark:border-white/10 dark:bg-white/5 dark:shadow-none">
+          <div className={`mb-4 rounded-xl border px-4 py-3 shadow-sm ${themeClasses.panel}`}>
             <div className="flex items-center justify-between">
               <div>
-                <div className="mb-1 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                <div className={`mb-1 text-sm font-semibold ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>
                   {questionBank.bankName}
                 </div>
-                <div className="text-xs text-zinc-600 dark:text-zinc-400">
+                <div className={`text-xs ${themeClasses.textMuted}`}>
                   {overview.filled}/{overview.total} câu đã nhập
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
+                <div className={`text-2xl font-bold ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>
                   {overview.filled}
                 </div>
-                <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                <div className={`text-xs ${themeClasses.textMuted}`}>
                   câu hoàn thành
                 </div>
               </div>
@@ -1042,24 +1023,24 @@ export default function QuestionBuilderPage() {
           </div>
 
           {/* bảng câu hỏi trong bộ */}
-          <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-white/10 dark:bg-white/5 dark:shadow-none">
-            <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 dark:border-white/10">
-              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          <div className={`rounded-2xl border shadow-sm ${themeClasses.panel}`}>
+            <div className={`flex items-center justify-between border-b px-4 py-3 ${themeClasses.tableBorder}`}>
+              <h3 className={`text-sm font-semibold ${isDark ? "text-zinc-50" : "text-zinc-900"}`}>
                 Danh sách câu hỏi trong bộ
               </h3>
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              <span className={`text-xs ${themeClasses.textMuted}`}>
                 {questionsFromBank.length} câu
               </span>
             </div>
             {questionsFromBank.length === 0 ? (
-              <div className="px-4 py-4 text-sm text-zinc-500 dark:text-zinc-400">
+              <div className={`px-4 py-4 text-sm ${themeClasses.textMuted}`}>
                 Chưa có câu hỏi nào trong bộ.
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="bg-zinc-50/70 text-zinc-700 dark:bg-zinc-900/70 dark:text-zinc-200">
+                    <tr className={`${isDark ? "bg-zinc-900/70" : "bg-zinc-50/70"} ${themeClasses.tableHeader}`}>
                       <th className="w-16 px-4 py-2 text-left font-semibold">
                         #
                       </th>
@@ -1077,26 +1058,24 @@ export default function QuestionBuilderPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="text-zinc-700 dark:text-zinc-50">
+                  <tbody className={isDark ? "text-zinc-50" : "text-zinc-700"}>
                     {questionsFromBank.map((q, idx) => (
                       <tr
                         key={q.questionId}
-                        className="border-t border-zinc-100 hover:bg-zinc-50/70 dark:border-white/10 dark:hover:bg-zinc-900/60"
+                        className={`border-t ${themeClasses.tableBorder} ${isDark ? "hover:bg-zinc-900/60" : "hover:bg-zinc-50/70"}`}
                       >
-                        <td className="px-4 py-2 text-xs text-zinc-600 dark:text-zinc-400">
+                        <td className={`px-4 py-2 text-xs ${themeClasses.textMuted}`}>
                           {idx + 1}
                         </td>
 
-                        <td className="px-4 py-2">
-                          <span className="text-zinc-700 dark:text-zinc-50">
-                            {q.questionText || q.correctAnswerText || "—"}
-                          </span>
+                        <td className={`px-4 py-2 ${themeClasses.tableCell}`}>
+                          {q.questionText || q.correctAnswerText || "—"}
                         </td>
 
-                        <td className="px-4 py-2 text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                        <td className={`px-4 py-2 text-xs uppercase tracking-wide ${themeClasses.textMuted}`}>
                           {getQuestionTypeLabel(q.questionType)}
                         </td>
-                        <td className="px-4 py-2 text-zinc-600 dark:text-zinc-300">
+                        <td className={`px-4 py-2 ${isDark ? "text-zinc-300" : "text-zinc-600"}`}>
                           {summarizeAnswer(q)}
                         </td>
                         <td className="px-4 py-2 text-right">

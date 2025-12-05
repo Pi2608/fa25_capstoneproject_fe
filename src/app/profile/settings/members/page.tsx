@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useToast } from "@/contexts/ToastContext";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 import {
   getMyOrganizations,
   getOrganizationMembers,
@@ -263,6 +265,10 @@ export default function MembersPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
   const { isLoggedIn } = useAuthStatus();
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const [orgs, setOrgs] = useState<MyOrganizationDto[]>([]);
   const [orgErr, setOrgErr] = useState<string | null>(null);
@@ -600,7 +606,7 @@ export default function MembersPage() {
           {t("settings_members.org_label")}
         </label>
         <select
-          className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-700 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+          className={`rounded-md border px-2 py-1 text-sm shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${themeClasses.select} ${isDark ? "dark:hover:bg-zinc-800" : ""}`}
           value={selectedOrgId ?? ""}
           onChange={(e) => setSelectedOrgId(e.target.value || null)}
         >
@@ -689,23 +695,23 @@ export default function MembersPage() {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg ring-1 ring-zinc-200 shadow-sm dark:ring-white/10">
-        <table className="min-w-full bg-white dark:bg-zinc-950">
+      <div className={`overflow-x-auto rounded-lg ring-1 shadow-sm ${isDark ? "ring-white/10" : "ring-gray-200"}`}>
+        <table className={`min-w-full ${isDark ? "bg-zinc-950" : "bg-white"}`}>
           <thead>
-            <tr className="border-b border-zinc-200 bg-zinc-50 text-left text-zinc-600 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
-              <th className="px-3 py-2 text-sm font-medium">
+            <tr className={themeClasses.tableHeader}>
+              <th className="px-3 py-2 text-sm font-medium text-left">
                 {t("settings_members.col_member")}
               </th>
-              <th className="px-3 py-2 text-sm font-medium">
+              <th className="px-3 py-2 text-sm font-medium text-left">
                 {t("settings_members.col_last_view")}
               </th>
-              <th className="px-3 py-2 text-sm font-medium">
+              <th className="px-3 py-2 text-sm font-medium text-left">
                 {t("settings_members.col_permissions")}
               </th>
-              <th className="px-3 py-2 text-sm font-medium">
+              <th className="px-3 py-2 text-sm font-medium text-left">
                 {t("settings_members.col_role")}
               </th>
-              <th className="w-[280px] px-3 py-2 text-sm font-medium">
+              <th className="w-[280px] px-3 py-2 text-sm font-medium text-left">
                 {t("settings_members.col_actions")}
               </th>
             </tr>
@@ -715,7 +721,7 @@ export default function MembersPage() {
               <tr>
                 <td
                   colSpan={5}
-                  className="px-3 py-6 text-center text-sm text-zinc-600 dark:text-zinc-400"
+                  className={`px-3 py-6 text-center text-sm ${themeClasses.textMuted}`}
                 >
                   {t("settings_members.loading_members")}
                 </td>
@@ -725,7 +731,7 @@ export default function MembersPage() {
               <tr>
                 <td
                   colSpan={5}
-                  className="px-3 py-6 text-center text-sm text-zinc-600 dark:text-zinc-400"
+                  className={`px-3 py-6 text-center text-sm ${themeClasses.textMuted}`}
                 >
                   {t("settings_members.no_members")}
                 </td>
@@ -752,18 +758,18 @@ export default function MembersPage() {
                 return (
                   <tr
                     key={m.memberId}
-                    className="border-t border-zinc-200 hover:bg-zinc-50 dark:border-white/5 dark:hover:bg-white/5"
+                    className={`border-t ${themeClasses.tableCell} ${isDark ? "hover:bg-white/5" : "hover:bg-gray-50"}`}
                   >
                     <td className="px-3 py-3">
-                      <div className="font-medium text-zinc-900 dark:text-white">
+                      <div className={`font-medium ${isDark ? "text-white" : "text-gray-900"}`}>
                         {m.displayName}
                       </div>
-                      <div className="text-xs text-zinc-600 dark:text-zinc-400">
+                      <div className={`text-xs ${themeClasses.textMuted}`}>
                         {m.email}
                       </div>
                     </td>
 
-                    <td className="px-3 py-3 text-sm text-zinc-700 dark:text-zinc-200">
+                    <td className={`px-3 py-3 text-sm ${themeClasses.textMuted}`}>
                       {m.lastViewedAgo ?? "—"}
                     </td>
 
@@ -779,7 +785,7 @@ export default function MembersPage() {
 
                     <td className="px-3 py-3 text-sm">
                       <select
-                        className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                        className={`rounded-md border px-2 py-1 text-sm shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-60 ${themeClasses.select} ${isDark ? "dark:hover:bg-zinc-800" : ""}`}
                         value={m.license}
                         disabled={
                           busy || m.license === "Owner" || !isOwner

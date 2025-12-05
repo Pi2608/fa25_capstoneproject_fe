@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import s from "../../admin.module.css";
 import { adminGetSupportTicketById } from "@/lib/admin-api";
 
 type TicketStatus = "Open" | "Pending" | "Closed";
@@ -73,50 +72,47 @@ export default function SupportTicketDetailPage() {
     }, [ticketId]);
 
     const renderStatusBadge = (status: TicketStatus | string) => {
-        if (status === "Closed") return <span className={s.badgeWarn}>Đã đóng</span>;
+        if (status === "Closed") return <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18">Đã đóng</span>;
         if (status === "Pending")
-            return <span className={s.badgePending}>Đang chờ</span>;
-        return <span className={s.badgeSuccess}>Đang mở</span>;
+            return <span className="px-2 py-1 rounded-full text-xs font-extrabold text-blue-600 bg-blue-500/16">Đang chờ</span>;
+        return <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16">Đang mở</span>;
     };
 
     if (loading)
-        return <div className={s.loadingBox}>Đang tải chi tiết yêu cầu…</div>;
+        return <div className="p-12 text-center text-zinc-400">Đang tải chi tiết yêu cầu…</div>;
     if (err)
         return (
-            <div className={s.stack}>
-                <section className={s.panel}>
-                    <div className={s.errorBox}>{err}</div>
+            <div className="grid gap-5">
+                <section className="bg-zinc-900/98 border border-zinc-800 rounded-xl p-4 shadow-sm grid gap-3">
+                    <div className="p-4 text-center text-red-500 font-semibold text-sm">{err}</div>
                 </section>
             </div>
         );
     if (!ticket)
         return (
-            <div className={s.stack}>
-                <section className={s.panel}>
-                    <div className={s.emptyBox}>Không có dữ liệu.</div>
+            <div className="grid gap-5">
+                <section className="bg-zinc-900/98 border border-zinc-800 rounded-xl p-4 shadow-sm grid gap-3">
+                    <div className="p-4 text-center text-zinc-400">Không có dữ liệu.</div>
                 </section>
             </div>
         );
 
     return (
-        <div className={s.stack}>
-            <section className={s.panel}>
-                <div className={s.panelHead}>
-                    <h3>Chi tiết yêu cầu</h3>
+        <div className="grid gap-5">
+            <section className="bg-zinc-900/98 border border-zinc-800 rounded-xl p-4 shadow-sm grid gap-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <h3 className="m-0 text-base font-extrabold">Chi tiết yêu cầu</h3>
 
-                    <div
-                        className={s.actionsRight}
-                        style={{ display: "flex", gap: 8, alignItems: "center" }}
-                    >
+                    <div className="flex gap-2 items-center">
                         <button
-                            className={s.linkBtn}
+                            className="text-sm font-bold text-[#3f5f36] hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer"
                             onClick={() => router.push("/support-tickets")}
                         >
                             ← Quay lại
                         </button>
 
                         <button
-                            className={s.linkBtn}
+                            className="text-sm font-bold text-[#3f5f36] hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer"
                             onClick={() =>
                                 router.push(`/support-tickets/${ticket.ticketId}/edit`)
                             }
@@ -126,50 +122,20 @@ export default function SupportTicketDetailPage() {
                     </div>
                 </div>
 
-                <div
-                    style={{
-                        background: "white",
-                        borderRadius: 12,
-                        padding: 24,
-                        boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-                    }}
-                >
-                    <div
-                        style={{
-                            display: "flex",
-                            justifyContent: "space-between",
-                            alignItems: "center",
-                            marginBottom: 12,
-                            borderBottom: "1px solid #eee",
-                            paddingBottom: 10,
-                        }}
-                    >
+                <div className="bg-white rounded-xl p-6 shadow-sm">
+                    <div className="flex justify-between items-center mb-3 pb-3 border-b border-zinc-200">
                         <div>
-                            <h2
-                                style={{
-                                    margin: 0,
-                                    fontSize: 20,
-                                    fontWeight: 700,
-                                }}
-                            >
+                            <h2 className="m-0 text-xl font-bold">
                                 {ticket.title || `Phiếu hỗ trợ #${ticket.ticketId}`}
                             </h2>
-                            <div
-                                style={{ fontSize: 13, color: "#6b7280", marginTop: 2 }}
-                            >
+                            <div className="text-sm text-zinc-500 mt-0.5">
                                 Mã yêu cầu: #{ticket.ticketId}
                             </div>
                         </div>
                         <div>{renderStatusBadge(ticket.status)}</div>
                     </div>
 
-                    <div
-                        style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(2, minmax(0,1fr))",
-                            gap: "18px 32px",
-                        }}
-                    >
+                    <div className="grid grid-cols-2 gap-4 lg:gap-8">
                         <Field label="Mô tả">
                             {ticket.description && ticket.description.trim().length > 0
                                 ? ticket.description
@@ -243,21 +209,10 @@ function Field({
 }) {
     return (
         <div>
-            <div
-                style={{
-                    fontSize: 13,
-                    color: "#6b7280",
-                    marginBottom: 4,
-                }}
-            >
+            <div className="text-sm text-zinc-500 mb-1">
                 {label}
             </div>
-            <div
-                style={{
-                    fontSize: 15,
-                    fontWeight: 500,
-                }}
-            >
+            <div className="text-base font-medium">
                 {children}
             </div>
         </div>

@@ -6,6 +6,8 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useI18n } from "@/i18n/I18nProvider";
+import { getHomeStats, type HomeStatsResponse } from "@/lib/api-home";
+import { getPublishedPosts, type CommunityPostSummaryResponse } from "@/lib/api-community";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -27,6 +29,13 @@ type EventItem = {
   title: string;
   type: "Webinar" | "Release" | "Showcase";
   href: string;
+};
+
+const COMMUNITY_STATS_FALLBACK: HomeStatsResponse = {
+  organizationCount: 14820,
+  templateCount: 128,
+  totalMaps: 325,
+  monthlyExports: 42,
 };
 
 function Pill({ children }: { children: React.ReactNode }) {
@@ -71,6 +80,8 @@ export default function CommunityPage() {
   const [topic, setTopic] = useState<Topic>("All");
   const [email, setEmail] = useState<string>("");
   const cardsRef = useRef<HTMLDivElement>(null);
+  const [stats, setStats] = useState<HomeStatsResponse | null>(null);
+  const [posts, setPosts] = useState<CommunityPostSummaryResponse[] | null>(null);
 
   const TOPIC_LABEL: Record<Topic, string> = useMemo(
     () => ({
@@ -84,66 +95,23 @@ export default function CommunityPage() {
     [t]
   );
 
-  // Demo data có thể i18n trực tiếp bằng t() cho tiêu đề/đoạn trích
-  const POSTS: Post[] = useMemo(
-    () => [
-      {
-        id: "p1",
-        title: t("community", "post1_title"),
-        excerpt: t("community", "post1_excerpt"),
-        topic: "Education",
-        date: "Mar 12, 2025",
-        readMin: 6,
-        href: "/resources/blog/story-maps-field-trips",
-      },
-      {
-        id: "p2",
-        title: t("community", "post2_title"),
-        excerpt: t("community", "post2_excerpt"),
-        topic: "Tutorial",
-        date: "Mar 5, 2025",
-        readMin: 7,
-        href: "/resources/blog/vector-styling-pro",
-      },
-      {
-        id: "p3",
-        title: t("community", "post3_title"),
-        excerpt: t("community", "post3_excerpt"),
-        topic: "Product",
-        date: "Feb 27, 2025",
-        readMin: 5,
-        href: "/resources/blog/csv-to-map",
-      },
-      {
-        id: "p4",
-        title: t("community", "post4_title"),
-        excerpt: t("community", "post4_excerpt"),
-        topic: "Stories",
-        date: "Feb 19, 2025",
-        readMin: 8,
-        href: "/resources/blog/city-tree-inventory",
-      },
-      {
-        id: "p5",
-        title: t("community", "post5_title"),
-        excerpt: t("community", "post5_excerpt"),
-        topic: "Education",
-        date: "Feb 10, 2025",
-        readMin: 6,
-        href: "/resources/blog/teach-gis-templates",
-      },
-      {
-        id: "p6",
-        title: t("community", "post6_title"),
-        excerpt: t("community", "post6_excerpt"),
-        topic: "Product",
-        date: "Jan 30, 2025",
-        readMin: 5,
-        href: "/resources/blog/export-presets",
-      },
-    ],
-    [t]
-  );
+  const POSTS: Post[] = useMemo(() => {
+    if (!posts || posts.length === 0) return [];
+
+    return posts.map((p) => ({
+      id: p.id,
+      title: p.title,
+      excerpt: p.excerpt,
+      topic: (p.topic as Exclude<Topic, "All">) || "Education",
+      date: new Date(p.publishedAt).toLocaleDateString("vi-VN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      readMin: 6,
+      href: `/community/${p.slug}`,
+    }));
+  }, [posts]);
 
   const EVENTS: EventItem[] = useMemo(
     () => [
@@ -178,6 +146,42 @@ export default function CommunityPage() {
     () => (topic === "All" ? POSTS : POSTS.filter((p) => p.topic === topic)),
     [POSTS, topic]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getHomeStats()
+      .then((data) => {
+        if (!cancelled) {
+          setStats(data);
+        }
+      })
+      .catch(() => {
+        // giữ fallback nếu lỗi
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    getPublishedPosts(topic === "All" ? undefined : topic)
+      .then((data) => {
+        if (!cancelled) {
+          setPosts(data);
+        }
+      })
+      .catch(() => {
+        // nếu lỗi thì giữ rỗng, UI vẫn hoạt động
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [topic]);
 
   useLayoutEffect(() => {
     const prefersReduced =
@@ -255,10 +259,6 @@ export default function CommunityPage() {
   return (
     <main className="relative z-10 max-w-7xl mx-auto px-6 py-10 text-zinc-100">
       <section className="min-h-[30vh] md:min-h-[36vh] flex flex-col justify-end gap-4">
-        <Pill>
-          <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          {t("community", "pill")}
-        </Pill>
         <h1 className="cm-hero-title text-4xl md:text-6xl font-extrabold tracking-tight">
           {t("community", "hero_title")}
         </h1>
@@ -304,17 +304,19 @@ export default function CommunityPage() {
       </section>
 
       <section className="cm-fade mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Link
-          href={POSTS[0].href}
-          className="group col-span-2 rounded-2xl p-6 md:p-8 ring-1 ring-white/10 bg-gradient-to-br from-zinc-900/60 to-zinc-800/40 backdrop-blur hover:ring-emerald-400/30 transition"
-        >
-          <div className="text-sm text-emerald-400 font-semibold mb-2">{t("community", "featured")}</div>
-          <h2 className="text-2xl md:text-3xl font-bold group-hover:text-emerald-300 transition">{POSTS[0].title}</h2>
-          <p className="mt-2 text-zinc-300 max-w-2xl">{POSTS[0].excerpt}</p>
-          <div className="mt-4 text-xs text-zinc-400">
-            {POSTS[0].date} • {POSTS[0].readMin} {t("community", "minutes")} {t("community", "read")}
-          </div>
-        </Link>
+        {POSTS[0] && (
+          <Link
+            href={POSTS[0].href}
+            className="group col-span-2 rounded-2xl p-6 md:p-8 ring-1 ring-white/10 bg-gradient-to-br from-zinc-900/60 to-zinc-800/40 backdrop-blur hover:ring-emerald-400/30 transition"
+          >
+            <div className="text-sm text-emerald-400 font-semibold mb-2">{t("community", "featured")}</div>
+            <h2 className="text-2xl md:text-3xl font-bold group-hover:text-emerald-300 transition">{POSTS[0].title}</h2>
+            <p className="mt-2 text-zinc-300 max-w-2xl">{POSTS[0].excerpt}</p>
+            <div className="mt-4 text-xs text-zinc-400">
+              {POSTS[0].date} • {POSTS[0].readMin} {t("community", "minutes")} {t("community", "read")}
+            </div>
+          </Link>
+        )}
 
         <div className="rounded-2xl p-6 ring-1 ring-white/10 bg-white/5 backdrop-blur">
           <h3 className="font-semibold text-lg">{t("community", "nl_title")}</h3>
@@ -360,19 +362,31 @@ export default function CommunityPage() {
       <section className="cm-fade mt-12">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="rounded-2xl px-6 py-5 bg-white/5 ring-1 ring-white/10 text-center">
-            <CountUp value={14820} className="text-3xl font-extrabold tracking-tight" />
+            <CountUp
+              value={stats?.organizationCount ?? COMMUNITY_STATS_FALLBACK.organizationCount}
+              className="text-3xl font-extrabold tracking-tight"
+            />
             <p className="mt-1 text-sm text-zinc-300">{t("community", "stat_members")}</p>
           </div>
           <div className="rounded-2xl px-6 py-5 bg-white/5 ring-1 ring-white/10 text-center">
-            <CountUp value={325} className="text-3xl font-extrabold tracking-tight" />
+            <CountUp
+              value={stats?.totalMaps ?? COMMUNITY_STATS_FALLBACK.totalMaps}
+              className="text-3xl font-extrabold tracking-tight"
+            />
             <p className="mt-1 text-sm text-zinc-300">{t("community", "stat_posts")}</p>
           </div>
           <div className="rounded-2xl px-6 py-5 bg-white/5 ring-1 ring-white/10 text-center">
-            <CountUp value={128} className="text-3xl font-extrabold tracking-tight" />
+            <CountUp
+              value={stats?.templateCount ?? COMMUNITY_STATS_FALLBACK.templateCount}
+              className="text-3xl font-extrabold tracking-tight"
+            />
             <p className="mt-1 text-sm text-zinc-300">{t("community", "stat_templates")}</p>
           </div>
           <div className="rounded-2xl px-6 py-5 bg-white/5 ring-1 ring-white/10 text-center">
-            <CountUp value={42} className="text-3xl font-extrabold tracking-tight" />
+            <CountUp
+              value={stats?.monthlyExports ?? COMMUNITY_STATS_FALLBACK.monthlyExports}
+              className="text-3xl font-extrabold tracking-tight"
+            />
             <p className="mt-1 text-sm text-zinc-300">{t("community", "stat_collections")}</p>
           </div>
         </div>

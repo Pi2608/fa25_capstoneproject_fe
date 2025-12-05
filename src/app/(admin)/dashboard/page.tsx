@@ -1,7 +1,6 @@
 "use client";
 
 import { JSX, useEffect, useMemo, useState } from "react";
-import s from "../admin.module.css";
 import {
   adminGetSystemDashboard,
   adminGetTopUsers,
@@ -9,6 +8,8 @@ import {
   adminGetRevenueAnalytics,
   adminGetSystemUsage,
 } from "@/lib/admin-api";
+import { useTheme } from "../layout";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 type Raw = Record<string, unknown>;
 
@@ -131,6 +132,8 @@ function normalizeUsage(obj: Raw): UsageItem[] {
 }
 
 export default function AdminDashboard(): JSX.Element {
+  const { isDark } = useTheme();
+  const theme = getThemeClasses(isDark);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [topUsers, setTopUsers] = useState<TopUserRow[]>([]);
   const [topOrgs, setTopOrgs] = useState<TopOrgRow[]>([]);
@@ -234,36 +237,60 @@ export default function AdminDashboard(): JSX.Element {
   const spark = useMemo(() => buildSparkPath(revenue), [revenue]);
 
   return (
-    <div className={s.stack}>
-      <section className={s.kpis}>
-        <div className={s.kpi}>
-          <div className={s.kpiTop}><span>Total users</span></div>
-          <div className={s.kpiNum}>{loading ? "…" : (stats?.totalUsers ?? 0).toLocaleString()}</div>
-          <div className={s.kpiTrend}>{loading ? "" : toPct(stats ? stats.totalUsersChangePct : 0)}</div>
+    <div className="grid gap-5">
+      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
+          <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
+            <span>Total users</span>
+          </div>
+          <div className="text-2xl font-extrabold tracking-wide">
+            {loading ? "…" : (stats?.totalUsers ?? 0).toLocaleString()}
+          </div>
+          <div className="text-green-500 font-bold text-xs">
+            {loading ? "" : toPct(stats ? stats.totalUsersChangePct : 0)}
+          </div>
         </div>
-        <div className={s.kpi}>
-          <div className={s.kpiTop}><span>Active today</span></div>
-          <div className={s.kpiNum}>{loading ? "…" : (stats?.activeToday ?? 0).toLocaleString()}</div>
-          <div className={s.kpiTrend}>{loading ? "" : toPct(stats ? stats.activeTodayChangePct : 0)}</div>
+        <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
+          <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
+            <span>Active today</span>
+          </div>
+          <div className="text-2xl font-extrabold tracking-wide">
+            {loading ? "…" : (stats?.activeToday ?? 0).toLocaleString()}
+          </div>
+          <div className="text-green-500 font-bold text-xs">
+            {loading ? "" : toPct(stats ? stats.activeTodayChangePct : 0)}
+          </div>
         </div>
-        <div className={s.kpi}>
-          <div className={s.kpiTop}><span>New signups</span></div>
-          <div className={s.kpiNum}>{loading ? "…" : (stats?.newSignups ?? 0).toLocaleString()}</div>
-          <div className={s.kpiTrend}>{loading ? "" : toPct(stats ? stats.newSignupsChangePct : 0)}</div>
+        <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
+          <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
+            <span>New signups</span>
+          </div>
+          <div className="text-2xl font-extrabold tracking-wide">
+            {loading ? "…" : (stats?.newSignups ?? 0).toLocaleString()}
+          </div>
+          <div className="text-green-500 font-bold text-xs">
+            {loading ? "" : toPct(stats ? stats.newSignupsChangePct : 0)}
+          </div>
         </div>
-        <div className={s.kpi}>
-          <div className={s.kpiTop}><span>Errors (24h)</span></div>
-          <div className={s.kpiNum}>{loading ? "…" : (stats?.errors24h ?? 0).toLocaleString()}</div>
-          <div className={s.kpiTrend}>{loading ? "" : toPct(stats ? stats.errors24hChangePct : 0)}</div>
+        <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
+          <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
+            <span>Errors (24h)</span>
+        </div>
+          <div className="text-2xl font-extrabold tracking-wide">
+            {loading ? "…" : (stats?.errors24h ?? 0).toLocaleString()}
+        </div>
+          <div className="text-green-500 font-bold text-xs">
+            {loading ? "" : toPct(stats ? stats.errors24hChangePct : 0)}
+        </div>
         </div>
       </section>
 
-      <section className={s.panel}>
-        <div className={s.panelHead}>
-          <h3>Revenue analytics</h3>
-          <div className={s.filters}>
+      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="m-0 text-base font-extrabold">Revenue analytics</h3>
+          <div className="flex gap-2 flex-wrap">
             <select
-              className={s.select}
+              className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 ${theme.select}`}
               value={revRange}
               onChange={(e) => setRevRange(e.target.value as "7d" | "30d")}
             >
@@ -272,7 +299,7 @@ export default function AdminDashboard(): JSX.Element {
             </select>
           </div>
         </div>
-        <div className={s.chartPlaceholder} style={{ height: 240 }}>
+        <div className={`h-[240px] border border-dashed ${theme.tableBorder} rounded-xl grid place-items-center ${theme.textMuted}`}>
           {revenue.length === 0 ? (
             "No data"
           ) : (
@@ -283,35 +310,50 @@ export default function AdminDashboard(): JSX.Element {
         </div>
       </section>
 
-      <section className={s.panel}>
-        <div className={s.panelHead}>
-          <h3>Top accounts</h3>
-          <div className={s.filters}>
+      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="m-0 text-base font-extrabold">Top accounts</h3>
+          <div className="flex gap-2 flex-wrap">
             <input
-              className={s.input}
+              className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 min-w-[160px] ${theme.input}`}
               placeholder="Search account…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
         </div>
-        <div className={s.tableWrap}>
-          <table className={s.table}>
+        <div className={`overflow-auto border ${theme.tableBorder} rounded-lg mt-2`}>
+          <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
-                <th>User</th><th>Email</th><th>Total maps</th><th>Total exports</th><th>Total spent</th><th>Last active</th><th></th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>User</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Email</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Total maps</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Total exports</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Total spent</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Last active</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}></th>
               </tr>
             </thead>
             <tbody>
               {(filteredTopUsers.length ? filteredTopUsers : Array.from({ length: 8 }).map(() => null)).map((row, i) => (
                 <tr key={i}>
-                  <td>{row ? row.userName : "…"}</td>
-                  <td>{row ? row.email : "…"}</td>
-                  <td>{row ? row.totalMaps.toLocaleString() : "…"}</td>
-                  <td>{row ? row.totalExports.toLocaleString() : "…"}</td>
-                  <td>{row ? formatMoney(row.totalSpent) : "…"}</td>
-                  <td>{row ? formatDateTime(row.lastActive) : "…"}</td>
-                  <td><button className={s.linkBtn} disabled={!row}>View</button></td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.userName : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.email : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.totalMaps.toLocaleString() : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.totalExports.toLocaleString() : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? formatMoney(row.totalSpent) : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? formatDateTime(row.lastActive) : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    <button
+                      className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50 ${
+                        isDark ? "text-[#3f5f36]" : "text-blue-600"
+                      }`}
+                      disabled={!row}
+                    >
+                      View
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -319,25 +361,38 @@ export default function AdminDashboard(): JSX.Element {
         </div>
       </section>
 
-      <section className={s.panel}>
-        <div className={s.panelHead}>
-          <h3>Top organizations</h3>
+      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="m-0 text-base font-extrabold">Top organizations</h3>
         </div>
-        <div className={s.tableWrap}>
-          <table className={s.table}>
+        <div className={`overflow-auto border ${theme.tableBorder} rounded-lg mt-2`}>
+          <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
-                <th>Name</th><th>Owner</th><th>Members</th><th>Created</th><th></th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Name</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Owner</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Members</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Created</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}></th>
               </tr>
             </thead>
             <tbody>
               {(topOrgs.length ? topOrgs : Array.from({ length: 8 }).map(() => null)).map((row, i) => (
                 <tr key={i}>
-                  <td>{row ? row.name : "…"}</td>
-                  <td>{row ? row.owner : "…"}</td>
-                  <td>{row ? row.members : "…"}</td>
-                  <td>{row ? row.created : "…"}</td>
-                  <td><button className={s.linkBtn} disabled={!row}>View</button></td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.name : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.owner : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.members : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.created : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    <button
+                      className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50 ${
+                        isDark ? "text-[#3f5f36]" : "text-blue-600"
+                      }`}
+                      disabled={!row}
+                    >
+                      View
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -345,20 +400,23 @@ export default function AdminDashboard(): JSX.Element {
         </div>
       </section>
 
-      <section className={s.panel}>
-        <div className={s.panelHead}>
-          <h3>System usage</h3>
+      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="m-0 text-base font-extrabold">System usage</h3>
         </div>
-        <div className={s.tableWrap}>
-          <table className={s.table}>
+        <div className={`overflow-auto border ${theme.tableBorder} rounded-lg mt-2`}>
+          <table className="w-full border-collapse text-sm">
             <thead>
-              <tr><th>Metric</th><th>Value</th></tr>
+              <tr>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Metric</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Value</th>
+              </tr>
             </thead>
             <tbody>
               {(usage.length ? usage : Array.from({ length: 4 }).map(() => null)).map((u, i) => (
                 <tr key={i}>
-                  <td>{u ? u.label : "…"}</td>
-                  <td>{u ? u.value : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{u ? u.label : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{u ? u.value : "…"}</td>
                 </tr>
               ))}
             </tbody>

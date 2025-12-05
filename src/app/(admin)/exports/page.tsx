@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import s from "../admin.module.css";
 
 type Row = {
   id: string;
@@ -53,32 +52,32 @@ export default function ExportsPage() {
   };
 
   return (
-    <main className={s.stack}>
-      <section className={s.panel}>
-        <div className={s.panelHead}>
+    <main className="p-5">
+      <section className="bg-zinc-900/50 p-6 rounded-lg">
+        <div className="flex items-center justify-between mb-6">
           <h3>Exports</h3>
-          <div className={s.filters}>
+          <div className="flex items-center gap-2">
             <input
-              className={s.input}
+              className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors"
               placeholder="Search file or user…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
             />
-            <select className={s.select} value={kind} onChange={handleKindChange}>
+            <select className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors" value={kind} onChange={handleKindChange}>
               <option>All</option>
               <option>PDF</option>
               <option>PNG</option>
               <option>GeoJSON</option>
               <option>CSV</option>
             </select>
-            <select className={s.select} value={status} onChange={handleStatusChange}>
+            <select className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors" value={status} onChange={handleStatusChange}>
               <option>All</option>
               <option>Completed</option>
               <option>Processing</option>
               <option>Failed</option>
             </select>
             <button
-              className={s.primary}
+              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
               disabled={!Object.values(checked).some(Boolean)}
               onClick={() => {
                 setRows((prev) => prev.filter((r) => !checked[r.id]));
@@ -90,8 +89,8 @@ export default function ExportsPage() {
           </div>
         </div>
 
-        <div className={s.tableWrap}>
-          <table className={s.table}>
+          <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-zinc-800">
             <thead>
               <tr>
                 <th>
@@ -134,14 +133,14 @@ export default function ExportsPage() {
                   <td>{r.createdAt}</td>
                   <td>
                     {r.status === "Completed" && (
-                      <span className={s.badgeSuccess}>Completed</span>
+                      <span className="px-2 py-1 rounded-md bg-green-500/10 text-green-500">Completed</span>
                     )}
                     {r.status === "Processing" && (
-                      <span className={s.badgeWarn}>Processing</span>
+                      <span className="px-2 py-1 rounded-md bg-yellow-500/10 text-yellow-500">Processing</span>
                     )}
                     {r.status === "Failed" && (
                       <span
-                        className={s.badgeWarn}
+                        className="px-2 py-1 rounded-md bg-red-500/10 text-red-500"
                         style={{
                           color: "#ef4444",
                           background:
@@ -152,15 +151,15 @@ export default function ExportsPage() {
                       </span>
                     )}
                   </td>
-                  <td className={s.rowActions}>
-                    <button className={s.linkBtn}>View</button>
+                  <td className="flex items-center gap-2">
+                    <button className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors">View</button>
                     {r.status === "Completed" && (
-                      <a className={s.linkBtn} href="#" download>
+                      <a className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors" href="#" download>
                         Download
                       </a>
                     )}
                     <button
-                      className={s.linkBtn}
+                      className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors"
                       onClick={() =>
                         setRows((prev) => prev.filter((x) => x.id !== r.id))
                       }
@@ -181,14 +180,14 @@ export default function ExportsPage() {
           </table>
         </div>
 
-        <div className={s.pagination}>
-          <button className={s.pageBtn}>Prev</button>
-          <div className={s.pageDots}>
+        <div className="flex items-center justify-center gap-2 mt-4">
+          <button className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors">Prev</button>
+          <div className="flex items-center gap-2">
             <b>1</b>
             <span>2</span>
             <span>3</span>…<span>10</span>
           </div>
-          <button className={s.pageBtn}>Next</button>
+          <button className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors">Next</button>
         </div>
       </section>
     </main>

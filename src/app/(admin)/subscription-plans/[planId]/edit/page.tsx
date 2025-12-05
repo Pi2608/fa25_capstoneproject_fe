@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import s from "@/app/(admin)/admin.module.css";
 import {
   adminGetSubscriptionPlanById,
   adminUpdateSubscriptionPlan,
@@ -67,8 +66,8 @@ export default function EditPlanPage() {
 
   if (loading)
     return (
-      <div className={s.stack}>
-        <section className={s.panel}>
+      <div className="p-5">
+        <section className="bg-zinc-900/50 p-6 rounded-lg">
           <p>Đang tải dữ liệu...</p>
         </section>
       </div>
@@ -76,42 +75,40 @@ export default function EditPlanPage() {
 
   if (!form)
     return (
-      <div className={s.stack}>
-        <section className={s.panel}>
+      <div className="p-5">
+        <section className="bg-zinc-900/50 p-6 rounded-lg">
           <p>Không tìm thấy gói đăng ký.</p>
         </section>
       </div>
     );
 
   return (
-    <div className={s.stack}>
-      <section className={s.panel}>
-        <div className={s.panelHead}>
+    <div className="p-5">
+      <section className="bg-zinc-900/50 p-6 rounded-lg">
+        <div className="flex items-center justify-between mb-6">
           <h3>
             Chỉnh sửa gói:{" "}
             <span style={{ color: "#2563eb" }}>{form.name}</span>
           </h3>
         </div>
 
-        {error && <div className={s.errorBox}>{error}</div>}
+        {error && <div className="p-4 mb-4 rounded-lg border border-red-300 bg-red-50 text-red-700">{error}</div>}
 
         <div
           style={{
             display: "grid",
             gap: 24,
             padding: "24px 28px 40px",
-            background: "#fff",
+            background: "#070b0b",
             borderRadius: 16,
             boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
           }}
         >
-          <div style={{ display: "grid", gap: 16 }}>
-            <label
-              style={{ display: "flex", flexDirection: "column", gap: 6 }}
-            >
-              <span className={s.formLabel}>Tên gói</span>
+          <div className="grid gap-4">
+            <label className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-zinc-300">Tên gói</span>
               <input
-                className={s.input}
+                className="w-full px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors"
                 value={form.name}
                 onChange={(e) =>
                   setForm({ ...form, name: e.target.value })
@@ -121,11 +118,11 @@ export default function EditPlanPage() {
             </label>
 
             <label
-              style={{ display: "flex", flexDirection: "column", gap: 6 }}
+              className="flex flex-col gap-2"
             >
-              <span className={s.formLabel}>Mô tả</span>
+              <span className="text-sm font-medium text-zinc-300">Mô tả</span>
               <textarea
-                className={s.input}
+                className="w-full px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors"
                 rows={4}
                 style={{
                   resize: "vertical",
@@ -167,9 +164,9 @@ export default function EditPlanPage() {
                   gap: 6,
                 }}
               >
-                <span className={s.formLabel}>Giá / tháng (USD)</span>
+                <span className="text-sm font-medium text-zinc-300">Giá / tháng (USD)</span>
                 <input
-                  className={s.input}
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors"
                   type="number"
                   value={form.priceMonthly}
                   onChange={(e) =>
@@ -180,7 +177,7 @@ export default function EditPlanPage() {
                   }
                   min={0}
                 />
-                <small className={s.muted}>
+                <small className="text-zinc-400 text-sm">
                   Ví dụ: 29.99 = $29.99 / tháng
                 </small>
               </label>
@@ -192,9 +189,9 @@ export default function EditPlanPage() {
                   gap: 6,
                 }}
               >
-                <span className={s.formLabel}>Giá / năm (USD)</span>
+                <span className="text-sm font-medium text-zinc-300">Giá / năm (USD)</span>
                 <input
-                  className={s.input}
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors"
                   type="number"
                   value={form.priceYearly}
                   onChange={(e) =>
@@ -205,7 +202,7 @@ export default function EditPlanPage() {
                   }
                   min={0}
                 />
-                <small className={s.muted}>
+                <small className="text-zinc-400 text-sm">
                   Ví dụ: 99.99 = $99.99 / năm
                 </small>
               </label>
@@ -239,9 +236,9 @@ export default function EditPlanPage() {
                   gap: 6,
                 }}
               >
-                <span className={s.formLabel}>Giới hạn bản đồ</span>
+                <span className="text-sm font-medium text-zinc-300">Giới hạn bản đồ</span>
                 <input
-                  className={s.input}
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors"
                   type="number"
                   value={form.mapsLimit}
                   onChange={(e) =>
@@ -260,9 +257,9 @@ export default function EditPlanPage() {
                   gap: 6,
                 }}
               >
-                <span className={s.formLabel}>Giới hạn xuất file</span>
+                <span className="text-sm font-medium text-zinc-300">Giới hạn xuất file</span>
                 <input
-                  className={s.input}
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors"
                   type="number"
                   value={form.exportsLimit}
                   onChange={(e) =>
@@ -281,9 +278,9 @@ export default function EditPlanPage() {
                   gap: 6,
                 }}
               >
-                <span className={s.formLabel}>Layer tùy chỉnh</span>
+                  <span className="text-sm font-medium text-zinc-300">Layer tùy chỉnh</span>
                 <input
-                  className={s.input}
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors"
                   type="number"
                   value={form.customLayersLimit}
                   onChange={(e) =>
@@ -302,9 +299,9 @@ export default function EditPlanPage() {
                   gap: 6,
                 }}
               >
-                <span className={s.formLabel}>Token / tháng</span>
+                <span className="text-sm font-medium text-zinc-300">Token / tháng</span>
                 <input
-                  className={s.input}
+                  className="w-full px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors"
                   type="number"
                   value={form.monthlyTokenLimit}
                   onChange={(e) =>
@@ -392,7 +389,7 @@ export default function EditPlanPage() {
             }}
           >
             <button
-              className={s.ghostBtn}
+              className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors"
               onClick={() => router.back()}
               disabled={saving}
             >
@@ -400,7 +397,7 @@ export default function EditPlanPage() {
             </button>
 
             <button
-              className={s.primaryBtn}
+              className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors"
               onClick={handleSave}
               disabled={saving}
             >
