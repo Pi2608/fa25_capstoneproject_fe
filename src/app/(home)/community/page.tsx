@@ -7,7 +7,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useI18n } from "@/i18n/I18nProvider";
 import { getHomeStats, type HomeStatsResponse } from "@/lib/api-home";
-import { getPublishedPosts, type CommunityPostSummaryResponse } from "@/lib/api-community";
+import { getCommunityPosts, type CommunityPostSummaryResponse } from "@/lib/api-community";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -103,7 +103,7 @@ export default function CommunityPage() {
       title: p.title,
       excerpt: p.excerpt,
       topic: (p.topic as Exclude<Topic, "All">) || "Education",
-      date: new Date(p.publishedAt).toLocaleDateString("vi-VN", {
+      date: new Date(p.publishedAt ?? "").toLocaleDateString("vi-VN", {
         day: "2-digit",
         month: "short",
         year: "numeric",
@@ -168,7 +168,7 @@ export default function CommunityPage() {
   useEffect(() => {
     let cancelled = false;
 
-    getPublishedPosts(topic === "All" ? undefined : topic)
+    getCommunityPosts(topic === "All" ? undefined : topic)
       .then((data) => {
         if (!cancelled) {
           setPosts(data);

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import GalleryClient, { MapItem } from "./GalleryClient";
-import { getPublishedMaps, type MapGallerySummaryResponse } from "@/lib/api-map-gallery";
+import GalleryClient from "./GalleryClient";
+import { MapGallerySummaryResponse } from "@/lib/api-map-gallery";
 
 export const metadata: Metadata = {
   title: "Map Gallery — IMOS",
@@ -17,25 +17,58 @@ function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-function mapApiResponseToMapItem(response: MapGallerySummaryResponse): MapItem {
-  return {
-    id: response.id,
-    title: response.mapName,
-    author: response.authorName || "Unknown",
-    tags: response.tags || [],
-    views: response.viewCount || 0,
-    likes: response.likeCount || 0,
-    updated: response.publishedAt || response.createdAt,
-    href: `/maps/${response.mapId}`,
-    duplicateHref: `/templates/duplicate?src=${response.mapId}`,
-  };
-}
+const MAPS: MapGallerySummaryResponse[] = [
+  {
+    id: "story-maps-history",
+    mapId: "story-maps-history",
+    mapName: "Vietnam History Story Map",
+    description: "A story map of Vietnam's history",
+    previewImage: "/images/story-maps-history.png",
+    category: "education",
+    tags: ["Education", "History", "Story Maps"],
+    authorName: "Lan Pham",
+    status: "approved",
+    isFeatured: true,
+    viewCount: 2540,
+    likeCount: 188,
+    createdAt: "2025-08-21",
+    publishedAt: "2025-08-21",
+  },
+  {
+    id: "urban-green-space",
+    mapId: "urban-green-space",
+    mapName: "Urban Green Space Access",
+    description: "A map of urban green space access",
+    previewImage: "/images/urban-green-space.png",
+    category: "education",
+    tags: ["Urban", "Environment"],
+    authorName: "Minh Tran",
+    status: "approved",
+    isFeatured: true,
+    viewCount: 1320,
+    likeCount: 96,
+    createdAt: "2025-07-12",
+    publishedAt: "2025-07-12",
+  },
+  {
+    id: "disaster-response-flood",
+    mapId: "disaster-response-flood",
+    mapName: "Flood Response – Evacuation Zones",
+    description: "A map of flood response evacuation zones",
+    previewImage: "/images/disaster-response-flood.png",
+    category: "education",
+    tags: ["Disaster", "Zones"],
+    authorName: "Quang Nguyen",
+    status: "approved",
+    isFeatured: true,
+    viewCount: 3110,
+    likeCount: 241,
+    createdAt: "2025-06-30",
+    publishedAt: "2025-06-30",
+  },
+];
 
-export default async function MapGalleryPage() {
-  let maps: MapItem[] = [];
-  const apiMaps = await getPublishedMaps();
-  maps = apiMaps.map(mapApiResponseToMapItem);
-
+export default function MapGalleryPage() {
   return (
     <main className="mx-auto max-w-7xl px-6 py-12 text-zinc-100">
       <section className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
@@ -68,7 +101,7 @@ export default async function MapGalleryPage() {
       </section>
 
       <section id="gallery" className="mt-10">
-        <GalleryClient maps={maps} />
+        <GalleryClient />
       </section>
     </main>
   );

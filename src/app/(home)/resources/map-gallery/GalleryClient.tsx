@@ -16,11 +16,6 @@ import {
 
 gsap.registerPlugin(ScrollTrigger);
 
-type MapItem = MapGallerySummaryResponse & {
-  href: string;
-  duplicateHref: string;
-};
-
 type GalleryMapDetail = MapGalleryDetailResponse;
 
 function EyeIcon(props: React.SVGProps<SVGSVGElement>) {
@@ -101,9 +96,8 @@ const CATEGORY_BY_TAG: Record<TagKey, MapGalleryCategory | undefined> = {
 
 export default function GalleryClient() {
   const { t } = useI18n();
-  const tr = (k: string) => t("gallery", k);
 
-  const [maps, setMaps] = useState<MapItem[]>([]);
+  const [maps, setMaps] = useState<MapGallerySummaryResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -141,13 +135,7 @@ export default function GalleryClient() {
 
         if (!isMounted) return;
 
-        const mapped: MapItem[] = data.map((m: MapGallerySummaryResponse) => ({
-          ...m,
-          href: `/maps/${m.mapId}`,
-          duplicateHref: `/maps/${m.mapId}/duplicate`,
-        }));
-
-        setMaps(mapped);
+        setMaps(data);
       } catch (err: any) {
         if (!isMounted) return;
         setLoadError(err?.message || "Failed to load gallery maps");
@@ -340,8 +328,8 @@ export default function GalleryClient() {
   }, [pageItems, tagKey, sort, q, page, featuredOnly]);
 
   const renderTagFilterLabel = (key: TagKey) => {
-    if (key === "All") return tr("tag_All");
-    return tr(`category_${key}`);
+    if (key === "All") return t("gallery.tag_All");
+    return t(`gallery.category_${key}`);
   };
 
   return (
@@ -349,13 +337,13 @@ export default function GalleryClient() {
       <section className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
         <div className="relative z-10">
           <p className="gal-hero-eyebrow text-sm tracking-wide text-emerald-300/90">
-            {tr("hero_eyebrow")}
+            {t("gallery.hero_eyebrow")}
           </p>
           <h1 className="gal-hero-title mt-2 text-3xl font-semibold sm:text-4xl">
-            {tr("hero_title")}
+            {t("gallery.hero_title")}
           </h1>
           <p className="gal-hero-sub mt-3 max-w-2xl text-zinc-300">
-            {tr("hero_sub")}
+            {t("gallery.hero_sub")}
           </p>
         </div>
         <div className="pointer-events-none absolute -left-32 -top-24 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl" />
@@ -370,7 +358,7 @@ export default function GalleryClient() {
                 ref={inputRef}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder={tr("search_placeholder")}
+                placeholder={t("gallery.search_placeholder")}
                 className="w-full rounded-xl bg-zinc-900/70 ring-1 ring-white/10 px-4 py-2.5 pr-24 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:ring-emerald-400/50"
               />
               <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-zinc-400">
@@ -385,9 +373,9 @@ export default function GalleryClient() {
               onChange={(e) => setSort(e.target.value as SortKey)}
               className="w-full rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2.5 text-sm outline-none focus:border-emerald-400/60"
             >
-              <option value="popular">{tr("sort_popular")}</option>
-              <option value="newest">{tr("sort_newest")}</option>
-              <option value="likes">{tr("sort_likes")}</option>
+              <option value="popular">{t("gallery.sort_popular")}</option>
+              <option value="newest">{t("gallery.sort_newest")}</option>
+              <option value="likes">{t("gallery.sort_likes")}</option>
             </select>
           </div>
 
@@ -399,9 +387,9 @@ export default function GalleryClient() {
               }
               className="w-full rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2.5 text-sm outline-none focus:border-emerald-400/60"
             >
-              <option value={12}>{tr("page_size")}: 12</option>
-              <option value={18}>{tr("page_size")}: 18</option>
-              <option value={24}>{tr("page_size")}: 24</option>
+                <option value={12}>{t("gallery.page_size")}: 12</option>
+              <option value={18}>{t("gallery.page_size")}: 18</option>
+              <option value={24}>{t("gallery.page_size")}: 24</option>
             </select>
           </div>
         </div>
@@ -414,7 +402,7 @@ export default function GalleryClient() {
               onChange={(e) => setFeaturedOnly(e.target.checked)}
               className="h-4 w-4 rounded border-zinc-600 bg-zinc-900"
             />
-            <span>{tr("featured_only")}</span>
+            <span>{t("gallery.featured_only")}</span>
           </label>
         </div>
 
@@ -437,13 +425,13 @@ export default function GalleryClient() {
 
         <div className="gal-meta mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-400 opacity-0 translate-y-[16px]">
           <span>
-            {sorted.length} {tr("results")} • {tr("showing")} “
+            {sorted.length} {t("gallery.results")} • {t("gallery.showing")} “
             {renderTagFilterLabel(tagKey)}”
-            {q ? ` • ${tr("searching_for")} “${q}”` : ""}
-            {featuredOnly ? ` • ${tr("featured_badge")}` : ""}
+            {q ? ` • ${t("gallery.searching_for")} “${q}”` : ""}
+            {featuredOnly ? ` • ${t("gallery.featured_badge")}` : ""}
           </span>
           <span className="rounded bg-white/5 px-2 py-0.5 ring-1 ring-white/10">
-            {sorted.length ? `${from}–${to}` : "0–0"} {tr("of")}{" "}
+            {sorted.length ? `${from}–${to}` : "0–0"} {t("gallery.of")}{" "}
             {sorted.length}
           </span>
         </div>
@@ -461,8 +449,8 @@ export default function GalleryClient() {
         </section>
       ) : pageItems.length === 0 ? (
         <section className="mt-8 rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-8 text-center">
-          <div className="text-lg font-medium">{tr("empty_title")}</div>
-          <p className="mt-1 text-sm text-zinc-400">{tr("empty_sub")}</p>
+          <div className="text-lg font-medium">{t("gallery.empty_title")}</div>
+          <p className="mt-1 text-sm text-zinc-400">{t("gallery.empty_sub")}</p>
           <div className="mt-4">
             <button
               onClick={() => {
@@ -473,7 +461,7 @@ export default function GalleryClient() {
               }}
               className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
             >
-              {tr("reset_filters")}
+              {t("gallery.reset_filters")}
             </button>
           </div>
         </section>
@@ -501,14 +489,14 @@ export default function GalleryClient() {
                   {m.mapName}
                 </h3>
                 <div className="mt-1 text-xs text-zinc-400">
-                  {tr("by")} {m.authorName} • {tr("updated")}{" "}
+                  {t("gallery.by")} {m.authorName} • {t("gallery.updated")}{" "}
                   {new Date(m.publishedAt ?? m.createdAt).toLocaleDateString()}
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <TagPill>{tr(`category_${m.category}`)}</TagPill>
+                  <TagPill>{t(`gallery.category_${m.category}`)}</TagPill>
                   {m.isFeatured && (
-                    <TagPill>{tr("featured_badge")}</TagPill>
+                    <TagPill>{t("gallery.featured_badge")}</TagPill>
                   )}
                   {m.tags.map((t) => (
                     <TagPill key={t}>{t}</TagPill>
@@ -528,17 +516,17 @@ export default function GalleryClient() {
 
                 <div className="mt-4 flex flex-wrap gap-3">
                   <Link
-                    href={m.href}
+                    href={`/maps/${m.mapId}`}
                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
                   >
-                    {tr("view_map")}
+                      {t("gallery.view_map")}
                   </Link>
                   <Link
-                    href={m.duplicateHref}
+                    href={`/maps/${m.mapId}/duplicate`}
                     className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-3 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70"
                   >
                     <CopyIcon className="h-4 w-4" />
-                    {tr("duplicate")}
+                    {t("gallery.duplicate")}
                   </Link>
                   <button
                     type="button"
@@ -554,8 +542,8 @@ export default function GalleryClient() {
 
           <section className="mt-6 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <div className="text-xs text-zinc-400">
-              {sorted.length ? `${from}–${to}` : "0–0"} {tr("of")}{" "}
-              {sorted.length} • {tr("page")} {Math.min(page, totalPages)} /{" "}
+              {sorted.length ? `${from}–${to}` : "0–0"} {t("gallery.of")}{" "}
+              {sorted.length} • {t("gallery.page")} {Math.min(page, totalPages)} /{" "}
               {totalPages}
             </div>
             <div className="flex items-center gap-2">
@@ -568,7 +556,7 @@ export default function GalleryClient() {
                     : "ring-white/15 hover:bg-white/5"
                 }`}
               >
-                {tr("prev")}
+                {t("gallery.prev")}
               </button>
 
               <div className="hidden items-center gap-1 sm:flex">
@@ -602,7 +590,7 @@ export default function GalleryClient() {
                     : "ring-white/15 hover:bg-white/5"
                 }`}
               >
-                {tr("next")}
+                {t("gallery.next")}
               </button>
             </div>
           </section>
@@ -638,9 +626,9 @@ export default function GalleryClient() {
                   {detail.description}
                 </p>
                 <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                  <TagPill>{tr(`category_${detail.category}`)}</TagPill>
+                  <TagPill>{t(`gallery.category_${detail.category}`)}</TagPill>
                   {detail.isFeatured && (
-                    <TagPill>{tr("featured_badge")}</TagPill>
+                    <TagPill>{t("gallery.featured_badge")}</TagPill>
                   )}
                   {detail.tags.map((t) => (
                     <TagPill key={t}>{t}</TagPill>
@@ -687,21 +675,21 @@ export default function GalleryClient() {
       <section className="gal-cta mt-10 opacity-0 translate-y-[16px] overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent p-6 ring-1 ring-emerald-500/10">
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <h3 className="text-xl font-semibold">{tr("cta_title")}</h3>
-            <p className="mt-1 text-zinc-300">{tr("cta_sub")}</p>
+            <h3 className="text-xl font-semibold">{t("gallery.cta_title")}</h3>
+            <p className="mt-1 text-zinc-300">{t("gallery.cta_sub")}</p>
           </div>
           <div className="flex gap-3">
             <Link
               href="/resources/map-gallery/submit"
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400"
             >
-              {tr("cta_submit")} <ArrowRightIcon className="h-4 w-4" />
+              {t("gallery.cta_submit")} <ArrowRightIcon className="h-4 w-4" />
             </Link>
             <Link
               href="/resources/blog"
               className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70"
             >
-              {tr("cta_blog")}
+              {t("gallery.cta_blog")}
             </Link>
           </div>
         </div>
