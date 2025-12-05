@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, notFound } from "next/navigation";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { Workspace } from "@/types/workspace";
@@ -361,6 +361,11 @@ export default function OrgDetailPage() {
         setWorkspaces(workspacesData);
       } catch (e) {
         if (!alive) return;
+        // Check if organization not found (404)
+        if (e && typeof e === "object" && "status" in e && (e as { status?: number }).status === 404) {
+          notFound();
+          return;
+        }
         setErr(safeMessage(e, t("org_detail.load_failed")));
       } finally {
         if (alive) setLoading(false);
@@ -423,7 +428,7 @@ export default function OrgDetailPage() {
       setInviteInput("");
       await refreshMembers();
     } catch (e) {
-      setInviteMsg(safeMessage(e, t("org_detail.action_failed")));
+      setInviteMsg(userMessage(e, t));
     } finally {
       setInviteBusy(false);
     }
@@ -443,7 +448,7 @@ export default function OrgDetailPage() {
       } else {
         window.dispatchEvent(new Event("auth-changed"));
       }
-      router.push("/profile");
+      router.push("/profile/information");
     } catch (e) {
       setDeleteErr(safeMessage(e, t("org_detail.delete_failed")));
     } finally {
@@ -532,7 +537,7 @@ export default function OrgDetailPage() {
         await refreshMembers();
         setInviteMsg(t("org_detail.msg_member_removed"));
       } catch (e) {
-        setInviteMsg(safeMessage(e, t("org_detail.action_failed")));
+        setInviteMsg(safeMessage(e, t("org_detail.err_already_member")));
       } finally {
         setRemoveBusyId(null);
         setOpenMemberMenu(null);
@@ -741,13 +746,17 @@ export default function OrgDetailPage() {
       <div className="flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-2">
           <h1 className={`text-2xl sm:text-3xl font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{org.orgName}</h1>
-          <span className={`text-xs rounded-full px-2 py-1 ${
-            isDark 
-              ? "text-zinc-400 bg-emerald-500/20" 
-              : "text-gray-600 bg-emerald-100"
-          }`}>
-            <h3 className={`text-sm font-semibold ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>{membership?.planName}</h3>
-          </span>
+          {membership?.planName ? 
+            <span className={`text-xs rounded-full px-2 py-1 ${
+              isDark 
+                ? "text-zinc-400 bg-emerald-500/20" 
+                : "text-gray-600 bg-emerald-100"
+            }`}>
+              <h3 className={`text-sm font-semibold ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>{membership.planName}</h3>
+            </span>
+            :
+            <></>
+          }
         </div>
 
         <div className="flex items-center gap-2 relative">
