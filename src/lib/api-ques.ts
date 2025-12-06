@@ -326,6 +326,14 @@ export type SessionStatus =
   | "CANCELLED"
   | string;
 
+export interface SessionQuestionBankDto {
+  questionBankId: string;
+  questionBankName: string;
+  description: string | null;
+  category: string;
+  totalQuestions: number;
+  attachedAt: string;
+}
 
 export interface SessionDto {
   sessionId: string;
@@ -333,8 +341,11 @@ export interface SessionDto {
   // Map & question bank
   mapId?: string | null;
   mapName?: string | null;
+
   questionBankId?: string | null;
   questionBankName?: string | null;
+
+  questionBanks?: SessionQuestionBankDto[];
 
   // Host
   hostUserId?: string | null;
@@ -369,7 +380,7 @@ export interface SessionDto {
 
 export interface CreateSessionRequest {
   mapId: string;
-  questionBankId?: string | null;
+  questionBankId?: string[] | null;
   sessionName?: string;
   description?: string | null;
   sessionType?: "live" | "practice" | string;
@@ -391,7 +402,10 @@ export async function createSession(
 
   const baseBody = {
     mapId: req.mapId,
-    questionBankId: req.questionBankId ?? null,
+    questionBankId:
+      req.questionBankId && req.questionBankId.length > 0
+        ? req.questionBankId
+        : null,
     sessionName: req.sessionName ?? "New session",
     description: req.description ?? null,
     sessionType: req.sessionType ?? "live",
@@ -521,19 +535,21 @@ export async function leaveSession(participantId: string) {
 // ---------- Leaderboard ----------
 
 export interface LeaderboardEntryDto {
-  participantId: string;
+  sessionParticipantId?: string;
+
+  participantId?: string;
+
   displayName: string;
-  score: number;
+
+  score?: number;
+  totalScore?: number;
+  totalCorrect?: number;
+  totalAnswered?: number;
+  averageResponseTime?: number;
+  isCurrentUser?: boolean;
+
   rank?: number;
 }
-
-export interface LeaderboardEntryDto {
-  participantId: string;
-  displayName: string;
-  score: number;
-  rank?: number;
-}
-
 export interface SessionLeaderboardResponse {
   sessionId: string;
   leaderboard: LeaderboardEntryDto[];
@@ -860,6 +876,38 @@ export async function getMapPinsData(
 ): Promise<MapPinsDataDto> {
   const res = await getJson<MapPinsDataDto>(
     `/sessions/questions/${sessionQuestionId}/map-pins`
+  );
+  return res;
+}
+
+// Question Responses (detailed per-student)
+export interface QuestionResponseEntryDto {
+  studentResponseId: string;
+  participantId: string;
+  displayName: string;
+  isCorrect: boolean;
+  pointsEarned: number;
+  responseTimeSeconds: number;
+  submittedAt: string;
+  questionOptionId?: string | null;
+  optionText?: string | null;
+  responseText?: string | null;
+  responseLatitude?: number | null;
+  responseLongitude?: number | null;
+  distanceErrorMeters?: number | null;
+}
+
+export interface SessionQuestionResponsesDto {
+  sessionQuestionId: string;
+  totalResponses: number;
+  answers: QuestionResponseEntryDto[];
+}
+
+export async function getSessionQuestionResponses(
+  sessionQuestionId: string
+): Promise<SessionQuestionResponsesDto> {
+  const res = await getJson<SessionQuestionResponsesDto>(
+    `/sessions/questions/${sessionQuestionId}/responses`
   );
   return res;
 }

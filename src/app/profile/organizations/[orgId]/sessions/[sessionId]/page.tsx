@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getSession, type SessionDto } from "@/lib/api-ques";
+import {
+  getSession,
+  getSessionLeaderboard,
+  type SessionDto,
+  type LeaderboardEntryDto,
+} from "@/lib/api-ques";
 
 type HeaderMode = "light" | "dark";
 
@@ -89,6 +94,11 @@ export default function OrgSessionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [leaderboard, setLeaderboard] =
+    useState<LeaderboardEntryDto[] | null>(null);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState<string | null>(null);
+
   const loadSession = useCallback(async () => {
     if (!sessionId) return;
     try {
@@ -140,6 +150,23 @@ export default function OrgSessionDetailPage() {
 
     router.push(`/storymap/control/${session.mapId}?${params.toString()}`);
   }, [router, session]);
+
+  const handleLoadLeaderboard = useCallback(async () => {
+    if (!sessionId) return;
+
+    try {
+      setLeaderboardLoading(true);
+      setLeaderboardError(null);
+
+      const data = await getSessionLeaderboard(sessionId, 10);
+      setLeaderboard(data);
+    } catch (e) {
+      console.error("Failed to load leaderboard", e);
+      setLeaderboardError("Không tải được bảng xếp hạng.");
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }, [sessionId]);
 
   return (
     <div className="min-w-0 relative px-6 py-8 space-y-6">
@@ -247,16 +274,20 @@ export default function OrgSessionDetailPage() {
                 <dt className="text-zinc-500 dark:text-zinc-400">
                   Bộ câu hỏi
                 </dt>
-                <dd className="text-right text-zinc-900 dark:text-zinc-100">
-                  {(session as any).questionBankName || "—"}
+                <dd
+                  className="text-right text-zinc-900 dark:text-zinc-100 max-w-[60%] truncate"
+                  title={
+                    session.questionBanks && session.questionBanks.length > 0
+                      ? session.questionBanks.map((qb) => qb.questionBankName).join(", ")
+                      : "—"
+                  }
+                >
+                  {session.questionBanks && session.questionBanks.length > 0
+                    ? session.questionBanks.map((qb) => qb.questionBankName).join(", ")
+                    : "—"}
                 </dd>
               </div>
-              <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500 dark:text-zinc-400">Mô tả</dt>
-                <dd className="max-w-[60%] text-right text-zinc-900 dark:text-zinc-100">
-                  {session.description || "—"}
-                </dd>
-              </div>
+
             </dl>
           </div>
 
@@ -301,7 +332,83 @@ export default function OrgSessionDetailPage() {
                   {formatDate((session as any).endTime)}
                 </dd>
               </div>
+              <div className="flex justify-between gap-4 pt-2 mt-2 border-t border-zinc-200 dark:border-zinc-800">
+                <dt className="text-zinc-500 dark:text-zinc-400">Bảng xếp hạng</dt>
+                <dd className="text-right">
+                  <button
+                    type="button"
+                    onClick={handleLoadLeaderboard}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-300 dark:border-emerald-400 dark:hover:bg-emerald-500/10 disabled:opacity-60"
+                    disabled={leaderboardLoading}
+                  >
+                    {leaderboardLoading ? "Đang tải..." : "Xem bảng xếp hạng"}
+                  </button>
+                </dd>
+              </div>
+
             </dl>
+            {leaderboardError && (
+              <p className="mt-3 text-xs text-red-500 dark:text-red-300">
+                {leaderboardError}
+              </p>
+            )}
+
+            {leaderboard && leaderboard.length > 0 && (
+              <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  TOP NGƯỜI THAM GIA
+                </p>
+                <ul className="space-y-2 text-xs">
+                  {leaderboard.map((entry: LeaderboardEntryDto, index: number) => {
+                    const rank = entry.rank ?? index + 1;
+
+                    return (
+                      <li
+                        key={entry.sessionParticipantId ?? index}
+                        className="flex items-start justify-between gap-3"
+                      >
+                        {/* Rank */}
+                        <span
+                          className={`mt-0.5 ${rank === 1
+                              ? "font-semibold text-emerald-500 dark:text-emerald-400"
+                              : "text-zinc-500 dark:text-zinc-400"
+                            }`}
+                        >
+                          #{rank}
+                        </span>
+
+                        <div className="flex-1 text-right">
+                          <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                            {entry.displayName ?? "Người chơi"}
+                            {entry.isCurrentUser && (
+                              <span className="ml-2 inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-500">
+                                Bạn
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                            <span>{entry.totalScore ?? 0} điểm</span>
+                            <span className="mx-1.5">·</span>
+                            <span>
+                              {entry.totalCorrect ?? 0}/{entry.totalAnswered ?? 0} đúng
+                            </span>
+                            {typeof entry.averageResponseTime === "number" && (
+                              <>
+                                <span className="mx-1.5">·</span>
+                                <span>{entry.averageResponseTime.toFixed(2)}s / câu</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+              </div>
+            )}
+
           </div>
         </div>
       )}
