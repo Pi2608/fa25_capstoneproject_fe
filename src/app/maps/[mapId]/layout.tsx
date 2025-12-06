@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+
 export async function generateStaticParams() {
   // For static export, we'll return an empty array
   // Dynamic routes will be handled client-side
@@ -9,5 +11,7 @@ export default function MapLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  <Suspense>
+    {children}
+  </Suspense>
 }

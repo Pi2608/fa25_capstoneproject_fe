@@ -1292,6 +1292,35 @@ export const messages = {
 
             featured_only: "Chỉ hiển thị bản đồ nổi bật",
             featured_badge: "Nổi bật",
+
+            // Error messages
+            error_load_maps: "Không tải được danh sách bản đồ",
+            error_load_detail: "Không tải được chi tiết bản đồ",
+            error_duplicate: "Không thể nhân bản bản đồ",
+            error_duplicate_unauthorized: "Vui lòng đăng nhập để duplicate bản đồ.",
+
+            // Loading states
+            loading_maps: "Đang tải danh sách bản đồ...",
+            loading_detail: "Đang tải chi tiết...",
+            duplicating: "Đang nhân bản...",
+
+            // Detail section
+            detail_title: "Chi tiết bản đồ đã chọn",
+            detail_empty: "Chọn một bản đồ hoặc tìm kiếm theo Map ID để xem chi tiết ở đây.",
+            detail_author: "Tác giả",
+            detail_views: "Lượt xem",
+            detail_likes: "Lượt thích",
+            detail_gallery_id: "Gallery ID",
+            detail_map_id: "Map ID",
+
+            // Search by Map ID section
+            search_by_map_id_title: "Tìm chi tiết theo Map ID",
+            search_by_map_id_desc: "Dán Map ID để tải chi tiết gallery bằng API công khai.",
+            search_by_map_id_placeholder: "Map ID...",
+            search_by_map_id_button: "Tải chi tiết theo Map ID",
+
+            // Buttons
+            button_details: "Chi tiết",
         },
         developers: {
             title: "Nhà phát triển",
@@ -3540,6 +3569,35 @@ export const messages = {
 
             featured_only: "Show featured maps only",
             featured_badge: "Featured",
+
+            // Error messages
+            error_load_maps: "Failed to load gallery maps",
+            error_load_detail: "Failed to load map detail",
+            error_duplicate: "Failed to duplicate map",
+            error_duplicate_unauthorized: "Please log in to duplicate the map.",
+
+            // Loading states
+            loading_maps: "Loading gallery maps...",
+            loading_detail: "Loading detail...",
+            duplicating: "Duplicating...",
+
+            // Detail section
+            detail_title: "Selected map detail",
+            detail_empty: "Choose a map card or search by Map ID to see detail here.",
+            detail_author: "Author",
+            detail_views: "Views",
+            detail_likes: "Likes",
+            detail_gallery_id: "Gallery ID",
+            detail_map_id: "Map ID",
+
+            // Search by Map ID section
+            search_by_map_id_title: "Find detail by Map ID",
+            search_by_map_id_desc: "Paste a Map ID to load its gallery detail using public API.",
+            search_by_map_id_placeholder: "Map ID...",
+            search_by_map_id_button: "Load detail by Map ID",
+
+            // Buttons
+            button_details: "Details",
         },
         cloudSources: {
             heroBadge: "Connect once — use across maps",

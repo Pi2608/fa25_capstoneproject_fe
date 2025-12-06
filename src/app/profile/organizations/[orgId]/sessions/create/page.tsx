@@ -317,7 +317,7 @@ export default function OrganizationCreateSessionPage() {
         shuffleOptions,
         enableHints,
         pointsForSpeed,
-        questionBankId: primaryBankId,
+        questionBankId: primaryBankId ? [primaryBankId] : null,
       });
 
       if (selectedQuestionBankIds.length > 1) {

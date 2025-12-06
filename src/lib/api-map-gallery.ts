@@ -72,6 +72,26 @@ export type MapGalleryAdminApprovalRequest = {
   isFeatured?: boolean;
 };
 
+export type MapGalleryDuplicateRequest = {
+  customName?: string;
+  customDescription?: string;
+  isPublic?: boolean;
+  workspaceId?: string;
+  customInitialLatitude?: number;
+  customInitialLongitude?: number;
+  customInitialZoom?: number;
+};
+
+export type MapGalleryDuplicateResponse = {
+  mapId: string;
+  mapName: string;
+  sourceMapName: string;
+  layersCreated: number;
+  imagesCreated: number;
+  createdAt: string;
+  message: string;
+};
+
 export async function getPublishedGalleryMaps(params?: {
   category?: MapGalleryCategory;
   search?: string;
@@ -156,4 +176,12 @@ export async function adminApproveOrRejectGallerySubmission(
     id
   )}/approve`;
     return putJson(url, payload);
+}
+
+export async function duplicateMapFromGallery(
+  galleryId: string,
+  payload: MapGalleryDuplicateRequest
+): Promise<MapGalleryDuplicateResponse> {
+  const url = `/map-gallery/maps/${encodeURIComponent(galleryId)}/duplicate`;
+  return postJson<MapGalleryDuplicateResponse>(url, payload);
 }
