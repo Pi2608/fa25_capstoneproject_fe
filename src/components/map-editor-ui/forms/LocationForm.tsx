@@ -32,8 +32,8 @@ export function LocationForm({
   const [tooltipContent, setTooltipContent] = useState("");
   const [locationType, setLocationType] = useState<LocationType>("PointOfInterest");
   const [coordinates, setCoordinates] = useState<[number, number] | null>(null);
-  const [selectedIcon, setSelectedIcon] = useState<string>("");
   const [isVisible, setIsVisible] = useState(true);
+  const [highlightOnEnter, setHighlightOnEnter] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -42,8 +42,8 @@ export function LocationForm({
       setSubtitle(initialLocation.subtitle || "");
       setTooltipContent(initialLocation.tooltipContent || "");
       setLocationType(initialLocation.locationType || "PointOfInterest");
-      setSelectedIcon(initialLocation.iconId || "");
       setIsVisible(initialLocation.isVisible !== false);
+      setHighlightOnEnter(initialLocation.highlightOnEnter ?? false);
       if (initialLocation.markerGeometry) {
         try {
           const geo = JSON.parse(initialLocation.markerGeometry);
@@ -67,14 +67,16 @@ export function LocationForm({
     try {
       const data: CreateLocationRequest = {
         title: title.trim(),
-        subtitle: subtitle.trim(),
-        tooltipContent: tooltipContent.trim(),
+        subtitle: subtitle.trim() || undefined,
+        tooltipContent: tooltipContent.trim() || undefined,
         locationType,
         markerGeometry: JSON.stringify({
           type: "Point",
           coordinates: coordinates,
         }),
-        iconId: selectedIcon || undefined,
+        displayOrder: initialLocation?.displayOrder ?? 0,
+        highlightOnEnter: highlightOnEnter,
+        showTooltip: !!tooltipContent.trim(),
         isVisible,
       };
 
@@ -246,6 +248,16 @@ export function LocationForm({
                 disabled={saving}
               />
               <span className="text-xs text-zinc-300">Hiển thị trên bản đồ</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={highlightOnEnter}
+                onChange={(e) => setHighlightOnEnter(e.target.checked)}
+                className="w-4 h-4 rounded"
+                disabled={saving}
+              />
+              <span className="text-xs text-zinc-300">Highlight khi vào segment</span>
             </label>
           </div>
         )}

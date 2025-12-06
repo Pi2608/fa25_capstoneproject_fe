@@ -676,11 +676,11 @@ export type CreateLocationRequest = {
   title: string;
   subtitle?: string;
   locationType: LocationType;
-  markerGeometry: string; // GeoJSON Point
+  markerGeometry?: string; // GeoJSON Point
   storyContent?: string;
   mediaResources?: string; // JSON string of media resources
   displayOrder: number;
-  highlightOnEnter?: boolean;
+  highlightOnEnter: boolean; // Required field
   showTooltip?: boolean;
   tooltipContent?: string;
   effectType?: string;
@@ -695,17 +695,6 @@ export type CreateLocationRequest = {
   animationOverrides?: string;
   isVisible?: boolean;
   zIndex?: number;
-
-  // Legacy fields for backward compatibility
-  description?: string;
-  iconType?: string;
-  iconUrl?: string;
-  iconColor?: string;
-  iconSize?: number;
-  openPopupOnClick?: boolean;
-  popupContent?: string;
-  mediaUrls?: string;
-  linkedSegmentId?: string;
 };
 
 export async function getSegmentLocations(mapId: string, segmentId: string): Promise<Location[]> {
@@ -723,7 +712,48 @@ export async function createLocation(
   segmentId: string,
   data: CreateLocationRequest
 ): Promise<Location> {
-  return await postJson<CreateLocationRequest, Location>(`/storymaps/${mapId}/segments/${segmentId}/locations`, data);
+  console.log(data)
+  const formData = new FormData();
+
+  // Required fields - always append
+  formData.append('MapId', mapId);
+  formData.append('Title', data.title);
+  formData.append('LocationType', data.locationType);
+  formData.append('DisplayOrder', data.displayOrder.toString());
+  formData.append('HighlightOnEnter', data.highlightOnEnter.toString());
+
+  const effectiveSegmentId = data.segmentId || segmentId;
+  if (effectiveSegmentId) formData.append('SegmentId', effectiveSegmentId);
+  if (data.zoneId) formData.append('ZoneId', data.zoneId);
+  if (data.subtitle) formData.append('Subtitle', data.subtitle);
+  if (data.markerGeometry) formData.append('MarkerGeometry', data.markerGeometry);
+  if (data.storyContent) formData.append('StoryContent', data.storyContent);
+  if (data.mediaResources) formData.append('MediaResources', data.mediaResources);
+
+  // Boolean fields with defaults
+  if (data.showTooltip !== undefined) formData.append('ShowTooltip', data.showTooltip.toString());
+  if (data.openSlideOnClick !== undefined) formData.append('OpenSlideOnClick', data.openSlideOnClick.toString());
+  if (data.playAudioOnClick !== undefined) formData.append('PlayAudioOnClick', data.playAudioOnClick.toString());
+  if (data.isVisible !== undefined) formData.append('IsVisible', data.isVisible.toString());
+
+  // Other optional string fields
+  if (data.tooltipContent) formData.append('TooltipContent', data.tooltipContent);
+  if (data.effectType) formData.append('EffectType', data.effectType);
+  if (data.slideContent) formData.append('SlideContent', data.slideContent);
+  if (data.audioUrl) formData.append('AudioUrl', data.audioUrl);
+  if (data.externalUrl) formData.append('ExternalUrl', data.externalUrl);
+  if (data.animationOverrides) formData.append('AnimationOverrides', data.animationOverrides);
+
+  // Optional Guid fields
+  if (data.linkedLocationId) formData.append('LinkedLocationId', data.linkedLocationId);
+  if (data.associatedLayerId) formData.append('AssociatedLayerId', data.associatedLayerId);
+  if (data.animationPresetId) formData.append('AnimationPresetId', data.animationPresetId);
+
+  // Optional number field
+  if (data.zIndex !== undefined) formData.append('ZIndex', data.zIndex.toString());
+
+  const { postFormData } = await import('./api-core');
+  return await postFormData<Location>(`/storymaps/${mapId}/segments/${segmentId}/locations`, formData);
 }
 
 export async function updateLocation(
