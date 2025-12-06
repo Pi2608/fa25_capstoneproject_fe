@@ -3,7 +3,7 @@ import { Segment, TimelineTransition, RouteAnimation, getRouteAnimationsBySegmen
 import { getTimelineTransitions } from "@/lib/api-storymap";
 import {
   renderSegmentZones,
-  renderSegmentLocations,
+  // renderSegmentLocations, // Now handled by usePoiMarkers globally
   renderSegmentLayers,
   applyCameraState,
   autoFitBounds,
@@ -155,13 +155,15 @@ export function useSegmentPlayback({
       newLayers.push(...layerResult.layers);
       allBounds.push(...layerResult.bounds);
 
-      // Render locations using shared function
-      const locationResult = await renderSegmentLocations(segment, currentMap, L, {
-        ...renderOptions,
-        onLocationClick,
-      });
-      newLayers.push(...locationResult.layers);
-      allBounds.push(...locationResult.bounds);
+      // NOTE: Locations are now rendered globally by usePoiMarkers hook
+      // This prevents duplicate rendering of POIs
+      // renderSegmentLocations is only used in viewer mode (StoryMapViewer)
+      // const locationResult = await renderSegmentLocations(segment, currentMap, L, {
+      //   ...renderOptions,
+      //   onLocationClick,
+      // });
+      // newLayers.push(...locationResult.layers);
+      // allBounds.push(...locationResult.bounds);
 
       // Apply camera state or auto-fit bounds using shared functions
       // FIXED: Always apply camera state when segment has one, even if route animations were playing

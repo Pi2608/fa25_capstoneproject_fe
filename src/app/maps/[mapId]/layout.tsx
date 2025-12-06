@@ -11,7 +11,9 @@ export default function MapLayout({
 }: {
   children: React.ReactNode;
 }) {
-  <Suspense>
-    {children}
-  </Suspense>
+  return (
+    <Suspense>
+      {children}
+    </Suspense>
+  );
 }

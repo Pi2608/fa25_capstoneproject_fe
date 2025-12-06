@@ -712,7 +712,6 @@ export async function createLocation(
   segmentId: string,
   data: CreateLocationRequest
 ): Promise<Location> {
-  console.log(data)
   const formData = new FormData();
 
   // Required fields - always append
