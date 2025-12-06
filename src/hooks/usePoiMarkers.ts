@@ -60,6 +60,14 @@ export function usePoiMarkers({
 
         // Load POIs
         const pois = (await getMapLocations(mapId)) as MapLocation[];
+        console.log(`📍 Loaded ${pois.length} POIs for map ${mapId}:`, pois.map(p => ({
+          id: p.locationId,
+          title: p.title,
+          segmentId: p.segmentId,
+          showTooltip: p.showTooltip,
+          hasTooltipContent: !!p.tooltipContent,
+          tooltipContent: p.tooltipContent,
+        })));
 
         if (cancelled || !mapRef.current) {
           return;
@@ -75,8 +83,15 @@ export function usePoiMarkers({
         for (const poi of pois) {
           if (cancelled || !mapRef.current) break;
 
+          console.log(`🔍 Processing POI: ${poi.title} (${poi.locationId})`, {
+            segmentId: poi.segmentId,
+            isVisible: poi.isVisible,
+            hasGeometry: !!poi.markerGeometry,
+          });
+
           try {
             if (poi.isVisible === false) {
+              console.log(`⏭️ Skipping ${poi.title}: isVisible=false`);
               continue;
             }
 
@@ -169,57 +184,84 @@ export function usePoiMarkers({
             // Store POI ID for cleanup
             (marker as any)._locationId = poi.locationId;
 
-            // Add click handler to show tooltip modal if enabled
+            // Add permanent tooltip label above marker (like segmentRenderer)
+            const tooltipLabel = poi.title || '';
+            if (tooltipLabel) {
+              marker.bindTooltip(tooltipLabel, {
+                permanent: true,
+                direction: 'top',
+                className: 'location-title-tooltip',
+                opacity: 0.95,
+                offset: [0, -(iconSize / 2) - 8],
+              });
+            }
+
+            // Add tooltip popup if enabled (similar to slide popup)
             if (poi.showTooltip !== false && poi.tooltipContent) {
-              marker.on("click", (e) => {
-                // Process content
-                let rawContent = poi.tooltipContent || "";
-                let processedContent = rawContent;
+              console.log(`📌 Adding tooltip popup for: ${poi.title}`, {
+                showTooltip: poi.showTooltip,
+                tooltipContent: poi.tooltipContent?.substring(0, 50) + '...',
+              });
 
-                // Method 1: Parse JSON string if needed
-                if (
-                  rawContent.startsWith('"') &&
-                  rawContent.endsWith('"')
-                ) {
-                  try {
-                    processedContent = JSON.parse(rawContent);
-                  } catch (e) {
-                    // Not JSON, use as-is
-                  }
-                }
+              // Process content
+              let rawContent = poi.tooltipContent || "";
+              let processedContent = rawContent;
 
-                // Method 2: Unescape common escape sequences
-                if (
-                  processedContent.includes('\\"') ||
-                  processedContent.includes("\\n") ||
-                  processedContent.includes("\\r")
-                ) {
-                  processedContent = processedContent
-                    .replace(/\\"/g, '"')
-                    .replace(/\\n/g, "\n")
-                    .replace(/\\r/g, "\r")
-                    .replace(/\\t/g, "\t")
-                    .replace(/\\\\/g, "\\");
-                }
-
-                // Method 3: Decode HTML entities
+              // Method 1: Parse JSON string if needed
+              if (rawContent.startsWith('"') && rawContent.endsWith('"')) {
                 try {
-                  const textarea = document.createElement("textarea");
-                  textarea.innerHTML = processedContent;
-                  const decoded = textarea.value;
-                  if (decoded !== processedContent) {
-                    processedContent = decoded;
-                  }
+                  processedContent = JSON.parse(rawContent);
                 } catch (e) {
-                  // Decode failed, use as-is
+                  // Not JSON, use as-is
                 }
+              }
 
-                // Open modal with processed content
-                setPoiTooltipModal({
-                  isOpen: true,
-                  title: poi.title,
-                  content: processedContent,
-                });
+              // Method 2: Unescape common escape sequences
+              if (
+                processedContent.includes('\\"') ||
+                processedContent.includes("\\n") ||
+                processedContent.includes("\\r")
+              ) {
+                processedContent = processedContent
+                  .replace(/\\"/g, '"')
+                  .replace(/\\n/g, "\n")
+                  .replace(/\\r/g, "\r")
+                  .replace(/\\t/g, "\t")
+                  .replace(/\\\\/g, "\\");
+              }
+
+              // Method 3: Decode HTML entities
+              try {
+                const textarea = document.createElement("textarea");
+                textarea.innerHTML = processedContent;
+                const decoded = textarea.value;
+                if (decoded !== processedContent) {
+                  processedContent = decoded;
+                }
+              } catch (e) {
+                // Decode failed, use as-is
+              }
+
+              // Create popup content with same style as slide popup
+              const popupContent = `
+                <div style="max-width: 300px; font-family: system-ui, -apple-system, sans-serif;">
+                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${
+                    poi.title
+                  }</h3>
+                  <div style="margin: 8px 0; font-size: 14px; color: #333; white-space: pre-wrap;">${
+                    processedContent || ""
+                  }</div>
+                </div>
+              `;
+
+              marker.bindPopup(popupContent, {
+                maxWidth: 320,
+                className: "poi-popup",
+              });
+            } else {
+              console.log(`⏭️ No tooltip for: ${poi.title}`, {
+                showTooltip: poi.showTooltip,
+                hasTooltipContent: !!poi.tooltipContent,
               });
             }
 
@@ -296,8 +338,9 @@ export function usePoiMarkers({
             // Add marker to map
             marker.addTo(mapRef.current);
             poiMarkersRef.current.push(marker);
+            console.log(`✅ Successfully rendered POI: ${poi.title} at [${latLng}]`);
           } catch (error) {
-            console.error(`❌ Failed to render POI ${poi.locationId}:`, error);
+            console.error(`❌ Failed to render POI ${poi.locationId} (${poi.title}):`, error);
           }
         }
 
@@ -328,16 +371,24 @@ export function usePoiMarkers({
     // Listen for POI changes
     const handlePoiChange = () => {
       if (!cancelled && mapRef.current) {
+        console.log('🔄 POI change event received, reloading POIs...');
         loadAndRenderPois();
       }
     };
 
+    window.addEventListener("locationCreated", handlePoiChange);
+    window.addEventListener("locationUpdated", handlePoiChange);
+    window.addEventListener("locationDeleted", handlePoiChange);
+    // Legacy event names for backward compatibility
     window.addEventListener("poi:created", handlePoiChange);
     window.addEventListener("poi:updated", handlePoiChange);
     window.addEventListener("poi:deleted", handlePoiChange);
 
     return () => {
       cancelled = true;
+      window.removeEventListener("locationCreated", handlePoiChange);
+      window.removeEventListener("locationUpdated", handlePoiChange);
+      window.removeEventListener("locationDeleted", handlePoiChange);
       window.removeEventListener("poi:created", handlePoiChange);
       window.removeEventListener("poi:updated", handlePoiChange);
       window.removeEventListener("poi:deleted", handlePoiChange);

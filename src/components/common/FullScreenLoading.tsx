@@ -48,10 +48,10 @@ export function FullScreenLoading({
     : "border-emerald-500";
 
   return (
-    <div className={`${baseClasses} ${backgroundClasses}`}>
+    <div className={`${baseClasses} ${backgroundClasses}`} suppressHydrationWarning>
       <div className="text-center">
-        <div className={`animate-spin rounded-full h-16 w-16 border-b-2 ${spinnerClasses} mx-auto mb-4`} />
-        <div className={`${textClasses} text-xl`}>{messageToDisplay}</div>
+        <div className={`animate-spin rounded-full h-16 w-16 border-b-2 ${spinnerClasses} mx-auto mb-4`} suppressHydrationWarning />
+        <div className={`${textClasses} text-xl`} suppressHydrationWarning>{messageToDisplay}</div>
       </div>
     </div>
   );
