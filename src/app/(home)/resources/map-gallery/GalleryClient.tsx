@@ -5,10 +5,12 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useToast } from "@/contexts/ToastContext";
 import {
   getPublishedGalleryMaps,
   getPublishedGalleryMapById,
   getPublishedGalleryMapByMapId,
+  duplicateMapFromGallery,
   MapGalleryCategory,
   MapGalleryDetailResponse,
   MapGallerySummaryResponse,
@@ -96,6 +98,7 @@ const CATEGORY_BY_TAG: Record<TagKey, MapGalleryCategory | undefined> = {
 
 export default function GalleryClient() {
   const { t } = useI18n();
+  const { showToast } = useToast();
 
   const [maps, setMaps] = useState<MapGallerySummaryResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,6 +108,8 @@ export default function GalleryClient() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [mapIdQuery, setMapIdQuery] = useState("");
+  const [duplicating, setDuplicating] = useState<string | null>(null);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
   const [tagKey, setTagKey] = useState<TagKey>("All");
@@ -138,7 +143,7 @@ export default function GalleryClient() {
         setMaps(data);
       } catch (err: any) {
         if (!isMounted) return;
-        setLoadError(err?.message || "Failed to load gallery maps");
+        setLoadError(err?.message || t("gallery.error_load_maps"));
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -158,7 +163,7 @@ export default function GalleryClient() {
       const d = await getPublishedGalleryMapById(galleryId);
       setDetail(d);
     } catch (err: any) {
-      setDetailError(err?.message || "Failed to load map detail");
+      setDetailError(err?.message || t("gallery.error_load_detail"));
     } finally {
       setDetailLoading(false);
     }
@@ -173,9 +178,30 @@ export default function GalleryClient() {
       const d = await getPublishedGalleryMapByMapId(id);
       setDetail(d);
     } catch (err: any) {
-      setDetailError(err?.message || "Failed to load map detail");
+      setDetailError(err?.message || t("gallery.error_load_detail"));
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const handleDuplicate = async (galleryId: string, mapId: string) => {
+    setDuplicating(galleryId);
+    setDuplicateError(null);
+    try {
+      const result = await duplicateMapFromGallery(galleryId, {});
+      // Redirect to the new map
+      window.location.href = `/maps/${result.mapId}`;
+    } catch (err: any) {
+      setDuplicating(null);
+      
+      // Check if error is 401 Unauthorized
+      if (err?.status === 401) {
+        showToast("error", t("gallery.error_duplicate_unauthorized"));
+      } else {
+        const errorMessage = err?.message || t("gallery.error_duplicate");
+        setDuplicateError(errorMessage);
+        showToast("error", errorMessage);
+      }
     }
   };
 
@@ -445,7 +471,7 @@ export default function GalleryClient() {
 
       {loading ? (
         <section className="mt-8 rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-8 text-center text-sm text-zinc-400">
-          Loading gallery maps...
+          {t("gallery.loading_maps")}
         </section>
       ) : pageItems.length === 0 ? (
         <section className="mt-8 rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-8 text-center">
@@ -521,19 +547,21 @@ export default function GalleryClient() {
                   >
                       {t("gallery.view_map")}
                   </Link>
-                  <Link
-                    href={`/maps/${m.mapId}/duplicate`}
-                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-3 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70"
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicate(m.id, m.mapId)}
+                    disabled={duplicating === m.id}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-3 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <CopyIcon className="h-4 w-4" />
-                    {t("gallery.duplicate")}
-                  </Link>
+                    {duplicating === m.id ? t("gallery.duplicating") : t("gallery.duplicate")}
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleSelectByGalleryId(m.id)}
                     className="inline-flex items-center gap-2 rounded-xl border border-zinc-700/70 bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-200 hover:border-emerald-400/70"
                   >
-                    Details
+                    {t("gallery.button_details")}
                   </button>
                 </div>
               </article>
@@ -600,23 +628,23 @@ export default function GalleryClient() {
       <section className="mt-10 rounded-2xl border border-emerald-500/20 bg-zinc-900/70 p-6 ring-1 ring-emerald-500/10">
         <div className="flex flex-col gap-6 lg:flex-row">
           <div className="flex-1">
-            <h3 className="text-lg font-semibold">Selected map detail</h3>
+            <h3 className="text-lg font-semibold">{t("gallery.detail_title")}</h3>
             {detailLoading && (
-              <p className="mt-2 text-sm text-zinc-400">Loading detail...</p>
+              <p className="mt-2 text-sm text-zinc-400">{t("gallery.loading_detail")}</p>
             )}
             {detailError && (
               <p className="mt-2 text-sm text-red-300">{detailError}</p>
             )}
             {!detailLoading && !detail && !detailError && (
               <p className="mt-2 text-sm text-zinc-400">
-                Choose a map card or search by Map ID to see detail here.
+                {t("gallery.detail_empty")}
               </p>
             )}
             {detail && !detailLoading && (
               <div className="mt-3 space-y-2 text-sm text-zinc-200">
                 <div className="text-base font-medium">{detail.mapName}</div>
                 <div className="text-xs text-zinc-400">
-                  Author: {detail.authorName} •{" "}
+                  {t("gallery.detail_author")}: {detail.authorName} •{" "}
                   {(detail.publishedAt || detail.createdAt) &&
                     new Date(
                       detail.publishedAt || detail.createdAt
@@ -635,29 +663,29 @@ export default function GalleryClient() {
                   ))}
                 </div>
                 <div className="mt-2 text-xs text-zinc-400">
-                  Views: {fmt(detail.viewCount)} • Likes:{" "}
+                  {t("gallery.detail_views")}: {fmt(detail.viewCount)} • {t("gallery.detail_likes")}:{" "}
                   {fmt(detail.likeCount)}
                 </div>
                 <div className="mt-2 text-xs text-zinc-400 break-all">
-                  Gallery ID: {detail.id}
+                  {t("gallery.detail_gallery_id")}: {detail.id}
                   <br />
-                  Map ID: {detail.mapId}
+                  {t("gallery.detail_map_id")}: {detail.mapId}
                 </div>
               </div>
             )}
           </div>
           <div className="w-full max-w-sm rounded-2xl border border-zinc-700/60 bg-zinc-950/70 p-4 text-sm">
             <div className="font-medium text-zinc-100">
-              Find detail by Map ID
+              {t("gallery.search_by_map_id_title")}
             </div>
             <p className="mt-1 text-xs text-zinc-400">
-              Paste a Map ID to load its gallery detail using public API.
+              {t("gallery.search_by_map_id_desc")}
             </p>
             <div className="mt-3 space-y-2">
               <input
                 value={mapIdQuery}
                 onChange={(e) => setMapIdQuery(e.target.value)}
-                placeholder="Map ID..."
+                placeholder={t("gallery.search_by_map_id_placeholder")}
                 className="w-full rounded-xl border border-zinc-700/70 bg-zinc-900/70 px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400/70"
               />
               <button
@@ -665,7 +693,7 @@ export default function GalleryClient() {
                 onClick={handleSearchByMapId}
                 className="w-full rounded-xl bg-emerald-500 px-3 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
               >
-                Load detail by Map ID
+                {t("gallery.search_by_map_id_button")}
               </button>
             </div>
           </div>

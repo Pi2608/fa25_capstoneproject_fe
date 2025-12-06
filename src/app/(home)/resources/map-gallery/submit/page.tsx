@@ -9,6 +9,8 @@ import {
   MapGalleryDetailResponse,
 } from "@/lib/api-map-gallery";
 import { getMyMaps, MapDto } from "@/lib/api-maps";
+import { useToast } from "@/contexts/ToastContext";
+
 
 const CATEGORY_OPTIONS: { value: MapGalleryCategory; label: string }[] = [
   { value: "general", label: "Tổng quan / General" },
@@ -68,6 +70,7 @@ function Banner({
 }
 
 export default function MapGallerySubmitPage() {
+  const { showToast } = useToast();
   const [maps, setMaps] = useState<MapDto[]>([]);
   const [loadingMaps, setLoadingMaps] = useState(true);
   const [mapsError, setMapsError] = useState<string | null>(null);
@@ -86,16 +89,6 @@ export default function MapGallerySubmitPage() {
   const [existingSubmission, setExistingSubmission] =
     useState<MapGalleryDetailResponse | null>(null);
   const [statusInfo, setStatusInfo] = useState<string | null>(null);
-
-  const [banner, setBanner] =
-    useState<{ type: BannerType; message: string } | null>(null);
-
-  const showBanner = (type: BannerType, message: string) => {
-    setBanner({ type, message });
-    setTimeout(() => {
-      setBanner((curr) => (curr && curr.message === message ? null : curr));
-    }, 4000);
-  };
 
   // Load tất cả map của user
   useEffect(() => {
@@ -154,7 +147,7 @@ export default function MapGallerySubmitPage() {
 
       setStatusInfo(statusText);
       if (!opts?.silent) {
-        showBanner("success", "Đã tải submission hiện có cho bản đồ này.");
+        showToast("success", "Đã tải submission hiện có cho bản đồ này.");
       }
     } catch (err: any) {
       if (isApiError(err) && err.status === 404) {
@@ -170,14 +163,14 @@ export default function MapGallerySubmitPage() {
           "Bản đồ này chưa được gửi lên thư viện. Bạn có thể tạo submission mới."
         );
         if (!opts?.silent) {
-          showBanner(
+          showToast(
             "info",
             "Map này chưa có submission. Hãy điền thông tin và gửi mới."
           );
         }
       } else {
         if (!opts?.silent) {
-          showBanner(
+          showToast(
             "error",
             err?.message || "Không thể kiểm tra submission hiện có."
           );
@@ -188,24 +181,31 @@ export default function MapGallerySubmitPage() {
     }
   };
 
-  // Khi chọn map mới → tự load submission (hoặc fill từ map)
   useEffect(() => {
     if (!selectedMapId || maps.length === 0) return;
-    loadSubmissionForMap(selectedMapId, { silent: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    
+    const baseMap = maps.find((m) => m.id === selectedMapId);
+    if (baseMap) {
+      setMapName(baseMap.name ?? "");
+      setDescription(baseMap.description ?? "");
+      setPreviewImage(baseMap.previewImage ?? "");
+      setCategory("general");
+      setTagsInput("");
+      setExistingSubmission(null);
+      setStatusInfo("Chọn 'Tải / làm mới từ Gallery' để kiểm tra submission hiện có.");
+    }
   }, [selectedMapId, maps]);
 
   const handleSubmit = async () => {
     const trimmedName = mapName.trim();
-    const trimmedDesc = description.trim();
 
     if (!selectedMapId) {
-      showBanner("error", "Vui lòng chọn một bản đồ để gửi lên Gallery.");
+      showToast("error", "Vui lòng chọn một bản đồ để gửi lên Gallery.");
       return;
     }
 
-    if (!trimmedName || !trimmedDesc) {
-      showBanner("error", "Vui lòng nhập đầy đủ Tên bản đồ và Mô tả.");
+    if (!trimmedName) {
+      showToast("error", "Vui lòng nhập đầy đủ Tên bản đồ.");
       return;
     }
 
@@ -219,25 +219,25 @@ export default function MapGallerySubmitPage() {
       if (existingSubmission) {
         await updateMyGallerySubmission(existingSubmission.id, {
           mapName: trimmedName,
-          description: trimmedDesc,
+          description: description,
           previewImage: previewImage.trim() || null,
           category,
           tags,
         });
-        showBanner("success", "Cập nhật submission thành công.");
+        showToast("success", "Cập nhật submission thành công.");
       } else {
         await submitMapToGallery({
           mapId: selectedMapId,
           mapName: trimmedName,
-          description: trimmedDesc,
+          description: description,
           previewImage: previewImage.trim() || null,
           category,
           tags,
         });
-        showBanner("success", "Gửi bản đồ lên thư viện thành công.");
+        showToast("success", "Gửi bản đồ lên thư viện thành công.");
       }
     } catch (err: any) {
-      showBanner("error", err?.message || "Gửi bản đồ thất bại.");
+      showToast("error", err?.message || "Gửi bản đồ thất bại.");
     } finally {
       setSubmitting(false);
     }
@@ -250,17 +250,6 @@ export default function MapGallerySubmitPage() {
 
   return (
     <>
-      {/* Toast mini */}
-      <div className="pointer-events-none fixed right-4 top-4 z-50 flex flex-col gap-2">
-        {banner && (
-          <Banner
-            type={banner.type}
-            message={banner.message}
-            onClose={() => setBanner(null)}
-          />
-        )}
-      </div>
-
       <main className="mx-auto max-w-6xl px-6 py-10 text-zinc-100">
         {/* Hero */}
         <section className="rounded-2xl border border-emerald-400/30 bg-gradient-to-br from-zinc-900/80 via-zinc-900/60 to-emerald-950/50 p-6 shadow-xl ring-1 ring-emerald-500/20">
