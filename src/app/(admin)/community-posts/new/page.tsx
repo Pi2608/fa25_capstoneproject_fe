@@ -4,7 +4,6 @@ import { adminCreateCommunityPost, type CommunityPostCreateRequest } from "@/lib
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import CustomEditor from "@/components/admin/CustomEditor";
 
 const TOPICS = ["Product", "Tutorial", "Stories", "Education", "Business"] as const;
 
@@ -164,7 +163,7 @@ export default function NewCommunityPostPage() {
         <div className="space-y-2">
           <div className="flex justify-between items-center mb-2">
             <label className="block text-sm font-medium text-zinc-300">
-              Nội dung <span className="text-red-500">*</span>
+              Nội dung HTML <span className="text-red-500">*</span>
             </label>
             <button
               type="button"
@@ -174,7 +173,14 @@ export default function NewCommunityPostPage() {
               📝 Load nội dung mẫu
             </button>
           </div>
-          <CustomEditor/>
+          <textarea
+            value={formData.contentHtml}
+            onChange={(e) => setFormData((prev) => ({ ...prev, contentHtml: e.target.value }))}
+            className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/96 text-zinc-100 outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700 resize-y font-mono text-sm"
+            rows={15}
+            required
+            placeholder="Nhập nội dung HTML của bài viết"
+          />
         </div>
 
         <div className="flex gap-4">

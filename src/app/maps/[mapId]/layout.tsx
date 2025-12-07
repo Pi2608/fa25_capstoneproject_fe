@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Loading from "@/app/loading";
 
 export async function generateStaticParams() {
   // For static export, we'll return an empty array
@@ -12,7 +13,7 @@ export default function MapLayout({
   children: React.ReactNode;
 }) {
   return (
-    <Suspense>
+    <Suspense fallback={<Loading />}>
       {children}
     </Suspense>
   );

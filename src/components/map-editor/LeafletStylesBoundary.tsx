@@ -1,11 +1,11 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { FullScreenLoading } from "@/components/common/FullScreenLoading";
+import Loading from "@/app/loading";
 
 const LeafletStylesClient = dynamic(() => import("./LeafletStylesClient"), {
   ssr: false,
-  loading: () => <FullScreenLoading />,
+  loading: () => <Loading />,
 });
 
 export function LeafletStylesBoundary() {
