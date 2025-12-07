@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, createContext, useContext } from "react";
 import { clearAllAuthData } from "@/utils/authUtils";
+import { getMe, type Me } from "@/lib/api-auth";
 
 const ThemeContext = createContext<{
   isDark: boolean;
@@ -36,13 +37,38 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [open, setOpen] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
   const [isDark, setIsDark] = useState(true);
+  const [isVerified, setIsVerified] = useState(false);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("admin-theme");
-    if (savedTheme === "light") {
-      setIsDark(false);
-    }
-  }, []);
+    const checkAdminAccess = async () => {
+      try {
+        const token = typeof window !== "undefined" 
+          ? (localStorage.getItem("token") || localStorage.getItem("accessToken"))
+          : null;
+        
+        if (!token) {
+          router.replace("/login");
+          return;
+        }
+
+        const user = await getMe(true);
+        
+        const adminRoles = ["Admin", "admin", "Administrator", "administrator"];
+        const hasAdminRole = adminRoles.includes(user.role);
+        
+        if (!hasAdminRole) {
+          router.replace("/not-found");
+          return;
+        }
+        setIsVerified(true);
+      } catch (error) {
+        console.error("Failed to check admin access:", error);
+        router.replace("/login");
+      }
+    };
+
+    checkAdminAccess();
+  }, [router]);
 
   const toggleTheme = () => {
     const newTheme = !isDark;
@@ -53,6 +79,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       window.dispatchEvent(new Event("admin-theme-change"));
     }
   };
+
 
   const onSignOut = async () => {
     if (signingOut) return;
@@ -80,6 +107,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.replace("/login");
     }
   };
+
+  if (!isVerified) {
+    return null;
+  }
 
   return (
     <div className={`flex h-screen transition-colors ${isDark

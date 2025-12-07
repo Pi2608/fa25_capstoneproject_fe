@@ -36,7 +36,6 @@ import { SaveIcon, UploadIcon } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import PublishButton from "@/components/map/PublishButton";
 import ZoomControls from "@/components/map/controls/ZoomControls";
-import Loading from "@/app/loading";
 
 
 const normalizeMapStatus = (status: unknown): MapStatus => {
@@ -136,7 +135,6 @@ export default function EditMapPage() {
     data: FeatureData | LayerDTO | Segment;
   } | null>(null);
 
-  const [activeTool, setActiveTool] = useState<string | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [transitions, setTransitions] = useState<TimelineTransition[]>([]);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
@@ -1607,6 +1605,39 @@ export default function EditMapPage() {
       setTransitions(transitionsData);
     } catch (error) {
       console.error("Failed to load segments/transitions:", error);
+    }
+  }, [mapId]);
+
+  // Handle refresh segments (used by TimelineWorkspace)
+  const handleRefreshSegments = useCallback(async () => {
+    try {
+      // Reload segments with enhanced details (includes locations, routes, zones, layers)
+      const [segmentsData, transitionsData] = await Promise.all([
+        getSegments(mapId),
+        getTimelineTransitions(mapId),
+      ]);
+
+      // Load route animations for each segment (GetSegmentsAsync doesn't include routes)
+      const segmentsWithRoutes = await Promise.all(
+        segmentsData.map(async (segment) => {
+          try {
+            // Fetch route animations for this segment
+            const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
+            return {
+              ...segment,
+              routeAnimations: routes || []
+            };
+          } catch (e) {
+            return segment;
+          }
+        })
+      );
+
+      // Force new array reference to ensure React re-renders
+      setSegments([...segmentsWithRoutes]);
+      setTransitions([...transitionsData]);
+    } catch (error) {
+      console.error("Failed to refresh segments:", error);
     }
   }, [mapId]);
 
@@ -3217,16 +3248,6 @@ export default function EditMapPage() {
 
   return (
     <main className="relative h-screen w-screen overflow-hidden text-white">
-      {/* Loading Overlay - Covers entire screen including sidebar and timeline */}
-      {loading && (
-        <div className="fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-            <Loading />
-          </div>
-        </div>
-      )}
-
       <div className="absolute top-0 left-0 z-[3000] w-full pointer-events-none">
         <div className="pointer-events-auto bg-black/70 backdrop-blur-md ring-1 ring-white/15 shadow-xl py-1 px-3">
           <div className="grid grid-cols-3 place-items-stretch gap-2">
@@ -3438,42 +3459,8 @@ export default function EditMapPage() {
         onPlay={handlePlayTimeline}
         onStop={handleStopTimeline}
         onPlaySingleSegment={playback.handlePlaySingleSegment}
-        // onSkipForward={handleSkipForward}
-        // onSkipBackward={handleSkipBackward}
         onSegmentClick={handleSegmentClick}
-        onRefreshSegments={async () => {
-          try {
-            // Reload segments with enhanced details (includes locations, routes, zones, layers)
-            const [segmentsData, transitionsData] = await Promise.all([
-              getSegments(mapId),
-              getTimelineTransitions(mapId),
-            ]);
-
-            // Load route animations for each segment (GetSegmentsAsync doesn't include routes)
-            const segmentsWithRoutes = await Promise.all(
-              segmentsData.map(async (segment) => {
-                try {
-                  // Fetch route animations for this segment
-                  const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
-                  return {
-                    ...segment,
-                    routeAnimations: routes || []
-                  };
-                } catch (e) {
-                  return segment;
-                }
-              })
-            );
-
-
-
-            // Force new array reference to ensure React re-renders
-            setSegments([...segmentsWithRoutes]);
-            setTransitions([...transitionsData]);
-          } catch (error) {
-            console.error("Failed to refresh segments:", error);
-          }
-        }}
+        onRefreshSegments={handleRefreshSegments}
       />
 
       <ZoomControls

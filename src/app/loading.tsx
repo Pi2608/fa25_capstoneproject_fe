@@ -13,7 +13,7 @@ export default function Loading() {
 
   return (
     <div 
-      className={`fixed inset-0 z-50 flex items-center justify-center ${themeClasses.loading.backgroundOverlay}`}
+      className={`fixed inset-0 z-[5000] flex items-center justify-center ${themeClasses.loading.backgroundOverlay}`}
       aria-label="Loading"
     >
       <div className="flex flex-col items-center gap-6">
