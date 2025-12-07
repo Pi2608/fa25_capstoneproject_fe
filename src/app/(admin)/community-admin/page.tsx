@@ -12,6 +12,7 @@ import {
   type CommunityPostAdminCreateRequest,
   type CommunityPostAdminUpdateRequest,
 } from "@/lib/api-community";
+import Loading from "@/app/loading";
 
 type FormState = {
   id?: string;
@@ -43,9 +44,8 @@ function formatDate(v?: string | null) {
 
 export default function AdminCommunityPage() {
   const [posts, setPosts] = useState<CommunityPostSummaryResponse[]>([]);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
+  const [loading, setLoading] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -58,8 +58,8 @@ export default function AdminCommunityPage() {
   const [deleteErr, setDeleteErr] = useState<string | null>(null);
 
   const loadList = async () => {
-    setLoading(true);
     setError(null);
+    setLoading(true);
     try {
       const data = await adminGetCommunityPosts();
       setPosts(data);
@@ -216,7 +216,6 @@ export default function AdminCommunityPage() {
         <div className="rounded-xl border border-zinc-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold">Danh sách bài viết</h2>
-            {loading && <span className="text-xs text-zinc-400">Đang tải…</span>}
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -240,7 +239,13 @@ export default function AdminCommunityPage() {
                     </td>
                   </tr>
                 )}
-                {posts.map((p) => (
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="px-2 py-4 text-center text-sm text-zinc-400">
+                      <Loading />
+                    </td>
+                  </tr>
+                ) : posts.map((p) => (
                   <tr key={p.id} className="border-b border-zinc-100">
                     <td className="px-2 py-2">{p.title}</td>
                     <td className="px-2 py-2 text-xs text-zinc-500">{p.slug}</td>

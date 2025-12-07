@@ -52,7 +52,7 @@ export function PinLocationPicker({
   const markerPosition =
     parsedLat !== null && parsedLng !== null ? [parsedLat, parsedLng] : null;
   const center = useMemo<[number, number]>(
-    () => (markerPosition ? markerPosition : DEFAULT_CENTER),
+    () => (markerPosition ? markerPosition as [number, number] : DEFAULT_CENTER),
     [markerPosition]
   );
 
@@ -103,10 +103,10 @@ export function PinLocationPicker({
 
             {markerPosition && (
               <>
-                <Marker position={markerPosition} icon={markerIcon} />
+                <Marker position={markerPosition as [number, number]} icon={markerIcon} />
                 {radius > 0 && (
                   <Circle
-                    center={markerPosition}
+                    center={markerPosition as [number, number]}
                     radius={radius}
                     pathOptions={{
                       color: "#10b981",

@@ -87,6 +87,7 @@ export interface MapDetail {
   viewState?: ViewState;
   isPublic?: boolean;
   status?: MapStatus;
+  isStoryMap?: boolean;
   publishedAt?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -102,6 +103,7 @@ export interface CreateMapRequest {
   viewState?: string;
   baseLayer?: BaseLayer;
   workspaceId?: string | null;
+  isStoryMap?: boolean;
 }
 
 export interface CreateMapResponse {
@@ -165,6 +167,7 @@ export function createMap(req: CreateMapRequest) {
     ViewState: req.viewState ?? null,
     BaseLayer: req.baseLayer ?? "OSM",
     WorkspaceId: req.workspaceId ?? null,
+    IsStoryMap: req.isStoryMap ?? false,
   };
 
   return postJson<typeof body, CreateMapResponse>("/maps", body);
@@ -178,6 +181,7 @@ export async function createDefaultMap(options?: {
   workspaceId?: string | null;
   center?: { lat: number; lng: number };
   zoom?: number;
+  isStoryMap?: boolean;
 }): Promise<CreateMapResponse> {
   const center = options?.center ?? DEFAULT_MAP_CENTER;
   const zoom = options?.zoom ?? DEFAULT_MAP_ZOOM;
@@ -191,6 +195,7 @@ export async function createDefaultMap(options?: {
     viewState,
     baseLayer: options?.baseLayer ?? "OSM",
     workspaceId: options?.workspaceId ?? null,
+    isStoryMap: options?.isStoryMap ?? false,
   });
 }
 
@@ -649,13 +654,20 @@ export function getMapFeatureById(mapId: string, featureId: string) {
 }
 
 // ===== PUBLISHING =====
+export interface PublishMapRequest {
+  isStoryMap?: boolean;  // true = publish as storymap (can create sessions), false = view-only
+}
+
 export interface PublishMapResponse {
   success: boolean;
   message?: string;
 }
 
-export function publishMap(mapId: string) {
-  return postJson<void, PublishMapResponse>(`/maps/${mapId}/publish`, undefined);
+export function publishMap(mapId: string, request?: PublishMapRequest) {
+  return postJson<PublishMapRequest | undefined, PublishMapResponse>(
+    `/maps/${mapId}/publish`, 
+    request || { isStoryMap: false }
+  );
 }
 
 export function unpublishMap(mapId: string) {

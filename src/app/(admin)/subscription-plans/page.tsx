@@ -10,6 +10,7 @@ import {
 } from "@/lib/admin-api";
 import { useTheme } from "../layout";
 import { getThemeClasses } from "@/utils/theme-utils";
+import Loading from "@/app/loading";
 
 type PlanStatus = "active" | "inactive" | string;
 
@@ -252,7 +253,7 @@ export default function PlansPage() {
               {loading && rows.length === 0 ? (
                 <tr>
                   <td colSpan={11} className={`p-8 text-center ${theme.textMuted}`}>
-                    Đang tải…
+                    <Loading />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
@@ -570,7 +571,7 @@ export default function PlansPage() {
                   onClick={submitCreate}
                   disabled={creating}
                 >
-                  {creating ? "Đang tạo…" : "Tạo gói"}
+                  {creating ? <Loading /> : "Tạo gói"}
                 </button>
               </div>
             </div>

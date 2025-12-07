@@ -2,7 +2,7 @@
 
 import { archiveMap, MapStatus, publishMap, restoreMap, unpublishMap } from "@/lib/api-maps";
 import { ArchiveIcon, RefreshCcwIcon, SendIcon, UndoIcon } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface PublishButtonProps {
   mapId: string;
@@ -13,12 +13,29 @@ interface PublishButtonProps {
 export default function PublishButton({ mapId, status, onStatusChange }: PublishButtonProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPublishOptions, setShowPublishOptions] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const handlePublish = async () => {
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowPublishOptions(false);
+      }
+    };
+
+    if (showPublishOptions) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showPublishOptions]);
+
+  const handlePublish = async (isStoryMap: boolean) => {
     setLoading(true);
     setError(null);
+    setShowPublishOptions(false);
     try {
-      await publishMap(mapId);
+      await publishMap(mapId, { isStoryMap });
       onStatusChange("Published");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể publish map");
@@ -93,23 +110,50 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
 
       {/* Action Buttons - Inline with status */}
       {status === "Draft" ? (
-        <button
-          onClick={handlePublish}
-          disabled={loading}
-          className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 ml-0.5"
-        >
-          {loading ? (
-            <>
-              <div className="w-3.5 h-3.5 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
-              <span>Processing...</span>
-            </>
-          ) : (
-            <>
-              <SendIcon className="w-3.5 h-3.5" />
-              <span>Publish</span>
-            </>
+        <div className="relative" ref={dropdownRef}>
+          <button
+            onClick={() => setShowPublishOptions(!showPublishOptions)}
+            disabled={loading}
+            className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 ml-0.5"
+          >
+            {loading ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
+                <span>Processing...</span>
+              </>
+            ) : (
+              <>
+                <SendIcon className="w-3.5 h-3.5" />
+                <span>Publish</span>
+              </>
+            )}
+          </button>
+          
+          {showPublishOptions && !loading && (
+            <div className="absolute top-full left-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-md shadow-lg z-50 min-w-[220px]">
+              <div className="py-1">
+                <button
+                  onClick={() => handlePublish(true)}
+                  className="w-full text-left px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-700 flex items-start gap-2"
+                >
+                  <div className="flex-1">
+                    <div className="font-medium">Publish thành Storymap</div>
+                    <div className="text-xs text-zinc-400 mt-0.5">Có thể tạo session từ bản đồ này</div>
+                  </div>
+                </button>
+                <button
+                  onClick={() => handlePublish(false)}
+                  className="w-full text-left px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-700 flex items-start gap-2"
+                >
+                  <div className="flex-1">
+                    <div className="font-medium">Publish để xem</div>
+                    <div className="text-xs text-zinc-400 mt-0.5">Chỉ để xem, không thể tạo session</div>
+                  </div>
+                </button>
+              </div>
+            </div>
           )}
-        </button>
+        </div>
       ) : status === "Published" ? (
         <>
           <button

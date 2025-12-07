@@ -8,7 +8,7 @@ import ToastContainer from "@/components/ui/ToastContainer";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import type { Lang } from "@/i18n/messages";
 import { LoadingProvider } from "@/contexts/LoadingContext";
-import { LeafletStylesBoundary } from "@/components/map-editor/LeafletStylesBoundary";
+import { LeafletStylesBoundary } from "@/components/layout/LeafletStylesBoundary";
 
 const manrope = Manrope({
   subsets: ["latin", "vietnamese"],

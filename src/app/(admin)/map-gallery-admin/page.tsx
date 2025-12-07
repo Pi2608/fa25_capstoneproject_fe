@@ -10,6 +10,7 @@ import {
   type MapGalleryDetailResponse,
   type MapGalleryStatus,
 } from "@/lib/api-map-gallery";
+import Loading from "@/app/loading";
 
 type StatusFilter = "all" | "pending" | "approved" | "rejected";
 
@@ -170,7 +171,7 @@ export default function MapGalleryAdminPage() {
             disabled={loadingList}
             className="inline-flex items-center rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium shadow-sm hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loadingList ? "Đang tải..." : "Làm mới"}
+            {loadingList ? <Loading /> : "Làm mới"}
           </button>
         </div>
       </div>
@@ -259,7 +260,7 @@ export default function MapGalleryAdminPage() {
                       colSpan={5}
                       className="px-4 py-6 text-center text-sm text-neutral-500"
                     >
-                      Đang tải dữ liệu...
+                      <Loading />
                     </td>
                   </tr>
                 )}
@@ -283,7 +284,7 @@ export default function MapGalleryAdminPage() {
             )}
 
             {loadingDetail && (
-              <p className="text-sm text-neutral-500">Đang tải chi tiết…</p>
+              <p className="text-sm text-neutral-500"><Loading /></p>
             )}
 
             {selected && !loadingDetail && (
@@ -370,7 +371,7 @@ export default function MapGalleryAdminPage() {
                     {selected.status === "approved"
                       ? "Đã approved"
                       : updating
-                      ? "Đang duyệt…"
+                      ? <Loading />
                       : "Approve"}
                   </button>
 

@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import type { BaseKey } from "@/types";
 import type { FeatureData } from "@/utils/mapUtils";
 import type { LayerDTO } from "@/lib/api-maps";
-import { addLayerToMap, updateMapLayer, updateMapFeature } from "@/lib/api-maps";
+import { addLayerToMap, updateMapLayer, updateMapFeature, removeLayerFromMap } from "@/lib/api-maps";
 import {
   type Segment,
   type TimelineTransition,
@@ -1225,6 +1225,31 @@ function ExplorerView({
     setEditingLayerName("");
   };
 
+  const handleDeleteLayer = async (layerId: string) => {
+    if (!mapId) return;
+    
+    if (!confirm("Bạn có chắc muốn xóa layer này? Các feature trong layer sẽ không bị xóa nhưng sẽ không còn thuộc layer nào.")) {
+      return;
+    }
+
+    try {
+      await removeLayerFromMap(mapId, layerId);
+      
+      // Dispatch event to refresh layers and map detail
+      window.dispatchEvent(new CustomEvent("layerDeleted", {
+        detail: { layerId }
+      }));
+      
+      // Clear current layer if it was deleted
+      if (onLayerChange && currentLayerId === layerId) {
+        onLayerChange(null);
+      }
+    } catch (error) {
+      console.error("Failed to delete layer:", error);
+      alert("Không thể xóa layer. Vui lòng thử lại.");
+    }
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Search Bar */}
@@ -1428,6 +1453,20 @@ function ExplorerView({
                             "w-3.5 h-3.5",
                             (layerVisibility?.[layer.id] ?? true) ? "text-emerald-400" : "text-zinc-600"
                           )}
+                        />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteLayer(layer.id);
+                        }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        className="opacity-0 group-hover/item:opacity-100 transition-opacity p-0.5 hover:bg-zinc-700 rounded"
+                        title="Xóa layer"
+                      >
+                        <Icon
+                          icon="mdi:trash-can-outline"
+                          className="w-3.5 h-3.5 text-red-400"
                         />
                       </button>
                     </div>

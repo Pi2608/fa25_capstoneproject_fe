@@ -21,7 +21,7 @@ import {
 import { CurrentMembershipDto, getMyMembership } from "@/lib/api-membership";
 import { getProjectsByOrganization } from "@/lib/api-workspaces";
 import { joinSession, getSession, type ParticipantDto } from "@/lib/api-ques";
-import ManageWorkspaces from "@/components/ManageWorkspaces";
+import ManageWorkspaces from "@/components/workspace/ManageWorkspaces";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useTheme } from "next-themes";
 import { getThemeClasses } from "@/utils/theme-utils";
@@ -428,7 +428,7 @@ export default function OrgDetailPage() {
       setInviteInput("");
       await refreshMembers();
     } catch (e) {
-      setInviteMsg(userMessage(e, t));
+      setInviteMsg(safeMessage(e, t("org_detail.action_failed")));
     } finally {
       setInviteBusy(false);
     }

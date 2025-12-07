@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { adminGetOrganizationById } from "@/lib/admin-api";
+import Loading from "@/app/loading";
 
 type OrgStatus = "Active" | "Suspended";
 
@@ -51,7 +52,7 @@ export default function OrganizationDetailPage() {
     };
   }, [orgId]);
 
-  if (loading) return <div className="p-5">Đang tải thông tin tổ chức...</div>;
+  if (loading) return <div className="p-5"><Loading /></div>;
   if (err) return <div className="p-5">Không tìm thấy tổ chức.</div>;
   if (!data) return <div className="p-5">Không tìm thấy tổ chức.</div>;
 
