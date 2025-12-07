@@ -13,6 +13,9 @@ import {
   type CommunityPostAdminUpdateRequest,
 } from "@/lib/api-community";
 import Loading from "@/app/loading";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertCircle } from "lucide-react";
+
 
 type FormState = {
   id?: string;
@@ -247,7 +250,23 @@ export default function AdminCommunityPage() {
                   </tr>
                 ) : posts.map((p) => (
                   <tr key={p.id} className="border-b border-zinc-100">
-                    <td className="px-2 py-2">{p.title}</td>
+                    <td className="px-2 py-2">
+                      <div className="flex items-center gap-2">
+                        <span>{p.title}</span>
+                        {p.riskText && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger>
+                                <AlertCircle className="h-4 w-4 text-amber-500" />
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{p.riskText}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-2 py-2 text-xs text-zinc-500">{p.slug}</td>
                     <td className="px-2 py-2 text-xs text-zinc-500">
                       {p.topic || "-"}

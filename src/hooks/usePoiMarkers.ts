@@ -54,7 +54,7 @@ export function usePoiMarkers({
               existingTooltip.remove();
             }
             mapRef.current?.removeLayer(marker);
-          } catch {}
+          } catch { }
         });
         poiMarkersRef.current = [];
 
@@ -163,6 +163,17 @@ export function usePoiMarkers({
             // Store POI ID for cleanup
             (marker as any)._locationId = poi.locationId;
 
+            // Auto-play audio on click if configured
+            if (poi.playAudioOnClick && poi.audioUrl) {
+              marker.on('click', () => {
+                // Create and play audio
+                const audio = new Audio(poi.audioUrl);
+                audio.play().catch(err => {
+                  console.warn('Failed to auto-play audio:', err);
+                });
+              });
+            }
+
             // Add permanent tooltip label above marker (like segmentRenderer)
             const tooltipLabel = poi.title || '';
             if (tooltipLabel) {
@@ -219,12 +230,10 @@ export function usePoiMarkers({
               // Create popup content with same style as slide popup
               const popupContent = `
                 <div style="max-width: 300px; font-family: system-ui, -apple-system, sans-serif;">
-                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${
-                    poi.title
-                  }</h3>
-                  <div style="margin: 8px 0; font-size: 14px; color: #333; white-space: pre-wrap;">${
-                    processedContent || ""
-                  }</div>
+                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${poi.title
+                }</h3>
+                  <div style="margin: 8px 0; font-size: 14px; color: #333; white-space: pre-wrap;">${processedContent || ""
+                }</div>
                 </div>
               `;
 
@@ -287,12 +296,10 @@ export function usePoiMarkers({
 
               const popupContent = `
                 <div style="max-width: 300px; font-family: system-ui, -apple-system, sans-serif;">
-                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${
-                    poi.title
-                  }</h3>
-                  <p style="margin: 8px 0; font-size: 14px; color: #333; white-space: pre-wrap;">${
-                    poi.slideContent || ""
-                  }</p>
+                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${poi.title
+                }</h3>
+                  <p style="margin: 8px 0; font-size: 14px; color: #333; white-space: pre-wrap;">${poi.slideContent || ""
+                }</p>
                   ${mediaHtml}
                   ${audioHtml}
                   ${linkHtml}
@@ -362,7 +369,7 @@ export function usePoiMarkers({
       poiMarkersRef.current.forEach((marker) => {
         try {
           mapRef.current?.removeLayer(marker);
-        } catch {}
+        } catch { }
       });
       poiMarkersRef.current = [];
     };

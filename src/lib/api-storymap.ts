@@ -326,7 +326,7 @@ export type RouteAnimation = {
   routeAnimationId: string;
   segmentId: string;
   mapId: string;
-  
+
   // Route information (matching backend DTO structure)
   fromLat: number;
   fromLng: number;
@@ -337,46 +337,46 @@ export type RouteAnimation = {
   toLocationId?: string; // Link to Location at destination point
   routePath: string; // GeoJSON LineString as string
   waypoints?: string; // JSON array of waypoints
-  
+
   // Icon configuration
   iconType: "car" | "walking" | "bike" | "plane" | "custom";
   iconUrl?: string;
   iconWidth: number;
   iconHeight: number;
-  
+
   // Route styling
   routeColor: string; // Color for unvisited route
   visitedColor: string; // Color for visited route
   routeWidth: number;
-  
+
   // Animation settings
   durationMs: number;
   startDelayMs?: number;
   easing: "linear" | "ease-in" | "ease-out" | "ease-in-out";
   autoPlay: boolean;
   loop: boolean;
-  
+
   // Display settings
   isVisible: boolean;
   zIndex: number;
   displayOrder: number;
-  
+
   // Timing relative to segment
   startTimeMs?: number;
   endTimeMs?: number;
-  
+
   // Camera state transitions (JSON stringified CameraState)
   cameraStateBefore?: string; // Camera state before route starts
   cameraStateAfter?: string; // Camera state after route completes
-  
+
   // Location info display settings
   showLocationInfoOnArrival: boolean; // Auto-show location popup when route completes
   locationInfoDisplayDurationMs?: number; // Duration to show location info popup
-  
+
   // Camera follow settings
   followCamera: boolean; // Whether camera should follow the moving icon
   followCameraZoom?: number; // Zoom level when following (null = keep current zoom)
-  
+
   createdAt: string;
   updatedAt?: string;
 };
@@ -695,6 +695,10 @@ export type CreateLocationRequest = {
   animationOverrides?: string;
   isVisible?: boolean;
   zIndex?: number;
+  // Media file uploads
+  iconFile?: File | Blob;
+  audioFile?: File | Blob;
+  iconUrl?: string;
 };
 
 export async function getSegmentLocations(mapId: string, segmentId: string): Promise<Location[]> {
@@ -750,6 +754,11 @@ export async function createLocation(
 
   // Optional number field
   if (data.zIndex !== undefined) formData.append('ZIndex', data.zIndex.toString());
+
+  // Media file fields
+  if (data.iconFile) formData.append('IconFile', data.iconFile);
+  if (data.audioFile) formData.append('AudioFile', data.audioFile);
+  if (data.iconUrl) formData.append('IconUrl', data.iconUrl);
 
   const { postFormData } = await import('./api-core');
   return await postFormData<Location>(`/storymaps/${mapId}/segments/${segmentId}/locations`, formData);

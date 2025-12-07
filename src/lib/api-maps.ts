@@ -27,7 +27,7 @@ export type MapDto = {
   description?: string;
   isPublic: boolean;
   previewImage?: string | null;
-  createdAt: string; 
+  createdAt: string;
   updatedAt?: string | null;
   lastActivityAt?: string | null;
   status?: MapStatus;
@@ -665,7 +665,7 @@ export interface PublishMapResponse {
 
 export function publishMap(mapId: string, request?: PublishMapRequest) {
   return postJson<PublishMapRequest | undefined, PublishMapResponse>(
-    `/maps/${mapId}/publish`, 
+    `/maps/${mapId}/publish`,
     request || { isStoryMap: false }
   );
 }
@@ -756,4 +756,97 @@ export async function getMapViews(mapId: string): Promise<number> {
 export async function getMultipleMapViews(mapIds: string[]): Promise<number[]> {
   const results = await Promise.allSettled(mapIds.map(id => getMapViews(id)));
   return results.map(result => result.status === "fulfilled" ? result.value : 0);
+}
+
+// ================== MAP ZONE (Zone attached to map for non-StoryMap mode) ==================
+
+// Zone type (master data)
+export type Zone = {
+  zoneId: string;
+  externalId?: string;
+  zoneCode?: string;
+  name: string;
+  zoneType: string;
+  adminLevel?: number;
+  parentZoneId?: string;
+  geometry: string;
+  simplifiedGeometry?: string;
+  centroid?: string;
+  boundingBox?: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+// MapZone (Link Map → Zone with highlight config for non-StoryMap mode)
+export type MapZone = {
+  mapZoneId: string;
+  mapId: string;
+  zoneId: string;
+  zone?: Zone; // Populated
+  displayOrder: number;
+  isVisible: boolean;
+  zIndex: number;
+
+  // Highlight config
+  highlightBoundary: boolean;
+  boundaryColor?: string;
+  boundaryWidth?: number;
+  fillZone: boolean;
+  fillColor?: string;
+  fillOpacity?: number;
+  showLabel: boolean;
+  labelOverride?: string;
+  labelStyle?: string;
+
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type CreateMapZoneRequest = {
+  mapId?: string; // Will be enriched by endpoint
+  zoneId: string; // Select from Zone master data
+  displayOrder?: number;
+  isVisible?: boolean;
+  zIndex?: number;
+  highlightBoundary?: boolean;
+  boundaryColor?: string;
+  boundaryWidth?: number;
+  fillZone?: boolean;
+  fillColor?: string;
+  fillOpacity?: number;
+  showLabel?: boolean;
+  labelOverride?: string;
+  labelStyle?: string;
+};
+
+export type UpdateMapZoneRequest = Omit<CreateMapZoneRequest, 'mapId' | 'zoneId'>;
+
+/**
+ * Get all zones attached to a map (for non-StoryMap mode)
+ */
+export function getMapZones(mapId: string) {
+  return getJson<MapZone[]>(`/maps/${mapId}/zones`);
+}
+
+/**
+ * Create a new zone attachment for a map
+ */
+export function createMapZone(mapId: string, data: Omit<CreateMapZoneRequest, 'mapId'>) {
+  return postJson<CreateMapZoneRequest, MapZone>(`/maps/${mapId}/zones`, { ...data, mapId });
+}
+
+/**
+ * Update a map zone's display properties
+ */
+export function updateMapZone(mapId: string, mapZoneId: string, data: UpdateMapZoneRequest) {
+  return putJson<UpdateMapZoneRequest, MapZone>(`/maps/${mapId}/zones/${mapZoneId}`, data);
+}
+
+/**
+ * Delete a zone from a map
+ */
+export function deleteMapZone(mapId: string, mapZoneId: string) {
+  return delJson<boolean>(`/maps/${mapId}/zones/${mapZoneId}`);
 }

@@ -31,11 +31,14 @@ import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
 import { useLayerStyles } from "@/hooks/useLayerStyles";
 import { useCollaborationVisualization } from "@/hooks/useCollaborationVisualization";
 import { useFeatureManagement } from "@/hooks/useFeatureManagement";
+import { usePoiMarkers } from "@/hooks/usePoiMarkers";
+import { useZoneMarkers } from "@/hooks/useZoneMarkers";
 import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geojson";
 import { SaveIcon, UploadIcon } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import PublishButton from "@/components/map/PublishButton";
 import ZoomControls from "@/components/map/controls/ZoomControls";
+import { ZoneStyleEditor } from "@/components/map-editor-ui/ZoneStyleEditor";
 
 
 const normalizeMapStatus = (status: unknown): MapStatus => {
@@ -128,7 +131,7 @@ export default function EditMapPage() {
   });
 
   // New VSCode-style UI state
-  const [leftSidebarView, setLeftSidebarView] = useState<"explorer" | "segments" | "transitions" | "icons" | null>("explorer");
+  const [leftSidebarView, setLeftSidebarView] = useState<"explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "library" | null>("explorer");
   const [isPropertiesPanelOpen, setIsPropertiesPanelOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<{
     type: "feature" | "layer" | "segment";
@@ -143,6 +146,11 @@ export default function EditMapPage() {
   const [isTimelineOpen, setIsTimelineOpen] = useState(true);
   const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
   const [currentZoom, setCurrentZoom] = useState<number>(10);
+
+  const [selectedZone, setSelectedZone] = useState<{
+    mapZone: import("@/lib/api-maps").MapZone;
+    zone: import("@/lib/api-maps").Zone;
+  } | null>(null);
 
   // Use layer styles hook for managing layer selection and styling
   const layerStyles = useLayerStyles();
@@ -159,8 +167,6 @@ export default function EditMapPage() {
     applySelectionStyle,
     applyMultiSelectionStyle,
     handleLayerHover,
-    // NOTE: resetAllSelections from hook is not used - we have a custom implementation below
-    // resetAllSelections,
   } = layerStyles;
 
   // Context menu state
@@ -215,6 +221,20 @@ export default function EditMapPage() {
     originalStylesRef,
     features,
   });
+
+  usePoiMarkers({
+    mapId,
+    mapRef,
+    isMapReady,
+    setPoiTooltipModal,
+  });
+
+  useZoneMarkers({
+    mapId,
+    mapRef,
+    isMapReady,
+  });
+
   // Handle layer click (single or multi-select)
   const handleLayerClick = useCallback((layer: Layer, isShiftKey: boolean) => {
     if (isShiftKey) {
@@ -1655,6 +1675,22 @@ export default function EditMapPage() {
     };
   }, [mapId, isMapReady, loadSegmentsAndTransitions]);
 
+  // Listen for zone selection events (from useZoneMarkers)
+  useEffect(() => {
+    const handleSelectZone = (e: Event) => {
+      const customEvent = e as CustomEvent<{
+        mapZone: import("@/lib/api-maps").MapZone;
+        zone: import("@/lib/api-maps").Zone;
+      }>;
+      setSelectedZone(customEvent.detail);
+    };
+
+    window.addEventListener("selectZone", handleSelectZone);
+    return () => {
+      window.removeEventListener("selectZone", handleSelectZone);
+    };
+  }, []);
+
   // Listen for location created event to refresh segments
   useEffect(() => {
     const handleLocationCreated = (e: Event) => {
@@ -1983,6 +2019,8 @@ export default function EditMapPage() {
 
       if (!map || !iconKey) return;
 
+      stopPlacement();
+
       isPlacingIcon = true;
       currentIconKey = iconKey;
 
@@ -2219,203 +2257,6 @@ export default function EditMapPage() {
     const handleStopPlacement = () => {
       stopPlacement();
     };
-
-
-    // COMMENTED OUT: Don't load existing location icons on EditMap
-    // This prevents duplicate rendering of location markers
-    // Locations should only be rendered via renderSegmentLocations in StoryMapViewer
-    // const loadExistingIcons = async () => {
-    //   if (!mapRef.current || !mapIdRef.current || !isMapReady) return;
-
-    //   try {
-    //     const locations = await getMapLocations(mapIdRef.current);
-
-    //     if (!locations || locations.length === 0) return;
-
-    //     const L = (await import("leaflet")).default;
-
-    //     if (!iconLayerGroupRef.current) {
-    //       iconLayerGroupRef.current = L.layerGroup().addTo(mapRef.current);
-    //     }
-
-    //     const existingLocationIds = new Set<string>();
-    //     iconMarkersRef.current.forEach((marker, id) => {
-    //       const locationId = (marker as any)._locationId || id.replace('icon-', '');
-    //       if (locationId) {
-    //         existingLocationIds.add(locationId);
-    //       }
-    //     });
-
-    //     const iconLocations = locations.filter(
-    //       (loc) =>
-    //         loc.markerGeometry &&
-    //         loc.isVisible !== false &&
-    //         loc.locationId &&
-    //         !existingLocationIds.has(loc.locationId)
-    //     );
-
-    //     for (const location of iconLocations) {
-    //       try {
-    //         const iconKeyFromMetadata = parseIconKeyFromStoryContent(location.storyContent);
-    //         const labelKey = location.title ?? "";
-    //         const iconKey =
-    //           iconKeyFromMetadata ||
-    //           location.iconType ||
-    //           labelToIconKeyMap[labelKey] ||
-    //           null;
-
-    //         if (!iconKey) {
-    //           continue;
-    //         }
-
-    //         const geoJson = JSON.parse(location.markerGeometry);
-    //         if (geoJson.type !== "Point" || !geoJson.coordinates) continue;
-
-    //         const [lng, lat] = geoJson.coordinates;
-
-    //         const emoji = iconEmojiMap[iconKey as keyof typeof iconEmojiMap] ?? "📍";
-
-    //         const iconCacheKey = `icon-${iconKey}`;
-    //         if (!(mapRef.current as any)._iconCache) {
-    //           (mapRef.current as any)._iconCache = new Map<string, L.DivIcon>();
-    //         }
-
-    //         let icon: L.DivIcon;
-    //         if ((mapRef.current as any)._iconCache.has(iconCacheKey)) {
-    //           icon = (mapRef.current as any)._iconCache.get(iconCacheKey);
-    //         } else {
-    //           icon = L.divIcon({
-    //             className: `custom-marker-icon icon-marker icon-${iconKey}`,
-    //             html: `<div style="font-size:24px; line-height:24px;">${emoji}</div>`,
-    //             iconSize: [28, 28],
-    //             iconAnchor: [14, 14],
-    //           });
-    //           (mapRef.current as any)._iconCache.set(iconCacheKey, icon);
-    //         }
-
-    //         // Create marker
-    //         const marker = L.marker([lat, lng], {
-    //           icon,
-    //           draggable: true,
-    //           pane: "markerPane",
-    //           zIndexOffset: 0,
-    //           keyboard: false,
-    //           riseOnHover: false,
-    //           autoPan: false,
-    //         });
-
-    //         // Store marker ID using locationId from API
-    //         const markerId = `icon-${location.locationId}`;
-    //         iconMarkersRef.current.set(markerId, marker);
-    //         iconMetadataRef.current.set(markerId, {
-    //           lat,
-    //           lng,
-    //           iconKey,
-    //           timestamp: Date.now() - 10000, // Mark as existing (not recently added)
-    //         });
-
-    //         // Store locationId on marker for deletion
-    //         (marker as any)._locationId = location.locationId;
-
-    //         // Add drag handlers
-    //         let dragTimeout: NodeJS.Timeout | null = null;
-    //         marker.on("drag", () => {
-    //           if (dragTimeout) return;
-    //           dragTimeout = setTimeout(() => {
-    //             dragTimeout = null;
-    //           }, 16);
-    //         });
-
-    //         marker.on("dragend", () => {
-    //           const latlng = marker.getLatLng();
-    //           iconMetadataRef.current.set(markerId, {
-    //             lat: latlng.lat,
-    //             lng: latlng.lng,
-    //             iconKey,
-    //             timestamp: Date.now(),
-    //           });
-    //         });
-
-    //         // Add context menu for deletion
-    //         marker.on("contextmenu", (event: any) => {
-    //           if (event.originalEvent) {
-    //             event.originalEvent.preventDefault();
-    //             event.originalEvent.stopPropagation();
-    //           }
-
-    //           const leafletId = (marker as any)._leaflet_id;
-    //           const popupButtonId = `delete-icon-${leafletId}`;
-
-    //           const popupHtml = `
-    // <div style="display:flex;align-items:center;gap:6px;">
-    //   <button
-    //     id="${popupButtonId}"
-    //     style="
-    //       background:#ef4444;
-    //       border:none;
-    //       color:white;
-    //       font-size:11px;
-    //       padding:4px 8px;
-    //       border-radius:4px;
-    //       cursor:pointer;
-    //       white-space:nowrap;
-    //     "
-    //   >
-    //     Xóa icon
-    //   </button>
-    // </div>
-    // `;
-
-    //           marker
-    //             .bindPopup(popupHtml, {
-    //               closeButton: false,
-    //               autoClose: true,
-    //               closeOnClick: false,
-    //               offset: L.point(0, -20),
-    //               className: "icon-delete-popup",
-    //             })
-    //             .openPopup();
-
-    //           setTimeout(() => {
-    //             const btn = document.getElementById(popupButtonId);
-    //             if (btn) {
-    //               btn.addEventListener("click", async () => {
-    //                 await deleteLocation(location.locationId);
-    //                 iconMarkersRef.current.delete(markerId);
-    //                 iconMetadataRef.current.delete(markerId);
-
-    //                 if (iconLayerGroupRef.current?.hasLayer(marker)) {
-    //                   iconLayerGroupRef.current.removeLayer(marker);
-    //                 }
-    //                 if (mapRef.current?.hasLayer(marker)) {
-    //                   mapRef.current.removeLayer(marker);
-    //                 }
-    //                 mapRef.current?.closePopup();
-    //               });
-    //             }
-    //           }, 0);
-    //         });
-
-    //         // Add to layer group
-    //         iconLayerGroupRef.current.addLayer(marker);
-    //       } catch (err) {
-    //         console.error(`[Icon] Failed to load icon for location ${location.locationId}:`, err);
-    //       }
-    //     }
-
-    //     // Update icon visibility after loading
-    //     if (mapRef.current) {
-    //       updateIconVisibility(mapRef.current);
-    //     }
-    //   } catch (err) {
-    //     console.error("[Icon] Failed to load existing icons:", err);
-    //   }
-    // };
-
-    // COMMENTED OUT: Don't call loadExistingIcons on map ready
-    // if (isMapReady && mapIdRef.current) {
-    //   loadExistingIcons();
-    // }
 
     window.addEventListener(
       "icon:startPlacement",
@@ -3405,12 +3246,13 @@ export default function EditMapPage() {
           left: leftSidebarView ? "376px" : "56px", // Icon bar (56px) + panel (320px) when open
           right: isPropertiesPanelOpen ? "360px" : "0",
           // top: "60px",
-          bottom: "200px", // Space for timeline workspace
+          bottom: !loading && detail?.isStoryMap !== false ? "200px" : "0", // Space for timeline workspace only for StoryMap
         }}
       />
 
       {/* NEW: VSCode-style Left Sidebar */}
       <LeftSidebarToolbox
+        isStoryMap={!loading && detail?.isStoryMap !== false}
         activeView={leftSidebarView}
         onViewChange={setLeftSidebarView}
         features={features}
@@ -3444,24 +3286,26 @@ export default function EditMapPage() {
         onUpdate={handleUpdateFeature}
       />
 
-      {/* NEW: Bottom Timeline Workspace */}
-      <TimelineWorkspace
-        segments={segments}
-        transitions={transitions}
-        activeSegmentId={activeSegmentId}
-        mapId={mapId}
-        isPlaying={isPlayingTimeline}
-        currentTime={currentPlaybackTime}
-        leftOffset={leftSidebarView ? 376 : 56}
-        isOpen={isTimelineOpen}
-        onToggle={() => setIsTimelineOpen((prev) => !prev)}
-        onReorder={handleTimelineReorder}
-        onPlay={handlePlayTimeline}
-        onStop={handleStopTimeline}
-        onPlaySingleSegment={playback.handlePlaySingleSegment}
-        onSegmentClick={handleSegmentClick}
-        onRefreshSegments={handleRefreshSegments}
-      />
+      {/* NEW: Bottom Timeline Workspace - Only show for StoryMap */}
+      {!loading && detail?.isStoryMap !== false && (
+        <TimelineWorkspace
+          segments={segments}
+          transitions={transitions}
+          activeSegmentId={activeSegmentId}
+          mapId={mapId}
+          isPlaying={isPlayingTimeline}
+          currentTime={currentPlaybackTime}
+          leftOffset={leftSidebarView ? 376 : 56}
+          isOpen={isTimelineOpen}
+          onToggle={() => setIsTimelineOpen((prev) => !prev)}
+          onReorder={handleTimelineReorder}
+          onPlay={handlePlayTimeline}
+          onStop={handleStopTimeline}
+          onPlaySingleSegment={playback.handlePlaySingleSegment}
+          onSegmentClick={handleSegmentClick}
+          onRefreshSegments={handleRefreshSegments}
+        />
+      )}
 
       <ZoomControls
         zoomIn={handleZoomIn}
@@ -3696,6 +3540,16 @@ export default function EditMapPage() {
           transition: none !important;
         }
       `}</style>
+
+      {/* Zone Style Editor Panel */}
+      {selectedZone && (
+        <ZoneStyleEditor
+          mapId={mapId}
+          mapZone={selectedZone.mapZone}
+          zone={selectedZone.zone}
+          onClose={() => setSelectedZone(null)}
+        />
+      )}
     </main>
   );
 }

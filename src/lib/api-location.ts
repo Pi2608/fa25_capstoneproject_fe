@@ -163,6 +163,10 @@ function buildLocationFormData(payload: CreateLocationReq): FormData {
 
 export function createMapLocation(mapId: string, body: Omit<CreateLocationReq, 'mapId'>) {
   // Ensure required fields are set with defaults from backend
+  if (!body.locationType) {
+    throw new Error("locationType is required when creating a location");
+  }
+  
   const payload: CreateLocationReq = {
     ...body,
     mapId,
@@ -192,6 +196,10 @@ export function getSegmentLocations(mapId: string, segmentId: string) {
 
 export function createSegmentLocation(mapId: string, segmentId: string, body: Omit<CreateLocationReq, 'mapId'>) {
   // Ensure required fields are set with defaults from backend
+  if (!body.locationType) {
+    throw new Error("locationType is required when creating a location");
+  }
+  
   const payload: CreateLocationReq = {
     ...body,
     mapId,
