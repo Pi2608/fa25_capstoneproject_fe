@@ -86,7 +86,7 @@ export default function EditCommunityPostPage() {
           : formData.publishedAt,
       });
       alert("Đã cập nhật bài viết thành công!");
-      router.refresh();
+      router.push("/community-posts");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Cập nhật bài viết thất bại.");
     } finally {
@@ -210,7 +210,7 @@ export default function EditCommunityPostPage() {
           <div className="flex-1 space-y-2">
             <label className="block text-sm font-medium text-zinc-300">Chủ đề</label>
             <select
-              value={formData.topic}
+              value={formData.topic ?? ""}
               onChange={(e) => setFormData((prev) => ({ ...prev, topic: e.target.value }))}
               className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/96 text-zinc-100 outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700"
             >

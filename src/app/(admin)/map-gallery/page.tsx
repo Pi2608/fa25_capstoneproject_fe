@@ -7,6 +7,7 @@ import {
   type MapGallerySummaryResponse,
   type MapGalleryStatusEnum,
   type MapGalleryApprovalRequest,
+  MapGalleryStatus,
 } from "@/lib/api-map-gallery";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -137,13 +138,20 @@ export default function MapGalleryPage() {
     }
   };
 
-  const getStatusBadge = (status: MapGalleryStatusEnum) => {
+  const getStatusBadge = (status: MapGalleryStatusEnum | string) => {
+    // Normalize status to capitalized format
+    const normalizedStatus = 
+      status === "Pending" || status === "pending" ? "Pending" :
+      status === "Approved" || status === "approved" ? "Approved" :
+      status === "Rejected" || status === "rejected" ? "Rejected" :
+      status;
+    
     const styles = {
       Pending: { bg: "#fff3cd", color: "#856404", text: "Chờ duyệt" },
       Approved: { bg: "#d4edda", color: "#155724", text: "Đã duyệt" },
       Rejected: { bg: "#f8d7da", color: "#721c24", text: "Đã từ chối" },
     };
-    const style = styles[status];
+    const style = styles[normalizedStatus as keyof typeof styles] || styles.Pending;
     return (
       <span
         style={{

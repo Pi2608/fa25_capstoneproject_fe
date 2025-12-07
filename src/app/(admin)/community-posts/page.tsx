@@ -140,12 +140,20 @@ export default function CommunityPostsPage() {
                         {post.slug}
                       </code>
                     </td>
-                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{post.topic}</td>
-                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{fmtDate(post.publishedAt)}</td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{post.topic || "N/A"}</td>
                     <td className={`p-3 border-b ${theme.tableCell} text-left`}>
-                      <span className="px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-700">
-                        Đã xuất bản
-                      </span>
+                      {post.publishedAt ? fmtDate(post.publishedAt) : "Chưa xuất bản"}
+                    </td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                      {post.isPublished ? (
+                        <span className="px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-700">
+                          Đã xuất bản
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 rounded-full text-sm bg-gray-100 text-gray-700">
+                          Chưa xuất bản
+                        </span>
+                      )}
                     </td>
                     <td className={`p-3 border-b ${theme.tableCell} text-left`}>
                       <div className="flex gap-2">

@@ -36,7 +36,6 @@ import { usePoiMarkers } from "@/hooks/usePoiMarkers";
 import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geojson";
 import { SaveIcon, UploadIcon } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
-import { FullScreenLoading } from "@/components/common/FullScreenLoading";
 
 
 const normalizeMapStatus = (status: unknown): MapStatus => {
@@ -3357,10 +3356,6 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
     }
   }, [detail, name, baseKey, showToast]);
 
-
-  if (loading) return <FullScreenLoading message="Đang tải..." overlay={false} />;
-  if (err || !detail) return <FullScreenLoading message={err ?? "Không tải được bản đồ"} overlay={false} />;
-
   return (
     <main className="relative h-screen w-screen overflow-hidden text-white">
       <div className="absolute top-0 left-0 z-[3000] w-full pointer-events-none">
@@ -3379,7 +3374,7 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
                       if (newName !== name) {
                         try {
                           setIsSaving(true);
-                          await updateMap(detail.id, { name: newName });
+                          await updateMap(detail?.id || '', { name: newName });
                           setName(newName);
                           showToast("success", "Đã đổi tên bản đồ");
                         } catch (error) {
@@ -3400,7 +3395,7 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
                     if (newName !== name) {
                       try {
                         setIsSaving(true);
-                        await updateMap(detail.id, { name: newName });
+                        await updateMap(detail?.id || '', { name: newName });
                         setName(newName);
                         showToast("success", "Đã đổi tên bản đồ");
                       } catch (error) {

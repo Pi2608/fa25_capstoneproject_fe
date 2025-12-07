@@ -28,6 +28,10 @@ export type CommunityPostAdminCreateRequest = {
 
 export type CommunityPostAdminUpdateRequest = Partial<CommunityPostAdminCreateRequest>;
 
+// Type aliases for compatibility with frontend pages
+export type CommunityPostCreateRequest = CommunityPostAdminCreateRequest;
+export type CommunityPostUpdateRequest = CommunityPostAdminUpdateRequest;
+
 export async function getCommunityPosts(
   topic?: string,
 ): Promise<CommunityPostSummaryResponse[]> {
@@ -56,6 +60,19 @@ export async function adminGetCommunityPostById(
 ): Promise<CommunityPostDetailResponse> {
   const url = `/community/admin/posts/${encodeURIComponent(id)}`;
   return getJson<CommunityPostDetailResponse>(url);
+}
+
+// Function aliases for compatibility with frontend pages
+export async function adminGetAllPosts(): Promise<
+  CommunityPostSummaryResponse[]
+> {
+  return adminGetCommunityPosts();
+}
+
+export async function adminGetPostById(
+  id: string,
+): Promise<CommunityPostDetailResponse> {
+  return adminGetCommunityPostById(id);
 }
 
 export async function adminCreateCommunityPost(

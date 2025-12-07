@@ -26,7 +26,7 @@ import { Icon } from "../Icon";
 import { cn } from "@/lib/utils";
 import type { Segment, TimelineTransition, RouteAnimation, Location, SegmentZone, SegmentLayer } from "@/lib/api-storymap";
 import { getRouteAnimationsBySegment, deleteRouteAnimation, deleteLocation, deleteSegmentZone, detachLayerFromSegment, reorderSegments, moveLocationToSegment, moveZoneToSegment, moveLayerToSegment, moveRouteToSegment } from "@/lib/api-storymap";
-import { FullScreenLoading } from "@/components/common/FullScreenLoading";
+
 
 interface TimelineTrackProps {
   segments: Segment[];
@@ -527,11 +527,6 @@ function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; map
       alert("Failed to delete route");
     }
   };
-
-
-  if (isLoading) {
-    return <FullScreenLoading message="Đang tải..." overlay={false} />;
-  }
 
   if (routeAnimations.length === 0) {
     return <div className="text-[10px] text-zinc-500 px-2 italic">No routes</div>;

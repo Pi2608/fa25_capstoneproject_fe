@@ -9,7 +9,9 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { FullScreenLoading } from "@/components/common/FullScreenLoading";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type LoadingState = {
   visible: boolean;
@@ -135,12 +137,32 @@ export function LoadingProvider({ children }: { children: ReactNode }) {
     [showLoading, hideLoading, setLoadingMessage]
   );
 
+  function LoadingUI() {
+    const { t } = useI18n();
+    const { resolvedTheme, theme } = useTheme();
+    // Use manually detected theme first, fallback to next-themes
+    const currentTheme = (isDark !== undefined 
+      ? (isDark ? "dark" : "light")
+      : (resolvedTheme ?? theme ?? "light")) as "light" | "dark";
+    const finalIsDark = currentTheme === "dark";
+    const themeClasses = getThemeClasses(finalIsDark);
+    const messageToDisplay = state.message ?? t("common.loading");
+
+    return (
+      <div className={`flex items-center justify-center fixed inset-0 z-[9999] ${themeClasses.loading.background}`}>
+        <div className="flex flex-col items-center gap-4">
+          <div className={`h-12 w-12 animate-spin rounded-full border-4 ${finalIsDark ? "border-emerald-400" : "border-emerald-500"} border-t-transparent`}></div>
+          <p className={`text-sm font-medium ${themeClasses.loading.text}`}>
+            {messageToDisplay}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const portal =
     typeof document !== "undefined" && state.visible && document.getElementById("modal-root")
-      ? createPortal(
-        <FullScreenLoading message={state.message} isDark={isDark} />,
-        document.getElementById("modal-root")!
-      )
+      ? createPortal(<LoadingUI />, document.getElementById("modal-root")!)
       : null;
 
   return (
