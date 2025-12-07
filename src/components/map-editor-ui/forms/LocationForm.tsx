@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CreateLocationRequest, Location } from "@/lib/api-storymap";
 import { LocationType } from "@/types/location";
 import { Icon } from "@/components/map-editor-ui/Icon";
+import { AssetPickerDialog } from "@/components/map-editor-ui/AssetPickerDialog";
+import { UserAsset } from "@/lib/api-library";
 
 type TabType = "basic" | "icon" | "display" | "media";
 
 interface LocationFormProps {
-  segmentId: string;
+  segmentId?: string;
   onSave: (data: CreateLocationRequest) => Promise<void>;
   onCancel: () => void;
   initialCoordinates?: [number, number] | null;
@@ -36,6 +38,20 @@ export function LocationForm({
   const [highlightOnEnter, setHighlightOnEnter] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Media state
+  const [iconFile, setIconFile] = useState<File | null>(null);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [iconUrl, setIconUrl] = useState("");
+  const [audioUrl, setAudioUrl] = useState("");
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
+
+  const iconInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
+
+  // Asset Picker State
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerType, setPickerType] = useState<"image" | "audio">("image");
+
   useEffect(() => {
     if (initialLocation) {
       setTitle(initialLocation.title || "");
@@ -44,6 +60,8 @@ export function LocationForm({
       setLocationType(initialLocation.locationType || "PointOfInterest");
       setIsVisible(initialLocation.isVisible !== false);
       setHighlightOnEnter(initialLocation.highlightOnEnter ?? false);
+      setIconUrl(initialLocation.iconUrl || "");
+      setAudioUrl(initialLocation.audioUrl || "");
       if (initialLocation.markerGeometry) {
         try {
           const geo = JSON.parse(initialLocation.markerGeometry);
@@ -58,6 +76,43 @@ export function LocationForm({
       setCoordinates(initialCoordinates);
     }
   }, [initialLocation, initialCoordinates]);
+
+  // Handle icon file preview
+  const handleIconFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIconFile(file);
+      setIconUrl(""); // Clear URL when file is selected
+      const reader = new FileReader();
+      reader.onload = (e) => setIconPreview(e.target?.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Handle audio file change
+  const handleAudioFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAudioFile(file);
+      setAudioUrl(""); // Clear URL when file is selected
+    }
+  };
+
+  const openAssetPicker = (type: "image" | "audio") => {
+    setPickerType(type);
+    setPickerOpen(true);
+  };
+
+  const handleAssetSelect = (asset: UserAsset) => {
+    if (pickerType === "image") {
+      setIconUrl(asset.url);
+      setIconPreview(asset.url);
+      setIconFile(null); // Clear file if selecting from library
+    } else {
+      setAudioUrl(asset.url);
+      setAudioFile(null); // Clear file if selecting from library
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +133,11 @@ export function LocationForm({
         highlightOnEnter: highlightOnEnter,
         showTooltip: !!tooltipContent.trim(),
         isVisible,
+        // Media fields
+        iconFile: iconFile || undefined,
+        audioFile: audioFile || undefined,
+        iconUrl: iconUrl.trim() || undefined,
+        audioUrl: audioUrl.trim() || undefined,
       };
 
       await onSave(data);
@@ -88,7 +148,7 @@ export function LocationForm({
 
   const tabs: { id: TabType; label: string; icon: string }[] = [
     { id: "basic", label: "Thông tin", icon: "📍" },
-    { id: "icon", label: "Icon", icon: "🎨" },
+    { id: "media", label: "Icon & Media", icon: "🎨" },
     { id: "display", label: "Hiển thị", icon: "👁️" },
   ];
 
@@ -115,11 +175,10 @@ export function LocationForm({
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             disabled={saving}
-            className={`px-2 py-1 text-xs font-medium rounded transition-colors ${
-              activeTab === tab.id
-                ? "text-emerald-400 bg-emerald-500/10 border-b-2 border-emerald-400"
-                : "text-zinc-400 hover:text-zinc-200"
-            }`}
+            className={`px-2 py-1 text-xs font-medium rounded transition-colors ${activeTab === tab.id
+              ? "text-emerald-400 bg-emerald-500/10 border-b-2 border-emerald-400"
+              : "text-zinc-400 hover:text-zinc-200"
+              }`}
           >
             <span className="mr-1">{tab.icon}</span>
             {tab.label}
@@ -156,12 +215,12 @@ export function LocationForm({
               />
             </div>
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Nội dung tooltip (hiển thị khi click)</label>
+              <label className="block text-xs text-zinc-400 mb-1">Risk Text</label>
               <textarea
                 value={tooltipContent}
                 onChange={(e) => setTooltipContent(e.target.value)}
                 className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
-                placeholder="Nội dung hiển thị khi click vào marker..."
+                placeholder="Nhập nội dung Risk Text..."
                 rows={3}
                 disabled={saving}
               />
@@ -226,15 +285,132 @@ export function LocationForm({
           </div>
         )}
 
-        {/* Icon Tab */}
-        {activeTab === "icon" && (
-          <div className="space-y-2">
-            <label className="block text-xs text-zinc-400 mb-1">Chọn icon</label>
-            <div className="text-xs text-zinc-500">
-              Icon selection sẽ được cập nhật sau
+        {/* Media Tab */}
+        {activeTab === "media" && (
+          <div className="space-y-3">
+            {/* Icon Image Upload */}
+            <div className="space-y-2">
+              <label className="block text-xs text-zinc-400">Ảnh đại diện (Icon)</label>
+              <div className="flex gap-2">
+                <input
+                  ref={iconInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleIconFileChange}
+                  className="hidden"
+                  disabled={saving}
+                />
+                <button
+                  type="button"
+                  onClick={() => iconInputRef.current?.click()}
+                  disabled={saving}
+                  className="flex-1 px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
+                >
+                  Upload ảnh
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAssetPicker("image")}
+                  disabled={saving}
+                  className="px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
+                  title="Chọn từ Library"
+                >
+                  <Icon icon="mdi:folder-image" className="w-3.5 h-3.5" />
+                  Library
+                </button>
+              </div>
+              {iconFile && (
+                <div className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded text-xs">
+                  {iconPreview && (
+                    <img src={iconPreview} alt="Preview" className="w-8 h-8 rounded object-cover" />
+                  )}
+                  <span className="flex-1 truncate text-zinc-300">{iconFile.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => { setIconFile(null); setIconPreview(null); }}
+                    className="p-1 hover:bg-zinc-700 rounded"
+                  >
+                    <Icon icon="mdi:close" className="w-3 h-3 text-zinc-400" />
+                  </button>
+                </div>
+              )}
+              <div className="text-xs text-zinc-500">hoặc nhập URL:</div>
+              <input
+                type="url"
+                value={iconUrl}
+                onChange={(e) => { setIconUrl(e.target.value); setIconFile(null); setIconPreview(null); }}
+                className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                placeholder="https://example.com/icon.png"
+                disabled={saving}
+              />
+            </div>
+
+            {/* Audio Upload */}
+            <div className="space-y-2">
+              <label className="block text-xs text-zinc-400">Audio (phát khi click)</label>
+              <div className="flex gap-2">
+                <input
+                  ref={audioInputRef}
+                  type="file"
+                  accept="audio/*"
+                  onChange={handleAudioFileChange}
+                  className="hidden"
+                  disabled={saving}
+                />
+                <button
+                  type="button"
+                  onClick={() => audioInputRef.current?.click()}
+                  disabled={saving}
+                  className="flex-1 px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
+                >
+                  Upload audio
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openAssetPicker("audio")}
+                  disabled={saving}
+                  className="px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
+                  title="Chọn từ Library"
+                >
+                  <Icon icon="mdi:folder-music" className="w-3.5 h-3.5" />
+                  Library
+                </button>
+              </div>
+              {audioFile && (
+                <div className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded text-xs">
+                  <Icon icon="mdi:music" className="w-4 h-4 text-emerald-400" />
+                  <span className="flex-1 truncate text-zinc-300">{audioFile.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAudioFile(null)}
+                    className="p-1 hover:bg-zinc-700 rounded"
+                  >
+                    <Icon icon="mdi:close" className="w-3 h-3 text-zinc-400" />
+                  </button>
+                </div>
+              )}
+              <div className="text-xs text-zinc-500">hoặc nhập URL:</div>
+              <input
+                type="url"
+                value={audioUrl}
+                onChange={(e) => { setAudioUrl(e.target.value); setAudioFile(null); }}
+                className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                placeholder="https://example.com/audio.mp3"
+                disabled={saving}
+              />
+            </div>
+
+            {/* Icon Selection Section - Merged from previous Icon tab */}
+            <div className="space-y-2 pt-2 border-t border-zinc-700/50">
+              <label className="block text-xs text-zinc-400 mb-1">Chọn icon</label>
+              <div className="text-xs text-zinc-500">
+                Icon selection sẽ được cập nhật sau
+              </div>
             </div>
           </div>
         )}
+
+        {/* Display Tab */}
 
         {/* Display Tab */}
         {activeTab === "display" && (
@@ -281,6 +457,14 @@ export function LocationForm({
           </button>
         </div>
       </form>
+
+      <AssetPickerDialog
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onSelect={handleAssetSelect}
+        initialTab={pickerType}
+        title={pickerType === "image" ? "Chọn Icon từ Library" : "Chọn Audio từ Library"}
+      />
     </div>
   );
 }

@@ -49,18 +49,22 @@ export default function WorkspaceDetailPage() {
   const [deleteMapLoading, setDeleteMapLoading] = useState(false);
 
   const [publishedMenuOpenId, setPublishedMenuOpenId] = useState<string | null>(null);
+  const [showCreateMapDialog, setShowCreateMapDialog] = useState(false);
+  const [mapType, setMapType] = useState<"normal" | "storymap">("normal");
 
   const handleCreateMap = useCallback(async () => {
     try {
       const created = await createDefaultMap({
         name: t("workspace_detail.untitled_map"),
         workspaceId,
+        isStoryMap: mapType === "storymap",
       });
-      router.push(`/maps/${created.mapId}?created=1`);
+      setShowCreateMapDialog(false);
+      router.push(`/maps/${created.mapId}`);
     } catch (e) {
       showToast("error", safeMessage(e, t("workspace_detail.request_failed")));
     }
-  }, [router, showToast, workspaceId, t]);
+  }, [router, showToast, workspaceId, mapType, t]);
 
   const loadData = useCallback(async () => {
     try {
@@ -196,7 +200,7 @@ export default function WorkspaceDetailPage() {
 
         <div className="flex items-center gap-2">
           <button
-            onClick={() => void handleCreateMap()}
+            onClick={() => setShowCreateMapDialog(true)}
             className="px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
           >
             {t("workspace_detail.create_map")}
@@ -254,7 +258,7 @@ export default function WorkspaceDetailPage() {
           <h3 className="text-lg font-semibold text-zinc-200 mb-2">{t("workspace_detail.empty_title")}</h3>
           <p className="text-zinc-400 mb-4">{t("workspace_detail.empty_desc")}</p>
           <button
-            onClick={() => void handleCreateMap()}
+            onClick={() => setShowCreateMapDialog(true)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -486,6 +490,79 @@ export default function WorkspaceDetailPage() {
               >
                 {deleteMapLoading ? "Đang xoá..." : "Xoá bản đồ"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create Map Dialog */}
+      {showCreateMapDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="p-6">
+              <h2 className="text-xl font-semibold text-white mb-4">Chọn loại bản đồ</h2>
+              <div className="space-y-3 mb-6">
+                <button
+                  onClick={() => setMapType("normal")}
+                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                    mapType === "normal"
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
+                      mapType === "normal" ? "border-emerald-500" : "border-zinc-600"
+                    }`}>
+                      {mapType === "normal" && (
+                        <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold text-white mb-1">Bản đồ thường</div>
+                      <div className="text-sm text-zinc-400">Tạo bản đồ để hiển thị và chia sẻ dữ liệu địa lý</div>
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setMapType("storymap")}
+                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
+                    mapType === "storymap"
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
+                      mapType === "storymap" ? "border-emerald-500" : "border-zinc-600"
+                    }`}>
+                      {mapType === "storymap" && (
+                        <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <div className="font-semibold text-white mb-1">Storymap</div>
+                      <div className="text-sm text-zinc-400">Tạo storymap với timeline và segments để có thể tạo session học tập</div>
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <div className="flex gap-3 justify-end">
+                <button
+                  onClick={() => setShowCreateMapDialog(false)}
+                  className="px-4 py-2 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={() => void handleCreateMap()}
+                  className="px-4 py-2 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-400 transition-colors"
+                >
+                  Tạo bản đồ
+                </button>
+              </div>
             </div>
           </div>
         </div>

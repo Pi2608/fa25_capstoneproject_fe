@@ -6,6 +6,7 @@ import {
   adminGetSubscriptionPlanById,
   adminUpdateSubscriptionPlan,
 } from "@/lib/admin-api";
+import Loading from "@/app/loading";
 
 type Plan = {
   planId: number;
@@ -68,7 +69,7 @@ export default function EditPlanPage() {
     return (
       <div className="p-5">
         <section className="bg-zinc-900/50 p-6 rounded-lg">
-          <p>Đang tải dữ liệu...</p>
+          <p><Loading /></p>
         </section>
       </div>
     );
@@ -401,7 +402,7 @@ export default function EditPlanPage() {
               onClick={handleSave}
               disabled={saving}
             >
-              {saving ? "Đang lưu..." : "Lưu thay đổi"}
+              {saving ? <Loading /> : "Lưu thay đổi"}
             </button>
           </div>
         </div>

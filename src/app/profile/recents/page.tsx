@@ -261,7 +261,7 @@ export default function RecentsPage() {
       workspaceId: null,
     });
 
-    router.push(`/maps/${created.mapId}?created=1&name=${encodeURIComponent("Untitled Map")}`);
+    router.push(`/maps/${created.mapId}`);
   }, [router]);
 
   const createFromSample = async (s: Sample) => {

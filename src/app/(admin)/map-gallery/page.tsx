@@ -14,6 +14,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "../layout";
 import { getThemeClasses } from "@/utils/theme-utils";
+import Loading from "@/app/loading";
 
 const STATUSES: MapGalleryStatusEnum[] = ["Pending", "Approved", "Rejected"];
 
@@ -215,7 +216,7 @@ export default function MapGalleryPage() {
       {loading && (
         <div className="p-5">
           <div className={`${theme.textMuted}`} style={{ padding: "2rem", textAlign: "center" }}>
-            Đang tải...
+            <Loading />
           </div>
         </div>
       )}

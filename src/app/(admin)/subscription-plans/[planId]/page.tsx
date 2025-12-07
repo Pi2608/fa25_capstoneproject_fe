@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { adminGetSubscriptionPlans } from "@/lib/admin-api";
+import Loading from "@/app/loading";
 
 type Plan = {
   planId: number;
@@ -70,7 +71,7 @@ export default function PlanDetailPage() {
 
   if (loading) return <div className="p-5">
     <section className="bg-zinc-900/50 p-6 rounded-lg">
-      <p>Đang tải dữ liệu...</p>
+      <Loading />
     </section>
   </div>;
   if (err) return <div className="p-5">

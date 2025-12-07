@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { adminGetOrganizationById } from "@/lib/admin-api";
+import Loading from "@/app/loading";
+import { useTheme } from "../../layout";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 type OrgStatus = "Active" | "Suspended";
 
@@ -25,6 +28,8 @@ export default function OrganizationDetailPage() {
   const params = useParams<{ orgId?: string }>();
   const orgId = params?.orgId ?? "";
   const router = useRouter();
+  const { isDark } = useTheme();
+  const themeClasses = getThemeClasses(isDark);
   const [data, setData] = useState<OrganizationDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -51,9 +56,17 @@ export default function OrganizationDetailPage() {
     };
   }, [orgId]);
 
-  if (loading) return <div className="p-5">Đang tải thông tin tổ chức...</div>;
-  if (err) return <div className="p-5">Không tìm thấy tổ chức.</div>;
-  if (!data) return <div className="p-5">Không tìm thấy tổ chức.</div>;
+  if (loading) return <div className="p-5"><Loading /></div>;
+  if (err) return (
+    <div className={`p-5 ${themeClasses.loading.text}`}>
+      Không tìm thấy tổ chức.
+    </div>
+  );
+  if (!data) return (
+    <div className={`p-5 ${themeClasses.loading.text}`}>
+      Không tìm thấy tổ chức.
+    </div>
+  );
 
   const StatusBadge =
     data.status === "Suspended" ? (
@@ -64,23 +77,28 @@ export default function OrganizationDetailPage() {
 
   return (
     <div className="p-5">
-      <section className="bg-zinc-900/50 p-6 rounded-lg">
+      <section className={`${themeClasses.panel} p-6 rounded-lg border`}>
         <div className="flex items-center justify-between mb-6">
-          <h3>Chi tiết tổ chức</h3>
+          <h3 className={themeClasses.loading.text}>Chi tiết tổ chức</h3>
           <div className="flex items-center gap-2">
-            <button className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors" onClick={() => router.back()}>← Quay lại</button>
+            <button 
+              className={`px-4 py-2 rounded-lg border transition-colors ${themeClasses.button}`} 
+              onClick={() => router.back()}
+            >
+              ← Quay lại
+            </button>
           </div>
         </div>
 
         <div
-          className="bg-white rounded-lg p-6 shadow-sm"
+          className={`${themeClasses.panel} rounded-lg p-6 shadow-sm border`}
         >
           <div
-            className="flex items-center justify-between gap-4 pb-3 border-b border-zinc-800 mb-5"
+            className={`flex items-center justify-between gap-4 pb-3 border-b mb-5 ${themeClasses.tableBorder}`}
           >
             <div className="min-w-0">
               <h2
-                className="m-0 text-2xl font-bold leading-none whitespace-nowrap text-ellipsis overflow-hidden"
+                className={`m-0 text-2xl font-bold leading-none whitespace-nowrap text-ellipsis overflow-hidden ${themeClasses.loading.text}`}
                 title={data.name}
               >
                 {data.name}
@@ -96,40 +114,32 @@ export default function OrganizationDetailPage() {
               gap: "18px 32px",
             }}
           >
-            <Field label="Chủ sở hữu">
+            <Field label="Chủ sở hữu" themeClasses={themeClasses}>
               {data.ownerName}{" "}
-              <span className="text-zinc-400">({data.ownerEmail})</span>
+              <span className={themeClasses.textMuted}>({data.ownerEmail})</span>
             </Field>
 
-            <Field label="Gói chính">{data.primaryPlanName ?? "—"}</Field>
+            <Field label="Gói chính" themeClasses={themeClasses}>{data.primaryPlanName ?? "—"}</Field>
 
-            <Field label="Tổng thành viên">{data.totalMembers ?? 0}</Field>
+            <Field label="Tổng thành viên" themeClasses={themeClasses}>{data.totalMembers ?? 0}</Field>
 
-            <Field label="Membership đang hoạt động">
+            <Field label="Membership đang hoạt động" themeClasses={themeClasses}>
               {data.totalActiveMemberships ?? 0}
             </Field>
 
-            <Field label="Ngày tạo">
+            <Field label="Ngày tạo" themeClasses={themeClasses}>
               {data.createdAt ? new Date(data.createdAt).toLocaleString("vi-VN") : "—"}
             </Field>
 
-            <Field label="Cập nhật lần cuối">
+            <Field label="Cập nhật lần cuối" themeClasses={themeClasses}>
               {data.updatedAt ? new Date(data.updatedAt).toLocaleString("vi-VN") : "—"}
             </Field>
           </div>
 
           <div style={{ marginTop: 28 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8 }}>Mô tả</div>
+            <div className={`font-semibold mb-2 ${themeClasses.loading.text}`}>Mô tả</div>
             <div
-              style={{
-                background: "#f9fafb",
-                border: "1px solid #f0f0f0",
-                borderRadius: 8,
-                padding: "12px 14px",
-                minHeight: 64,
-                whiteSpace: "pre-wrap",
-                color: "#111827",
-              }}
+              className={`rounded-lg p-3.5 min-h-[64px] whitespace-pre-wrap border ${themeClasses.panel} ${themeClasses.loading.text}`}
             >
               {data.description?.trim() || "Không có mô tả."}
             </div>
@@ -140,11 +150,15 @@ export default function OrganizationDetailPage() {
   );
 }
 
-function Field(props: { label: string; children: React.ReactNode }) {
+function Field(props: { 
+  label: string; 
+  children: React.ReactNode; 
+  themeClasses: ReturnType<typeof getThemeClasses>;
+}) {
   return (
     <div>
-      <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 4 }}>{props.label}</div>
-      <div style={{ fontSize: 15, fontWeight: 500 }}>{props.children}</div>
+      <div className={`text-xs mb-1 ${props.themeClasses.textMuted}`}>{props.label}</div>
+      <div className={`text-sm font-medium ${props.themeClasses.loading.text}`}>{props.children}</div>
     </div>
   );
 }

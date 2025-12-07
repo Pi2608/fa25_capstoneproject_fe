@@ -9,6 +9,7 @@ export type CommunityPostSummaryResponse = {
   publishedAt?: string | null;
   createdAt?: string | null;
   isPublished?: boolean;
+  riskText?: string | null;
 };
 
 export type CommunityPostDetailResponse = CommunityPostSummaryResponse & {

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, useEffect, createContext, useContext } from "react";
 import { clearAllAuthData } from "@/utils/authUtils";
+import { getMe, type Me } from "@/lib/api-auth";
+import Loading from "@/app/loading";
 
 const ThemeContext = createContext<{
   isDark: boolean;
@@ -36,13 +38,41 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [open, setOpen] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
   const [isDark, setIsDark] = useState(true);
+  const [isVerified, setIsVerified] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("admin-theme");
-    if (savedTheme === "light") {
-      setIsDark(false);
-    }
-  }, []);
+    const checkAdminAccess = async () => {
+      try {
+        const token = typeof window !== "undefined"
+          ? (localStorage.getItem("token") || localStorage.getItem("accessToken"))
+          : null;
+
+        if (!token) {
+          router.replace("/login");
+          return;
+        }
+
+        const user = await getMe(true);
+
+        const adminRoles = ["Admin", "admin", "Administrator", "administrator"];
+        const hasAdminRole = adminRoles.includes(user.role);
+
+        if (!hasAdminRole) {
+          router.replace("/not-found");
+          return;
+        }
+        setIsVerified(true);
+      } catch (error) {
+        console.error("Failed to check admin access:", error);
+        router.replace("/login");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAdminAccess();
+  }, [router]);
 
   const toggleTheme = () => {
     const newTheme = !isDark;
@@ -53,6 +83,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       window.dispatchEvent(new Event("admin-theme-change"));
     }
   };
+
 
   const onSignOut = async () => {
     if (signingOut) return;
@@ -81,10 +112,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   };
 
+  if (loading) {
+    return (
+      <Loading />
+    );
+  }
+
+  if (!isVerified) {
+    return null;
+  }
+
   return (
     <div className={`flex h-screen transition-colors ${isDark
-        ? "bg-zinc-950 text-zinc-100"
-        : "bg-gray-50 text-gray-900"
+      ? "bg-zinc-950 text-zinc-100"
+      : "bg-gray-50 text-gray-900"
       }`}>
       <aside className={`flex flex-col transition-all duration-300 ${open ? "w-64" : "w-20"
         } ${isDark
@@ -106,12 +147,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 key={href}
                 href={href}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 transition-colors ${active
-                    ? isDark
-                      ? "bg-zinc-800 text-white"
-                      : "bg-gray-100 text-gray-900"
-                    : isDark
-                      ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
-                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  ? isDark
+                    ? "bg-zinc-800 text-white"
+                    : "bg-gray-100 text-gray-900"
+                  : isDark
+                    ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                   }`}
                 aria-current={active ? "page" : undefined}
               >
@@ -127,8 +168,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           }`}>
           <button
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isDark
-                ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
-                : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+              : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             onClick={toggleTheme}
           >
@@ -140,8 +181,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
           <button
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50 ${isDark
-                ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
-                : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+              : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             onClick={() => router.push("/settings")}
           >
@@ -153,8 +194,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </button>
           <button
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50 ${isDark
-                ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
-                : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+              : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
             onClick={onSignOut}
             disabled={signingOut}
@@ -171,13 +212,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className={`h-14 border-b flex items-center gap-4 px-4 ${isDark
-            ? "bg-zinc-900 border-zinc-800"
-            : "bg-white border-gray-200"
+          ? "bg-zinc-900 border-zinc-800"
+          : "bg-white border-gray-200"
           }`}>
           <button
             className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${isDark
-                ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200"
-                : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
+              ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+              : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
               }`}
             onClick={() => setOpen((v) => !v)}
             aria-label="Thu gọn/mở rộng menu"
@@ -187,8 +228,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="flex-1 max-w-md">
             <input
               className={`w-full h-9 px-3 rounded-lg border outline-none focus:ring-1 ${isDark
-                  ? "border-zinc-800 bg-zinc-800/50 text-zinc-100 placeholder-zinc-500 focus:border-zinc-700 focus:ring-zinc-700"
-                  : "border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:ring-gray-400"
+                ? "border-zinc-800 bg-zinc-800/50 text-zinc-100 placeholder-zinc-500 focus:border-zinc-700 focus:ring-zinc-700"
+                : "border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:ring-gray-400"
                 }`}
               placeholder="Tìm kiếm…"
               aria-label="Tìm kiếm"
@@ -197,16 +238,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           <div className="flex items-center gap-2">
             <button
               className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${isDark
-                  ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200"
-                  : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
+                ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+                : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
                 }`}
               aria-label="Thông báo"
             >
               <BellIcon />
             </button>
             <div className={`w-9 h-9 rounded-full border ${isDark
-                ? "bg-zinc-700 border-zinc-600"
-                : "bg-gray-300 border-gray-400"
+              ? "bg-zinc-700 border-zinc-600"
+              : "bg-gray-300 border-gray-400"
               }`} />
           </div>
         </header>

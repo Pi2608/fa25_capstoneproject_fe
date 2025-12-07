@@ -25,6 +25,7 @@ import {
 } from "@/lib/api-workspaces";
 import { MapDto } from "@/lib/api-maps";
 import { Workspace } from "@/types/workspace";
+import Loading from "@/app/loading";
 
 type HeaderMode = "light" | "dark";
 
@@ -385,7 +386,7 @@ export default function OrganizationCreateSessionPage() {
   if (isLoading) {
     return (
       <div className="min-h-[60vh] px-4 text-zinc-500 animate-pulse">
-        Đang tải...
+        <Loading />
       </div>
     );
   }

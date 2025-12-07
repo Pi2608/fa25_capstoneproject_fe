@@ -54,21 +54,12 @@ export function usePoiMarkers({
               existingTooltip.remove();
             }
             mapRef.current?.removeLayer(marker);
-          } catch {}
+          } catch { }
         });
         poiMarkersRef.current = [];
 
         // Load POIs
         const pois = (await getMapLocations(mapId)) as MapLocation[];
-        console.log(`📍 Loaded ${pois.length} POIs for map ${mapId}:`, pois.map(p => ({
-          id: p.locationId,
-          title: p.title,
-          segmentId: p.segmentId,
-          showTooltip: p.showTooltip,
-          hasTooltipContent: !!p.tooltipContent,
-          tooltipContent: p.tooltipContent,
-        })));
-
         if (cancelled || !mapRef.current) {
           return;
         }
@@ -83,20 +74,12 @@ export function usePoiMarkers({
         for (const poi of pois) {
           if (cancelled || !mapRef.current) break;
 
-          console.log(`🔍 Processing POI: ${poi.title} (${poi.locationId})`, {
-            segmentId: poi.segmentId,
-            isVisible: poi.isVisible,
-            hasGeometry: !!poi.markerGeometry,
-          });
-
           try {
             if (poi.isVisible === false) {
-              console.log(`⏭️ Skipping ${poi.title}: isVisible=false`);
               continue;
             }
 
             if (!poi.markerGeometry) {
-              console.warn(`⚠️ POI ${poi.locationId} has no geometry`);
               continue;
             }
 
@@ -104,10 +87,6 @@ export function usePoiMarkers({
             try {
               geoJsonData = JSON.parse(poi.markerGeometry);
             } catch (parseError) {
-              console.error(
-                `❌ Failed to parse geometry for POI ${poi.locationId}:`,
-                parseError
-              );
               continue;
             }
 
@@ -184,6 +163,17 @@ export function usePoiMarkers({
             // Store POI ID for cleanup
             (marker as any)._locationId = poi.locationId;
 
+            // Auto-play audio on click if configured
+            if (poi.playAudioOnClick && poi.audioUrl) {
+              marker.on('click', () => {
+                // Create and play audio
+                const audio = new Audio(poi.audioUrl);
+                audio.play().catch(err => {
+                  console.warn('Failed to auto-play audio:', err);
+                });
+              });
+            }
+
             // Add permanent tooltip label above marker (like segmentRenderer)
             const tooltipLabel = poi.title || '';
             if (tooltipLabel) {
@@ -198,11 +188,6 @@ export function usePoiMarkers({
 
             // Add tooltip popup if enabled (similar to slide popup)
             if (poi.showTooltip !== false && poi.tooltipContent) {
-              console.log(`📌 Adding tooltip popup for: ${poi.title}`, {
-                showTooltip: poi.showTooltip,
-                tooltipContent: poi.tooltipContent?.substring(0, 50) + '...',
-              });
-
               // Process content
               let rawContent = poi.tooltipContent || "";
               let processedContent = rawContent;
@@ -245,12 +230,10 @@ export function usePoiMarkers({
               // Create popup content with same style as slide popup
               const popupContent = `
                 <div style="max-width: 300px; font-family: system-ui, -apple-system, sans-serif;">
-                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${
-                    poi.title
-                  }</h3>
-                  <div style="margin: 8px 0; font-size: 14px; color: #333; white-space: pre-wrap;">${
-                    processedContent || ""
-                  }</div>
+                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${poi.title
+                }</h3>
+                  <div style="margin: 8px 0; font-size: 14px; color: #333; white-space: pre-wrap;">${processedContent || ""
+                }</div>
                 </div>
               `;
 
@@ -259,10 +242,6 @@ export function usePoiMarkers({
                 className: "poi-popup",
               });
             } else {
-              console.log(`⏭️ No tooltip for: ${poi.title}`, {
-                showTooltip: poi.showTooltip,
-                hasTooltipContent: !!poi.tooltipContent,
-              });
             }
 
             // Add popup if enabled - rich HTML content with media, audio, external link
@@ -317,12 +296,10 @@ export function usePoiMarkers({
 
               const popupContent = `
                 <div style="max-width: 300px; font-family: system-ui, -apple-system, sans-serif;">
-                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${
-                    poi.title
-                  }</h3>
-                  <p style="margin: 8px 0; font-size: 14px; color: #333; white-space: pre-wrap;">${
-                    poi.slideContent || ""
-                  }</p>
+                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${poi.title
+                }</h3>
+                  <p style="margin: 8px 0; font-size: 14px; color: #333; white-space: pre-wrap;">${poi.slideContent || ""
+                }</p>
                   ${mediaHtml}
                   ${audioHtml}
                   ${linkHtml}
@@ -338,7 +315,6 @@ export function usePoiMarkers({
             // Add marker to map
             marker.addTo(mapRef.current);
             poiMarkersRef.current.push(marker);
-            console.log(`✅ Successfully rendered POI: ${poi.title} at [${latLng}]`);
           } catch (error) {
             console.error(`❌ Failed to render POI ${poi.locationId} (${poi.title}):`, error);
           }
@@ -362,7 +338,6 @@ export function usePoiMarkers({
           });
         }
       } catch (error) {
-        console.error("Failed to load POIs:", error);
       }
     };
 
@@ -371,7 +346,6 @@ export function usePoiMarkers({
     // Listen for POI changes
     const handlePoiChange = () => {
       if (!cancelled && mapRef.current) {
-        console.log('🔄 POI change event received, reloading POIs...');
         loadAndRenderPois();
       }
     };
@@ -395,7 +369,7 @@ export function usePoiMarkers({
       poiMarkersRef.current.forEach((marker) => {
         try {
           mapRef.current?.removeLayer(marker);
-        } catch {}
+        } catch { }
       });
       poiMarkersRef.current = [];
     };

@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import Loading from "@/app/loading";
 
-const LeafletStylesClient = dynamic(() => import("./LeafletStylesClient"), {
+const LeafletStylesClient = dynamic(() => import("@/components/layout/LeafletStylesClient"), {
   ssr: false,
   loading: () => <Loading />,
 });
