@@ -12,7 +12,6 @@ import {
   getSession,
   getSessionLeaderboard,
   leaveSession,
-  type SessionRunningQuestionDto,
   type SessionDto,
   type LeaderboardEntryDto,
 } from "@/lib/api-ques";
@@ -28,6 +27,25 @@ import {
   type SessionEndedEvent,
   type JoinedSessionEvent,
 } from "@/lib/hubs/session";
+
+import {
+  createGroupCollaborationConnection,
+  startGroupCollaborationConnection,
+  stopGroupCollaborationConnection,
+  joinGroupCollaborationSession,
+  joinGroupCollaborationGroup,
+  leaveGroupCollaborationGroup,
+  submitGroupWorkViaSignalR,
+  sendMessageViaSignalR,
+  registerGroupCollaborationEventHandlers,
+  unregisterGroupCollaborationEventHandlers,
+  type GroupDto,
+  type GroupChatMessage,
+  type GroupSubmissionDto,
+  type GroupGradedSubmissionDto,
+} from "@/lib/hubs/groupCollaboration";
+import { getGroupsBySession } from "@/lib/api-groupCollaboration";
+
 import { toast } from "react-toastify";
 
 type ViewState = "waiting" | "viewing" | "question" | "results" | "ended";
@@ -40,25 +58,21 @@ export default function StoryMapViewPage() {
   const sessionId = searchParams.get("sessionId") ?? "";
   const participantIdFromUrl = searchParams.get("participantId") ?? "";
 
-  // User info state
   const [displayName, setDisplayName] = useState("Học sinh");
   const [sessionCode, setSessionCode] = useState("");
   const [participantId, setParticipantId] = useState("");
 
-  // Session state
   const [session, setSession] = useState<SessionDto | null>(null);
   const [viewState, setViewState] = useState<ViewState>("waiting");
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntryDto[]>([]);
 
-  // Map and segments
   const [segments, setSegments] = useState<Segment[]>([]);
   const [mapDetail, setMapDetail] = useState<any>(null);
-  const [currentIndex, setCurrentIndex] = useState(-1); // -1 = no segment selected yet
-  const [isTeacherPlaying, setIsTeacherPlaying] = useState(false); // Track if teacher is playing
-  const [hasReceivedSegmentSync, setHasReceivedSegmentSync] = useState(false); // Track if we've received a live sync from teacher
+  const [currentIndex, setCurrentIndex] = useState(-1);
+  const [isTeacherPlaying, setIsTeacherPlaying] = useState(false);
+  const [hasReceivedSegmentSync, setHasReceivedSegmentSync] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Question state
   const [currentQuestion, setCurrentQuestion] = useState<QuestionBroadcastEvent | null>(null);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [answering, setAnswering] = useState(false);
@@ -66,14 +80,20 @@ export default function StoryMapViewPage() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [questionResults, setQuestionResults] = useState<QuestionResultsEvent | null>(null);
 
-  // Countdown timer
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Leaving state
   const [isLeaving, setIsLeaving] = useState(false);
 
-  // Load user info from sessionStorage
+  // ==== Group Collaboration state ====
+  const [groupConnection, setGroupConnection] = useState<any>(null);
+  const [sessionGroups, setSessionGroups] = useState<GroupDto[]>([]);
+  const [currentGroupId, setCurrentGroupId] = useState<string | null>(null);
+  const [groupMessages, setGroupMessages] = useState<GroupChatMessage[]>([]);
+  const [groupWorkContent, setGroupWorkContent] = useState("");
+  const [groupChatInput, setGroupChatInput] = useState("");
+  const [groupSubmitting, setGroupSubmitting] = useState(false);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -94,7 +114,6 @@ export default function StoryMapViewPage() {
     }
   }, [sessionId, participantIdFromUrl]);
 
-  // Load session info (only for initial data, viewState is controlled by SignalR)
   useEffect(() => {
     if (!sessionId) return;
 
@@ -106,11 +125,9 @@ export default function StoryMapViewPage() {
         if (cancelled) return;
         setSession(sessionData);
 
-        // Only set ended state from API - other states are controlled by SignalR
         const status = sessionData.status as string;
         if (status === "COMPLETED" || status === "Ended") {
           setViewState("ended");
-          // Load final leaderboard
           try {
             const lb = await getSessionLeaderboard(sessionId, 100);
             setLeaderboard(lb);
@@ -118,8 +135,6 @@ export default function StoryMapViewPage() {
             console.error("Failed to load leaderboard:", e);
           }
         }
-        // Note: viewState "waiting" or "viewing" will be set by JoinedSession event
-        // This ensures we get the correct cached segment state from the hub
       } catch (e: any) {
         console.error("Load session failed:", e);
         if (!cancelled) {
@@ -133,7 +148,6 @@ export default function StoryMapViewPage() {
     };
   }, [sessionId]);
 
-  // Load map and segments
   useEffect(() => {
     if (!mapId) return;
 
@@ -152,22 +166,35 @@ export default function StoryMapViewPage() {
     })();
   }, [mapId]);
 
-  // ================== SignalR Event Handlers ==================
+  // ==== Load groups of this session (list nhóm để join) ====
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
 
-  // Handle JoinedSession - sent when student joins/rejoins the session
+    (async () => {
+      try {
+        const data = await getGroupsBySession(sessionId);
+        if (!cancelled) {
+          setSessionGroups(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {
+        console.error("[GroupCollab][View] Load groups failed:", e);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
   const handleJoinedSession = useCallback((event: JoinedSessionEvent) => {
-    // Reset sync state when joining/rejoining
     setHasReceivedSegmentSync(false);
-    setCurrentIndex(-1); // Reset to no segment selected
+    setCurrentIndex(-1);
     setIsTeacherPlaying(false);
 
-    // Set view state based on session status
     const status = event.status as string;
     if (status === "IN_PROGRESS" || status === "Running") {
-      // Session is in progress - show viewing state
-      // But don't render segments until teacher sends live sync
       setViewState("viewing");
-      // Note: We don't use cached segmentState here - wait for live SegmentSync event
     } else if (status === "COMPLETED" || status === "Ended") {
       setViewState("ended");
     } else {
@@ -178,7 +205,6 @@ export default function StoryMapViewPage() {
   const handleSessionStatusChanged = useCallback((event: SessionStatusChangedEvent) => {
     const status = event.status as string;
     if (status === "IN_PROGRESS" || status === "Running") {
-      // Session started - but wait for teacher to sync segment before playing
       setViewState("viewing");
       toast.info("Tiết học đã bắt đầu!");
     } else if (status === "PAUSED" || status === "Paused") {
@@ -191,16 +217,13 @@ export default function StoryMapViewPage() {
     }
   }, []);
 
-  // Track previous segment sync to avoid duplicate processing
   const prevSegmentSyncRef = useRef<{
     index: number;
     isPlaying: boolean;
     timestamp: number;
   } | null>(null);
 
-  // Track play start time to ignore rapid stop signals
-  const playStartTimeRef = useRef<number>(0);
-  const MIN_PLAY_DURATION_MS = 1000; // Minimum 1 second before accepting stop
+  const MIN_PLAY_DURATION_MS = 1000;
 
   const handleSegmentSync = useCallback(
     (event: SegmentSyncEvent) => {
@@ -208,35 +231,27 @@ export default function StoryMapViewPage() {
       const shouldPlay = typeof event.isPlaying === "boolean" ? event.isPlaying : false;
       const now = Date.now();
 
-      // Check if this is a duplicate event (same index and same isPlaying)
       const prev = prevSegmentSyncRef.current;
       if (prev && prev.index === idx && prev.isPlaying === shouldPlay) {
         return;
       }
 
-      // CRITICAL: Ignore rapid stop signals after play
-      // Teacher's playback hook sometimes sends stop right after play
       if (prev && prev.isPlaying === true && shouldPlay === false) {
         const timeSincePlay = now - prev.timestamp;
         if (timeSincePlay < MIN_PLAY_DURATION_MS) {
-          return; // Ignore this stop
+          return;
         }
       }
 
-      // Update ref with timestamp
       prevSegmentSyncRef.current = { index: idx, isPlaying: shouldPlay, timestamp: now };
 
-      // Only update segment index when receiving live sync from teacher
       if (typeof idx === "number" && idx >= 0) {
-        // Check if segment changed
         setCurrentIndex((prevIndex) => {
           const segmentChanged = prevIndex !== idx;
 
           if (segmentChanged) {
-            // When segment changes, stop playing immediately
             setIsTeacherPlaying(false);
 
-            // Thêm delay để StoryMapViewer có thời gian load route animations
             if (shouldPlay) {
               setTimeout(() => {
                 setIsTeacherPlaying(true);
@@ -245,21 +260,17 @@ export default function StoryMapViewPage() {
               setIsTeacherPlaying(false);
             }
           } else {
-            // Segment không thay đổi, update playing state ngay
             setIsTeacherPlaying(shouldPlay);
           }
 
           return idx;
         });
 
-        // Always mark that we've received a live sync when we have a valid index
         setHasReceivedSegmentSync(true);
       } else {
-        // Update playing state from teacher (khi không có segment change)
         setIsTeacherPlaying(shouldPlay);
       }
 
-      // When viewing map, ensure we're in viewing state
       if (viewState === "waiting") {
         setViewState("viewing");
       }
@@ -275,7 +286,6 @@ export default function StoryMapViewPage() {
     setQuestionResults(null);
     setViewState("question");
 
-    // Start countdown timer
     if (event.timeLimit > 0) {
       setTimeRemaining(event.timeLimit);
 
@@ -304,7 +314,6 @@ export default function StoryMapViewPage() {
     setQuestionResults(event);
     setViewState("results");
 
-    // Clear timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -317,7 +326,6 @@ export default function StoryMapViewPage() {
     setViewState("ended");
     setLeaderboard(event.finalLeaderboard || []);
 
-    // Clear timer
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -326,8 +334,7 @@ export default function StoryMapViewPage() {
     toast.info("Tiết học đã kết thúc!");
   }, []);
 
-  // ================== SignalR Connection ==================
-  const { connection, isConnected, error: hubError } = useSessionHub({
+  const { connection, isConnected } = useSessionHub({
     sessionId: sessionId,
     enabled: !!sessionId && !!participantId,
     handlers: {
@@ -340,7 +347,58 @@ export default function StoryMapViewPage() {
     },
   });
 
-  // Cleanup timers on unmount
+  useEffect(() => {
+    if (!sessionId || !participantId) return;
+
+    const conn = createGroupCollaborationConnection();
+    if (!conn) return;
+    setGroupConnection(conn);
+
+    registerGroupCollaborationEventHandlers(conn, {
+      onGroupCreated: (group: GroupDto) => {
+        setSessionGroups((prev) => {
+          if (prev.some((g) => g.id === group.id)) return prev;
+          return [...prev, group];
+        });
+      },
+      onMessageReceived: (msg: GroupChatMessage) => {
+        setGroupMessages((prev) => [...prev, msg]);
+      },
+      onWorkSubmitted: () => {
+        toast.info("Nhóm đã gửi bài thành công!");
+      },
+      onSubmissionGraded: () => {
+        toast.info("Bài nhóm đã được chấm điểm!");
+      },
+      onError: (err: any) => {
+        console.error("[GroupCollab][View] Error:", err);
+      },
+    });
+
+    (async () => {
+      try {
+        const started = await startGroupCollaborationConnection(conn);
+        if (started) {
+          await joinGroupCollaborationSession(conn, sessionId);
+        }
+      } catch (e) {
+        console.error("[GroupCollab][View] Start connection failed:", e);
+      }
+    })();
+
+    return () => {
+      (async () => {
+        try {
+          unregisterGroupCollaborationEventHandlers(conn);
+          await stopGroupCollaborationConnection(conn);
+        } catch (err) {
+          console.error("[GroupCollab][View] Stop connection failed:", err);
+        }
+      })();
+    };
+  }, [sessionId, participantId]);
+
+
   useEffect(() => {
     return () => {
       if (timerRef.current) {
@@ -349,7 +407,6 @@ export default function StoryMapViewPage() {
     };
   }, []);
 
-  // ================== Submit Answer ==================
   const handleSubmitAnswer = async () => {
     if (!participantId || !currentQuestion || !selectedOptionId || hasSubmitted) {
       if (!selectedOptionId) {
@@ -378,29 +435,72 @@ export default function StoryMapViewPage() {
     }
   };
 
-  // Continue viewing map after results
   const handleContinueViewing = () => {
     setCurrentQuestion(null);
     setQuestionResults(null);
     setViewState("viewing");
   };
 
-  // ======= LEAVE SESSION BUTTON HANDLER =======
+  // ==== GroupCollab helpers ====
+  const handleJoinGroup = async (groupId: string) => {
+    if (!groupConnection || !groupId) return;
+    try {
+      if (currentGroupId && currentGroupId !== groupId) {
+        await leaveGroupCollaborationGroup(groupConnection, currentGroupId);
+      }
+      await joinGroupCollaborationGroup(groupConnection, groupId);
+      setCurrentGroupId(groupId);
+      setGroupMessages([]);
+      toast.success("Đã tham gia nhóm!");
+    } catch (e) {
+      console.error("[GroupCollab][View] Join group failed:", e);
+      toast.error("Không tham gia được nhóm.");
+    }
+  };
+
+  const handleSubmitGroupWork = async () => {
+    if (!groupConnection || !currentGroupId || !groupWorkContent.trim() || groupSubmitting) return;
+    try {
+      setGroupSubmitting(true);
+      await submitGroupWorkViaSignalR(groupConnection, {
+        groupId: currentGroupId,
+        content: groupWorkContent.trim(),
+      });
+      setGroupWorkContent("");
+      toast.success("Đã gửi bài nhóm!");
+    } catch (e) {
+      console.error("[GroupCollab][View] Submit group work failed:", e);
+      toast.error("Gửi bài nhóm thất bại.");
+    } finally {
+      setGroupSubmitting(false);
+    }
+  };
+
+  const handleSendGroupMessage = async () => {
+    if (!groupConnection || !currentGroupId || !groupChatInput.trim()) return;
+    try {
+      await sendMessageViaSignalR(groupConnection, {
+        groupId: currentGroupId,
+        message: groupChatInput.trim(),
+      });
+      setGroupChatInput("");
+    } catch (e) {
+      console.error("[GroupCollab][View] Send group message failed:", e);
+    }
+  };
+
   const handleLeaveSession = async () => {
     if (isLeaving) return;
     setIsLeaving(true);
 
-    // Gọi API REST để rời session
     if (participantId) {
       try {
         await leaveSession(participantId);
       } catch (err) {
         console.error("Leave session API failed:", err);
-        // Nếu 404 hoặc lỗi khác vẫn cho rời tiếp
       }
     }
 
-    // Rời group SignalR + stop connection
     if (connection) {
       try {
         await leaveSessionConnection(connection, sessionId);
@@ -415,7 +515,21 @@ export default function StoryMapViewPage() {
       }
     }
 
-    // Xoá local sessionStorage
+    if (groupConnection) {
+      try {
+        if (currentGroupId) {
+          await leaveGroupCollaborationGroup(groupConnection, currentGroupId);
+        }
+      } catch (err) {
+        console.error("[GroupCollab][View] leaveGroup on leaveSession failed:", err);
+      }
+      try {
+        await stopGroupCollaborationConnection(groupConnection);
+      } catch (err) {
+        console.error("[GroupCollab][View] stopGroupCollab failed:", err);
+      }
+    }
+
     if (typeof window !== "undefined") {
       window.sessionStorage.removeItem("imos_student_name");
       window.sessionStorage.removeItem("imos_session_code");
@@ -425,8 +539,6 @@ export default function StoryMapViewPage() {
     toast.info("Bạn đã rời tiết học.");
     router.push("/session/join");
   };
-
-  // ================== Render States ==================
 
   if (error) {
     return (
@@ -449,12 +561,10 @@ export default function StoryMapViewPage() {
     ? [mapDetail.center.latitude, mapDetail.center.longitude]
     : [10.8231, 106.6297];
 
-  // Ensure currentIndex is valid (>= 0 and within segments array)
   const safeCurrentIndex =
     currentIndex >= 0 && currentIndex < segments.length ? currentIndex : 0;
   const currentSegment = segments.length > 0 ? segments[safeCurrentIndex] : null;
 
-  // ================== WAITING STATE ==================
   if (viewState === "waiting") {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
@@ -488,7 +598,6 @@ export default function StoryMapViewPage() {
     );
   }
 
-  // ================== ENDED STATE ==================
   if (viewState === "ended") {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
@@ -499,7 +608,6 @@ export default function StoryMapViewPage() {
           </h2>
           <p className="text-zinc-600 dark:text-zinc-400 mb-6">Cảm ơn bạn đã tham gia!</p>
 
-          {/* Final Leaderboard */}
           {leaderboard.length > 0 && (
             <div className="bg-zinc-900/80 rounded-xl border border-zinc-800 p-4 mb-6">
               <h3 className="text-sm font-semibold text-zinc-300 mb-3 uppercase tracking-wider">
@@ -547,12 +655,10 @@ export default function StoryMapViewPage() {
     );
   }
 
-  // ================== MAIN LAYOUT (VIEWING / QUESTION / RESULTS) ==================
   return (
     <div className="h-screen flex bg-zinc-950 text-zinc-50">
-      {/* LEFT SIDEBAR */}
+      {/* SIDEBAR TRÁI: giữ như cũ, không có Hoạt động nhóm */}
       <div className="w-[360px] border-r border-zinc-800 bg-zinc-950/95 flex flex-col">
-        {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950">
           <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 font-medium">
             Đang xem tiết học
@@ -586,7 +692,6 @@ export default function StoryMapViewPage() {
             )}
           </div>
 
-          {/* Connection status */}
           <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
             <span
               className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"
@@ -597,9 +702,7 @@ export default function StoryMapViewPage() {
           </div>
         </div>
 
-        {/* Question Panel */}
         <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3 space-y-4">
-          {/* Current Question Card */}
           {(viewState === "question" || viewState === "results") && currentQuestion && (
             <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3 space-y-3">
               <div className="flex items-center justify-between gap-2">
@@ -621,7 +724,6 @@ export default function StoryMapViewPage() {
                 </div>
               </div>
 
-              {/* Question Text */}
               <div className="rounded-lg bg-zinc-950/70 border border-zinc-800 px-3 py-2">
                 <p className="text-sm text-zinc-50 whitespace-pre-wrap">
                   {currentQuestion.questionText}
@@ -635,7 +737,6 @@ export default function StoryMapViewPage() {
                 )}
               </div>
 
-              {/* Answer Options */}
               {viewState === "question" &&
                 currentQuestion.options &&
                 currentQuestion.options.length > 0 && (
@@ -674,7 +775,6 @@ export default function StoryMapViewPage() {
                   </div>
                 )}
 
-              {/* Submit Button */}
               {viewState === "question" && !hasSubmitted && (
                 <button
                   type="button"
@@ -690,14 +790,12 @@ export default function StoryMapViewPage() {
                 </button>
               )}
 
-              {/* Submitted Message */}
               {viewState === "question" && hasSubmitted && (
                 <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 text-[12px] text-emerald-300">
                   ✅ Đã gửi đáp án! Chờ giáo viên hiển thị kết quả...
                 </div>
               )}
 
-              {/* Results Display */}
               {viewState === "results" && questionResults && (
                 <div className="space-y-2">
                   {questionResults.correctAnswer && (
@@ -717,7 +815,7 @@ export default function StoryMapViewPage() {
                         Kết quả các bạn
                       </p>
                       <div className="space-y-1 max-h-32 overflow-y-auto">
-                        {questionResults.results.map((result, idx) => (
+                        {questionResults.results.map((result) => (
                           <div
                             key={result.participantId}
                             className={`flex items-center justify-between text-[11px] ${result.participantId === participantId
@@ -758,7 +856,6 @@ export default function StoryMapViewPage() {
             </section>
           )}
 
-          {/* No Question - Viewing Map */}
           {viewState === "viewing" && !currentQuestion && (
             <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3">
               <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium mb-2">
@@ -784,7 +881,6 @@ export default function StoryMapViewPage() {
           )}
         </div>
 
-        {/* LEAVE BUTTON AT BOTTOM */}
         <div className="px-4 pb-4 border-t border-zinc-800">
           <button
             type="button"
@@ -797,9 +893,8 @@ export default function StoryMapViewPage() {
         </div>
       </div>
 
-      {/* MAP AREA - ALWAYS RENDER MAP, just show overlay when waiting for sync */}
+      {/* MAP GIỮA */}
       <div className="flex-1 min-h-0 relative">
-        {/* Always render the map to avoid unmount/remount issues */}
         {segments.length > 0 && (
           <StoryMapViewer
             mapId={mapId}
@@ -815,7 +910,6 @@ export default function StoryMapViewPage() {
           />
         )}
 
-        {/* Overlay when waiting for teacher sync */}
         {(!hasReceivedSegmentSync || currentIndex < 0) && (
           <div className="absolute inset-0 z-[500] flex items-center justify-center bg-zinc-900/90 backdrop-blur-sm">
             <div className="text-center">
@@ -833,7 +927,103 @@ export default function StoryMapViewPage() {
         )}
       </div>
 
-      {/* QUESTION OVERLAY - When question is active */}
+      {/* PANEL PHẢI: Hoạt động nhóm */}
+      <div className="w-[340px] border-l border-zinc-800 bg-zinc-950/95 flex flex-col">
+        <div className="px-4 pt-5 pb-3 border-b border-zinc-800">
+          <div className="flex items-center justify-between">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium">
+              Hoạt động nhóm
+            </p>
+            <span className="text-[10px] text-zinc-500">
+              {currentGroupId ? "Đã vào nhóm" : "Chưa vào nhóm"}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3 space-y-3">
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {sessionGroups.length === 0 && (
+              <p className="text-[12px] text-zinc-500">
+                Giáo viên chưa tạo nhóm hoặc chưa cập nhật.
+              </p>
+            )}
+            {sessionGroups.map((g, idx) => (
+              <button
+                key={g.id ?? idx}
+                type="button"
+                onClick={() => handleJoinGroup(g.id)}
+                className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-[12px] border ${currentGroupId === g.id
+                  ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
+                  : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
+                  }`}
+              >
+                <span className="truncate">{g.name || `Nhóm ${idx + 1}`}</span>
+                {typeof g.currentMembers === "number" && typeof g.maxMembers === "number" && (
+                  <span className="text-[11px] text-zinc-400">
+                    {g.currentMembers}/{g.maxMembers}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-[11px] text-zinc-500 uppercase tracking-[0.12em]">
+              Bài làm nhóm
+            </p>
+            <textarea
+              value={groupWorkContent}
+              onChange={(e) => setGroupWorkContent(e.target.value)}
+              placeholder="Nội dung bài làm nhóm..."
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-[12px] resize-none h-20"
+            />
+            <button
+              type="button"
+              onClick={handleSubmitGroupWork}
+              disabled={!currentGroupId || groupSubmitting || !groupWorkContent.trim()}
+              className="w-full inline-flex justify-center rounded-lg px-3 py-2 text-[12px] font-medium border border-emerald-500/70 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {groupSubmitting ? "Đang gửi bài nhóm..." : "Gửi bài nhóm"}
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-[11px] text-zinc-500 uppercase tracking-[0.12em]">
+              Chat nhóm
+            </p>
+            <div className="max-h-32 overflow-y-auto space-y-1 rounded-lg border border-zinc-800 bg-zinc-950/60 px-2 py-2">
+              {groupMessages.length === 0 && (
+                <p className="text-[11px] text-zinc-500">
+                  Tin nhắn nhóm sẽ hiển thị tại đây.
+                </p>
+              )}
+              {groupMessages.map((m, idx) => (
+                <div key={idx} className="text-[11px] text-zinc-300">
+                  <span className="font-semibold text-emerald-300">{m.userName}:</span>{" "}
+                  <span>{m.message}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                value={groupChatInput}
+                onChange={(e) => setGroupChatInput(e.target.value)}
+                placeholder="Nhắn tin cho nhóm..."
+                className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-[12px]"
+              />
+              <button
+                type="button"
+                onClick={handleSendGroupMessage}
+                disabled={!currentGroupId || !groupChatInput.trim()}
+                className="px-3 py-1.5 rounded-lg text-[12px] border border-sky-500/70 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Gửi
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {viewState === "question" && currentQuestion && (
         <div className="absolute inset-0 z-[9999] flex items-center justify-center pointer-events-none">
           <div className="bg-zinc-900/95 backdrop-blur-sm border-2 border-emerald-500/50 rounded-2xl p-6 shadow-2xl max-w-lg mx-4 pointer-events-auto">

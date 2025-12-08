@@ -26,7 +26,26 @@ import {
   showQuestionResultsViaSignalR,
   type QuestionResultsEvent,
 } from "@/lib/hubs/session";
-
+import {
+  getGroupsBySession,
+  getGroupById,
+  deleteGroup,
+} from "@/lib/api-groupCollaboration";
+import type { HubConnection } from "@microsoft/signalr";
+import {
+  createGroupCollaborationConnection,
+  startGroupCollaborationConnection,
+  stopGroupCollaborationConnection,
+  joinGroupCollaborationSession,
+  registerGroupCollaborationEventHandlers,
+  unregisterGroupCollaborationEventHandlers,
+  createGroupViaSignalR,
+  gradeSubmissionViaSignalR,
+  sendMessageViaSignalR,
+  type GroupDto,
+  type GroupSubmissionDto,
+  type GroupGradedSubmissionDto,
+} from "@/lib/hubs/groupCollaboration";
 
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
 import { useLoading } from "@/contexts/LoadingContext";
@@ -56,25 +75,14 @@ type SessionQuestionBankInfo = {
   totalQuestions: number;
 };
 
-// type SessionQuestionResponsesDto = {
-//   sessionQuestionId: string;
-//   totalResponses: number;
-//   answers: {
-//     studentResponseId: string;
-//     participantId: string;
-//     displayName: string;
-//     isCorrect: boolean;
-//     pointsEarned: number;
-//     responseTimeSeconds: number;
-//     submittedAt: string;
-//     questionOptionId?: string;
-//     optionText?: string | null;
-//     responseText?: string | null;
-//     responseLatitude?: number | null;
-//     responseLongitude?: number | null;
-//     distanceErrorMeters?: number | null;
-//   }[];
-// };
+// Kiểu dữ liệu cho member của group (theo response API /groups/{groupId})
+type GroupMember = {
+  groupMemberId: string;
+  sessionParticipantId: string;
+  participantName: string;
+  isLeader: boolean;
+  joinedAt: string;
+};
 
 export default function StoryMapControlPage() {
   const params = useParams<{ mapId: string }>();
@@ -105,7 +113,24 @@ export default function StoryMapControlPage() {
 
   const [questionBankMeta, setQuestionBankMeta] =
     useState<QuestionBankMeta | null>(null);
-  const [sessionQuestionBanks, setSessionQuestionBanks] = useState<SessionQuestionBankInfo[]>([]);
+  const [groupCollabConnection, setGroupCollabConnection] =
+    useState<HubConnection | null>(null);
+
+  const [groups, setGroups] = useState<GroupDto[]>([]);
+  const [groupSubmissions, setGroupSubmissions] = useState<GroupSubmissionDto[]>(
+    []
+  );
+
+  const [sessionQuestionBanks, setSessionQuestionBanks] = useState<
+    SessionQuestionBankInfo[]
+  >([]);
+
+  // ========== NEW: state hiển thị chi tiết nhóm ==========
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [selectedGroupMembers, setSelectedGroupMembers] = useState<GroupMember[]>(
+    []
+  );
+  const [loadingGroupMembers, setLoadingGroupMembers] = useState(false);
 
   const totalQuestionsOfAllBanks = sessionQuestionBanks.reduce(
     (sum, bank) => sum + (bank.totalQuestions ?? 0),
@@ -116,7 +141,9 @@ export default function StoryMapControlPage() {
   const shareOverlayGuardRef = useRef(false);
 
   // FIXED: Track last sent segment sync to avoid duplicates
-  const lastSentSyncRef = useRef<{ index: number; isPlaying: boolean } | null>(null);
+  const lastSentSyncRef = useRef<{ index: number; isPlaying: boolean } | null>(
+    null
+  );
   const syncDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
@@ -188,9 +215,48 @@ export default function StoryMapControlPage() {
         setCurrentQuestionResults(event);
         setShowStudentAnswers(true);
       },
-
     },
   });
+
+  // ================== SignalR connection for group collaboration ==================
+  useEffect(() => {
+    if (!session?.sessionId) return;
+
+    const conn = createGroupCollaborationConnection();
+    if (!conn) {
+      console.error("[GroupCollab] Cannot create connection");
+      return;
+    }
+
+    registerGroupCollaborationEventHandlers(conn, {
+      onGroupCreated: (group) => {
+        setGroups((prev) => [...prev, group]);
+      },
+      onWorkSubmitted: (submission) => {
+        setGroupSubmissions((prev) => [...prev, submission]);
+      },
+      onSubmissionGraded: (graded) => {
+        console.log("[GroupCollab] Submission graded", graded);
+      },
+      onError: (error) => {
+        console.error("[GroupCollab] Error", error);
+      },
+    });
+
+    (async () => {
+      const ok = await startGroupCollaborationConnection(conn);
+      if (ok && session?.sessionId) {
+        await joinGroupCollaborationSession(conn, session.sessionId);
+        setGroupCollabConnection(conn);
+      }
+    })();
+
+    return () => {
+      unregisterGroupCollaborationEventHandlers(conn);
+      stopGroupCollaborationConnection(conn);
+      setGroupCollabConnection(null);
+    };
+  }, [session?.sessionId]);
 
   // ================== Broadcast channel (for same-browser testing) ==================
   useEffect(() => {
@@ -226,7 +292,6 @@ export default function StoryMapControlPage() {
 
         setMapDetail(detail);
         setSegments(Array.isArray(segs) ? segs : []);
-
       } catch (e: any) {
         console.error("Load control page failed:", e);
         setError(e?.message || "Failed to load storymap");
@@ -337,24 +402,22 @@ export default function StoryMapControlPage() {
             if (b?.questionBankId) {
               bankNameMap.set(
                 b.questionBankId,
-                b.questionBankName ||
-                `Bank (${b.questionBankId.slice(0, 6)}…)`
+                b.questionBankName || `Bank (${b.questionBankId.slice(0, 6)}…)`
               );
             }
           });
         }
 
-        const result: SessionQuestionBankInfo[] = Array.from(grouped.values()).map(
-          (info) => ({
-            ...info,
-            bankName:
-              bankNameMap.get(info.questionBankId) ||
-              `Bank (${info.questionBankId.slice(0, 6)}…)`,
-          })
-        );
+        const result: SessionQuestionBankInfo[] = Array.from(
+          grouped.values()
+        ).map((info) => ({
+          ...info,
+          bankName:
+            bankNameMap.get(info.questionBankId) ||
+            `Bank (${info.questionBankId.slice(0, 6)}…)`,
+        }));
 
         setSessionQuestionBanks(result);
-
 
         // Sắp xếp toàn bộ câu hỏi để hiển thị bên dưới
         const ordered = [...list].sort((a, b) => {
@@ -385,7 +448,6 @@ export default function StoryMapControlPage() {
       cancelled = true;
     };
   }, [session?.sessionId, session?.questionBanks]);
-
 
   // ================== Load participants when session changes ==================
   useEffect(() => {
@@ -420,54 +482,132 @@ export default function StoryMapControlPage() {
     };
   }, [session?.sessionId]);
 
-  // ================== FIXED: Debounced Segment Sync Function ==================
-  const sendSegmentSync = useCallback(async (
-    segmentIndex: number,
-    segmentId: string,
-    segmentName: string,
-    isPlaying: boolean
-  ) => {
-    if (!connection || !session?.sessionId) return;
-
-    // Check if this is a duplicate
-    const last = lastSentSyncRef.current;
-    if (last && last.index === segmentIndex && last.isPlaying === isPlaying) {
-      console.log("[Control] Skipping duplicate SegmentSync:", { segmentIndex, isPlaying });
+  // ================== Load groups khi vào trang control ==================
+  useEffect(() => {
+    if (!session?.sessionId) {
+      setGroups([]);
+      setSelectedGroupId(null);
+      setSelectedGroupMembers([]);
       return;
     }
 
-    // Clear any pending debounce
-    if (syncDebounceRef.current) {
-      clearTimeout(syncDebounceRef.current);
-    }
+    let cancelled = false;
 
-    // Debounce to avoid rapid successive calls
-    syncDebounceRef.current = setTimeout(async () => {
+    (async () => {
       try {
-        const segmentData: SegmentSyncRequest = {
-          segmentIndex,
-          segmentId,
-          segmentName,
-          isPlaying,
-        };
+        const data = await getGroupsBySession(session.sessionId);
 
-        console.log("[Control] Sending SegmentSync:", segmentData);
-        await sendSegmentSyncViaSignalR(connection, session.sessionId, segmentData);
-
-        // Update last sent
-        lastSentSyncRef.current = { index: segmentIndex, isPlaying };
-      } catch (error) {
-        console.error("[Control] Failed to send SegmentSync:", error);
+        if (!cancelled) {
+          setGroups(Array.isArray(data) ? data : []);
+        }
+      } catch (e) {
+        console.error("[GroupCollab] Load groups failed:", e);
+        if (!cancelled) setGroups([]);
       }
-    }, 100); // 100ms debounce
-  }, [connection, session?.sessionId]);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.sessionId]);
+
+  // ==================chi tiết nhóm  ==================
+  const handleSelectGroup = async (groupId: string | undefined) => {
+    if (!groupId) return;
+
+    setSelectedGroupId(groupId);
+    setLoadingGroupMembers(true);
+    setSelectedGroupMembers([]);
+
+    try {
+      const detail: any = await getGroupById(groupId);
+      const members: GroupMember[] = Array.isArray(detail?.members)
+        ? detail.members
+        : [];
+      setSelectedGroupMembers(members);
+    } catch (e) {
+      console.error("[GroupCollab] Load group detail failed:", e);
+      setSelectedGroupMembers([]);
+    } finally {
+      setLoadingGroupMembers(false);
+    }
+  };
+
+  const handleDeleteGroup = async (groupId: string | undefined) => {
+    if (!groupId) return;
+
+    const confirmDelete = window.confirm(
+      "Bạn có chắc chắn muốn xóa nhóm này không?"
+    );
+    if (!confirmDelete) return;
+
+    try {
+      await deleteGroup(groupId);
+
+      setGroups((prev) => prev.filter((g) => g.groupId !== groupId));
+
+      if (selectedGroupId === groupId) {
+        setSelectedGroupId(null);
+        setSelectedGroupMembers([]);
+      }
+    } catch (error) {
+      console.error("[GroupCollab] Delete group failed:", error);
+    }
+  };
+
+  // ================== FIXED: Debounced Segment Sync Function ==================
+  const sendSegmentSync = useCallback(
+    async (
+      segmentIndex: number,
+      segmentId: string,
+      segmentName: string,
+      isPlaying: boolean
+    ) => {
+      if (!connection || !session?.sessionId) return;
+
+      const last = lastSentSyncRef.current;
+      if (last && last.index === segmentIndex && last.isPlaying === isPlaying) {
+        console.log("[Control] Skipping duplicate SegmentSync:", {
+          segmentIndex,
+          isPlaying,
+        });
+        return;
+      }
+
+      if (syncDebounceRef.current) {
+        clearTimeout(syncDebounceRef.current);
+      }
+
+      syncDebounceRef.current = setTimeout(async () => {
+        try {
+          const segmentData: SegmentSyncRequest = {
+            segmentIndex,
+            segmentId,
+            segmentName,
+            isPlaying,
+          };
+
+          console.log("[Control] Sending SegmentSync:", segmentData);
+          await sendSegmentSyncViaSignalR(
+            connection,
+            session.sessionId,
+            segmentData
+          );
+
+          lastSentSyncRef.current = { index: segmentIndex, isPlaying };
+        } catch (error) {
+          console.error("[Control] Failed to send SegmentSync:", error);
+        }
+      }, 100);
+    },
+    [connection, session?.sessionId]
+  );
 
   // ================== Segment broadcast ==================
   const handleSegmentChange = async (segment: Segment, index: number) => {
     setCurrentIndex(index);
     setIsTeacherPlaying(false);
 
-    // Broadcast via BroadcastChannel (for same-browser testing)
     broadcastRef.current?.postMessage({
       type: "segment-change",
       segmentIndex: index,
@@ -475,32 +615,37 @@ export default function StoryMapControlPage() {
       timestamp: Date.now(),
     });
 
-    // Broadcast via SignalR to students
     if (connection && session?.sessionId) {
-      sendSegmentSync(index, segment.segmentId, segment.name || `Segment ${index + 1}`, false);
+      sendSegmentSync(
+        index,
+        segment.segmentId,
+        segment.name || `Segment ${index + 1}`,
+        false
+      );
     }
   };
 
   // ================== Play/Pause state broadcast ==================
-  const handlePlayingChange = useCallback(async (isPlaying: boolean) => {
-    console.log("[Control] handlePlayingChange called:", isPlaying);
+  const handlePlayingChange = useCallback(
+    async (isPlaying: boolean) => {
+      console.log("[Control] handlePlayingChange called:", isPlaying);
 
-    // Update local state
-    setIsTeacherPlaying(isPlaying);
+      setIsTeacherPlaying(isPlaying);
 
-    // Broadcast play/pause state to students
-    if (connection && session?.sessionId && segments.length > 0) {
-      const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
-      const currentSeg = segments[segmentIndex] || segments[0];
+      if (connection && session?.sessionId && segments.length > 0) {
+        const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
+        const currentSeg = segments[segmentIndex] || segments[0];
 
-      sendSegmentSync(
-        segmentIndex,
-        currentSeg.segmentId,
-        currentSeg.name || `Segment ${segmentIndex + 1}`,
-        isPlaying
-      );
-    }
-  }, [connection, session?.sessionId, segments, currentIndex, sendSegmentSync]);
+        sendSegmentSync(
+          segmentIndex,
+          currentSeg.segmentId,
+          currentSeg.name || `Segment ${segmentIndex + 1}`,
+          isPlaying
+        );
+      }
+    },
+    [connection, session?.sessionId, segments, currentIndex, sendSegmentSync]
+  );
 
   const goToSegment = (index: number) => {
     if (index < 0 || index >= segments.length) return;
@@ -538,18 +683,26 @@ export default function StoryMapControlPage() {
           : prev
       );
 
-      // When starting session, sync the current segment to students
       if (action === "start" && connection && segments.length > 0) {
         const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
         const currentSeg = segments[segmentIndex] || segments[0];
-        sendSegmentSync(segmentIndex, currentSeg.segmentId, currentSeg.name || `Segment ${segmentIndex + 1}`, false);
+        sendSegmentSync(
+          segmentIndex,
+          currentSeg.segmentId,
+          currentSeg.name || `Segment ${segmentIndex + 1}`,
+          false
+        );
       }
 
-      // When pausing, sync with isPlaying = false
       if (action === "pause" && connection && segments.length > 0) {
         const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
         const currentSeg = segments[segmentIndex] || segments[0];
-        sendSegmentSync(segmentIndex, currentSeg.segmentId, currentSeg.name || `Segment ${segmentIndex + 1}`, false);
+        sendSegmentSync(
+          segmentIndex,
+          currentSeg.segmentId,
+          currentSeg.name || `Segment ${segmentIndex + 1}`,
+          false
+        );
       }
     } catch (e: any) {
       console.error("Change session status failed:", e);
@@ -594,7 +747,10 @@ export default function StoryMapControlPage() {
   };
 
   // ================== Question control handlers ==================
-  const handleBroadcastQuestion = async (question: QuestionDto, index: number) => {
+  const handleBroadcastQuestion = async (
+    question: QuestionDto,
+    index: number
+  ) => {
     if (!session || questionControlLoading || !connection) return;
 
     try {
@@ -604,13 +760,12 @@ export default function StoryMapControlPage() {
       setShowStudentAnswers(false);
 
       await broadcastQuestionViaSignalR(connection, session.sessionId, {
-
         sessionQuestionId: question.sessionQuestionId ?? question.questionId,
         questionId: question.questionId,
         questionText: question.questionText,
         questionType: question.questionType,
         questionImageUrl: question.questionImageUrl ?? undefined,
-        options: question.options?.map(opt => ({
+        options: question.options?.map((opt) => ({
           id: opt.questionOptionId,
           optionText: opt.optionText,
           optionImageUrl: opt.optionImageUrl ?? undefined,
@@ -619,7 +774,6 @@ export default function StoryMapControlPage() {
         points: question.points,
         timeLimit: question.timeLimit ?? 30,
       });
-
     } catch (e: any) {
       console.error("Broadcast question failed:", e);
       setError(e?.message || "Không phát được câu hỏi");
@@ -661,7 +815,6 @@ export default function StoryMapControlPage() {
 
       setCurrentQuestionResults(null);
       setShowStudentAnswers(false);
-
 
       setCurrentQuestionIndex((prev) => {
         if (!questions.length) return prev;
@@ -724,9 +877,63 @@ export default function StoryMapControlPage() {
     }
   };
 
+  const handleCreateGroup = async (name: string, maxMembers?: number) => {
+    if (!groupCollabConnection || !session?.sessionId) return;
+
+    const source = participants ?? [];
+
+    const allIds = source
+      .map((p: any) => p.participantId ?? p.sessionParticipantId ?? p.id)
+      .filter((id: unknown): id is string => Boolean(id));
+
+    if (allIds.length === 0) {
+      console.error(
+        "[GroupCollab] Không tìm được participantId nào từ Danh sách người tham gia để tạo nhóm"
+      );
+      return;
+    }
+
+    const memberParticipantIds =
+      typeof maxMembers === "number" && maxMembers > 0
+        ? allIds.slice(0, maxMembers)
+        : allIds;
+
+    try {
+      await createGroupViaSignalR(groupCollabConnection, {
+        sessionId: session.sessionId,
+        groupName: name,
+        color: undefined,
+        memberParticipantIds,
+        leaderParticipantId: memberParticipantIds[0],
+      });
+    } catch (error) {
+      console.error("[GroupCollab] Tạo nhóm thất bại", error);
+    }
+  };
+
+  const handleGradeSubmission = async (
+    submissionId: string,
+    score: number,
+    feedback?: string
+  ) => {
+    if (!groupCollabConnection) return;
+
+    await gradeSubmissionViaSignalR(groupCollabConnection, {
+      submissionId,
+      score,
+      feedback,
+    });
+  };
+
+  const handleSendMessageToGroup = async (groupId: string, message: string) => {
+    if (!groupCollabConnection) return;
+    await sendMessageViaSignalR(groupCollabConnection, groupId, message);
+  };
+
   // ================== Render states ==================
   useEffect(() => {
     if (loading) {
+      useLoading;
       showLoading("Loading Control Panel...");
     } else {
       hideLoading();
@@ -753,7 +960,9 @@ export default function StoryMapControlPage() {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
         <div className="text-center max-w-md px-4">
-          <div className="text-red-600 dark:text-red-400 text-2xl mb-4">⚠️ {error}</div>
+          <div className="text-red-600 dark:text-red-400 text-2xl mb-4">
+            ⚠️ {error}
+          </div>
           <button
             onClick={() => router.back()}
             className="px-6 py-3 bg-muted hover:bg-muted/80 text-zinc-900 dark:text-zinc-100 rounded-lg transition-colors"
@@ -835,7 +1044,9 @@ export default function StoryMapControlPage() {
                 <div className="space-y-2">
                   <div className="rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2.5 flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-[11px] text-zinc-400">Code cho học sinh</p>
+                      <p className="text-[11px] text-zinc-400">
+                        Code cho học sinh
+                      </p>
                       <p className="font-mono text-xl font-semibold tracking-[0.18em] text-emerald-400">
                         {session.sessionCode}
                       </p>
@@ -850,14 +1061,26 @@ export default function StoryMapControlPage() {
                         className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-blue-600 px-2.5 py-1.5 text-[11px] text-zinc-100 hover:bg-blue-700 border border-blue-500"
                         title="Chia sẻ link hoặc QR code"
                       >
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        <svg
+                          className="w-3 h-3"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                          />
                         </svg>
                         Share
                       </button>
                       <button
                         type="button"
-                        onClick={() => navigator.clipboard.writeText(session.sessionCode)}
+                        onClick={() =>
+                          navigator.clipboard.writeText(session.sessionCode)
+                        }
                         className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-zinc-800 px-2.5 py-1.5 text-[11px] text-zinc-100 hover:bg-zinc-700 border border-zinc-700"
                       >
                         <span>Copy</span>
@@ -897,7 +1120,9 @@ export default function StoryMapControlPage() {
                     <button
                       type="button"
                       onClick={() => handleChangeStatus("start")}
-                      disabled={changingStatus || session.status === "Running"}
+                      disabled={
+                        changingStatus || session.status === "Running"
+                      }
                       className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-emerald-500/60 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Start
@@ -905,7 +1130,9 @@ export default function StoryMapControlPage() {
                     <button
                       type="button"
                       onClick={() => handleChangeStatus("pause")}
-                      disabled={changingStatus || session.status !== "Running"}
+                      disabled={
+                        changingStatus || session.status !== "Running"
+                      }
                       className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-amber-400/70 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Pause
@@ -913,7 +1140,9 @@ export default function StoryMapControlPage() {
                     <button
                       type="button"
                       onClick={() => handleChangeStatus("resume")}
-                      disabled={changingStatus || session.status !== "Paused"}
+                      disabled={
+                        changingStatus || session.status !== "Paused"
+                      }
                       className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-sky-400/70 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       Resume
@@ -1011,7 +1240,9 @@ export default function StoryMapControlPage() {
                               <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-zinc-800 text-[10px] font-semibold text-zinc-300">
                                 {p.rank ?? idx + 1}
                               </span>
-                              <span className="text-zinc-100">{p.displayName}</span>
+                              <span className="text-zinc-100">
+                                {p.displayName}
+                              </span>
                             </div>
                             {typeof p.score === "number" && (
                               <span className="font-semibold text-emerald-400">
@@ -1028,6 +1259,133 @@ export default function StoryMapControlPage() {
                       </p>
                     )}
                   </div>
+
+                  {/* HOẠT ĐỘNG NHÓM (Group Collaboration) */}
+                  {session && (
+                    <section className="mt-3 pt-3 border-t border-zinc-800">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-500 font-medium">
+                          Hoạt động nhóm
+                        </p>
+                        <button
+                          type="button"
+                          disabled={!groupCollabConnection}
+                          onClick={() =>
+                            handleCreateGroup(`Nhóm ${groups.length + 1}`, 4)
+                          }
+                          className="text-[11px] rounded-lg px-2.5 py-1 
+             bg-emerald-600 text-zinc-100 hover:bg-emerald-500
+             disabled:bg-zinc-700 disabled:text-zinc-400 disabled:cursor-not-allowed"
+                        >
+                          {groupCollabConnection ? "+ Tạo nhóm" : "Đang kết nối..."}
+                        </button>
+                      </div>
+
+                      <div className="max-h-40 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 space-y-1.5">
+                        {groups.length === 0 ? (
+                          <p className="text-[11px] text-zinc-500">
+                            Chưa có nhóm nào. Bấm &quot;Tạo nhóm&quot; để bắt đầu.
+                          </p>
+                        ) : (
+                          groups.map((g, idx) => {
+                            const isSelected = g.groupId === selectedGroupId;
+                            return (
+                              <div
+                                key={g.groupId ?? idx}
+                                onClick={() => handleSelectGroup(g.groupId)}
+                                className={
+                                  "w-full flex items-center justify-between text-[11px] py-1 px-2 rounded-md border mb-[2px] last:mb-0 cursor-pointer " +
+                                  (isSelected
+                                    ? "bg-emerald-500/15 border-emerald-400/70 text-emerald-100"
+                                    : "bg-transparent border-zinc-800 text-zinc-200 hover:bg-zinc-900/70")
+                                }
+                              >
+                                <div>
+                                  <p className="font-semibold">
+                                    {g.name || `Nhóm ${idx + 1}`}
+                                  </p>
+                                  {typeof g.currentMembersCount === "number" &&
+                                    typeof g.maxMembers === "number" && (
+                                      <p className="text-zinc-400">
+                                        {g.currentMembersCount}/{g.maxMembers} thành viên
+                                      </p>
+                                    )}
+                                </div>
+
+                                {/* Nút Xóa nhóm */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteGroup(g.groupId);
+                                  }}
+                                  className="ml-2 inline-flex items-center justify-center rounded-full 
+                     border border-rose-500/70 bg-rose-600/10 text-rose-200 
+                     hover:bg-rose-600/20 px-2 py-[2px] text-[10px]"
+                                >
+                                  Xóa
+                                </button>
+                              </div>
+                            );
+                          })
+                        )}
+
+                      </div>
+
+                      {/* Chi tiết thành viên của nhóm được chọn */}
+                      {selectedGroupId && (
+                        <div className="mt-2 rounded-lg border border-zinc-800 bg-zinc-950/90 px-3 py-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-500 font-medium">
+                              Thành viên trong nhóm
+                            </p>
+                            {loadingGroupMembers ? (
+                              <span className="text-[10px] text-zinc-400">
+                                Đang tải...
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-zinc-400">
+                                {selectedGroupMembers.length} thành viên
+                              </span>
+                            )}
+                          </div>
+
+                          {loadingGroupMembers ? (
+                            <p className="text-[11px] text-zinc-500">
+                              Đang tải danh sách thành viên...
+                            </p>
+                          ) : selectedGroupMembers.length === 0 ? (
+                            <p className="text-[11px] text-zinc-500">
+                              Chưa có thành viên nào trong nhóm này.
+                            </p>
+                          ) : (
+                            <div className="max-h-32 overflow-y-auto space-y-1.5">
+                              {selectedGroupMembers.map((m, index) => (
+                                <div
+                                  key={m.groupMemberId ?? index}
+                                  className="flex items-center justify-between text-[11px] text-zinc-200 border-b border-zinc-800/60 pb-1 last:border-0"
+                                >
+                                  <div>
+                                    <p className="font-medium">
+                                      {m.participantName || `Thành viên ${index + 1}`}
+                                    </p>
+                                    <p className="text-zinc-500">
+                                      Tham gia lúc: {m.joinedAt}
+                                    </p>
+                                  </div>
+                                  {m.isLeader && (
+                                    <span className="ml-2 rounded-full bg-emerald-500/15 border border-emerald-400/60 px-2 py-[1px] text-[10px] text-emerald-200">
+                                      Nhóm trưởng
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </section>
+                  )}
                 </>
               )}
             </section>
@@ -1060,11 +1418,11 @@ export default function StoryMapControlPage() {
                       Bộ câu hỏi của session này
                     </p>
 
-                    {/* MÔ TẢ + DANH SÁCH QUESTION_BANK */}
                     {sessionQuestionBanks.length > 0 ? (
                       <>
                         <p className="text-xs text-zinc-400">
-                          Đã gắn {sessionQuestionBanks.length} bộ câu hỏi vào session này:
+                          Đã gắn {sessionQuestionBanks.length} bộ câu hỏi vào
+                          session này:
                         </p>
                         <div className="mt-1 flex flex-wrap gap-1">
                           {sessionQuestionBanks.map((bank, index) => (
@@ -1076,7 +1434,6 @@ export default function StoryMapControlPage() {
                             </span>
                           ))}
                         </div>
-
                       </>
                     ) : (
                       <p className="text-xs text-zinc-400">
@@ -1085,10 +1442,11 @@ export default function StoryMapControlPage() {
                     )}
                   </div>
 
-                  {/* TỔNG SỐ CÂU HỎI (CỘNG TỪ CÁC BANK) */}
                   {totalQuestionsOfAllBanks > 0 && (
                     <div className="text-right text-[11px] text-zinc-300">
-                      <div className="font-semibold">{totalQuestionsOfAllBanks}</div>
+                      <div className="font-semibold">
+                        {totalQuestionsOfAllBanks}
+                      </div>
                       <div className="text-zinc-500">câu hỏi</div>
                     </div>
                   )}
@@ -1144,7 +1502,8 @@ export default function StoryMapControlPage() {
                 {/* META BỘ CÂU HỎI + DANH SÁCH CÂU HỎI */}
                 {!questionBankMeta ? (
                   <div className="mt-2 rounded-xl border border-zinc-800 bg-zinc-950/80 px-3 py-2 text-[11px] text-zinc-400">
-                    Session hiện tại chưa gắn bộ câu hỏi hoặc thông tin chưa được truyền sang.
+                    Session hiện tại chưa gắn bộ câu hỏi hoặc thông tin chưa
+                    được truyền sang.
                   </div>
                 ) : (
                   <div className="mt-2 space-y-2">
@@ -1179,16 +1538,17 @@ export default function StoryMapControlPage() {
                       </div>
                     )}
 
-                    {(questionBankMeta.createdAt || questionBankMeta.updatedAt) && (
-                      <div className="pt-1 border-t border-zinc-800 mt-1 text-[11px] text-zinc-500 space-y-0.5">
-                        {questionBankMeta.createdAt && (
-                          <p>Tạo lúc: {questionBankMeta.createdAt}</p>
-                        )}
-                        {questionBankMeta.updatedAt && (
-                          <p>Cập nhật: {questionBankMeta.updatedAt}</p>
-                        )}
-                      </div>
-                    )}
+                    {(questionBankMeta.createdAt ||
+                      questionBankMeta.updatedAt) && (
+                        <div className="pt-1 border-t border-zinc-800 mt-1 text-[11px] text-zinc-500 space-y-0.5">
+                          {questionBankMeta.createdAt && (
+                            <p>Tạo lúc: {questionBankMeta.createdAt}</p>
+                          )}
+                          {questionBankMeta.updatedAt && (
+                            <p>Cập nhật: {questionBankMeta.updatedAt}</p>
+                          )}
+                        </div>
+                      )}
 
                     {/* DANH SÁCH CÂU HỎI */}
                     <div className="pt-2 border-t border-zinc-800 mt-2">
@@ -1232,7 +1592,6 @@ export default function StoryMapControlPage() {
                                       <span className="font-semibold">
                                         Câu {idx + 1}:
                                       </span>{" "}
-
                                       {q.questionText}
                                     </p>
                                   </div>
@@ -1248,10 +1607,11 @@ export default function StoryMapControlPage() {
                                         </span>
                                         <button
                                           type="button"
-                                          onClick={() => handleShowQuestionResults(q)}
+                                          onClick={() =>
+                                            handleShowQuestionResults(q)
+                                          }
                                           disabled={
-                                            !session ||
-                                            questionControlLoading
+                                            !session || questionControlLoading
                                           }
                                           className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-400/60 px-2 py-0.5 text-[10px] text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
                                         >
@@ -1261,7 +1621,9 @@ export default function StoryMapControlPage() {
                                     ) : (
                                       <button
                                         type="button"
-                                        onClick={() => handleBroadcastQuestion(q, idx)}
+                                        onClick={() =>
+                                          handleBroadcastQuestion(q, idx)
+                                        }
                                         disabled={
                                           !session ||
                                           session.status !== "Running" ||
@@ -1273,7 +1635,6 @@ export default function StoryMapControlPage() {
                                       </button>
                                     )}
                                   </div>
-
                                 </div>
 
                                 {q.options && q.options.length > 0 && (
@@ -1287,7 +1648,8 @@ export default function StoryMapControlPage() {
                                       .map((opt) => (
                                         <li
                                           key={
-                                            opt.questionOptionId ?? opt.optionText
+                                            opt.questionOptionId ??
+                                            opt.optionText
                                           }
                                           className="flex items-start gap-2 text-[11px]"
                                         >
@@ -1299,7 +1661,8 @@ export default function StoryMapControlPage() {
                                                 : "text-zinc-300"
                                             }
                                           >
-                                            {opt.optionText || "(Không có nội dung)"}
+                                            {opt.optionText ||
+                                              "(Không có nội dung)"}
                                           </span>
                                           {opt.isCorrect && (
                                             <span className="ml-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 px-1.5 py-[1px] text-[10px] text-emerald-300">
@@ -1316,12 +1679,15 @@ export default function StoryMapControlPage() {
                         </div>
                       )}
                     </div>
+
                     {currentQuestionResults && (
                       <div className="mt-3 pt-2 border-t border-zinc-800">
                         <div className="flex items-center justify-between mb-2">
                           <button
                             type="button"
-                            onClick={() => setShowStudentAnswers((prev) => !prev)}
+                            onClick={() =>
+                              setShowStudentAnswers((prev) => !prev)
+                            }
                             disabled={!session || questionControlLoading}
                             className="text-[11px] uppercase tracking-[0.12em] text-zinc-200 font-medium underline-offset-2 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
                           >
@@ -1337,7 +1703,8 @@ export default function StoryMapControlPage() {
                           </span>
                         </div>
 
-                        {typeof currentQuestionResults.correctAnswer === "string" &&
+                        {typeof currentQuestionResults.correctAnswer ===
+                          "string" &&
                           currentQuestionResults.correctAnswer.trim() !== "" && (
                             <p className="mb-2 text-[11px] text-emerald-300">
                               Đáp án đúng:{" "}
@@ -1349,7 +1716,8 @@ export default function StoryMapControlPage() {
 
                         {!showStudentAnswers ? (
                           <p className="text-[11px] text-zinc-500">
-                            Bấm nút &quot;Các câu trả lời của học sinh&quot; để xem chi tiết.
+                            Bấm nút &quot;Các câu trả lời của học sinh&quot; để
+                            xem chi tiết.
                           </p>
                         ) : !currentQuestionResults.results ||
                           currentQuestionResults.results.length === 0 ? (
@@ -1358,51 +1726,53 @@ export default function StoryMapControlPage() {
                           </p>
                         ) : (
                           <div className="max-h-40 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 space-y-1.5">
-                            {currentQuestionResults.results.map((ans, index) => (
-                              <div
-                                key={ans.participantId ?? index}
-                                className="flex items-start justify-between gap-3 text-[11px] text-zinc-100 border-b border-zinc-800/60 pb-1.5 last:border-0"
-                              >
-                                <div className="flex-1">
-                                  <p className="font-medium">
-                                    {ans.displayName || `Học sinh ${index + 1}`}
-                                  </p>
-
-                                  {ans.answer && ans.answer.trim() !== "" && (
-                                    <p className="text-zinc-400">
-                                      Trả lời:{" "}
-                                      <span className="text-zinc-100">
-                                        {ans.answer}
-                                      </span>
+                            {currentQuestionResults.results.map(
+                              (ans, index) => (
+                                <div
+                                  key={ans.participantId ?? index}
+                                  className="flex items-start justify-between gap-3 text-[11px] text-zinc-100 border-b border-zinc-800/60 pb-1.5 last:border-0"
+                                >
+                                  <div className="flex-1">
+                                    <p className="font-medium">
+                                      {ans.displayName ||
+                                        `Học sinh ${index + 1}`}
                                     </p>
-                                  )}
-                                </div>
 
-                                <div className="text-right text-[10px]">
-                                  <p
-                                    className={
-                                      ans.isCorrect
-                                        ? "text-emerald-300 font-semibold"
-                                        : "text-rose-300 font-semibold"
-                                    }
-                                  >
-                                    {ans.isCorrect ? "Đúng" : "Sai"}
-                                  </p>
-                                  <p className="text-zinc-400 mt-0.5">
-                                    {ans.pointsEarned} điểm
-                                  </p>
+                                    {ans.answer &&
+                                      ans.answer.trim() !== "" && (
+                                        <p className="text-zinc-400">
+                                          Trả lời:{" "}
+                                          <span className="text-zinc-100">
+                                            {ans.answer}
+                                          </span>
+                                        </p>
+                                      )}
+                                  </div>
+
+                                  <div className="text-right text-[10px]">
+                                    <p
+                                      className={
+                                        ans.isCorrect
+                                          ? "text-emerald-300 font-semibold"
+                                          : "text-rose-300 font-semibold"
+                                      }
+                                    >
+                                      {ans.isCorrect ? "Đúng" : "Sai"}
+                                    </p>
+                                    <p className="text-zinc-400 mt-0.5">
+                                      {ans.pointsEarned} điểm
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
-                            ))}
+                              )
+                            )}
                           </div>
                         )}
                       </div>
                     )}
-
                   </div>
                 )}
               </section>
-
             </div>
           </div>
         </div>
@@ -1445,8 +1815,8 @@ export default function StoryMapControlPage() {
                 key={seg.segmentId}
                 onClick={() => goToSegment(index)}
                 className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition ${index === currentIndex
-                  ? "bg-blue-500 text-white border-blue-400"
-                  : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700"
+                    ? "bg-blue-500 text-white border-blue-400"
+                    : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700"
                   }`}
               >
                 {index + 1}. {seg.name || "Untitled"}
@@ -1462,8 +1832,10 @@ export default function StoryMapControlPage() {
         </div>
       </div>
 
-      {/* Session Share Modal - render via Portal to avoid re-render issues with map */}
-      {session && showShareModal && typeof document !== "undefined" &&
+      {/* Session Share Modal */}
+      {session &&
+        showShareModal &&
+        typeof document !== "undefined" &&
         createPortal(
           <div className="fixed inset-0 z-[9999] flex items-center justify-center">
             <div
@@ -1493,7 +1865,9 @@ export default function StoryMapControlPage() {
                         className="flex-1 px-4 py-2 border border-gray-300 dark:border-zinc-700 rounded-lg bg-gray-50 dark:bg-zinc-800 text-gray-900 dark:text-white font-mono text-lg font-semibold tracking-wider text-center"
                       />
                       <button
-                        onClick={() => copyToClipboard(session.sessionCode)}
+                        onClick={() =>
+                          copyToClipboard(session.sessionCode)
+                        }
                         className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
                       >
                         Copy Code
@@ -1549,8 +1923,7 @@ export default function StoryMapControlPage() {
             </div>
           </div>,
           document.body
-        )
-      }
+        )}
     </div>
   );
 }
