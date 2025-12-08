@@ -36,7 +36,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
     setShowPublishOptions(false);
     try {
       await publishMap(mapId);
-      onStatusChange("Published");
+      onStatusChange("published");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể publish map");
     } finally {
@@ -49,7 +49,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
     setError(null);
     try {
       await unpublishMap(mapId);
-      onStatusChange("Draft");
+      onStatusChange("draft");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể unpublish map");
     } finally {
@@ -62,7 +62,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
     setError(null);
     try {
       await archiveMap(mapId);
-      onStatusChange("Archived");
+      onStatusChange("archived");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể archive map");
     } finally {
@@ -75,7 +75,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
     setError(null);
     try {
       await restoreMap(mapId);
-      onStatusChange("Draft");
+      onStatusChange("draft");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể restore map");
     } finally {
@@ -85,11 +85,11 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
 
   const getStatusInfo = () => {
     switch (status) {
-      case "Draft":
+        case "draft":
         return { label: "Nháp", color: "bg-gray-600", icon: "📝" };
-      case "Published":
+      case "published":
         return { label: "Đã publish", color: "bg-green-600", icon: "✓" };
-      case "Archived":
+      case "archived":
         return { label: "Đã archive", color: "bg-red-600", icon: "🗄️" };
       default:
         return { label: "Unknown", color: "bg-gray-600", icon: "?" };
@@ -109,7 +109,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
       </span>
 
       {/* Action Buttons - Inline with status */}
-      {status === "Draft" ? (
+      {status === "draft" ? (
         <div className="relative flex items-center gap-1" ref={dropdownRef}>
           {/* Primary quick publish (view-only) */}
           <button
@@ -155,7 +155,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
             </div>
           )}
         </div>
-      ) : status === "Published" ? (
+      ) : status === "published" ? (
         <>
           <button
             onClick={handleUnpublish}
@@ -188,7 +188,7 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
             )}
           </button>
         </>
-      ) : status === "Archived" ? (
+      ) : status === "archived" ? (
         <button
           onClick={handleRestore}
           disabled={loading}

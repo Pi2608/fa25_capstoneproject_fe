@@ -43,18 +43,6 @@ import ZoomControls from "@/components/map/controls/ZoomControls";
 import { ZoneStyleEditor } from "@/components/map-editor-ui/ZoneStyleEditor";
 
 
-const normalizeMapStatus = (status: unknown): MapStatus => {
-  if (typeof status === "string") {
-    const normalized = status.toLowerCase();
-    if (normalized === "published") return "Published";
-    if (normalized === "archived") return "Archived";
-    if (normalized === "draft") return "Draft";
-  }
-  if (status === 1) return "Published";
-  if (status === 2) return "Archived";
-  return "Draft";
-};
-
 const baseKeyToBackend = (key: BaseKey): BaseLayer => {
   const mapping: Record<BaseKey, BaseLayer> = {
     "osm": "OSM",
@@ -101,7 +89,7 @@ export default function EditMapPage() {
   const [detail, setDetail] = useState<MapDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [err, setErr] = useState<string | null>(null);
-  const [mapStatus, setMapStatus] = useState<MapStatus>("Draft");
+  const [mapStatus, setMapStatus] = useState<MapStatus>("draft");
 
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const { showToast } = useToast();
@@ -1098,7 +1086,7 @@ export default function EditMapPage() {
         setDetail(m);
         setName(m.name ?? "");
         setBaseKey(backendToBaseKey(m.baseLayer));
-        setMapStatus(normalizeMapStatus(m.status));
+        setMapStatus(m.status ?? "draft");
       } catch (e) {
         if (!alive) return;
         setErr(e instanceof Error ? e.message : "Không tải được bản đồ");
@@ -3175,9 +3163,9 @@ export default function EditMapPage() {
         options: {
           title: detail.name,
           description: detail.description,
-          width: mapEl.current.offsetWidth || 1920,
-          height: mapEl.current.offsetHeight || 1080,
-          dpi: 300,
+          width: (mapEl.current.offsetWidth || 1920).toString(),
+          height: (mapEl.current.offsetHeight || 1080).toString(),
+          dpi: "300",
           includeLegend: true,
           includeScale: true
         }
@@ -3330,7 +3318,9 @@ export default function EditMapPage() {
                 </span>
               )}
             </div>
+            {!loading && mapStatus !== "archived" && (
             <DrawingToolsBar mapRef={mapRef} />
+            )}
             <div className="flex items-center justify-end gap-2 overflow-x-auto no-scrollbar">
               {/* Active Users */}
               <ActiveUsersIndicator
@@ -3439,15 +3429,16 @@ export default function EditMapPage() {
         ref={mapEl}
         className="absolute inset-0 transition-all duration-300"
         style={{
-          left: leftSidebarView ? "376px" : "56px", // Icon bar (56px) + panel (320px) when open
+          left: mapStatus === "archived" ? "0" : (leftSidebarView ? "376px" : "56px"), // Hide sidebar when Archived
           right: isPropertiesPanelOpen ? "360px" : "0",
           // top: "60px",
-          bottom: !loading && detail?.isStoryMap !== false ? "200px" : "0", // Space for timeline workspace only for StoryMap
+          bottom: (!loading && detail?.isStoryMap !== false && mapStatus !== "archived") ? "200px" : "0", // Hide timeline when Archived
         }}
       />
 
-      {/* NEW: VSCode-style Left Sidebar */}
-      <LeftSidebarToolbox
+      {/* NEW: VSCode-style Left Sidebar - Hide when Archived */}
+      {mapStatus !== "archived" && !loading && (
+        <LeftSidebarToolbox
         isStoryMap={!loading && detail?.isStoryMap !== false}
         activeView={leftSidebarView}
         onViewChange={setLeftSidebarView}
@@ -3471,8 +3462,9 @@ export default function EditMapPage() {
         onSaveTransition={handleSaveTransition}
         onDeleteTransition={handleDeleteTransition}
         currentLayerId={currentLayerId}
-        onLayerChange={setCurrentLayerId}
-      />
+          onLayerChange={setCurrentLayerId}
+        />
+      )}
 
       {/* NEW: Right Properties Panel */}
       <PropertiesPanel
@@ -3482,8 +3474,8 @@ export default function EditMapPage() {
         onUpdate={handleUpdateFeature}
       />
 
-      {/* NEW: Bottom Timeline Workspace - Only show for StoryMap */}
-      {!loading && detail?.isStoryMap !== false && (
+      {/*Timeline Workspace - Only show for StoryMap, hide when Archived */}
+      {!loading && detail?.isStoryMap !== false && mapStatus !== "archived" && (
         <TimelineWorkspace
           segments={segments}
           transitions={transitions}
