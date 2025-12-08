@@ -1,195 +1,333 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { getPendingExports, approveExport, rejectExport, type ExportResponse, getMapDetailAsAdmin, type MapDetail } from "@/lib/api-maps";
+import { useTheme } from "../layout";
+import { getThemeClasses } from "@/utils/theme-utils";
+import MapPreviewModal from "@/components/admin/MapPreviewModal";
 
-type Row = {
-  id: string;
-  fileName: string;
-  kind: "PDF" | "PNG" | "GeoJSON" | "CSV";
-  size: string;
-  owner: string;
-  createdAt: string;
-  status: "Completed" | "Processing" | "Failed";
-};
+function formatDate(iso: string): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("vi-VN");
+  } catch {
+    return iso;
+  }
+}
 
-const seed: Row[] = [
-  { id: "e1", fileName: "map-overview.pdf", kind: "PDF", size: "1.2 MB", owner: "admin", createdAt: "2025-09-20 09:12", status: "Completed" },
-  { id: "e2", fileName: "districts.geojson", kind: "GeoJSON", size: "5.8 MB", owner: "duy.ng", createdAt: "2025-09-20 08:22", status: "Processing" },
-  { id: "e3", fileName: "heatmap.png", kind: "PNG", size: "820 KB", owner: "mai.ph", createdAt: "2025-09-19 17:41", status: "Completed" },
-  { id: "e4", fileName: "poi-export.csv", kind: "CSV", size: "342 KB", owner: "linh.tr", createdAt: "2025-09-19 10:03", status: "Failed" },
-  { id: "e5", fileName: "ward-boundary.geojson", kind: "GeoJSON", size: "3.4 MB", owner: "system", createdAt: "2025-09-18 22:11", status: "Completed" },
-];
+function getStatusBadgeClass(status: string, isDark: boolean): string {
+  const statusLower = status.toLowerCase();
+  if (statusLower === "pendingapproval" || statusLower === "pending") {
+    return isDark ? "bg-yellow-500/20 text-yellow-300" : "bg-yellow-100 text-yellow-800";
+  }
+  if (statusLower === "processing") {
+    return isDark ? "bg-blue-500/20 text-blue-300" : "bg-blue-100 text-blue-800";
+  }
+  if (statusLower === "approved") {
+    return isDark ? "bg-green-500/20 text-green-300" : "bg-green-100 text-green-800";
+  }
+  if (statusLower === "rejected") {
+    return isDark ? "bg-red-500/20 text-red-300" : "bg-red-100 text-red-800";
+  }
+  if (statusLower === "failed") {
+    return isDark ? "bg-red-500/20 text-red-300" : "bg-red-100 text-red-800";
+  }
+  return isDark ? "bg-gray-500/20 text-gray-300" : "bg-gray-100 text-gray-800";
+}
 
-export default function ExportsPage() {
-  const [rows, setRows] = useState<Row[]>(seed);
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState<"All" | Row["status"]>("All");
-  const [kind, setKind] = useState<"All" | Row["kind"]>("All");
-  const [checked, setChecked] = useState<Record<string, boolean>>({});
+export default function AdminExportsPage() {
+  const { isDark } = useTheme();
+  const theme = getThemeClasses(isDark);
 
-  const filtered = useMemo(() => {
-    return rows.filter((r) => {
-      const okQ = q
-        ? r.fileName.toLowerCase().includes(q.toLowerCase()) ||
-          r.owner.toLowerCase().includes(q.toLowerCase())
-        : true;
-      const okS = status === "All" ? true : r.status === status;
-      const okK = kind === "All" ? true : r.kind === kind;
-      return okQ && okS && okK;
-    });
-  }, [rows, q, status, kind]);
+  const [exports, setExports] = useState<ExportResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [actioningId, setActioningId] = useState<number | null>(null);
+  const [rejectModal, setRejectModal] = useState<{ isOpen: boolean; exportId: number | null; exportItem: ExportResponse | null }>({
+    isOpen: false,
+    exportId: null,
+    exportItem: null
+  });
+  const [rejectReason, setRejectReason] = useState("");
+  const [previewModal, setPreviewModal] = useState<{ isOpen: boolean; mapId: string | null; mapDetail: MapDetail | null }>({
+    isOpen: false,
+    mapId: null,
+    mapDetail: null
+  });
 
-  const allChecked = filtered.length > 0 && filtered.every((r) => checked[r.id]);
+  const loadExports = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await getPendingExports();
+      setExports(data);
+    } catch (error) {
+      console.error("Failed to load pending exports:", error);
+      setExports([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const handleKindChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value as Row["kind"] | "All";
-    setKind(value);
+  useEffect(() => {
+    loadExports();
+  }, [loadExports]);
+
+  const handleApprove = async (exportId: number) => {
+    if (actioningId) return;
+
+    const confirmed = window.confirm("Bạn có chắc chắn muốn phê duyệt export này?");
+    if (!confirmed) return;
+
+    try {
+      setActioningId(exportId);
+      await approveExport(exportId);
+      alert("Đã phê duyệt export thành công!");
+      await loadExports();
+    } catch (error) {
+      console.error("Failed to approve export:", error);
+      alert("Không thể phê duyệt export. Vui lòng thử lại.");
+    } finally {
+      setActioningId(null);
+    }
   };
 
-  const handleStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const value = e.target.value as Row["status"] | "All";
-    setStatus(value);
+  const handleRejectClick = (exportId: number, exportItem: ExportResponse) => {
+    setRejectModal({ isOpen: true, exportId, exportItem });
+    setRejectReason("");
   };
+
+  const handleRejectConfirm = async () => {
+    if (!rejectModal.exportId || !rejectReason.trim()) {
+      alert("Vui lòng nhập lý do từ chối");
+      return;
+    }
+
+    try {
+      setActioningId(rejectModal.exportId);
+      await rejectExport(rejectModal.exportId, rejectReason.trim());
+      alert("Đã từ chối export!");
+      setRejectModal({ isOpen: false, exportId: null, exportItem: null });
+      setRejectReason("");
+      await loadExports();
+    } catch (error) {
+      console.error("Failed to reject export:", error);
+      alert("Không thể từ chối export. Vui lòng thử lại.");
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleViewMap = async (mapId: string) => {
+    try {
+      const mapDetail = await getMapDetailAsAdmin(mapId);
+      setPreviewModal({ isOpen: true, mapId, mapDetail });
+    } catch (error) {
+      console.error("Failed to load map detail:", error);
+      alert("Không thể tải thông tin bản đồ");
+    }
+  };
+
+  const filteredExports = exports.filter(exp => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return (
+      exp.mapName?.toLowerCase().includes(q) ||
+      exp.userName?.toLowerCase().includes(q) ||
+      exp.format?.toLowerCase().includes(q) ||
+      exp.exportId.toString().includes(q)
+    );
+  });
 
   return (
-    <main className="p-5">
-      <section className="bg-zinc-900/50 p-6 rounded-lg">
-        <div className="flex items-center justify-between mb-6">
-          <h3>Exports</h3>
-          <div className="flex items-center gap-2">
+    <div className="grid gap-5">
+      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="m-0 text-xl font-extrabold">Quản lý Export Map - Chờ phê duyệt</h2>
+          <div className="flex gap-2 flex-wrap">
             <input
-              className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors"
-              placeholder="Search file or user…"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
+              className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 min-w-[200px] ${theme.input}`}
+              placeholder="Tìm kiếm theo tên map, user, format..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
             />
-            <select className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors" value={kind} onChange={handleKindChange}>
-              <option>All</option>
-              <option>PDF</option>
-              <option>PNG</option>
-              <option>GeoJSON</option>
-              <option>CSV</option>
-            </select>
-            <select className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 focus:outline-none focus:ring-2 focus:ring-zinc-700 transition-colors" value={status} onChange={handleStatusChange}>
-              <option>All</option>
-              <option>Completed</option>
-              <option>Processing</option>
-              <option>Failed</option>
-            </select>
             <button
-              className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
-              disabled={!Object.values(checked).some(Boolean)}
-              onClick={() => {
-                setRows((prev) => prev.filter((r) => !checked[r.id]));
-                setChecked({});
-              }}
+              className={`h-[34px] px-4 text-sm rounded-lg border font-medium transition-colors ${
+                isDark
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+                  : "bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-500"
+              }`}
+              onClick={loadExports}
+              disabled={loading}
             >
-              Delete selected
+              {loading ? "Đang tải..." : "Làm mới"}
             </button>
           </div>
         </div>
 
-          <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-zinc-800">
+        <div className={`overflow-auto border ${theme.tableBorder} rounded-lg mt-2`}>
+          <table className="w-full border-collapse text-sm">
             <thead>
               <tr>
-                <th>
-                  <input
-                    type="checkbox"
-                    checked={allChecked}
-                    onChange={(e) => {
-                      const v = e.target.checked;
-                      const next = { ...checked };
-                      filtered.forEach((r) => (next[r.id] = v));
-                      setChecked(next);
-                    }}
-                  />
-                </th>
-                <th>File</th>
-                <th>Type</th>
-                <th>Size</th>
-                <th>User</th>
-                <th>Created</th>
-                <th>Status</th>
-                <th></th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Export ID</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Map</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>User</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Format</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Trạng thái</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`}>Ngày tạo</th>
+                <th className={`p-3 border-b ${theme.tableHeader} text-center font-extrabold text-xs`}>Hành động</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={!!checked[r.id]}
-                      onChange={(e) =>
-                        setChecked((p) => ({ ...p, [r.id]: e.target.checked }))
-                      }
-                    />
-                  </td>
-                  <td className="font-medium">{r.fileName}</td>
-                  <td>{r.kind}</td>
-                  <td>{r.size}</td>
-                  <td>{r.owner}</td>
-                  <td>{r.createdAt}</td>
-                  <td>
-                    {r.status === "Completed" && (
-                      <span className="px-2 py-1 rounded-md bg-green-500/10 text-green-500">Completed</span>
-                    )}
-                    {r.status === "Processing" && (
-                      <span className="px-2 py-1 rounded-md bg-yellow-500/10 text-yellow-500">Processing</span>
-                    )}
-                    {r.status === "Failed" && (
-                      <span
-                        className="px-2 py-1 rounded-md bg-red-500/10 text-red-500"
-                        style={{
-                          color: "#ef4444",
-                          background:
-                            "color-mix(in srgb,#ef4444 14%, transparent)",
-                        }}
-                      >
-                        Failed
-                      </span>
-                    )}
-                  </td>
-                  <td className="flex items-center gap-2">
-                    <button className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors">View</button>
-                    {r.status === "Completed" && (
-                      <a className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors" href="#" download>
-                        Download
-                      </a>
-                    )}
-                    <button
-                      className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors"
-                      onClick={() =>
-                        setRows((prev) => prev.filter((x) => x.id !== r.id))
-                      }
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
+              {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-[--muted]">
-                    No exports found
+                  <td colSpan={7} className={`p-8 text-center ${theme.textMuted}`}>
+                    Đang tải...
                   </td>
                 </tr>
+              ) : filteredExports.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className={`p-8 text-center ${theme.textMuted}`}>
+                    Không có export nào đang chờ phê duyệt
+                  </td>
+                </tr>
+              ) : (
+                filteredExports.map((exp) => (
+                  <tr key={exp.exportId}>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left font-mono`}>
+                      #{exp.exportId}
+                    </td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                      <div className="flex flex-col gap-1">
+                        <span className="font-medium">{exp.mapName || "(Không tên)"}</span>
+                        <span className="text-xs opacity-60">ID: {exp.mapId}</span>
+                      </div>
+                    </td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                      {exp.userName || exp.userId}
+                    </td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                      <span className="uppercase font-mono text-xs font-bold">{exp.format}</span>
+                    </td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                      <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${getStatusBadgeClass(exp.status, isDark)}`}>
+                        {exp.status}
+                      </span>
+                    </td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                      {formatDate(exp.createdAt)}
+                    </td>
+                    <td className={`p-3 border-b ${theme.tableCell} text-center`}>
+                      <div className="flex items-center justify-center gap-2">
+                        <button
+                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-opacity disabled:opacity-50 ${
+                            isDark
+                              ? "bg-blue-600 hover:bg-blue-700 text-white"
+                              : "bg-blue-500 hover:bg-blue-600 text-white"
+                          }`}
+                          onClick={() => handleViewMap(exp.mapId)}
+                          disabled={actioningId !== null}
+                        >
+                          Xem Map
+                        </button>
+                        <button
+                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-opacity disabled:opacity-50 ${
+                            isDark
+                              ? "bg-green-600 hover:bg-green-700 text-white"
+                              : "bg-green-500 hover:bg-green-600 text-white"
+                          }`}
+                          onClick={() => handleApprove(exp.exportId)}
+                          disabled={actioningId !== null}
+                        >
+                          {actioningId === exp.exportId ? "Đang xử lý..." : "Phê duyệt"}
+                        </button>
+                        <button
+                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-opacity disabled:opacity-50 ${
+                            isDark
+                              ? "bg-red-600 hover:bg-red-700 text-white"
+                              : "bg-red-500 hover:bg-red-600 text-white"
+                          }`}
+                          onClick={() => handleRejectClick(exp.exportId, exp)}
+                          disabled={actioningId !== null}
+                        >
+                          Từ chối
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
-
-        <div className="flex items-center justify-center gap-2 mt-4">
-          <button className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors">Prev</button>
-          <div className="flex items-center gap-2">
-            <b>1</b>
-            <span>2</span>
-            <span>3</span>…<span>10</span>
-          </div>
-          <button className="px-4 py-2 rounded-lg border border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700 transition-colors">Next</button>
-        </div>
       </section>
-    </main>
+
+      {/* Reject Modal */}
+      {rejectModal.isOpen && (
+        <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/50">
+          <div className={`relative rounded-xl shadow-2xl border w-full max-w-md mx-4 ${
+            isDark ? "bg-zinc-900 border-zinc-700" : "bg-white border-gray-200"
+          }`}>
+            <div className={`px-6 py-4 border-b ${isDark ? "border-zinc-700" : "border-gray-200"}`}>
+              <h3 className="text-lg font-bold">Từ chối Export</h3>
+              <p className="text-sm opacity-60 mt-1">
+                Export ID: #{rejectModal.exportId} - {rejectModal.exportItem?.mapName}
+              </p>
+            </div>
+            <div className="p-6">
+              <label className="block text-sm font-medium mb-2">
+                Lý do từ chối <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                className={`w-full px-3 py-2 rounded-lg border outline-none focus:ring-2 min-h-[120px] ${
+                  isDark
+                    ? "bg-zinc-800 border-zinc-700 focus:border-zinc-600 focus:ring-zinc-600"
+                    : "bg-white border-gray-300 focus:border-gray-400 focus:ring-gray-400"
+                }`}
+                placeholder="Nhập lý do từ chối export này..."
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className={`px-6 py-4 border-t flex gap-3 justify-end ${isDark ? "border-zinc-700" : "border-gray-200"}`}>
+              <button
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isDark
+                    ? "bg-zinc-800 hover:bg-zinc-700 text-white"
+                    : "bg-gray-200 hover:bg-gray-300 text-gray-900"
+                }`}
+                onClick={() => {
+                  setRejectModal({ isOpen: false, exportId: null, exportItem: null });
+                  setRejectReason("");
+                }}
+                disabled={actioningId !== null}
+              >
+                Hủy
+              </button>
+              <button
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50 ${
+                  isDark
+                    ? "bg-red-600 hover:bg-red-700 text-white"
+                    : "bg-red-500 hover:bg-red-600 text-white"
+                }`}
+                onClick={handleRejectConfirm}
+                disabled={!rejectReason.trim() || actioningId !== null}
+              >
+                {actioningId === rejectModal.exportId ? "Đang xử lý..." : "Xác nhận từ chối"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Map Preview Modal */}
+      {previewModal.isOpen && previewModal.mapDetail && (
+        <MapPreviewModal
+          mapDetail={previewModal.mapDetail}
+          onClose={() => setPreviewModal({ isOpen: false, mapId: null, mapDetail: null })}
+          isDark={isDark}
+        />
+      )}
+    </div>
   );
 }
