@@ -92,6 +92,8 @@ export interface MapDetail {
   createdAt?: string;
   updatedAt?: string;
   layers: LayerDTO[];
+  workspaceId?: string | null;
+  workspaceName?: string | null;
 }
 
 // ===== MAP CRUD =====
@@ -250,6 +252,11 @@ export async function getOrganizationMaps(orgId: string): Promise<MapDto[]> {
 
 export async function getMapDetail(mapId: string): Promise<MapDetail> {
   const res = await getJson<MapDetail | MapDetail>(`/maps/${mapId}`);
+  return res as MapDetail;
+}
+
+export async function getMapDetailAsAdmin(mapId: string): Promise<MapDetail> {
+  const res = await getJson<MapDetail>(`/api/admin/maps/${mapId}`);
   return res as MapDetail;
 }
 
@@ -679,16 +686,67 @@ export function restoreMap(mapId: string) {
 // ===== EXPORTS =====
 export type ExportRequest = {
   mapId: string;
-  format: "pdf" | "png" | "geojson";
+  format: "pdf" | "png" | "geojson" | "svg";
+  membershipId?: string; // Optional
+  viewState?: string; // JSON string of { center: [lat, lng], zoom: number }
+  mapImageData?: string; // Base64 encoded image data from frontend capture
+  visibleLayerIds?: Record<string, boolean>; // Which layers should be visible
+  visibleFeatureIds?: Record<string, boolean>; // Which features should be visible
+  options?: {
+    width?: string;
+    height?: string;
+    dpi?: string;
+    includeLegend?: boolean;
+    includeScale?: boolean;
+    title?: string;
+    description?: string;
+  };
 };
 
 export type ExportResponse = {
-  url: string;
-  exportId: string;
+  exportId: number;
+  mapId: string;
+  mapName?: string;
+  userId: string;
+  userName?: string;
+  format: "pdf" | "png" | "geojson" | "svg";
+  status: "Pending" | "Processing" | "PendingApproval" | "Approved" | "Rejected" | "Failed";
+  fileUrl?: string;
+  canDownload: boolean;
+  fileSize: number;
+  errorMessage?: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  approvedAt?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  completedAt?: string;
 };
 
 export function createExport(req: ExportRequest) {
   return postJson<ExportRequest, ExportResponse>("/exports", req);
+}
+
+export function getExportById(exportId: number) {
+  return getJson<ExportResponse>(`/exports/${exportId}`);
+}
+
+export function getMyExports() {
+  return getJson<{ exports: ExportResponse[]; total: number }>("/exports/my");
+}
+
+// Admin Export Functions
+export async function getPendingExports(): Promise<ExportResponse[]> {
+  const res = await getJson<{ exports: ExportResponse[] } | ExportResponse[]>("/api/admin/exports/pending-approval");
+  return Array.isArray(res) ? res : (res.exports ?? []);
+}
+
+export function approveExport(exportId: number) {
+  return postJson<void, ExportResponse>(`/api/admin/exports/${exportId}/approve`, undefined);
+}
+
+export function rejectExport(exportId: number, reason: string) {
+  return postJson<{ reason: string }, ExportResponse>(`/api/admin/exports/${exportId}/reject`, { reason });
 }
 
 // ===== MAP ANALYTICS =====
