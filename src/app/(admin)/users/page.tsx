@@ -55,8 +55,15 @@ function useDebounce<T>(value: T, delay = 350) {
 
 function timeAgoVi(iso?: string | null) {
   if (!iso) return "–";
+  if (iso === "0001-01-01T00:00:00" || iso.startsWith("0001-01-01")) {
+    return "Chưa đăng nhập";
+  }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "–";
+  if (d.getTime() < 0) {
+    return "Chưa đăng nhập";
+  }
+  
   const diff = new Date().getTime() - d.getTime();
   const m = Math.floor(diff / 60000);
   if (m < 1) return "vừa xong";

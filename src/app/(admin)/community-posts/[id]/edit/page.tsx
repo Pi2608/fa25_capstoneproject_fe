@@ -9,6 +9,7 @@ import {
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Loading from "@/app/loading";
 
 const TOPICS = ["Product", "Tutorial", "Stories", "Education", "Business"] as const;
 
@@ -112,7 +113,7 @@ export default function EditCommunityPostPage() {
   if (loading) {
     return (
       <div className="p-5">
-        <div className="p-12 text-center">Đang tải...</div>
+        <div className="p-12 text-center"><Loading /></div>
       </div>
     );
   }

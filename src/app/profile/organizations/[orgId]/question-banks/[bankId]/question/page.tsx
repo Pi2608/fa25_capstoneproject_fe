@@ -25,6 +25,7 @@ import {
   QuestionOptionInput,
 } from "@/hooks/useQuestionSets";
 import type { PinLocationPickerProps } from "@/components/question-banks/PinLocationPicker";
+import Loading from "@/app/loading";
 
 
 function safeMessage(err: unknown, fallback: string): string {
@@ -64,7 +65,7 @@ const PinLocationPicker = dynamic<PinLocationPickerProps>(
       // We'll need to handle theme in the component itself since this is a static loading component
       return (
         <div className="mt-4 flex h-64 items-center justify-center rounded-xl border border-dashed text-sm">
-          Đang tải bản đồ...
+          <Loading />
         </div>
       );
     },
@@ -890,7 +891,7 @@ export default function QuestionBuilderPage() {
                                   <label className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-4 text-center text-xs ${themeClasses.textMuted} ${isDark ? "border-white/10 hover:border-emerald-500 hover:text-emerald-400" : "border-gray-300 hover:border-emerald-400 hover:text-emerald-600"}`}>
                                     <span>
                                       {uploadingImageFor === q.id
-                                        ? "Đang tải ảnh..."
+                                        ? <Loading />
                                         : "Nhấn để chọn ảnh (JPG, PNG)"}
                                     </span>
 
@@ -937,7 +938,7 @@ export default function QuestionBuilderPage() {
                                   <label className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-4 text-center text-xs ${themeClasses.textMuted} ${isDark ? "border-white/10 hover:border-emerald-500 hover:text-emerald-400" : "border-gray-300 hover:border-emerald-400 hover:text-emerald-600"}`}>
                                     <span>
                                       {uploadingAudioFor === q.id
-                                        ? "Đang tải audio..."
+                                        ? <Loading />
                                         : "Nhấn để chọn file audio (MP3, WAV)"}
                                     </span>
 

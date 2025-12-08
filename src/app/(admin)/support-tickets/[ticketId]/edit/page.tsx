@@ -7,6 +7,8 @@ import {
   adminUpdateSupportTicket,
   adminCloseSupportTicket,
 } from "@/lib/admin-api";
+import { useTheme } from "../../../layout";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 type TicketStatus = "Open" | "Pending" | "Closed";
 type Priority = string;
@@ -41,6 +43,8 @@ export default function EditSupportTicketPage() {
   const router = useRouter();
   const params = useParams<{ ticketId?: string }>();
   const ticketId = params?.ticketId ?? "";
+  const { isDark } = useTheme();
+  const theme = getThemeClasses(isDark);
 
   const [ticket, setTicket] = useState<Ticket | null>(null);
   const [editDraft, setEditDraft] = useState<EditableTicketFields | null>(null);
@@ -167,11 +171,11 @@ export default function EditSupportTicketPage() {
   };
 
   if (loading)
-    return <div className="p-12 text-center text-zinc-400">Đang tải yêu cầu…</div>;
+    return <div className={`p-12 text-center ${theme.textMuted}`}>Đang tải yêu cầu…</div>;
   if (err)
     return (
       <div className="grid gap-5">
-        <section className="bg-zinc-900/98 border border-zinc-800 rounded-xl p-4 shadow-sm grid gap-3">
+        <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
           <div className="p-4 text-center text-red-500 font-semibold text-sm">{err}</div>
         </section>
       </div>
@@ -179,8 +183,8 @@ export default function EditSupportTicketPage() {
   if (!ticket || !editDraft)
     return (
       <div className="grid gap-5">
-        <section className="bg-zinc-900/98 border border-zinc-800 rounded-xl p-4 shadow-sm grid gap-3">
-          <div className="p-4 text-center text-zinc-400">Không có dữ liệu.</div>
+        <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
+          <div className={`p-4 text-center ${theme.textMuted}`}>Không có dữ liệu.</div>
         </section>
       </div>
     );
@@ -188,11 +192,11 @@ export default function EditSupportTicketPage() {
 
   return (
     <div className="grid gap-5">
-      <section className="bg-zinc-900/98 border border-zinc-800 rounded-xl p-4 shadow-sm grid gap-3">
+      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="m-0 text-base font-extrabold">Chỉnh sửa yêu cầu</h3>
+          <h3 className={`m-0 text-base font-extrabold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>Chỉnh sửa yêu cầu</h3>
           <button
-            className="text-sm font-bold text-[#3f5f36] hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50"
+            className={`text-sm font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-600'} hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50`}
             onClick={() => router.push(`/support-tickets/${ticket.ticketId}`)}
             disabled={saving || closing}
           >
@@ -200,18 +204,18 @@ export default function EditSupportTicketPage() {
           </button>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm p-6 lg:p-7 grid gap-5">
-          <div className="flex justify-between items-start gap-4 pb-3 border-b border-zinc-200 mb-1">
+        <div className={`${isDark ? 'bg-zinc-800/50' : 'bg-white'} rounded-2xl shadow-sm p-6 lg:p-7 grid gap-5`}>
+          <div className={`flex justify-between items-start gap-4 pb-3 border-b ${theme.tableBorder} mb-1`}>
             <div>
-              <h2 className="m-0 text-lg font-semibold">
+              <h2 className={`m-0 text-lg font-semibold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>
                 {ticket.title || `Phiếu hỗ trợ #${ticket.ticketId}`}
               </h2>
-              <div className="text-sm text-zinc-500 mt-0.5">
+              <div className={`text-sm ${theme.textMuted} mt-0.5`}>
                 #{ticket.ticketId} · {ticket.category} ·{" "}
                 {ticket.userName ?? "Ẩn danh"}
               </div>
             </div>
-            <div className="text-right text-xs text-zinc-500">
+            <div className={`text-right text-xs ${theme.textMuted}`}>
               <div>Tạo: {fmtDate(ticket.createdAt)}</div>
               <div>Cập nhật: {fmtDate(ticket.updatedAt)}</div>
             </div>
@@ -219,9 +223,9 @@ export default function EditSupportTicketPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <label className="flex flex-col gap-1.5">
-              <span className="block text-sm font-medium text-zinc-300">Trạng thái</span>
+              <span className={`block text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Trạng thái</span>
               <select
-                className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/96 text-zinc-100 outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700"
+                className={theme.select}
                 value={editDraft.status}
                 onChange={(e) => onDraftChange("status", e.target.value)}
               >
@@ -232,9 +236,9 @@ export default function EditSupportTicketPage() {
             </label>
 
             <label className="flex flex-col gap-1.5">
-              <span className="block text-sm font-medium text-zinc-300">Độ ưu tiên</span>
+              <span className={`block text-sm font-medium ${isDark ? 'text-zinc-300' : 'text-gray-700'}`}>Độ ưu tiên</span>
               <input
-                className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/96 text-zinc-100 outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700"
+                className={theme.input}
                 value={editDraft.priority}
                 onChange={(e) => onDraftChange("priority", e.target.value)}
                 placeholder="Ví dụ: cao, trung bình, thấp…"
@@ -242,12 +246,12 @@ export default function EditSupportTicketPage() {
             </label>
           </div>
 
-          <div className="border-t border-zinc-200 pt-3 grid gap-2">
-            <h4 className="m-0 text-zinc-900 text-sm font-medium">
+          <div className={`border-t ${theme.tableBorder} pt-3 grid gap-2`}>
+            <h4 className={`m-0 ${isDark ? 'text-zinc-100' : 'text-gray-900'} text-sm font-medium`}>
               ✉️ Ghi chú / phản hồi cho khách
             </h4>
             <textarea
-              className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/96 text-zinc-100 outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700 resize-y min-h-[120px]"
+              className={`${theme.input} resize-y min-h-[120px]`}
               rows={4}
               value={editDraft.response}
               onChange={(e) => onDraftChange("response", e.target.value)}
@@ -257,7 +261,7 @@ export default function EditSupportTicketPage() {
 
           <div className="flex justify-end gap-2 mt-1">
             <button
-              className="px-4 py-2 rounded-full text-sm font-medium cursor-pointer inline-flex items-center justify-center whitespace-nowrap border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+              className={`px-4 py-2 rounded-full text-sm font-medium cursor-pointer inline-flex items-center justify-center whitespace-nowrap border ${isDark ? 'border-zinc-700 bg-zinc-800 text-zinc-200 hover:bg-zinc-700' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'} disabled:opacity-50`}
               onClick={() =>
                 router.push(`/support-tickets/${ticket.ticketId}`)
               }
@@ -267,7 +271,7 @@ export default function EditSupportTicketPage() {
             </button>
 
             <button
-              className="px-4 py-2 rounded-full text-sm font-medium cursor-pointer inline-flex items-center justify-center whitespace-nowrap border-transparent bg-blue-600 text-white shadow-sm disabled:opacity-70"
+              className="px-4 py-2 rounded-full text-sm font-medium cursor-pointer inline-flex items-center justify-center whitespace-nowrap border-transparent bg-blue-600 text-white shadow-sm disabled:opacity-70 hover:bg-blue-700 transition-colors"
               onClick={handleSave}
               disabled={saving || closing}
             >
@@ -276,7 +280,7 @@ export default function EditSupportTicketPage() {
 
             {ticket.status !== "Closed" ? (
               <button
-                className="px-4 py-2 rounded-full text-sm font-medium cursor-pointer inline-flex items-center justify-center whitespace-nowrap border-transparent bg-red-500 text-white shadow-sm disabled:opacity-70"
+                className="px-4 py-2 rounded-full text-sm font-medium cursor-pointer inline-flex items-center justify-center whitespace-nowrap border-transparent bg-red-500 text-white shadow-sm disabled:opacity-70 hover:bg-red-600 transition-colors"
                 onClick={handleClose}
                 disabled={saving || closing}
               >

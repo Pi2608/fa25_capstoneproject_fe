@@ -6,11 +6,11 @@ import "leaflet/dist/leaflet.css";
 import type { TileLayer, LatLngTuple, FeatureGroup } from "leaflet";
 import type L from "leaflet";
 import { debounce, rafThrottle, BatchUpdater } from "@/utils/performance";
-import { type FeatureData, extractLayerStyle, applyLayerStyle, handleLayerVisibilityChange, handleFeatureVisibilityChange, getFeatureType as getFeatureTypeUtil, updateFeatureInDB, deleteFeatureFromDB, loadFeaturesToMap, loadLayerToMap, type ExtendedLayer, saveFeature,} from "@/utils/mapUtils";
-import {  getFeatureName,  getFeatureBounds,  formatCoordinates,  copyToClipboard,  findFeatureIndex,  removeFeatureFromGeoJSON} from "@/utils/zoneOperations";
+import { type FeatureData, extractLayerStyle, applyLayerStyle, handleLayerVisibilityChange, handleFeatureVisibilityChange, getFeatureType as getFeatureTypeUtil, updateFeatureInDB, deleteFeatureFromDB, loadFeaturesToMap, loadLayerToMap, type ExtendedLayer, saveFeature, } from "@/utils/mapUtils";
+import { getFeatureName, getFeatureBounds, formatCoordinates, copyToClipboard, findFeatureIndex, removeFeatureFromGeoJSON } from "@/utils/zoneOperations";
 import * as mapHelpers from "@/utils/mapHelpers";
 
-import type { BaseKey, Layer, LeafletMouseEvent, LeafletMapClickEvent, MapWithPM, PMCreateEvent, LayerStyle, PathLayer, LocationType, GeomanLayer} from "@/types";
+import type { BaseKey, Layer, LeafletMouseEvent, LeafletMapClickEvent, MapWithPM, PMCreateEvent, LayerStyle, PathLayer, LocationType, GeomanLayer } from "@/types";
 
 interface CircleLayer extends Layer {
   setRadius(radius: number): void;
@@ -19,25 +19,28 @@ import { getSegments, reorderSegments, type Segment, type TimelineTransition, ge
 import { getMapDetail, type MapDetail, updateMap, type UpdateMapRequest, type UpdateMapFeatureRequest, uploadGeoJsonToMap, updateLayerData, MapStatus, updateMapFeature, LayerDTO, getMapFeatureById, type BaseLayer, createExport, getExportById, type ExportRequest, type ExportResponse} from "@/lib/api-maps";
 import { createMapLocation, deleteLocation, getMapLocations } from "@/lib/api-location";
 
-import { MapControls } from "@/components/map";
 import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator } from "@/components/map-editor-ui";
-import PublishButton from "@/components/map-editor/PublishButton";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
 import SequentialRoutePlaybackWrapper from "@/components/storymap/SequentialRoutePlaybackWrapper";
 
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
+import { iconEmojiMap, iconLabelMap, labelToIconKeyMap } from "@/constants/icons";
 import { useMapCollaboration, type MapSelection } from "@/hooks/useMapCollaboration";
 import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
 import { useLayerStyles } from "@/hooks/useLayerStyles";
 import { useCollaborationVisualization } from "@/hooks/useCollaborationVisualization";
 import { useFeatureManagement } from "@/hooks/useFeatureManagement";
 import { usePoiMarkers } from "@/hooks/usePoiMarkers";
+import { useZoneMarkers } from "@/hooks/useZoneMarkers";
 import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geojson";
 import { SaveIcon, UploadIcon, DownloadIcon } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import html2canvas from "html2canvas";
 import { useI18n } from "@/i18n/I18nProvider";
+import PublishButton from "@/components/map/PublishButton";
+import ZoomControls from "@/components/map/controls/ZoomControls";
+import { ZoneStyleEditor } from "@/components/map-editor-ui/ZoneStyleEditor";
 
 
 const normalizeMapStatus = (status: unknown): MapStatus => {
@@ -120,7 +123,7 @@ export default function EditMapPage() {
   const [layers, setLayers] = useState<LayerDTO[]>([]);
   const [layerVisibility, setLayerVisibility] = useState<Record<string, boolean>>({});
   const [featureVisibility, setFeatureVisibility] = useState<Record<string, boolean>>({})
-  
+
   // Current layer ID for drawing new features
   const [currentLayerId, setCurrentLayerId] = useState<string | null>(null);
 
@@ -137,14 +140,13 @@ export default function EditMapPage() {
   });
 
   // New VSCode-style UI state
-  const [leftSidebarView, setLeftSidebarView] = useState<"explorer" | "segments" | "transitions" | "icons" | null>("explorer");
+  const [leftSidebarView, setLeftSidebarView] = useState<"explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "library" | null>("explorer");
   const [isPropertiesPanelOpen, setIsPropertiesPanelOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<{
     type: "feature" | "layer" | "segment";
     data: FeatureData | LayerDTO | Segment;
   } | null>(null);
 
-  const [activeTool, setActiveTool] = useState<string | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [transitions, setTransitions] = useState<TimelineTransition[]>([]);
   const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null);
@@ -153,6 +155,11 @@ export default function EditMapPage() {
   const [isTimelineOpen, setIsTimelineOpen] = useState(true);
   const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
   const [currentZoom, setCurrentZoom] = useState<number>(10);
+
+  const [selectedZone, setSelectedZone] = useState<{
+    mapZone: import("@/lib/api-maps").MapZone;
+    zone: import("@/lib/api-maps").Zone;
+  } | null>(null);
 
   // Use layer styles hook for managing layer selection and styling
   const layerStyles = useLayerStyles();
@@ -169,8 +176,6 @@ export default function EditMapPage() {
     applySelectionStyle,
     applyMultiSelectionStyle,
     handleLayerHover,
-    // NOTE: resetAllSelections from hook is not used - we have a custom implementation below
-    // resetAllSelections,
   } = layerStyles;
 
   // Context menu state
@@ -206,10 +211,10 @@ export default function EditMapPage() {
     copyMode: "existing"
   });
 
-const mapEl = useRef<HTMLDivElement | null>(null);
-const mapRef = useRef<MapWithPM | null>(null);
-const baseRef = useRef<TileLayer | null>(null);
-const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
+  const mapEl = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapWithPM | null>(null);
+  const baseRef = useRef<TileLayer | null>(null);
+  const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
   const sketchRef = useRef<FeatureGroup | null>(null);
   const dataLayerRefs = useRef<Map<string, L.Layer>>(new Map());
   // Icon management refs for performance optimization
@@ -225,6 +230,20 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
     originalStylesRef,
     features,
   });
+
+  usePoiMarkers({
+    mapId,
+    mapRef,
+    isMapReady,
+    setPoiTooltipModal,
+  });
+
+  useZoneMarkers({
+    mapId,
+    mapRef,
+    isMapReady,
+  });
+
   // Handle layer click (single or multi-select)
   const handleLayerClick = useCallback((layer: Layer, isShiftKey: boolean) => {
     if (isShiftKey) {
@@ -313,13 +332,6 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
     setActiveSegmentId,
   });
 
-  // Use POI markers hook for POI rendering and lifecycle management
-  const { poiMarkersRef } = usePoiMarkers({
-    mapId,
-    mapRef,
-    isMapReady,
-    setPoiTooltipModal,
-  });
 
   const visualizeRef = useRef(visualizeOtherUserSelection);
   const removeVisualizationRef = useRef(removeUserSelectionVisualization);
@@ -349,17 +361,6 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
         await handleMapDataChangedRef.current();
       }
     }, 300),
-    []
-  );
-
-  const visibilityBatchUpdater = useMemo(
-    () => new BatchUpdater<boolean>((updates) => {
-      const newVisibility: Record<string, boolean> = {};
-      updates.forEach((value, key) => {
-        newVisibility[key] = value;
-      });
-      setFeatureVisibility(prev => ({ ...prev, ...newVisibility }));
-    }, 16),
     []
   );
 
@@ -603,10 +604,10 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
         prev.map(f =>
           f.featureId === featureId
             ? {
-                ...f,
-                isVisible: updatedFeature.isVisible ?? true,
-                layerId: updatedFeature.layerId || null,
-              }
+              ...f,
+              isVisible: updatedFeature.isVisible ?? true,
+              layerId: updatedFeature.layerId || null,
+            }
             : f
         )
       );
@@ -1123,9 +1124,52 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
       }
     };
 
+    const handleLayerDeleted = async (e?: Event) => {
+      try {
+        const deletedLayerId = (e as CustomEvent<{ layerId: string }>)?.detail?.layerId;
+        const updatedDetail = await getMapDetail(mapId);
+        setDetail(updatedDetail);
+
+        // Force update layers state immediately
+        if (updatedDetail.layers) {
+          setLayers(updatedDetail.layers);
+        } else {
+          setLayers([]);
+        }
+
+        // Update features to remove layerId if they belonged to the deleted layer
+        if (deletedLayerId) {
+          setFeatures(prev => {
+            const updatedFeatures = prev.map(feature => {
+              if (feature.layerId === deletedLayerId) {
+                // Update local state immediately
+                const updated = { ...feature, layerId: null };
+
+                // Update backend asynchronously
+                if (feature.featureId && mapId) {
+                  updateMapFeature(mapId, feature.featureId, { layerId: null })
+                    .catch(error => {
+                      console.error(`Failed to update feature ${feature.featureId} after layer deletion:`, error);
+                    });
+                }
+
+                return updated;
+              }
+              return feature;
+            });
+            return updatedFeatures;
+          });
+        }
+      } catch (error) {
+        console.error("Failed to refresh map detail after layer deletion:", error);
+      }
+    };
+
     window.addEventListener("layerCreated", handleLayerCreated);
+    window.addEventListener("layerDeleted", handleLayerDeleted);
     return () => {
       window.removeEventListener("layerCreated", handleLayerCreated);
+      window.removeEventListener("layerDeleted", handleLayerDeleted);
     };
   }, [mapId]);
 
@@ -1464,13 +1508,22 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
   }, [isMapReady, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd, handlePolygonCut]);
 
   useEffect(() => {
-    if (!mapRef.current || !detail?.layers || detail.layers.length === 0 || !isMapReady) return;
+    if (!mapRef.current || !isMapReady) return;
+    // Always update layers state, even if empty
+    if (detail?.layers) {
+      setLayers(detail.layers);
+    } else {
+      setLayers([]);
+    }
+
+    // Only process layers if there are any
+    if (!detail?.layers || detail.layers.length === 0) return;
+
     const map = mapRef.current;
 
     let alive = true;
 
     (async () => {
-      setLayers((detail.layers));
 
       dataLayerRefs.current.forEach((layer) => {
         if (map.hasLayer(layer)) {
@@ -1584,6 +1637,39 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
     }
   }, [mapId]);
 
+  // Handle refresh segments (used by TimelineWorkspace)
+  const handleRefreshSegments = useCallback(async () => {
+    try {
+      // Reload segments with enhanced details (includes locations, routes, zones, layers)
+      const [segmentsData, transitionsData] = await Promise.all([
+        getSegments(mapId),
+        getTimelineTransitions(mapId),
+      ]);
+
+      // Load route animations for each segment (GetSegmentsAsync doesn't include routes)
+      const segmentsWithRoutes = await Promise.all(
+        segmentsData.map(async (segment) => {
+          try {
+            // Fetch route animations for this segment
+            const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
+            return {
+              ...segment,
+              routeAnimations: routes || []
+            };
+          } catch (e) {
+            return segment;
+          }
+        })
+      );
+
+      // Force new array reference to ensure React re-renders
+      setSegments([...segmentsWithRoutes]);
+      setTransitions([...transitionsData]);
+    } catch (error) {
+      console.error("Failed to refresh segments:", error);
+    }
+  }, [mapId]);
+
   useEffect(() => {
     if (!mapId || !isMapReady) return;
 
@@ -1597,6 +1683,22 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
       alive = false;
     };
   }, [mapId, isMapReady, loadSegmentsAndTransitions]);
+
+  // Listen for zone selection events (from useZoneMarkers)
+  useEffect(() => {
+    const handleSelectZone = (e: Event) => {
+      const customEvent = e as CustomEvent<{
+        mapZone: import("@/lib/api-maps").MapZone;
+        zone: import("@/lib/api-maps").Zone;
+      }>;
+      setSelectedZone(customEvent.detail);
+    };
+
+    window.addEventListener("selectZone", handleSelectZone);
+    return () => {
+      window.removeEventListener("selectZone", handleSelectZone);
+    };
+  }, []);
 
   // Listen for location created event to refresh segments
   useEffect(() => {
@@ -1899,102 +2001,6 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
     let clickHandler: ((e: LeafletMouseEvent) => void) | null = null;
     let contextMenuHandler: ((e: LeafletMouseEvent) => void) | null = null;
 
-    const iconLabelMap: Record<string, string> = {
-      plane: "Plane", car: "Car", bus: "Bus", train: "Train", ship: "Ship", bike: "Bike", walk: "Walk", route: "Route", from: "From", to: "To",
-      home: "Home", office: "Office", school: "School", hospital: "Hospital", restaurant: "Food", coffee: "Coffee", shop: "Shop", park: "Park", museum: "Museum", hotel: "Hotel",
-      person: "Person", group: "Group", info: "Info", warning: "Warning", danger: "Danger", star: "Highlight", photo: "Photo spot", camera: "Camera", note: "Note", chat: "Comment",
-      gold: "Gold", silver: "Silver", coal: "Coal", oil: "Oil", gas: "Natural Gas", iron: "Iron", copper: "Copper", diamond: "Diamond", stone: "Stone", mining: "Mining",
-      factory: "Factory", "power-plant": "Power Plant", refinery: "Refinery", warehouse: "Warehouse", construction: "Construction", shipyard: "Shipyard", airport: "Airport", port: "Port", textile: "Textile", agriculture: "Agriculture",
-      mountain: "Mountain", river: "River", lake: "Lake", forest: "Forest", desert: "Desert", volcano: "Volcano", island: "Island", beach: "Beach", castle: "Castle", temple: "Temple", monument: "Monument", tomb: "Tomb", ruin: "Ruin", battlefield: "Battlefield", "ancient-city": "Ancient City",
-    };
-    const iconEmojiMap: Record<string, string> = {
-      plane: "✈️",
-      car: "🚗",
-      bus: "🚌",
-      train: "🚆",
-      ship: "🚢",
-      bike: "🚲",
-      walk: "🚶",
-      route: "📍",
-      from: "🅰️",
-      to: "🅱️",
-      home: "🏠",
-      office: "🏢",
-      school: "🏫",
-      hospital: "🏥",
-      restaurant: "🍽️",
-      coffee: "☕",
-      shop: "🛒",
-      park: "🌳",
-      museum: "🏛️",
-      hotel: "🏨",
-      person: "👤",
-      group: "👥",
-      info: "ℹ️",
-      warning: "⚠️",
-      danger: "❗",
-      star: "⭐",
-      photo: "📷",
-      camera: "📸",
-      note: "📝",
-      chat: "💬",
-      gold: "🥇",
-      silver: "🥈",
-      coal: "🪨",
-      oil: "🛢️",
-      gas: "⛽",
-      iron: "⚙️",
-      copper: "🟧",
-      diamond: "💎",
-      stone: "🪨",
-      mining: "⛏️",
-      factory: "🏭",
-      "power-plant": "🔌",
-      refinery: "🏭",
-      warehouse: "📦",
-      construction: "🏗️",
-      shipyard: "🏗️",
-      airport: "🛫",
-      port: "⚓",
-      textile: "🧵",
-      agriculture: "🌾",
-      mountain: "⛰️",
-      river: "🌊",
-      lake: "💧",
-      forest: "🌲",
-      desert: "🏜️",
-      volcano: "🌋",
-      island: "🏝️",
-      beach: "🏖️",
-      castle: "🏰",
-      temple: "🛕",
-      monument: "🗿",
-      tomb: "🪦",
-      ruin: "🏚️",
-      battlefield: "⚔️",
-      "ancient-city": "🏛️",
-    };
-
-    const labelToIconKeyMap: Record<string, string> = {};
-    Object.entries(iconLabelMap).forEach(([key, label]) => {
-      if (!labelToIconKeyMap[label]) {
-        labelToIconKeyMap[label] = key;
-      }
-    });
-
-    const parseIconKeyFromStoryContent = (storyContent?: string | null) => {
-      if (!storyContent) return null;
-      try {
-        const parsed = JSON.parse(storyContent);
-        if (parsed && typeof parsed === "object" && typeof parsed.iconKey === "string") {
-          return parsed.iconKey;
-        }
-      } catch (parseErr) {
-        console.warn("[Icon] Failed to parse icon metadata from storyContent:", parseErr);
-      }
-      return null;
-    };
-
     const stopPlacement = () => {
       const map = mapRef.current;
       if (!map) return;
@@ -2021,6 +2027,8 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
       const map = mapRef.current;
 
       if (!map || !iconKey) return;
+
+      stopPlacement();
 
       isPlacingIcon = true;
       currentIconKey = iconKey;
@@ -2131,17 +2139,11 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
               title: iconLabel,
               locationType: "Custom" as LocationType,
               markerGeometry,
-              iconType: currentIconKey,
+              iconType: emoji,
               displayOrder: 0,
               isVisible: true,
-              highlightOnEnter: false,
               showTooltip: false,
               openPopupOnClick: false,
-              storyContent: JSON.stringify({
-                source: "iconPlacement",
-                iconKey: currentIconKey,
-                iconLabel,
-              }),
             };
 
 
@@ -2264,203 +2266,6 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
     const handleStopPlacement = () => {
       stopPlacement();
     };
-
-
-    // COMMENTED OUT: Don't load existing location icons on EditMap
-    // This prevents duplicate rendering of location markers
-    // Locations should only be rendered via renderSegmentLocations in StoryMapViewer
-    // const loadExistingIcons = async () => {
-    //   if (!mapRef.current || !mapIdRef.current || !isMapReady) return;
-
-    //   try {
-    //     const locations = await getMapLocations(mapIdRef.current);
-
-    //     if (!locations || locations.length === 0) return;
-
-    //     const L = (await import("leaflet")).default;
-
-    //     if (!iconLayerGroupRef.current) {
-    //       iconLayerGroupRef.current = L.layerGroup().addTo(mapRef.current);
-    //     }
-
-    //     const existingLocationIds = new Set<string>();
-    //     iconMarkersRef.current.forEach((marker, id) => {
-    //       const locationId = (marker as any)._locationId || id.replace('icon-', '');
-    //       if (locationId) {
-    //         existingLocationIds.add(locationId);
-    //       }
-    //     });
-
-    //     const iconLocations = locations.filter(
-    //       (loc) =>
-    //         loc.markerGeometry &&
-    //         loc.isVisible !== false &&
-    //         loc.locationId &&
-    //         !existingLocationIds.has(loc.locationId)
-    //     );
-
-    //     for (const location of iconLocations) {
-    //       try {
-    //         const iconKeyFromMetadata = parseIconKeyFromStoryContent(location.storyContent);
-    //         const labelKey = location.title ?? "";
-    //         const iconKey =
-    //           iconKeyFromMetadata ||
-    //           location.iconType ||
-    //           labelToIconKeyMap[labelKey] ||
-    //           null;
-
-    //         if (!iconKey) {
-    //           continue;
-    //         }
-
-    //         const geoJson = JSON.parse(location.markerGeometry);
-    //         if (geoJson.type !== "Point" || !geoJson.coordinates) continue;
-
-    //         const [lng, lat] = geoJson.coordinates;
-
-    //         const emoji = iconEmojiMap[iconKey as keyof typeof iconEmojiMap] ?? "📍";
-
-    //         const iconCacheKey = `icon-${iconKey}`;
-    //         if (!(mapRef.current as any)._iconCache) {
-    //           (mapRef.current as any)._iconCache = new Map<string, L.DivIcon>();
-    //         }
-
-    //         let icon: L.DivIcon;
-    //         if ((mapRef.current as any)._iconCache.has(iconCacheKey)) {
-    //           icon = (mapRef.current as any)._iconCache.get(iconCacheKey);
-    //         } else {
-    //           icon = L.divIcon({
-    //             className: `custom-marker-icon icon-marker icon-${iconKey}`,
-    //             html: `<div style="font-size:24px; line-height:24px;">${emoji}</div>`,
-    //             iconSize: [28, 28],
-    //             iconAnchor: [14, 14],
-    //           });
-    //           (mapRef.current as any)._iconCache.set(iconCacheKey, icon);
-    //         }
-
-    //         // Create marker
-    //         const marker = L.marker([lat, lng], {
-    //           icon,
-    //           draggable: true,
-    //           pane: "markerPane",
-    //           zIndexOffset: 0,
-    //           keyboard: false,
-    //           riseOnHover: false,
-    //           autoPan: false,
-    //         });
-
-    //         // Store marker ID using locationId from API
-    //         const markerId = `icon-${location.locationId}`;
-    //         iconMarkersRef.current.set(markerId, marker);
-    //         iconMetadataRef.current.set(markerId, {
-    //           lat,
-    //           lng,
-    //           iconKey,
-    //           timestamp: Date.now() - 10000, // Mark as existing (not recently added)
-    //         });
-
-    //         // Store locationId on marker for deletion
-    //         (marker as any)._locationId = location.locationId;
-
-    //         // Add drag handlers
-    //         let dragTimeout: NodeJS.Timeout | null = null;
-    //         marker.on("drag", () => {
-    //           if (dragTimeout) return;
-    //           dragTimeout = setTimeout(() => {
-    //             dragTimeout = null;
-    //           }, 16);
-    //         });
-
-    //         marker.on("dragend", () => {
-    //           const latlng = marker.getLatLng();
-    //           iconMetadataRef.current.set(markerId, {
-    //             lat: latlng.lat,
-    //             lng: latlng.lng,
-    //             iconKey,
-    //             timestamp: Date.now(),
-    //           });
-    //         });
-
-    //         // Add context menu for deletion
-    //         marker.on("contextmenu", (event: any) => {
-    //           if (event.originalEvent) {
-    //             event.originalEvent.preventDefault();
-    //             event.originalEvent.stopPropagation();
-    //           }
-
-    //           const leafletId = (marker as any)._leaflet_id;
-    //           const popupButtonId = `delete-icon-${leafletId}`;
-
-    //           const popupHtml = `
-    // <div style="display:flex;align-items:center;gap:6px;">
-    //   <button
-    //     id="${popupButtonId}"
-    //     style="
-    //       background:#ef4444;
-    //       border:none;
-    //       color:white;
-    //       font-size:11px;
-    //       padding:4px 8px;
-    //       border-radius:4px;
-    //       cursor:pointer;
-    //       white-space:nowrap;
-    //     "
-    //   >
-    //     Xóa icon
-    //   </button>
-    // </div>
-    // `;
-
-    //           marker
-    //             .bindPopup(popupHtml, {
-    //               closeButton: false,
-    //               autoClose: true,
-    //               closeOnClick: false,
-    //               offset: L.point(0, -20),
-    //               className: "icon-delete-popup",
-    //             })
-    //             .openPopup();
-
-    //           setTimeout(() => {
-    //             const btn = document.getElementById(popupButtonId);
-    //             if (btn) {
-    //               btn.addEventListener("click", async () => {
-    //                 await deleteLocation(location.locationId);
-    //                 iconMarkersRef.current.delete(markerId);
-    //                 iconMetadataRef.current.delete(markerId);
-
-    //                 if (iconLayerGroupRef.current?.hasLayer(marker)) {
-    //                   iconLayerGroupRef.current.removeLayer(marker);
-    //                 }
-    //                 if (mapRef.current?.hasLayer(marker)) {
-    //                   mapRef.current.removeLayer(marker);
-    //                 }
-    //                 mapRef.current?.closePopup();
-    //               });
-    //             }
-    //           }, 0);
-    //         });
-
-    //         // Add to layer group
-    //         iconLayerGroupRef.current.addLayer(marker);
-    //       } catch (err) {
-    //         console.error(`[Icon] Failed to load icon for location ${location.locationId}:`, err);
-    //       }
-    //     }
-
-    //     // Update icon visibility after loading
-    //     if (mapRef.current) {
-    //       updateIconVisibility(mapRef.current);
-    //     }
-    //   } catch (err) {
-    //     console.error("[Icon] Failed to load existing icons:", err);
-    //   }
-    // };
-
-    // COMMENTED OUT: Don't call loadExistingIcons on map ready
-    // if (isMapReady && mapIdRef.current) {
-    //   loadExistingIcons();
-    // }
 
     window.addEventListener(
       "icon:startPlacement",
@@ -2789,7 +2594,7 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
           ...prev,
           [featureId]: isVisible
         }));
-        
+
         // Update feature in features state
         setFeatures(prev => prev.map(f => {
           if (f.id === feature.id || f.featureId === feature.featureId) {
@@ -3065,15 +2870,6 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
     setCurrentPlaybackTime(0);
   }, [playback]);
 
-  const handleSkipForward = useCallback((seconds: number) => {
-    const totalDuration = segments.reduce((sum, seg) => sum + seg.durationMs, 0) / 1000;
-    setCurrentPlaybackTime((prev) => Math.min(totalDuration, prev + seconds));
-  }, [segments]);
-
-  const handleSkipBackward = useCallback((seconds: number) => {
-    setCurrentPlaybackTime((prev) => Math.max(0, prev - seconds));
-  }, []);
-
   // Sync isPlayingTimeline with hook's isPlaying state
   useEffect(() => {
     setIsPlayingTimeline(playback.isPlaying);
@@ -3109,7 +2905,7 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
   // Smooth playback time progression - Optimized with requestAnimationFrame
   // Use refs to avoid dependency issues
   const playbackRef = useRef(playback);
-  
+
   useEffect(() => {
     playbackRef.current = playback;
   }, [playback.isPlaying, playback.currentPlayIndex]);
@@ -3117,11 +2913,11 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
   // Use ref to track last set time to avoid unnecessary updates
   const lastSetTimeRef = useRef<number>(0);
   const lastSegmentIndexRef = useRef<number>(-1);
-  
+
   useEffect(() => {
     const currentPlayback = playbackRef.current;
     const currentSegments = segmentsRef.current;
-    
+
     if (!currentPlayback.isPlaying || currentSegments.length === 0) {
       // Reset time when not playing
       if (!currentPlayback.isPlaying) {
@@ -3141,7 +2937,7 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
 
     // Only set initial time when segment changes (not on every render)
     if (lastSegmentIndexRef.current !== currentPlayback.currentPlayIndex) {
-    setCurrentPlaybackTime(baseTime);
+      setCurrentPlaybackTime(baseTime);
       lastSetTimeRef.current = baseTime;
       lastSegmentIndexRef.current = currentPlayback.currentPlayIndex;
     }
@@ -3158,7 +2954,7 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
       if (isCancelled || !latestPlayback.isPlaying) {
         return;
       }
-      
+
       const now = Date.now();
       const elapsed = (now - startTime) / 1000;
 
@@ -3181,7 +2977,7 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
         if (Math.abs(lastSetTimeRef.current - newTime) >= 0.01) {
           setCurrentPlaybackTime(newTime);
           lastSetTimeRef.current = newTime;
-        lastUpdateTime = now;
+          lastUpdateTime = now;
         }
       }
 
@@ -3200,38 +2996,6 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
     };
   }, [playback.isPlaying, playback.currentPlayIndex]);
 
-  const onUpdateLayer = useCallback(async (layerId: string, updates: { isVisible?: boolean; zIndex?: number; customStyle?: string; filterConfig?: string }) => {
-    if (!detail || !mapRef.current) return;
-  }, [detail]);
-
-  const onUpdateFeature = useCallback(async (featureId: string, updates: UpdateMapFeatureRequest) => {
-    if (!detail) return;
-
-    try {
-      await updateMapFeature(detail.id, featureId, updates);
-
-      // Update local state
-      setFeatures(prev => prev.map(f =>
-        f.featureId === featureId
-          ? { ...f, name: updates.name || f.name }
-          : f
-      ));
-    } catch (error) {
-    }
-  }, [detail]);
-
-  // Apply style visually to layer
-  const onApplyStyle = useCallback((layer: Layer, styleOptions: LayerStyle) => {
-    if (!layer || !('setStyle' in layer)) return;
-
-    // Apply style
-    (layer as unknown as PathLayer).setStyle(styleOptions);
-
-    // Update original style ref
-    originalStylesRef.current.set(layer, {
-      ...styleOptions
-    });
-  }, []);
 
   const onDeleteFeature = useCallback(async (featureId: string) => {
     if (!detail) return;
@@ -3292,52 +3056,19 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedLayers, features, onDeleteFeature]);
 
-  const applyPresetStyleToFeature = useCallback(async (featureId: string, layerType: string, presetName: string) => {
-    if (!detail) return;
-  }, [detail]);
-
-  const applyCustomStyleToFeature = useCallback(async (featureId: string, styleOptions: {
-    color?: string;
-    fillColor?: string;
-    weight?: number;
-    opacity?: number;
-    fillOpacity?: number;
-    radius?: number;
-    dashArray?: string;
-  }) => {
-    if (!detail) return;
-  }, [detail]);
-
-  const applyStyleToLayer = useCallback(async (layerId: string, styleOptions: {
-    color?: string;
-    fillColor?: string;
-    weight?: number;
-    opacity?: number;
-    fillOpacity?: number;
-  }) => {
-    if (!detail) return;
-  }, [detail]);
-
-  const getCurrentFeatureStyle = useCallback((featureId: string) => {
-    const feature = features.find(f => f.id === featureId);
-    if (!feature) return {};
-
-    return extractLayerStyle(feature.layer);
-  }, [features]);
-
   const saveMap = useCallback(async () => {
     if (!detail) return;
-    
+
     if (!mapRef.current) {
       console.warn("saveMap: mapRef.current is null");
       showToast("error", "Bản đồ chưa sẵn sàng");
       return;
     }
-    
+
     setIsSaving(true);
     try {
       const map = mapRef.current;
-      
+
       // Get camera state if map is valid
       let viewState: string | undefined = undefined;
       if (map && map.getCenter && typeof map.getCenter === 'function') {
@@ -3348,14 +3079,14 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
           viewState = JSON.stringify(view);
         }
       }
-      
+
       // Update map with both metadata and view state
       const body: UpdateMapRequest = {
         name: (name ?? "").trim() || "Untitled Map",
         baseLayer: baseKeyToBackend(baseKey),
         ...(viewState && { viewState }),
       };
-      
+
       await updateMap(detail.id, body);
       showToast("success", "Đã lưu thông tin bản đồ và vị trí hiển thị.");
     } catch (e) {
@@ -3606,7 +3337,7 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
                 activeUsers={collaboration.activeUsers}
                 isConnected={collaboration.isConnected}
               />
-              
+
               {/* Toolbar Group - Canva Style */}
               <div className="flex items-center gap-0 bg-zinc-800/50 rounded-lg p-0.5 border border-zinc-700/50">
                 <input
@@ -3649,9 +3380,9 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
                   <UploadIcon className="w-4 h-4" />
                   Upload
                 </label>
-                
+
                 <div className="h-5 w-px bg-zinc-600/50" />
-                
+
                 <button
                   className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
                   onClick={saveMap}
@@ -3711,12 +3442,13 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
           left: leftSidebarView ? "376px" : "56px", // Icon bar (56px) + panel (320px) when open
           right: isPropertiesPanelOpen ? "360px" : "0",
           // top: "60px",
-          bottom: "200px", // Space for timeline workspace
+          bottom: !loading && detail?.isStoryMap !== false ? "200px" : "0", // Space for timeline workspace only for StoryMap
         }}
       />
 
       {/* NEW: VSCode-style Left Sidebar */}
       <LeftSidebarToolbox
+        isStoryMap={!loading && detail?.isStoryMap !== false}
         activeView={leftSidebarView}
         onViewChange={setLeftSidebarView}
         features={features}
@@ -3750,60 +3482,28 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
         onUpdate={handleUpdateFeature}
       />
 
-      {/* NEW: Bottom Timeline Workspace */}
-      <TimelineWorkspace
-        segments={segments}
-        transitions={transitions}
-        activeSegmentId={activeSegmentId}
-        mapId={mapId}
-        isPlaying={isPlayingTimeline}
-        currentTime={currentPlaybackTime}
-        leftOffset={leftSidebarView ? 376 : 56}
-        isOpen={isTimelineOpen}
-        onToggle={() => setIsTimelineOpen((prev) => !prev)}
-        onReorder={handleTimelineReorder}
-        onPlay={handlePlayTimeline}
-        onStop={handleStopTimeline}
-        onPlaySingleSegment={playback.handlePlaySingleSegment}
-        // onSkipForward={handleSkipForward}
-        // onSkipBackward={handleSkipBackward}
-        onSegmentClick={handleSegmentClick}
-        onRefreshSegments={async () => {
-          try {
-            // Reload segments with enhanced details (includes locations, routes, zones, layers)
-            const [segmentsData, transitionsData] = await Promise.all([
-              getSegments(mapId),
-              getTimelineTransitions(mapId),
-            ]);
+      {/* NEW: Bottom Timeline Workspace - Only show for StoryMap */}
+      {!loading && detail?.isStoryMap !== false && (
+        <TimelineWorkspace
+          segments={segments}
+          transitions={transitions}
+          activeSegmentId={activeSegmentId}
+          mapId={mapId}
+          isPlaying={isPlayingTimeline}
+          currentTime={currentPlaybackTime}
+          leftOffset={leftSidebarView ? 376 : 56}
+          isOpen={isTimelineOpen}
+          onToggle={() => setIsTimelineOpen((prev) => !prev)}
+          onReorder={handleTimelineReorder}
+          onPlay={handlePlayTimeline}
+          onStop={handleStopTimeline}
+          onPlaySingleSegment={playback.handlePlaySingleSegment}
+          onSegmentClick={handleSegmentClick}
+          onRefreshSegments={handleRefreshSegments}
+        />
+      )}
 
-            // Load route animations for each segment (GetSegmentsAsync doesn't include routes)
-            const segmentsWithRoutes = await Promise.all(
-              segmentsData.map(async (segment) => {
-                try {
-                  // Fetch route animations for this segment
-                  const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
-                  return {
-                    ...segment,
-                    routeAnimations: routes || []
-                  };
-                } catch (e) {
-                  return segment;
-                }
-              })
-            );
-
-
-
-            // Force new array reference to ensure React re-renders
-            setSegments([...segmentsWithRoutes]);
-            setTransitions([...transitionsData]);
-          } catch (error) {
-            console.error("Failed to refresh segments:", error);
-          }
-        }}
-      />
-
-      <MapControls
+      <ZoomControls
         zoomIn={handleZoomIn}
         zoomOut={handleZoomOut}
         isTimelineOpen={isTimelineOpen}
@@ -3816,39 +3516,39 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
         const currentSegment = playback.currentPlayIndex !== undefined && playback.currentPlayIndex >= 0 && playback.currentPlayIndex < segments.length
           ? segments[playback.currentPlayIndex]
           : null;
-        
+
         // Parse segment camera state
-        const segmentCameraState = currentSegment?.cameraState 
-          ? (typeof currentSegment.cameraState === 'string' 
-              ? (() => {
-                  try {
-                    const parsed = JSON.parse(currentSegment.cameraState);
-                    return parsed?.center && Array.isArray(parsed.center) && parsed.center.length >= 2
-                      ? { center: [parsed.center[0], parsed.center[1]] as [number, number], zoom: parsed.zoom ?? 10 }
-                      : null;
-                  } catch {
-                    return null;
-                  }
-                })()
-              : (currentSegment.cameraState?.center && Array.isArray(currentSegment.cameraState.center) && currentSegment.cameraState.center.length >= 2
-                  ? { center: [currentSegment.cameraState.center[0], currentSegment.cameraState.center[1]] as [number, number], zoom: currentSegment.cameraState.zoom ?? 10 }
-                  : null))
+        const segmentCameraState = currentSegment?.cameraState
+          ? (typeof currentSegment.cameraState === 'string'
+            ? (() => {
+              try {
+                const parsed = JSON.parse(currentSegment.cameraState);
+                return parsed?.center && Array.isArray(parsed.center) && parsed.center.length >= 2
+                  ? { center: [parsed.center[0], parsed.center[1]] as [number, number], zoom: parsed.zoom ?? 10 }
+                  : null;
+              } catch {
+                return null;
+              }
+            })()
+            : (currentSegment.cameraState?.center && Array.isArray(currentSegment.cameraState.center) && currentSegment.cameraState.center.length >= 2
+              ? { center: [currentSegment.cameraState.center[0], currentSegment.cameraState.center[1]] as [number, number], zoom: currentSegment.cameraState.zoom ?? 10 }
+              : null))
           : null;
-        
+
         return (
-        <SequentialRoutePlaybackWrapper
-          map={playbackMap}
-          routeAnimations={playback.routeAnimations}
-          isPlaying={playback.isPlaying}
-          segmentStartTime={playback.segmentStartTime}
-          onLocationClick={(location) => {
-            setPoiTooltipModal({
-              isOpen: true,
-              poi: location,
-            });
-          }}
+          <SequentialRoutePlaybackWrapper
+            map={playbackMap}
+            routeAnimations={playback.routeAnimations}
+            isPlaying={playback.isPlaying}
+            segmentStartTime={playback.segmentStartTime}
+            onLocationClick={(location) => {
+              setPoiTooltipModal({
+                isOpen: true,
+                poi: location,
+              });
+            }}
             segmentCameraState={segmentCameraState}
-        />
+          />
         );
       })()}
 
@@ -3868,9 +3568,9 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
         featureIndex={
           detail && contextMenu.feature && contextMenu.layerId
             ? findFeatureIndex(
-                (detail.layers.find(l => l.id === contextMenu.layerId)?.layerData as FeatureCollection) || {},
-                contextMenu.feature
-              )
+              (detail.layers.find(l => l.id === contextMenu.layerId)?.layerData as FeatureCollection) || {},
+              contextMenu.feature
+            )
             : 0
         }
         feature={contextMenu.feature ?? undefined}
@@ -4155,6 +3855,16 @@ const [playbackMap, setPlaybackMap] = useState<MapWithPM | null>(null);
           transition: none !important;
         }
       `}</style>
+
+      {/* Zone Style Editor Panel */}
+      {selectedZone && (
+        <ZoneStyleEditor
+          mapId={mapId}
+          mapZone={selectedZone.mapZone}
+          zone={selectedZone.zone}
+          onClose={() => setSelectedZone(null)}
+        />
+      )}
     </main>
   );
 }
