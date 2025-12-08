@@ -1250,6 +1250,75 @@ export const messages = {
             tier_basic: "Basic",
             tier_pro: "Pro",
             tier_enterprise: "Enterprise",
+            // Tiêu đề trang
+            page_title: "Gói & Thành viên",
+            page_subtitle: "Quản lý gói thành viên cho tổ chức.",
+
+            // Chọn tổ chức
+            org_label: "Tổ chức",
+            org_none: "(Chưa có tổ chức)",
+
+            // Lỗi chung
+            error_generic: "Đã xảy ra lỗi. Vui lòng thử lại.",
+
+            // Banner owner / không phải owner
+            banner_not_owner_view_only:
+                "Bạn không phải Owner nên không thể thay đổi gói. Bạn chỉ có thể xem thông tin.",
+            banner_not_owner_no_membership:
+                "Bạn không phải Owner nên không thể xem hoặc thay đổi gói của tổ chức này.",
+            banner_owner_no_membership:
+                "Chưa có gói cho tổ chức này. Hãy chọn một gói bên dưới.",
+
+            // Trạng thái sau khi redirect thanh toán
+            payment_success: "Thanh toán thành công! Gói của bạn đã được kích hoạt.",
+            payment_failed: "Thanh toán thất bại. Vui lòng thử lại.",
+            payment_cancelled: "Bạn đã hủy thanh toán.",
+
+            // Thông tin gói hiện tại
+            current_plan_label: "Gói hiện tại",
+            loading_membership: "Đang tải gói…",
+            no_membership_owner:
+                "Chưa có gói cho tổ chức này. Hãy chọn một gói bên dưới.",
+            no_membership_not_owner:
+                "Tổ chức này chưa có gói. Hãy liên hệ Owner để chọn gói.",
+            status_label: "Trạng thái:",
+            end_date_label: "Hết hạn:",
+            auto_renew_label: "Tự gia hạn:",
+            toggle_on: "Bật",
+            toggle_off: "Tắt",
+            renew_button: "Gia hạn",
+            processing: "Đang xử lý…",
+            renew_success: "Gia hạn gói thành công.",
+            renew_not_found:
+                "Không tìm thấy gói để gia hạn. Vui lòng chọn gói bên dưới để đăng ký mới.",
+
+            // Giá (dùng trong popup + thẻ gói)
+            price_per_month: "{price}/tháng",
+
+            // Mô tả phương thức thanh toán
+            payos_description: "PayOS – Nhanh & bảo mật",
+            stripe_description: "Thẻ tín dụng (Quốc tế)",
+            vnpay_description: "Đang bảo trì – Sẽ sớm ra mắt",
+            popular_badge: "Ưa chuộng",
+            under_maintenance_badge: "Đang bảo trì",
+
+            // Kết quả subscribe / upgrade
+            upgrade_success: "Nâng cấp gói thành công.",
+            subscribe_success: "Đăng ký gói thành công.",
+
+            // Fallback mô tả tính năng
+            unlimited: "Không giới hạn",
+            feature_max_orgs: "Số tổ chức tối đa: {value}",
+            feature_max_users_per_org: "Người dùng/tổ chức: {value}",
+            feature_max_maps: "Bản đồ/tháng: {value}",
+
+            // Không có tổ chức
+            no_orgs:
+                "Bạn chưa có tổ chức nào. Hãy tạo một tổ chức để quản lý gói thành viên.",
+
+            // Ghi chú PayOS (hoặc thanh toán nói chung)
+            payos_note:
+                "Lưu ý: Bạn có thể được chuyển hướng sang cổng thanh toán để hoàn tất giao dịch. Sau khi xong, hệ thống sẽ tự động cập nhật trạng thái gói.",
         },
         qgis: {
             hero_eyebrow: "Tài nguyên / Plugin QGIS",
@@ -1966,7 +2035,15 @@ export const messages = {
 
             role_member_default: "Thành viên",
         },
-
+        map_gallery: {
+            breadcrumb: "Tài nguyên / Thư viện Bản đồ",
+            title: "Bộ sưu tập Bản đồ Cộng đồng",
+            subtitle:
+                "Khám phá các bản đồ nổi bật từ cộng đồng — giáo dục, môi trường, quy hoạch đô thị và hơn thế nữa. " +
+                "Mở bất kỳ bản đồ nào, tìm hiểu cách thiết lập hoặc nhân bản nó làm mẫu khởi đầu.",
+            browse_btn: "Duyệt bản đồ",
+            templates_btn: "Xem mẫu",
+        },
         help: {
             sec_start: "BẮT ĐẦU",
             sec_upload_anything: "TẢI LÊN MỌI THỨ",
@@ -3450,6 +3527,15 @@ export const messages = {
             toast_delete_success: "Question deleted.",
             toast_delete_failed: "Could not delete the question.",
         },
+        map_gallery: {
+            breadcrumb: "Resources / Map Library",
+            title: "Community Map Gallery",
+            subtitle:
+                "Explore highlighted maps from the community — education, environment, urban planning and more. " +
+                "Open any map, learn how it is configured, or duplicate it as a starter template.",
+            browse_btn: "Browse maps",
+            templates_btn: "View templates",
+        },
         organization: {
             not_found_title: "Organization Not Found",
             not_found_description: "This organization does not exist or has been deleted. Please check the URL or create a new organization.",
@@ -3470,6 +3556,75 @@ export const messages = {
             tier_basic: "Basic",
             tier_pro: "Pro",
             tier_enterprise: "Enterprise",
+            // Page title
+            page_title: "Plans & Membership",
+            page_subtitle: "Manage membership plans for your organization.",
+
+            // Organization selector
+            org_label: "Organization",
+            org_none: "(No organization yet)",
+
+            // Generic error
+            error_generic: "Something went wrong. Please try again.",
+
+            // Owner / non-owner banners
+            banner_not_owner_view_only:
+                "You are not the Owner, so you cannot change the plan. You can only view information.",
+            banner_not_owner_no_membership:
+                "You are not the Owner, so you cannot view or change this organization’s plan.",
+            banner_owner_no_membership:
+                "This organization has no active plan yet. Please choose a plan below.",
+
+            // Payment redirect status
+            payment_success: "Payment successful! Your plan has been activated.",
+            payment_failed: "Payment failed. Please try again.",
+            payment_cancelled: "You cancelled the payment.",
+
+            // Current plan section
+            current_plan_label: "Current plan",
+            loading_membership: "Loading membership…",
+            no_membership_owner:
+                "No plan for this organization yet. Please choose one below.",
+            no_membership_not_owner:
+                "This organization has no plan. Please contact the Owner to select one.",
+            status_label: "Status:",
+            end_date_label: "Expires:",
+            auto_renew_label: "Auto-renew:",
+            toggle_on: "On",
+            toggle_off: "Off",
+            renew_button: "Renew",
+            processing: "Processing…",
+            renew_success: "Plan renewed successfully.",
+            renew_not_found:
+                "No existing plan found to renew. Please select a new plan below.",
+
+            // Price (used in popup + cards)
+            price_per_month: "{price}/month",
+
+            // Payment method descriptions
+            payos_description: "PayOS – Fast & Secure",
+            stripe_description: "Credit card (International)",
+            vnpay_description: "Under maintenance – Coming soon",
+            popular_badge: "Popular",
+            under_maintenance_badge: "Under maintenance",
+
+            // Subscribe / upgrade result messages
+            upgrade_success: "Plan upgraded successfully.",
+            subscribe_success: "Plan subscribed successfully.",
+
+            // Feature description (fallback)
+            unlimited: "Unlimited",
+            feature_max_orgs: "Max organizations: {value}",
+            feature_max_users_per_org: "Users per organization: {value}",
+            feature_max_maps: "Maps per month: {value}",
+
+            // No organizations
+            no_orgs:
+                "You don’t have any organizations yet. Create one to manage membership plans.",
+
+            // PayOS / payment note
+            payos_note:
+                "Note: You may be redirected to a payment gateway to complete the transaction. After completion, your plan status will be updated automatically.",
         },
         workspace_detail: {
             storymap_section_title: "Storymap maps",
