@@ -53,63 +53,51 @@ export async function askAI(messages: AIMessage[]): Promise<string | null> {
 }
 
 // ===== SUPPORT TICKET =====
-export type SupportTicketStatus = "Open" | "Pending" | "Closed" | string;
 
-export type SupportTicket = {
-  ticketId: string;
+export const SUPPORT_TICKET_API_BASE = "/support-tickets";
+
+export type SupportTicketStatus = "open" | "inprogress" | "waitingforcustomer" | "resolved" | "closed";
+
+export type CreateSupportTicketRequest = {
   subject: string;
-  description?: string | null;
-  priority?: string | null;
-  status: SupportTicketStatus;
-  createdAt?: string;
-  updatedAt?: string | null;
+  message: string;
+  priority: string;
+};
+
+export type CreateSupportTicketResponse = {
+  ticketId: number;
+  message: string;
+};
+
+export type ResponseSupportTicketRequest = {
+  response: string;
+};
+
+export type ReplySupportTicketRequest = {
+  reply: string;
 };
 
 export type SupportTicketMessage = {
-  messageId: string;
-  ticketId: string;
-  content: string;
-  senderName?: string | null;
-  isFromSupport?: boolean;
-  createdAt?: string;
-};
-
-const SUPPORT_BASE = "/api/support-tickets";
-
-export type SupportTicketMessageDto = {
   messageId: number;
-  ticketId: number;
   message: string;
   isFromUser: boolean;
   createdAt: string;
 };
 
-export type SupportTicketMessage = {
-  messageId: number;
+export type SupportTicket = {
   ticketId: number;
-  content: string;
-  isFromSupport: boolean;
-  createdAt: string;
-  senderName?: string | null;
-};
-
-type AddTicketMessageRequest = {
-  ticketId: number;
+  userEmail: string;
+  userName: string;
+  subject: string;
   message: string;
+  status: SupportTicketStatus;
+  priority: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  messages: SupportTicketMessage[];
 };
 
-function mapSupportTicketMessage(dto: SupportTicketMessageDto): SupportTicketMessage {
-  return {
-    messageId: dto.messageId,
-    ticketId: dto.ticketId,
-    content: dto.message,
-    isFromSupport: !dto.isFromUser,
-    createdAt: dto.createdAt,
-    senderName: dto.isFromUser ? "Bạn" : "Support",
-  };
-}
-
-type SupportTicketListRes = {
+export type SupportTicketListResponse = {
   tickets: SupportTicket[];
   totalCount: number;
   page: number;
@@ -117,68 +105,57 @@ type SupportTicketListRes = {
   totalPages: number;
 };
 
-type CreateSupportTicketRequest = {
-  subject: string;
+export type ResponseSupportTicketResponse = {
+  ticketId: number;
   message: string;
-  priority?: string | null;
 };
 
-export async function getMySupportTickets(): Promise<SupportTicket[]> {
-  const res = await getJson<SupportTicketListRes>(
-    `${SUPPORT_BASE}?page=1&pageSize=20`,
-  );
-  return res.tickets ?? [];
+export type ReplySupportTicketResponse = {
+  ticketId: number;
+  message: string;
+};
+
+export type CloseSupportTicketResponse = {
+  ticketId: number;
+  message: string;
+};
+// User create support ticket
+export async function createSupportTicket(request: CreateSupportTicketRequest): Promise<CreateSupportTicketResponse> {
+  const res = await postJson<CreateSupportTicketRequest, CreateSupportTicketResponse>(SUPPORT_TICKET_API_BASE, request);
+  return res;
 }
-
-export async function createSupportTicket(input: {
-  subject: string;
-  description: string;
-  priority?: string;
-}): Promise<SupportTicket> {
-  const body: CreateSupportTicketRequest = {
-    subject: input.subject,
-    message: input.description,
-    priority: input.priority ?? undefined,
-  };
-  return postJson<SupportTicket>(SUPPORT_BASE, body);
+//User get support tickets
+export async function getSupportTickets(page: number = 1, pageSize: number = 20): Promise<SupportTicketListResponse> {
+  const res = await getJson<SupportTicketListResponse>(`${SUPPORT_TICKET_API_BASE}?page=${page}&pageSize=${pageSize}`);
+  return res;
 }
-
-export async function getSupportTicket(ticketId: string): Promise<SupportTicket> {
-  return getJson<SupportTicket>(
-    `${SUPPORT_BASE}/${encodeURIComponent(ticketId)}`,
-  );
+//User get support ticket by id
+export async function getSupportTicketById(ticketId: number): Promise<SupportTicket> {
+  const res = await getJson<SupportTicket>(`${SUPPORT_TICKET_API_BASE}/${ticketId}`);
+  return res;
 }
-
-export async function closeSupportTicket(ticketId: string): Promise<void> {
-  await postJson<void>(
-    `${SUPPORT_BASE}/${encodeURIComponent(ticketId)}/close`,
-    {},
-  );
+//User response to support ticket
+export async function responseToSupportTicket(ticketId: number, request: ResponseSupportTicketRequest): Promise<ResponseSupportTicketResponse> {
+  const res = await postJson<ResponseSupportTicketRequest, ResponseSupportTicketResponse>(`${SUPPORT_TICKET_API_BASE}/${ticketId}/response`, request);
+  return res;
 }
-
-export async function getSupportTicketMessages(
-  ticketId: number | string,
-): Promise<SupportTicketMessage[]> {
-  const res = await getJson<SupportTicketMessageDto[]>(
-    `${SUPPORT_BASE}/${encodeURIComponent(String(ticketId))}/messages`,
-  );
-
-  return res.map(mapSupportTicketMessage);
+//Admin get support tickets
+export async function getSupportTicketsByAdmin(page: number, pageSize: number): Promise<SupportTicketListResponse> {
+  const res = await getJson<SupportTicketListResponse>(`${SUPPORT_TICKET_API_BASE}/admin?page=${page}&pageSize=${pageSize}`);
+  return res;
 }
-
-export async function addSupportTicketMessage(
-  ticketId: string | number,
-  input: { content: string },
-): Promise<SupportTicketMessage> {
-  const body: AddTicketMessageRequest = {
-    ticketId: typeof ticketId === "number" ? ticketId : Number(ticketId),
-    message: input.content,
-  };
-
-  const dto = await postJson<SupportTicketMessageDto>(
-    `${SUPPORT_BASE}/${encodeURIComponent(String(ticketId))}/messages`,
-    body,
-  );
-
-  return mapSupportTicketMessage(dto);
+//Admin get support ticket by id
+export async function getSupportTicketByIdByAdmin(ticketId: number): Promise<SupportTicket> {
+  const res = await getJson<SupportTicket>(`${SUPPORT_TICKET_API_BASE}/admin/${ticketId}`);
+  return res;
+}
+//Admin reply to support ticket
+export async function replyToSupportTicket(ticketId: number, request: ReplySupportTicketRequest): Promise<ReplySupportTicketResponse> {
+  const res = await postJson<ReplySupportTicketRequest, ReplySupportTicketResponse>(`${SUPPORT_TICKET_API_BASE}/admin/${ticketId}/reply`, request);
+  return res;
+}
+//Admin close support ticket
+export async function closeSupportTicket(ticketId: number): Promise<CloseSupportTicketResponse> {
+  const res = await postJson<void, CloseSupportTicketResponse>(`${SUPPORT_TICKET_API_BASE}/admin/${ticketId}/close`, undefined);
+  return res;
 }

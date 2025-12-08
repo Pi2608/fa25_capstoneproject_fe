@@ -17,7 +17,7 @@ export type BaseLayer =
   | "Toner"
   | "Watercolor"
   | "Topo";
-export type MapStatus = "Draft" | "Published" | "Archived";
+export type MapStatus = "draft" | "published" | "archived";
 
 export type MapDto = {
   id: string;
@@ -30,8 +30,9 @@ export type MapDto = {
   createdAt: string;
   updatedAt?: string | null;
   lastActivityAt?: string | null;
-  status?: MapStatus;
+  status: MapStatus;
   isOwner: boolean;
+  isStoryMap: boolean;
   workspaceName?: string | null;
 };
 
@@ -101,7 +102,7 @@ export interface MapDetail {
   baseLayer: BaseLayer;
   viewState?: ViewState;
   isPublic?: boolean;
-  status?: MapStatus;
+  status: MapStatus;
   isStoryMap?: boolean;
   publishedAt?: string;
   createdAt?: string;
