@@ -303,7 +303,6 @@ const handleCreateSession = async (e: React.FormEvent) => {
   try {
     const session = await createSession({
       mapId: selectedMapId,
-      // ✅ gửi toàn bộ mảng questionBankId
       questionBankId: selectedQuestionBankIds ?? [],
       sessionName:
         sessionName || `${selectedMap.name ?? "Storymap"} Session`,
@@ -317,7 +316,6 @@ const handleCreateSession = async (e: React.FormEvent) => {
       shuffleOptions,
       enableHints,
       pointsForSpeed,
-      // không truyền scheduledStartTime -> api-ques sẽ tự dùng nowIso
     });
 
     toast.success("Tạo session thành công!");

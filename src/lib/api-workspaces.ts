@@ -30,7 +30,10 @@ export function createWorkspace(req: CreateWorkspaceRequest) {
 export type CreateProjectRequest = CreateWorkspaceRequest;
 export const createProject = createWorkspace;
 
-
+export async function getAllWorkspaces(): Promise<Workspace[]> {
+  const res = await getJson<any>("/workspaces");
+  return Array.isArray(res) ? res : res?.workspaces ?? [];
+}
 
 export async function getWorkspacesByOrganization(orgId: string): Promise<Workspace[]> {
   const res = await getJson<any>(`/workspaces/organization/${orgId}`);
@@ -57,7 +60,10 @@ export async function getWorkspaceById(workspaceId: string): Promise<Workspace> 
   return res?.workspace ?? res;
 }
 
-export async function updateWorkspace(workspaceId: string, req: { workspaceName: string; description?: string }) {
+export async function updateWorkspace(
+  workspaceId: string,
+  req: { workspaceName: string; description?: string }
+) {
   const body = {
     WorkspaceName: req.workspaceName,
     Description: req.description ?? null,
@@ -71,7 +77,6 @@ export function deleteWorkspace(workspaceId: string) {
 }
 
 export async function getWorkspaceMaps(workspaceId: string): Promise<MapDto[]> {
-
   const res = await getJson<{
     maps: {
       mapId: string;
