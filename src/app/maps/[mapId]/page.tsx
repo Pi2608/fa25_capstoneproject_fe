@@ -16,7 +16,7 @@ interface CircleLayer extends Layer {
   setRadius(radius: number): void;
 }
 import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions, getRouteAnimationsBySegment, updateSegment, createSegment, deleteSegment, createTimelineTransition, deleteTimelineTransition, type Location } from "@/lib/api-storymap";
-import { getMapDetail, type MapDetail, updateMap, type UpdateMapRequest, type UpdateMapFeatureRequest, uploadGeoJsonToMap, updateLayerData, MapStatus, updateMapFeature, LayerDTO, getMapFeatureById, type BaseLayer } from "@/lib/api-maps";
+import { getMapDetail, type MapDetail, updateMap, type UpdateMapRequest, type UpdateMapFeatureRequest, uploadGeoJsonToMap, updateLayerData, MapStatus, updateMapFeature, LayerDTO, getMapFeatureById, type BaseLayer, createExport, getExportById, type ExportRequest, type ExportResponse} from "@/lib/api-maps";
 import { createMapLocation, deleteLocation, getMapLocations } from "@/lib/api-location";
 
 import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator } from "@/components/map-editor-ui";
@@ -34,8 +34,10 @@ import { useFeatureManagement } from "@/hooks/useFeatureManagement";
 import { usePoiMarkers } from "@/hooks/usePoiMarkers";
 import { useZoneMarkers } from "@/hooks/useZoneMarkers";
 import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geojson";
-import { SaveIcon, UploadIcon } from "lucide-react";
+import { SaveIcon, UploadIcon, DownloadIcon } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
+import html2canvas from "html2canvas";
+import { useI18n } from "@/i18n/I18nProvider";
 import PublishButton from "@/components/map/PublishButton";
 import ZoomControls from "@/components/map/controls/ZoomControls";
 import { ZoneStyleEditor } from "@/components/map-editor-ui/ZoneStyleEditor";
@@ -103,6 +105,13 @@ export default function EditMapPage() {
 
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const { showToast } = useToast();
+  const { t, lang } = useI18n();
+
+  // Export functionality state
+  const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [showExportModal, setShowExportModal] = useState<boolean>(false);
+  const [exportFormat, setExportFormat] = useState<"geojson" | "png" | "pdf" | "svg">("geojson");
+  const [exportStatus, setExportStatus] = useState<ExportResponse | null>(null);
 
   const [name, setName] = useState<string>("");
   const [isEditingMapName, setIsEditingMapName] = useState<boolean>(false);
@@ -3087,6 +3096,171 @@ export default function EditMapPage() {
     }
   }, [detail, name, baseKey, showToast]);
 
+  // Export map handler
+  const handleExport = useCallback(async () => {
+    if (!mapRef.current || !detail || !mapEl.current) {
+      showToast("error", t('export_embed', 'error_map_not_ready'));
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const map = mapRef.current;
+
+      // 1. Capture map canvas as image (for PNG/PDF/SVG formats)
+      let mapImageData: string | undefined = undefined;
+      if (exportFormat === "png" || exportFormat === "pdf" || exportFormat === "svg") {
+        showToast("info", t('export_embed', 'info_capturing_map'));
+
+        // Wait a bit for tiles to load
+        await new Promise(resolve => setTimeout(resolve, 500));
+
+        // Capture the map container
+        try {
+          const canvas = await html2canvas(mapEl.current, {
+            useCORS: true,
+            allowTaint: false,
+            backgroundColor: '#ffffff',
+            scale: 1,
+            logging: false,
+            width: mapEl.current.offsetWidth,
+            height: mapEl.current.offsetHeight,
+          });
+
+          // Convert to base64
+          mapImageData = canvas.toDataURL('image/png');
+        } catch (captureError) {
+          console.error("Map capture failed:", captureError);
+          showToast("error", t('export_embed', 'error_capture_failed'));
+          setIsExporting(false);
+          return;
+        }
+      }
+
+      // 2. Get current view state (center, zoom)
+      let viewState: string | undefined = undefined;
+      if (map && map.getCenter && typeof map.getCenter === 'function') {
+        const center = map.getCenter();
+        if (center) {
+          const zoom = map.getZoom ? map.getZoom() : 10;
+          const view = {
+            center: [center.lat, center.lng] as [number, number],
+            zoom
+          };
+          viewState = JSON.stringify(view);
+        }
+      }
+
+      // 3. Get visible layers
+      const visibleLayerIds: Record<string, boolean> = {};
+      layers.forEach(layer => {
+        visibleLayerIds[layer.id] = layerVisibility[layer.id] ?? layer.isVisible ?? true;
+      });
+
+      // 4. Get visible features
+      const visibleFeatureIds: Record<string, boolean> = {};
+      features.forEach(feature => {
+        visibleFeatureIds[feature.id] = featureVisibility[feature.id] ?? feature.isVisible ?? true;
+      });
+
+      // 5. Prepare export request
+      const exportRequest: ExportRequest = {
+        mapId: detail.id,
+        format: exportFormat,
+        viewState: viewState,
+        mapImageData: mapImageData, // Include captured map image
+        visibleLayerIds: Object.keys(visibleLayerIds).length > 0 ? visibleLayerIds : undefined,
+        visibleFeatureIds: Object.keys(visibleFeatureIds).length > 0 ? visibleFeatureIds : undefined,
+        options: {
+          title: detail.name,
+          description: detail.description,
+          width: mapEl.current.offsetWidth || 1920,
+          height: mapEl.current.offsetHeight || 1080,
+          dpi: 300,
+          includeLegend: true,
+          includeScale: true
+        }
+      };
+
+      const response = await createExport(exportRequest);
+      setExportStatus(response);
+
+      showToast("success", t('export_embed', 'success_export_created'));
+
+      // Poll for status updates if pending approval
+      if (response.status === "PendingApproval" || response.status === "Processing") {
+        pollExportStatus(response.exportId);
+      } else if (response.status === "Approved" && response.fileUrl) {
+        // Show download link in toast if already approved
+        showToast("success", `${t('export_embed', 'success_export_approved')} ${response.fileUrl}`);
+      }
+    } catch (error) {
+      console.error("Export failed:", error);
+
+      // Handle specific error types
+      if (error instanceof Error) {
+        const errorMessage = error.message;
+
+        // Check for specific error types from the API
+        if (errorMessage.includes("Export.MembershipNotFound") || errorMessage.includes("membership not found")) {
+          showToast("error", t('export_embed', 'error_membership_not_found'));
+        } else if (errorMessage.includes("permission") || errorMessage.includes("forbidden")) {
+          showToast("error", t('export_embed', 'error_permission_denied'));
+        } else if (errorMessage.includes("format")) {
+          showToast("error", t('export_embed', 'error_invalid_format'));
+        } else {
+          showToast("error", errorMessage || t('export_embed', 'error_export_failed'));
+        }
+      } else {
+        showToast("error", t('export_embed', 'error_export_failed'));
+      }
+    } finally {
+      setIsExporting(false);
+    }
+  }, [detail, mapRef, mapEl, features, layers, layerVisibility, featureVisibility, exportFormat, showToast, t]);
+
+  // Poll export status
+  const pollExportStatus = useCallback(async (exportId: number) => {
+    const maxAttempts = 60; // 5 minutes max
+    let attempts = 0;
+
+    const interval = setInterval(async () => {
+      attempts++;
+
+      try {
+        const updatedExport = await getExportById(exportId);
+        setExportStatus(updatedExport);
+
+        if (updatedExport.status === "Approved") {
+          clearInterval(interval);
+          if (updatedExport.fileUrl) {
+            showToast("success", `${t('export_embed', 'success_export_approved')} URL: ${updatedExport.fileUrl}`);
+          } else {
+            showToast("success", t('export_embed', 'success_export_approved'));
+          }
+        } else if (updatedExport.status === "Rejected" || updatedExport.status === "Failed") {
+          clearInterval(interval);
+          const reason = updatedExport.rejectionReason || updatedExport.errorMessage || '';
+          const statusText = updatedExport.status === "Rejected"
+            ? t('export_embed', 'status_rejected')
+            : t('export_embed', 'status_failed');
+          showToast("error", `${statusText}: ${reason}`);
+        } else if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          showToast("warning", t('export_embed', 'error_export_timeout'));
+        }
+      } catch (error) {
+        console.error("Error polling export status:", error);
+      }
+    }, 5000); // Poll every 5 seconds
+
+    // Cleanup on unmount
+    return () => clearInterval(interval);
+  }, [showToast, t]);
+
+  // Toggle export popup
+
   return (
     <main className="relative h-screen w-screen overflow-hidden text-white">
       <div className="absolute top-0 left-0 z-[3000] w-full pointer-events-none">
@@ -3224,6 +3398,28 @@ export default function EditMapPage() {
                     <>
                       <SaveIcon className="w-4 h-4" />
                       Save
+                    </>
+                  )}
+                </button>
+
+                <div className="h-5 w-px bg-zinc-600/50" />
+
+                {/* Export Button */}
+                <button
+                  className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                  onClick={() => setShowExportModal(true)}
+                  disabled={isExporting || !mapRef.current}
+                  title="Xuất bản đồ"
+                >
+                  {isExporting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
+                      Đang xuất...
+                    </>
+                  ) : (
+                    <>
+                      <DownloadIcon className="w-4 h-4" />
+                      Xuất
                     </>
                   )}
                 </button>
@@ -3420,6 +3616,125 @@ export default function EditMapPage() {
                 className="prose prose-invert max-w-none"
                 dangerouslySetInnerHTML={{ __html: poiTooltipModal.content || '' }}
               />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Modal */}
+      {showExportModal && (
+        <div className="fixed inset-0 z-[4000] flex items-start justify-center pt-32">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => {
+              setShowExportModal(false);
+              setExportStatus(null);
+            }}
+          />
+          <div className="relative bg-zinc-900 rounded-lg shadow-2xl border border-zinc-700 w-full max-w-md mx-4">
+            <div className="sticky top-0 bg-zinc-900 border-b border-zinc-700 px-6 py-4 flex items-center justify-between rounded-t-lg">
+              <h2 className="text-xl font-semibold text-white">
+                {t('export_embed', 'hero_pill')}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowExportModal(false);
+                  setExportStatus(null);
+                }}
+                className="text-zinc-400 hover:text-white transition-colors p-1 rounded hover:bg-zinc-800"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {/* Format Selection */}
+              <div>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">
+                  {t('export_embed', 'formats_title')}
+                </label>
+                <select
+                  value={exportFormat}
+                  onChange={(e) => setExportFormat(e.target.value as "geojson" | "png" | "pdf" | "svg")}
+                  disabled={isExporting}
+                  className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
+                >
+                  <option value="geojson">GeoJSON</option>
+                  <option value="png">PNG Image</option>
+                  <option value="pdf">PDF Document</option>
+                  <option value="svg">SVG Vector</option>
+                </select>
+              </div>
+
+              {/* Export Status */}
+              {exportStatus && (
+                <div className="bg-zinc-800 rounded-md p-4 border border-zinc-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-zinc-300">Status:</span>
+                    <span className={`text-sm font-semibold ${
+                      exportStatus.status === "Approved" ? "text-green-400" :
+                      exportStatus.status === "Rejected" || exportStatus.status === "Failed" ? "text-red-400" :
+                      exportStatus.status === "Processing" ? "text-blue-400" :
+                      "text-yellow-400"
+                    }`}>
+                      {exportStatus.status === "PendingApproval" ? t('export_embed', 'status_pending') :
+                       exportStatus.status === "Processing" ? t('export_embed', 'status_processing') :
+                       exportStatus.status === "Approved" ? t('export_embed', 'status_approved') :
+                       exportStatus.status === "Rejected" ? t('export_embed', 'status_rejected') :
+                       exportStatus.status === "Failed" ? t('export_embed', 'status_failed') :
+                       exportStatus.status}
+                    </span>
+                  </div>
+
+                  {/* Download Link */}
+                  {exportStatus.status === "Approved" && exportStatus.fileUrl && (
+                    <a
+                      href={exportStatus.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full mt-3 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-center transition-colors"
+                    >
+                      {lang === 'vi' ? 'Tải xuống' : 'Download'}
+                    </a>
+                  )}
+
+                  {/* Error/Rejection Reason */}
+                  {(exportStatus.status === "Rejected" || exportStatus.status === "Failed") && (
+                    <div className="mt-3 text-sm text-red-400">
+                      {exportStatus.rejectionReason || exportStatus.errorMessage || t('export_embed', 'error_export_failed')}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => {
+                    setShowExportModal(false);
+                    setExportStatus(null);
+                  }}
+                  disabled={isExporting}
+                  className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-md transition-colors disabled:opacity-50"
+                >
+                  {t('common', 'cancel')}
+                </button>
+                <button
+                  onClick={handleExport}
+                  disabled={isExporting || !mapRef.current}
+                  className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isExporting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      {t('export_embed', 'status_processing')}
+                    </>
+                  ) : (
+                    lang === 'vi' ? 'Xuất' : 'Export'
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

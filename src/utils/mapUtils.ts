@@ -870,8 +870,7 @@ export async function loadFeaturesToMap(
           coordinates = parsed;
         }
       } catch (parseError) {
-        console.warn("Failed to parse coordinates for feature:", feature.featureId, "Raw coordinates:", feature.coordinates);
-
+        
         // Try to handle the case where coordinates might be a comma-separated string
         if (typeof feature.coordinates === 'string' && feature.coordinates.includes(',')) {
           try {
@@ -981,44 +980,81 @@ export async function loadFeaturesToMap(
         let circleCoords: [number, number, number];
 
         if (Array.isArray(coordinates)) {
-          if (coordinates.length === 3) {
+          if (coordinates.length === 3 && typeof coordinates[0] === 'number') {
             // Simple [lng, lat, radius] format
             circleCoords = coordinates as [number, number, number];
-          } else if (coordinates.length === 2) {
+          } else if (coordinates.length === 2 && typeof coordinates[0] === 'number') {
             // If only 2 coordinates, assume radius is 100 meters
             const coords = coordinates as [number, number];
             circleCoords = [coords[0], coords[1], 100];
-          } else if (coordinates.length === 1 && Array.isArray(coordinates[0])) {
-            // GeoJSON Polygon format - extract center and calculate radius
-            const polygonCoords = coordinates[0] as Position[];
-            if (polygonCoords.length > 0) {
+          } else if (Array.isArray(coordinates[0])) {
+            // GeoJSON Polygon format - coordinates is [[[lng, lat], ...]] for Polygon
+            // OR [[lng, lat], ...] if it's already the ring
+            let polygonRing: Position[];
+            
+            if (Array.isArray(coordinates[0][0]) && Array.isArray(coordinates[0][0][0])) {
+              // Triple nested: [[[[lng, lat], ...]]] - this shouldn't happen but handle it
+              polygonRing = (coordinates[0][0] as unknown as Position[]);
+            } else if (Array.isArray(coordinates[0][0]) && typeof coordinates[0][0][0] === 'number') {
+              // Double nested: [[[lng, lat], ...]] - Polygon format
+              polygonRing = coordinates[0] as unknown as Position[];
+            } else if (Array.isArray(coordinates[0]) && typeof coordinates[0][0] === 'number') {
+              // Single nested: [[lng, lat], ...] - already a ring
+              polygonRing = coordinates as unknown as Position[];
+            } else {
+              continue;
+            }
+            
+            if (polygonRing.length > 0) {         
               // Calculate center point (average of all coordinates)
               let sumLng = 0, sumLat = 0;
-              for (const coord of polygonCoords) {
-                sumLng += coord[0];
-                sumLat += coord[1];
+              let validPoints = 0;
+              for (const coord of polygonRing) {
+                if (Array.isArray(coord) && coord.length >= 2 && typeof coord[0] === 'number' && typeof coord[1] === 'number') {
+                  sumLng += coord[0]; // lng
+                  sumLat += coord[1]; // lat
+                  validPoints++;
+                }
               }
-              const centerLng = sumLng / polygonCoords.length;
-              const centerLat = sumLat / polygonCoords.length;
+              
+              if (validPoints === 0) {
+                continue;
+              }
+              
+              const centerLng = sumLng / validPoints;
+              const centerLat = sumLat / validPoints;
 
-              // Calculate radius (distance from center to first point)
-              const firstPoint = polygonCoords[0];
-              const radius = Math.sqrt(
-                Math.pow(firstPoint[0] - centerLng, 2) +
-                Math.pow(firstPoint[1] - centerLat, 2)
-              ) * 111000; // Convert degrees to meters (approximate)
+              // Calculate radius (distance from center to first point in meters)
+              const firstPoint = polygonRing[0];
+              if (Array.isArray(firstPoint) && firstPoint.length >= 2 && typeof firstPoint[0] === 'number' && typeof firstPoint[1] === 'number') {
+                // Use Haversine formula for accurate distance calculation
+                const R = 6371000; // Earth radius in meters
+                const dLat = (firstPoint[1] - centerLat) * Math.PI / 180;
+                const dLng = (firstPoint[0] - centerLng) * Math.PI / 180;
+                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                          Math.cos(centerLat * Math.PI / 180) * Math.cos(firstPoint[1] * Math.PI / 180) *
+                          Math.sin(dLng / 2) * Math.sin(dLng / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                const radius = R * c;
 
-              circleCoords = [centerLng, centerLat, radius];
+                circleCoords = [centerLng, centerLat, radius];
+              } else {
+                continue;
+              }
             } else {
-              console.error("Empty polygon coordinates for circle");
+              console.error("📥 [LOAD FEATURE] Circle: Empty polygon coordinates for circle");
               continue;
             }
           } else {
-            console.error("Invalid circle coordinates length:", coordinates.length);
+            console.error("📥 [LOAD FEATURE] Circle: Invalid circle coordinates structure:", {
+              length: coordinates.length,
+              firstElement: coordinates[0],
+              isArray: Array.isArray(coordinates[0])
+            });
             continue;
           }
         } else {
-          console.error("Circle coordinates is not an array:", coordinates);
+          console.error("📥 [LOAD FEATURE] Circle: Circle coordinates is not an array:", coordinates);
           continue;
         }
 
@@ -1031,11 +1067,22 @@ export async function loadFeaturesToMap(
         // Validate coordinate ranges
         const [lng, lat, radius] = circleCoords;
         if (lng < -180 || lng > 180 || lat < -90 || lat > 90 || radius <= 0) {
-          console.error("Circle coordinates out of valid range:", circleCoords);
           continue;
         }
 
         layer = L.circle([lat, lng], { radius: radius }) as ExtendedLayer;
+        
+        // Verify the circle was created correctly
+        if (layer && (layer as any).getLatLng && typeof (layer as any).getLatLng === 'function') {
+          const createdCenter = (layer as any).getLatLng();
+          console.log('📥 [LOAD FEATURE] Circle: Created circle center:', {
+            lat: createdCenter.lat,
+            lng: createdCenter.lng,
+            expectedLat: lat,
+            expectedLng: lng,
+            match: Math.abs(createdCenter.lat - lat) < 0.000001 && Math.abs(createdCenter.lng - lng) < 0.000001
+          });
+        }
       }
 
       if (layer) {

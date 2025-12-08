@@ -1827,6 +1827,27 @@ export const messages = {
             faq_jobs_q: "Các tác vụ xuất được trả về thế nào?",
             faq_jobs_a:
                 "Tác vụ lớn chạy theo hàng đợi. Gọi định kỳ endpoint của job hoặc đăng ký webhook để nhận URL tệp.",
+
+            error_membership_not_found: "Không tìm thấy gói thành viên hoạt động. Vui lòng đảm bảo bạn có gói thành viên hoạt động cho tổ chức của bản đồ này hoặc liên hệ quản trị viên.",
+            error_export_failed: "Xuất bản đồ thất bại. Vui lòng thử lại sau.",
+            error_map_not_ready: "Bản đồ chưa sẵn sàng để xuất. Vui lòng đợi bản đồ tải xong.",
+            error_invalid_format: "Định dạng xuất không hợp lệ. Vui lòng chọn định dạng khác.",
+            error_permission_denied: "Bạn không có quyền xuất bản đồ này.",
+            error_export_timeout: "Xuất bản đồ đang mất nhiều thời gian hơn dự kiến. Vui lòng kiểm tra lại sau.",
+            error_capture_failed: "Không thể chụp ảnh bản đồ. Vui lòng thử lại.",
+            error_personal_map_no_export: "Bản đồ cá nhân không thể xuất. Chỉ có bản đồ thuộc tổ chức mới có thể xuất.",
+
+            success_export_created: "Đã tạo yêu cầu xuất bản đồ thành công!",
+            success_export_approved: "Xuất bản đồ đã được phê duyệt! Bạn có thể tải xuống.",
+
+            status_pending: "Đang chờ xử lý...",
+            status_processing: "Đang xử lý...",
+            status_pending_approval: "Đang chờ phê duyệt từ quản trị viên...",
+            status_approved: "Đã được phê duyệt",
+            status_rejected: "Đã bị từ chối",
+            status_failed: "Thất bại",
+
+            info_capturing_map: "Đang chụp ảnh bản đồ...",
         },
         tutorials: {
             pill_guides: "Hướng dẫn",
@@ -2326,6 +2347,31 @@ export const messages = {
             faq_jobs_q: "How are export jobs delivered?",
             faq_jobs_a:
                 "Large jobs run in a queue. Poll the job endpoint or register a webhook to receive the file URL.",
+
+            // Export error messages
+            error_membership_not_found: "Active membership not found. Please ensure you have an active membership for this map's organization or contact an administrator.",
+            error_export_failed: "Map export failed. Please try again later.",
+            error_map_not_ready: "Map is not ready to export. Please wait for the map to finish loading.",
+            error_invalid_format: "Invalid export format. Please select a different format.",
+            error_permission_denied: "You do not have permission to export this map.",
+            error_export_timeout: "Map export is taking longer than expected. Please check back later.",
+            error_capture_failed: "Failed to capture map image. Please try again.",
+            error_personal_map_no_export: "Personal maps cannot be exported. Only organization maps can be exported.",
+
+            // Success messages
+            success_export_created: "Export request created successfully!",
+            success_export_approved: "Map export has been approved! You can download it now.",
+
+            // Status messages
+            status_pending: "Pending...",
+            status_processing: "Processing...",
+            status_pending_approval: "Pending approval from administrator...",
+            status_approved: "Approved",
+            status_rejected: "Rejected",
+            status_failed: "Failed",
+
+            // Action messages
+            info_capturing_map: "Capturing map image...",
         },
         tutorials: {
             pill_guides: "Guides",
