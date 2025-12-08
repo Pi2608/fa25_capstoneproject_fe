@@ -30,12 +30,12 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
     }
   }, [showPublishOptions]);
 
-  const handlePublish = async (isStoryMap: boolean) => {
+  const handlePublish = async (_isStoryMap: boolean) => {
     setLoading(true);
     setError(null);
     setShowPublishOptions(false);
     try {
-      await publishMap(mapId, { isStoryMap });
+      await publishMap(mapId);
       onStatusChange("Published");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Không thể publish map");
@@ -110,9 +110,10 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
 
       {/* Action Buttons - Inline with status */}
       {status === "Draft" ? (
-        <div className="relative" ref={dropdownRef}>
+        <div className="relative flex items-center gap-1" ref={dropdownRef}>
+          {/* Primary quick publish (view-only) */}
           <button
-            onClick={() => setShowPublishOptions(!showPublishOptions)}
+            onClick={() => handlePublish(false)}
             disabled={loading}
             className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 ml-0.5"
           >
@@ -128,9 +129,9 @@ export default function PublishButton({ mapId, status, onStatusChange }: Publish
               </>
             )}
           </button>
-          
+
           {showPublishOptions && !loading && (
-            <div className="absolute top-full left-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-md shadow-lg z-50 min-w-[220px]">
+            <div className="absolute top-full right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-md shadow-lg z-50 min-w-[240px]">
               <div className="py-1">
                 <button
                   onClick={() => handlePublish(true)}

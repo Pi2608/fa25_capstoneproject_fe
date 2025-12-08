@@ -223,8 +223,58 @@ export function createSegmentLocation(mapId: string, segmentId: string, body: Om
   return postFormData<SegmentLocation>(`${LOCATION_PREFIX}/${mapId}/segments/${segmentId}`, formData);
 }
 
+// Build FormData for update (all fields optional)
+function buildLocationUpdateFormData(payload: UpdateLocationReq): FormData {
+  const formData = new FormData();
+
+  // Optional fields (strings)
+  if (payload.mapId) formData.append("mapId", payload.mapId as any);
+  if (payload.title) formData.append("title", payload.title);
+  if (payload.zoneId) formData.append("zoneId", payload.zoneId);
+  if (payload.subtitle) formData.append("subtitle", payload.subtitle);
+  if (payload.description) formData.append("description", payload.description);
+  if (payload.mediaResources) formData.append("mediaResources", payload.mediaResources);
+  if (payload.iconType) formData.append("iconType", payload.iconType);
+  if (payload.iconColor) formData.append("iconColor", payload.iconColor);
+  if (payload.tooltipContent) formData.append("tooltipContent", payload.tooltipContent);
+  if (payload.iconUrl) formData.append("iconUrl", payload.iconUrl);
+  if (payload.audioUrl) formData.append("audioUrl", payload.audioUrl);
+  if (payload.popupContent) formData.append("popupContent", payload.popupContent);
+  if (payload.entryEffect) formData.append("entryEffect", payload.entryEffect);
+  if (payload.exitEffect) formData.append("exitEffect", payload.exitEffect);
+  if (payload.linkedLocationId) formData.append("linkedLocationId", payload.linkedLocationId);
+  if (payload.externalUrl) formData.append("externalUrl", payload.externalUrl);
+  if (payload.markerGeometry) formData.append("markerGeometry", payload.markerGeometry);
+  if (payload.locationType) formData.append("locationType", payload.locationType);
+
+  // Optional numbers
+  if (payload.displayOrder !== undefined) formData.append("displayOrder", String(payload.displayOrder));
+  if (payload.iconSize !== undefined) formData.append("iconSize", String(payload.iconSize));
+  if (payload.zIndex !== undefined) formData.append("zIndex", String(payload.zIndex));
+  if (payload.entryDelayMs !== undefined) formData.append("entryDelayMs", String(payload.entryDelayMs));
+  if (payload.entryDurationMs !== undefined) formData.append("entryDurationMs", String(payload.entryDurationMs));
+  if (payload.exitDelayMs !== undefined) formData.append("exitDelayMs", String(payload.exitDelayMs));
+  if (payload.exitDurationMs !== undefined) formData.append("exitDurationMs", String(payload.exitDurationMs));
+
+  // Optional booleans
+  if (payload.showTooltip !== undefined) formData.append("showTooltip", String(payload.showTooltip));
+  if (payload.openPopupOnClick !== undefined) formData.append("openPopupOnClick", String(payload.openPopupOnClick));
+  if (payload.playAudioOnClick !== undefined) formData.append("playAudioOnClick", String(payload.playAudioOnClick));
+  if (payload.isVisible !== undefined) formData.append("isVisible", String(payload.isVisible));
+
+  // File uploads
+  if (payload.audioFile) formData.append("audioFile", payload.audioFile);
+  if (payload.iconFile) formData.append("iconFile", payload.iconFile);
+
+  return formData;
+}
+
 export function updateLocation(locationId: string, body: UpdateLocationReq) {
-  return putJson<UpdateLocationReq, MapLocation>(`${LOCATION_PREFIX}/${locationId}`, body);
+  const formData = buildLocationUpdateFormData(body);
+  return apiFetch<MapLocation>(`${LOCATION_PREFIX}/${locationId}`, {
+    method: "PUT",
+    body: formData,
+  });
 }
 
 export function deleteLocation(locationId: string) {
