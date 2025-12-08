@@ -20,7 +20,6 @@ import {
   type SessionRunningQuestionDto,
   type LeaderboardEntryDto,
   type QuestionDto,
-  getSessionQuestionResponses,
 } from "@/lib/api-ques";
 
 import {
@@ -57,25 +56,25 @@ type SessionQuestionBankInfo = {
   totalQuestions: number;
 };
 
-type SessionQuestionResponsesDto = {
-  sessionQuestionId: string;
-  totalResponses: number;
-  answers: {
-    studentResponseId: string;
-    participantId: string;
-    displayName: string;
-    isCorrect: boolean;
-    pointsEarned: number;
-    responseTimeSeconds: number;
-    submittedAt: string;
-    questionOptionId?: string;
-    optionText?: string | null;
-    responseText?: string | null;
-    responseLatitude?: number | null;
-    responseLongitude?: number | null;
-    distanceErrorMeters?: number | null;
-  }[];
-};
+// type SessionQuestionResponsesDto = {
+//   sessionQuestionId: string;
+//   totalResponses: number;
+//   answers: {
+//     studentResponseId: string;
+//     participantId: string;
+//     displayName: string;
+//     isCorrect: boolean;
+//     pointsEarned: number;
+//     responseTimeSeconds: number;
+//     submittedAt: string;
+//     questionOptionId?: string;
+//     optionText?: string | null;
+//     responseText?: string | null;
+//     responseLatitude?: number | null;
+//     responseLongitude?: number | null;
+//     distanceErrorMeters?: number | null;
+//   }[];
+// };
 
 export default function StoryMapControlPage() {
   const params = useParams<{ mapId: string }>();
@@ -170,8 +169,8 @@ export default function StoryMapControlPage() {
   const [currentQuestionResults, setCurrentQuestionResults] =
     useState<QuestionResultsEvent | null>(null);
 
-  const [currentQuestionResponses, setCurrentQuestionResponses] =
-    useState<SessionQuestionResponsesDto | null>(null);
+  const [showStudentAnswers, setShowStudentAnswers] = useState(false);
+
   const broadcastRef = useRef<BroadcastChannel | null>(null);
 
   // ================== SignalR connection for session ==================
@@ -187,7 +186,9 @@ export default function StoryMapControlPage() {
       },
       onQuestionResults: (event) => {
         setCurrentQuestionResults(event);
+        setShowStudentAnswers(true);
       },
+
     },
   });
 
@@ -214,13 +215,18 @@ export default function StoryMapControlPage() {
           getSegments(mapId),
         ]);
 
-        if (detail.status !== "Published" && !detail.isPublic) {
+        const isPublished =
+          typeof detail.status === "string" &&
+          detail.status.toLowerCase() === "published";
+
+        if (!isPublished) {
           setError("This map is not published yet");
           return;
         }
 
         setMapDetail(detail);
         setSegments(Array.isArray(segs) ? segs : []);
+
       } catch (e: any) {
         console.error("Load control page failed:", e);
         setError(e?.message || "Failed to load storymap");
@@ -595,7 +601,7 @@ export default function StoryMapControlPage() {
       setQuestionControlLoading(true);
       setCurrentQuestionIndex(index);
       setCurrentQuestionResults(null);
-      setCurrentQuestionResponses(null);
+      setShowStudentAnswers(false);
 
       await broadcastQuestionViaSignalR(connection, session.sessionId, {
 
@@ -646,38 +652,6 @@ export default function StoryMapControlPage() {
     }
   };
 
-  const handleLoadQuestionResponses = async () => {
-    if (!session || questionControlLoading) return;
-    if (
-      currentQuestionIndex == null ||
-      currentQuestionIndex < 0 ||
-      currentQuestionIndex >= questions.length
-    ) {
-      return;
-    }
-
-    const question = questions[currentQuestionIndex];
-    const sessionQuestionId =
-      question.sessionQuestionId ?? question.questionId;
-
-    if (!sessionQuestionId) return;
-
-    try {
-      setQuestionControlLoading(true);
-
-      const res = await getSessionQuestionResponses<SessionQuestionResponsesDto>(
-        sessionQuestionId
-      );
-
-      setCurrentQuestionResponses(res);
-    } catch (e: any) {
-      console.error("Load question responses failed:", e);
-      setError(e?.message || "Không tải được danh sách câu trả lời");
-    } finally {
-      setQuestionControlLoading(false);
-    }
-  };
-
   const handleNextQuestion = async () => {
     if (!session || questionControlLoading) return;
 
@@ -686,7 +660,8 @@ export default function StoryMapControlPage() {
       await activateNextQuestion(session.sessionId);
 
       setCurrentQuestionResults(null);
-      setCurrentQuestionResponses(null);
+      setShowStudentAnswers(false);
+
 
       setCurrentQuestionIndex((prev) => {
         if (!questions.length) return prev;
@@ -710,7 +685,7 @@ export default function StoryMapControlPage() {
       await skipCurrentQuestion(session.sessionId);
 
       setCurrentQuestionResults(null);
-      setCurrentQuestionResponses(null);
+      setShowStudentAnswers(false);
 
       setCurrentQuestionIndex((prev) => {
         if (!questions.length) return prev;
@@ -1341,30 +1316,28 @@ export default function StoryMapControlPage() {
                         </div>
                       )}
                     </div>
-                    {(currentQuestionResults || currentQuestionResponses) && (
+                    {currentQuestionResults && (
                       <div className="mt-3 pt-2 border-t border-zinc-800">
                         <div className="flex items-center justify-between mb-2">
                           <button
                             type="button"
-                            onClick={handleLoadQuestionResponses}
-                            disabled={
-                              !session ||
-                              questionControlLoading ||
-                              currentQuestionIndex == null
-                            }
+                            onClick={() => setShowStudentAnswers((prev) => !prev)}
+                            disabled={!session || questionControlLoading}
                             className="text-[11px] uppercase tracking-[0.12em] text-zinc-200 font-medium underline-offset-2 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            Các câu trả lời của học sinh
+                            {showStudentAnswers
+                              ? "Ẩn câu trả lời của học sinh"
+                              : "Các câu trả lời của học sinh"}
                           </button>
 
                           <span className="text-[11px] text-zinc-400">
-                            {currentQuestionResponses
-                              ? `${currentQuestionResponses.totalResponses} câu trả lời`
+                            {currentQuestionResults.results
+                              ? `${currentQuestionResults.results.length} câu trả lời`
                               : "—"}
                           </span>
                         </div>
 
-                        {typeof currentQuestionResults?.correctAnswer === "string" &&
+                        {typeof currentQuestionResults.correctAnswer === "string" &&
                           currentQuestionResults.correctAnswer.trim() !== "" && (
                             <p className="mb-2 text-[11px] text-emerald-300">
                               Đáp án đúng:{" "}
@@ -1374,19 +1347,20 @@ export default function StoryMapControlPage() {
                             </p>
                           )}
 
-                        {!currentQuestionResponses ? (
+                        {!showStudentAnswers ? (
                           <p className="text-[11px] text-zinc-500">
-                            Bấm nút &quot;Các câu trả lời của học sinh&quot; để tải danh sách.
+                            Bấm nút &quot;Các câu trả lời của học sinh&quot; để xem chi tiết.
                           </p>
-                        ) : currentQuestionResponses.answers.length === 0 ? (
+                        ) : !currentQuestionResults.results ||
+                          currentQuestionResults.results.length === 0 ? (
                           <p className="text-[11px] text-zinc-500">
                             Chưa có câu trả lời nào cho câu hỏi này.
                           </p>
                         ) : (
                           <div className="max-h-40 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 space-y-1.5">
-                            {currentQuestionResponses.answers.map((ans, index) => (
+                            {currentQuestionResults.results.map((ans, index) => (
                               <div
-                                key={ans.studentResponseId ?? index}
+                                key={ans.participantId ?? index}
                                 className="flex items-start justify-between gap-3 text-[11px] text-zinc-100 border-b border-zinc-800/60 pb-1.5 last:border-0"
                               >
                                 <div className="flex-1">
@@ -1394,20 +1368,11 @@ export default function StoryMapControlPage() {
                                     {ans.displayName || `Học sinh ${index + 1}`}
                                   </p>
 
-                                  {ans.optionText && ans.optionText.trim() !== "" && (
-                                    <p className="text-zinc-400">
-                                      Chọn:{" "}
-                                      <span className="text-zinc-100">
-                                        {ans.optionText}
-                                      </span>
-                                    </p>
-                                  )}
-
-                                  {ans.responseText && ans.responseText.trim() !== "" && (
+                                  {ans.answer && ans.answer.trim() !== "" && (
                                     <p className="text-zinc-400">
                                       Trả lời:{" "}
                                       <span className="text-zinc-100">
-                                        {ans.responseText}
+                                        {ans.answer}
                                       </span>
                                     </p>
                                   )}

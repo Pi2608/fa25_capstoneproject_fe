@@ -98,14 +98,36 @@ export default function WorkspaceDetailPage() {
         })
       );
 
-      const published = detailList
-        .filter((d): d is any => !!d && (!!(d as any).PublishedAt || !!(d as any).publishedAt))
+      const storyMaps = detailList
+        .filter((d): d is any => {
+          if (!d) return false;
+          const anyD = d as any;
+
+          const isStoryMap =
+            anyD.isStoryMap ??
+            anyD.is_storymap ??
+            anyD.IsStoryMap ??
+            false;
+
+          const status = (anyD.status ?? anyD.Status ?? "")
+            .toString()
+            .toLowerCase();
+
+          return Boolean(isStoryMap) && status === "published";
+        })
         .map((d: any) => ({
           id: d.mapId ?? d.id ?? d.map_id,
           name: d.name ?? d.mapName ?? d.map_name ?? "",
-          publishedAt: d.PublishedAt ?? d.publishedAt ?? d.updatedAt ?? d.createdAt ?? null,
+          publishedAt:
+            d.PublishedAt ??
+            d.publishedAt ??
+            d.updatedAt ??
+            d.createdAt ??
+            null,
         }));
-      setPublishedMaps(published);
+
+      setPublishedMaps(storyMaps);
+
     } catch (e) {
       setErr(safeMessage(e, t("workspace_detail.request_failed")));
     } finally {
@@ -384,7 +406,10 @@ export default function WorkspaceDetailPage() {
 
       {publishedMaps.length > 0 && (
         <section className="mt-10">
-          <h2 className="text-lg font-semibold mb-4">Bản đồ đã publish</h2>
+          <h2 className="text-lg font-semibold mb-4">
+            {t("workspace_detail.storymap_section_title")}
+          </h2>
+
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {publishedMaps.map((map) => (
               <div
@@ -392,14 +417,13 @@ export default function WorkspaceDetailPage() {
                 className="group relative rounded-3xl border border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 to-zinc-950/40 hover:border-emerald-400 hover:shadow-[0_0_0_1px_rgba(16,185,129,0.5)] transition-all duration-200 p-4"
               >
                 <div
-                  className={`absolute top-3 right-3 transition ${
-                    publishedMenuOpenId === map.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                  }`}
+                  className={`absolute top-3 right-3 transition ${publishedMenuOpenId === map.id ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                    }`}
                 >
                   <div className="relative">
                     <button
                       className="h-7 w-7 flex items-center justify-center rounded-lg border border-emerald-500/40 bg-emerald-900/60 hover:bg-emerald-800/80 text-xs text-zinc-100"
-                      title="Tùy chọn"
+                      title={t("workspace_detail.storymap_menu_title")}
                       onClick={(e) => {
                         e.stopPropagation();
                         setPublishedMenuOpenId((prev) => (prev === map.id ? null : map.id));
@@ -424,7 +448,7 @@ export default function WorkspaceDetailPage() {
                             });
                           }}
                         >
-                          Xoá bản đồ
+                          {t("workspace_detail.storymap_menu_delete")}
                         </button>
                       </div>
                     )}
@@ -432,28 +456,33 @@ export default function WorkspaceDetailPage() {
                 </div>
 
                 <div className="mb-4 h-28 w-full rounded-2xl border border-emerald-500/40 bg-[radial-gradient(circle_at_0_0,#22c55e33,transparent_55%),radial-gradient(circle_at_100%_0,#22c55e22,transparent_55%)] bg-emerald-950/40 flex items-center justify-center text-sm font-medium text-emerald-300">
-                  Đã publish
+                  {t("workspace_detail.storymap_published_badge")}
                 </div>
                 <div className="min-w-0 mb-3">
                   <div className="truncate font-semibold text-zinc-50">
                     {map.name || t("workspace_detail.unnamed")}
                   </div>
                   <div className="text-xs text-zinc-400">
-                    {map.publishedAt ? `Publish: ${formatDate(map.publishedAt)}` : "Publish: —"}
+                    {map.publishedAt
+                      ? t("workspace_detail.storymap_publish_at", {
+                        date: formatDate(map.publishedAt),
+                      })
+                      : t("workspace_detail.storymap_publish_unknown")}
                   </div>
+
                 </div>
                 <div className="flex flex-col gap-2 mt-auto">
                   <button
                     onClick={() => router.push(`/storymap/${map.id}`)}
                     className="w-full px-3 py-2 rounded-xl border border-zinc-700 bg-zinc-900 text-sm text-zinc-100 hover:bg-zinc-800"
                   >
-                    Mở storymap
+                    {t("workspace_detail.storymap_open_btn")}
                   </button>
                   <button
                     onClick={() => void handleOpenCreateSession(map.id)}
                     className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
                   >
-                    Tạo session
+                    {t("workspace_detail.storymap_create_session_btn")}
                   </button>
                 </div>
               </div>
@@ -464,7 +493,7 @@ export default function WorkspaceDetailPage() {
 
       {publishedMaps.length === 0 && (
         <div className="mt-10 text-sm text-zinc-500">
-          Chưa có bản đồ nào đã publish trong workspace này.
+          {t("workspace_detail.storymap_empty_text")}
         </div>
       )}
 
@@ -504,16 +533,14 @@ export default function WorkspaceDetailPage() {
               <div className="space-y-3 mb-6">
                 <button
                   onClick={() => setMapType("normal")}
-                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                    mapType === "normal"
-                      ? "border-emerald-500 bg-emerald-500/10"
-                      : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
-                  }`}
+                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${mapType === "normal"
+                    ? "border-emerald-500 bg-emerald-500/10"
+                    : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                    }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
-                      mapType === "normal" ? "border-emerald-500" : "border-zinc-600"
-                    }`}>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${mapType === "normal" ? "border-emerald-500" : "border-zinc-600"
+                      }`}>
                       {mapType === "normal" && (
                         <div className="w-3 h-3 rounded-full bg-emerald-500" />
                       )}
@@ -527,16 +554,14 @@ export default function WorkspaceDetailPage() {
 
                 <button
                   onClick={() => setMapType("storymap")}
-                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${
-                    mapType === "storymap"
-                      ? "border-emerald-500 bg-emerald-500/10"
-                      : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
-                  }`}
+                  className={`w-full text-left p-4 rounded-lg border-2 transition-all ${mapType === "storymap"
+                    ? "border-emerald-500 bg-emerald-500/10"
+                    : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                    }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
-                      mapType === "storymap" ? "border-emerald-500" : "border-zinc-600"
-                    }`}>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${mapType === "storymap" ? "border-emerald-500" : "border-zinc-600"
+                      }`}>
                       {mapType === "storymap" && (
                         <div className="w-3 h-3 rounded-full bg-emerald-500" />
                       )}

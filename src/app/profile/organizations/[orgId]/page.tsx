@@ -1068,7 +1068,7 @@ export default function OrgDetailPage() {
                   }
                   className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-500 bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 hover:border-emerald-600"
                 >
-                  Bộ câu hỏi
+                  {t("org_detail.btn_question_banks")}
                 </button>
 
                 <button
@@ -1077,7 +1077,7 @@ export default function OrgDetailPage() {
                   }
                   className="px-3 py-2 rounded-lg text-sm font-semibold border border-emerald-500 bg-emerald-500 text-white shadow-sm hover:bg-emerald-600 hover:border-emerald-600"
                 >
-                  Danh sách session
+                  {t("org_detail.btn_sessions_list")}
                 </button>
 
                 <button
@@ -1088,7 +1088,7 @@ export default function OrgDetailPage() {
                   }
                   className="px-3 py-2 rounded-lg text-sm font-semibold border border-sky-500 bg-sky-500 text-white shadow-sm hover:bg-sky-600 hover:border-sky-600"
                 >
-                  Tạo session
+                  {t("org_detail.btn_create_session")}
                 </button>
               </>
             )}

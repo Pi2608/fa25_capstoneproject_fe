@@ -426,6 +426,91 @@ export const messages = {
             toast_org_success: "Đang thiết lập tổ chức 🏢",
             toast_setup_error: "Không thể hoàn tất thiết lập. Vui lòng thử lại."
         },
+        sessionCreate: {
+            back: "← Quay lại",
+            title: "Tạo session",
+
+            step1_title: "1. Chọn workspace",
+            step1_subtitle: "Chỉ hiển thị workspace thuộc tổ chức này",
+            workspace_badge: "{count} workspace",
+            no_workspaces_title: "Tổ chức này chưa có workspace nào",
+            no_workspaces_desc:
+                "Tạo workspace mới hoặc gán workspace hiện có cho tổ chức để quản lý session theo nhóm.",
+            manage_workspaces_btn: "Quản lý workspace",
+            workspace_no_desc: "Không có mô tả",
+
+            step2_title: "2. Chọn Storymap",
+            step2_workspace_label: "Workspace: {name}",
+            refresh_maps: "Làm mới",
+            loading_maps: "Đang tải danh sách bản đồ cho Storymap...",
+            no_storymaps_title: "Workspace này chưa có bản đồ cho Storymap",
+            no_storymaps_desc:
+                "Hãy tạo hoặc gán bản đồ cho Storymap vào workspace để có thể mở session từ đây.",
+            create_storymap_btn: "Mở trang workspace",
+            map_no_desc: "Không có mô tả",
+
+            updated_at: "Cập nhật: {date}",
+            date_not_updated: "Chưa cập nhật",
+            date_unknown: "Không rõ",
+            date_locale: "vi-VN",
+
+            qb_section_title: "Bộ câu hỏi cho session này (tùy chọn)",
+            qb_section_desc:
+                "Bạn có thể chọn nhiều bộ câu hỏi (của bạn và public) hoặc bỏ qua bước này.",
+            qb_selected: "Đã chọn {count} bộ câu hỏi.",
+            qb_clear: "Không dùng bộ câu hỏi",
+            qb_loading: "Đang tải danh sách bộ câu hỏi...",
+            qb_none_for_map:
+                "Storymap này hiện chưa có bộ câu hỏi nào được gắn.",
+            qb_hint_prefix:
+                "Bạn có thể tạo session không có câu hỏi, hoặc gắn bộ câu hỏi ở trang",
+            qb_link_label: "Bộ câu hỏi",
+            bank_no_desc: "Không có mô tả",
+            qb_selected_badge: "Đã chọn",
+
+            step3_title: "3. Thông tin session",
+            session_name_label: "Tên session",
+            session_name_placeholder: "Ví dụ: Ôn tập Chương 1",
+            session_desc_label: "Mô tả (tùy chọn)",
+            session_desc_placeholder: "Ghi chú cho session này",
+            session_type_label: "Loại session",
+            session_type_live: "Live",
+            session_type_practice: "Practice",
+            max_participants_label: "Số người tối đa (0 = không giới hạn)",
+
+            step4_title: "4. Thiết lập session",
+            setting_allowLateJoin_label: "Cho phép vào muộn",
+            setting_allowLateJoin_desc: "Học sinh có thể tham gia sau khi đã bắt đầu",
+            setting_showLeaderboard_label: "Hiển thị bảng xếp hạng",
+            setting_showLeaderboard_desc: "Cập nhật điểm theo thời gian thực",
+            setting_showCorrectAnswers_label: "Hiển thị đáp án đúng",
+            setting_showCorrectAnswers_desc: "Cho phép xem đáp án sau khi trả lời",
+            setting_shuffleQuestions_label: "Xáo trộn câu hỏi",
+            setting_shuffleQuestions_desc: "Ngẫu nhiên thứ tự câu hỏi",
+            setting_shuffleOptions_label: "Xáo trộn đáp án",
+            setting_shuffleOptions_desc: "Ngẫu nhiên thứ tự đáp án",
+            setting_enableHints_label: "Cho phép gợi ý",
+            setting_enableHints_desc: "Học sinh có thể xem gợi ý",
+            setting_pointsForSpeed_label: "Cộng điểm tốc độ",
+            setting_pointsForSpeed_desc: "Trả lời nhanh nhận thêm điểm",
+
+            cancel_btn: "Hủy",
+            submit_btn: "Tạo session",
+            creating_label: "Đang tạo...",
+
+            toast_org_error: "Không tải được dữ liệu tổ chức.",
+            toast_maps_error: "Không tải được danh sách bản đồ cho Storymap.",
+            maps_error_message:
+                "Không thể tải danh sách bản đồ. Vui lòng thử lại.",
+            question_banks_error:
+                "Không tải được danh sách bộ câu hỏi cho Storymap này.",
+            toast_no_workspace: "Vui lòng chọn workspace trước khi tạo session.",
+            toast_no_map: "Vui lòng chọn bản đồ cho Storymap trước khi tạo session.",
+            toast_success: "Tạo session thành công!",
+            toast_create_error: "Không thể tạo session.",
+
+            org_not_found: "Không tìm thấy tổ chức.",
+        },
         blog: {
             breadcrumb: "Tài nguyên / Blog",
             hero_title: "Cập nhật thân thiện và câu chuyện lập bản đồ thực tế",
@@ -832,7 +917,79 @@ export const messages = {
             manage_delete_title: "Xoá workspace",
             manage_delete_desc: "Hành động này không thể hoàn tác."
         },
+        org_question_banks: {
+            // Header
+            header_back: "← Quay lại",
+            header_title: "Bộ câu hỏi",
+            header_create_btn: "Tạo bộ câu hỏi",
+
+            // Tabs
+            tabs_my: "Của tôi ({count})",
+            tabs_public: "Công khai ({count})",
+
+            // Section
+            section_title_my: "Bộ câu hỏi của tôi",
+            section_title_public: "Bộ câu hỏi công khai",
+            section_count: "{count} bộ",
+
+            empty_my: "Chưa có bộ câu hỏi nào.",
+            empty_public: "Chưa có bộ câu hỏi công khai nào.",
+
+            // Table header
+            th_name: "Tên bộ",
+            th_desc: "Mô tả",
+            th_questions: "Số câu hỏi",
+            th_tags: "Tags",
+            th_workspace: "Workspace",
+            th_actions: "Hành động",
+
+            // Buttons trong bảng
+            btn_edit_questions: "Tạo / sửa",
+            btn_options: "Tùy chọn ▾",
+            btn_view_use: "Xem / sử dụng",
+
+            // Loading / error
+            loading_text: "Đang tải...",
+            error_not_found: "Không tìm thấy tổ chức",
+
+            // Toast
+            toast_missing_name: "Vui lòng nhập tên bộ câu hỏi",
+            toast_missing_workspace: "Vui lòng chọn workspace",
+            toast_update_success: "Cập nhật thành công",
+            toast_create_success: "Tạo thành công",
+            toast_save_error: "Không thể lưu bộ câu hỏi",
+            toast_delete_success: "Đã xóa bộ câu hỏi",
+            toast_delete_error: "Không thể xóa bộ câu hỏi",
+
+            // Dialog form
+            dialog_title_edit: "Chỉnh sửa bộ câu hỏi",
+            dialog_title_create: "Tạo bộ câu hỏi mới",
+            field_name_label: "Tên bộ câu hỏi",
+            field_name_placeholder: "VD: Bộ câu hỏi chương 1...",
+            field_desc_label: "Mô tả",
+            field_desc_placeholder: "Mô tả ngắn...",
+            field_category_label: "Danh mục",
+            field_category_placeholder: "VD: Lịch sử, Địa lý...",
+            field_tags_label: "Tags (phân cách bằng dấu phẩy)",
+            field_tags_placeholder: "VD: ôn tập, giữa kỳ",
+            field_workspace_label: "Workspace",
+            field_workspace_placeholder: "Chọn workspace",
+            field_isTemplate_label: "Dùng như template",
+            field_isPublic_label: "Công khai trong tổ chức",
+            dialog_btn_cancel: "Hủy",
+            dialog_btn_saving: "Đang lưu...",
+            dialog_btn_save_edit: "Lưu thay đổi",
+            dialog_btn_save_create: "Tạo bộ câu hỏi",
+
+            // Row menu
+            menu_edit: "Sửa thông tin",
+            menu_delete: "Xóa",
+            menu_deleting: "Đang xóa...",
+        },
         org_detail: {
+            "btn_question_banks": "Bộ câu hỏi",
+            "btn_sessions_list": "Danh sách session",
+            "btn_create_session": "Tạo session",
             loading: "Đang tải…",
             not_found: "Không tìm thấy workspace.",
             action_failed: "Thao tác thất bại",
@@ -1026,6 +1183,15 @@ export const messages = {
             copied: "Đã sao chép",
         },
         workspace_detail: {
+            storymap_section_title: "Bản đồ cho Storymap",
+            storymap_menu_title: "Tùy chọn",
+            storymap_menu_delete: "Xoá bản đồ",
+            storymap_published_badge: "Đã publish",
+            storymap_publish_at: "Publish: {date}",
+            storymap_publish_unknown: "Publish: —",
+            storymap_open_btn: "Mở storymap",
+            storymap_create_session_btn: "Tạo session",
+            storymap_empty_text: "Chưa có bản đồ Storymap nào trong workspace này.",
             loading: "Đang tải…",
             not_found: "Không tìm thấy workspace.",
             request_failed: "Yêu cầu thất bại",
@@ -1252,6 +1418,147 @@ export const messages = {
             quota_ok: "Bạn còn đủ hạn mức để tạo thêm 1 bản đồ.",
             quota_notEnough: "Không đủ hạn mức.",
             quota_failed: "Kiểm tra hạn mức thất bại."
+        },
+        org_question_builder: {
+            // Header
+            header_back: "← Quay lại",
+            header_title: "Tạo câu hỏi cho bộ: {name}",
+            header_save: "Lưu bộ câu hỏi",
+            header_save_saving: "Đang lưu...",
+
+            // Các loại câu hỏi
+            type_multiple_choice: "Trắc nghiệm",
+            type_true_false: "Đúng / Sai",
+            type_short_answer: "Tự luận ngắn",
+            type_pin_on_map: "Ghim trên bản đồ",
+
+            // TRUE / FALSE label chung
+            tf_true_label: "Đúng",
+            tf_false_label: "Sai",
+
+            // Bước 1
+            step1_title: "1. Thông tin bộ câu hỏi",
+            step1_bank_name_label: "Tên bộ câu hỏi",
+            step1_workspace_label: "Thuộc workspace",
+
+            // Bước 2 tổng quan
+            step2_title: "2. Nhập nội dung câu hỏi",
+            summary_line:
+                "Tổng số câu hỏi: {total} câu (trong đó {filled} câu đã nhập)",
+
+            add_question_btn: "Thêm câu hỏi",
+
+            // Card câu hỏi
+            question_title: "Câu {index}",
+            question_status_filled: "Đã nhập",
+            question_status_empty: "Chưa nhập",
+            question_delete_title: "Xóa câu hỏi này",
+
+            question_content_label: "Nội dung câu hỏi",
+            question_content_placeholder: "Nhập nội dung câu hỏi...",
+            question_type_label: "Loại câu hỏi",
+
+            // Tự luận
+            short_answer_label: "Đáp án / Gợi ý trả lời",
+            short_answer_placeholder:
+                "Nhập đáp án đúng hoặc lời giải thích...",
+
+            // Trắc nghiệm
+            mc_list_label: "Danh sách lựa chọn",
+            mc_add_option_btn: "+ Thêm lựa chọn",
+            mc_option_label: "Phương án {index}",
+            mc_delete_option_btn: "Xóa",
+            mc_option_placeholder: "Nhập nội dung lựa chọn...",
+            mc_mark_correct_label: "Đáp án đúng",
+
+            // Đúng / Sai
+            tf_correct_label: "Đáp án đúng",
+
+            // Pin on map
+            pin_exact_label: "Toạ độ chính xác",
+            pin_lat_label: "Vĩ độ",
+            pin_lon_label: "Kinh độ",
+            pin_radius_label: "Bán kính (m)",
+            pin_lat_placeholder: "Ví dụ: 10.762622",
+            pin_lon_placeholder: "Ví dụ: 106.660172",
+            pin_radius_placeholder: "Ví dụ: 100",
+            pin_answer_summary:
+                "({lat}, {lon}) ± {radius}m",
+
+            // Nội dung bổ trợ
+            optional_title: "Nội dung bổ trợ (tùy chọn)",
+            optional_subtitle_filled: "Đã thêm nội dung bổ trợ",
+            optional_subtitle_empty:
+                "Thêm ảnh minh hoạ, audio, gợi ý hoặc giải thích khi cần.",
+            optional_toggle_expand: "Thêm",
+            optional_toggle_collapse: "Thu gọn",
+
+            optional_image_label: "Ảnh minh hoạ",
+            optional_image_upload: "Nhấn để chọn ảnh (JPG, PNG)",
+            optional_image_remove: "Gỡ ảnh",
+
+            optional_audio_label: "Audio (thuyết minh / gợi ý)",
+            optional_audio_upload: "Nhấn để chọn file audio (MP3, WAV)",
+            optional_audio_remove: "Gỡ audio",
+
+            optional_hint_label: "Gợi ý (Hint)",
+            optional_hint_placeholder:
+                "Nhập gợi ý để giúp học sinh (tùy chọn)...",
+
+            optional_explanation_label: "Giải thích sau khi trả lời",
+            optional_explanation_placeholder:
+                "Nhập lời giải thích sẽ hiển thị sau khi trả lời...",
+
+            // Bước 3
+            step3_title: "3. Tổng quan bộ câu hỏi",
+            overview_subtitle: "{filled}/{total} câu đã nhập",
+            overview_completed_label: "câu hoàn thành",
+            overview_list_title: "Danh sách câu hỏi trong bộ",
+            overview_list_count: "{count} câu",
+            overview_empty: "Chưa có câu hỏi nào trong bộ.",
+
+            // Table header
+            th_index: "#",
+            th_content: "Nội dung",
+            th_type: "Loại",
+            th_answer: "Đáp án",
+            th_actions: "Hành động",
+
+            // Nút trong bảng
+            btn_delete: "Xóa",
+            btn_deleting: "Đang xóa",
+
+            // Toast & lỗi
+            toast_upload_image_success: "Tải ảnh thành công.",
+            toast_upload_image_error: "Không thể tải ảnh.",
+            toast_upload_audio_success: "Tải audio thành công.",
+            toast_upload_audio_error: "Không thể tải audio.",
+            error_missing_question_bank:
+                "Không tìm thấy bộ câu hỏi. Vui lòng quay lại và thử lại.",
+            validation_question_text_required:
+                "Vui lòng nhập nội dung câu hỏi.",
+            validation_mc_min_options:
+                "Cần ít nhất hai đáp án cho câu hỏi trắc nghiệm.",
+            validation_mc_need_correct:
+                "Vui lòng chọn ít nhất một đáp án đúng.",
+            validation_short_answer_required:
+                "Vui lòng nhập đáp án cho câu hỏi tự luận.",
+            validation_pin_coords_required:
+                "Vui lòng nhập toạ độ hợp lệ cho câu hỏi bản đồ.",
+            validation_pin_radius_required:
+                "Vui lòng nhập bán kính chấp nhận lớn hơn 0.",
+            validation_question_type_not_supported:
+                "Loại câu hỏi không được hỗ trợ.",
+            validation_question_invalid:
+                "Câu hỏi chưa hợp lệ.",
+            validation_question_index_error:
+                "Câu {index}: {message}",
+            validation_no_valid_questions:
+                "Bạn chưa nhập nội dung hợp lệ cho bất kỳ câu hỏi nào.",
+            toast_save_success: "Lưu bộ câu hỏi thành công.",
+            toast_save_failed: "Không thể lưu bộ câu hỏi.",
+            toast_delete_success: "Đã xoá câu hỏi.",
+            toast_delete_failed: "Không thể xoá câu hỏi.",
         },
         orgSetup: {
             // steps
@@ -2707,6 +3014,9 @@ export const messages = {
             manage_delete_desc: "This action cannot be undone."
         },
         org_detail: {
+            "btn_question_banks": "Question banks",
+            "btn_sessions_list": "Sessions list",
+            "btn_create_session": "Create session",
             loading: "Loading…",
             not_found: "Workspace not found.",
             action_failed: "Action failed.",
@@ -2840,6 +3150,306 @@ export const messages = {
             col_email: "Email",
             plan_basic: "Basic plan"
         },
+        org_question_banks: {
+            // Header
+            header_back: "← Back",
+            header_title: "Question banks",
+            header_create_btn: "Create question bank",
+
+            // Tabs
+            tabs_my: "Mine ({count})",
+            tabs_public: "Public ({count})",
+
+            // Section
+            section_title_my: "My question banks",
+            section_title_public: "Public question banks",
+            section_count: "{count} bank(s)",
+
+            empty_my: "You don't have any question banks yet.",
+            empty_public: "There are no public question banks yet.",
+
+            // Table header
+            th_name: "Name",
+            th_desc: "Description",
+            th_questions: "Questions",
+            th_tags: "Tags",
+            th_workspace: "Workspace",
+            th_actions: "Actions",
+
+            // Buttons in table
+            btn_edit_questions: "Create / edit",
+            btn_options: "Options ▾",
+            btn_view_use: "View / use",
+
+            // Loading / error
+            loading_text: "Loading...",
+            error_not_found: "Organization not found.",
+
+            // Toast
+            toast_missing_name: "Please enter a question bank name.",
+            toast_missing_workspace: "Please choose a workspace.",
+            toast_update_success: "Updated successfully.",
+            toast_create_success: "Created successfully.",
+            toast_save_error: "Could not save the question bank.",
+            toast_delete_success: "Question bank deleted.",
+            toast_delete_error: "Could not delete the question bank.",
+
+            // Dialog form
+            dialog_title_edit: "Edit question bank",
+            dialog_title_create: "Create new question bank",
+            field_name_label: "Question bank name",
+            field_name_placeholder: "E.g. Chapter 1 review...",
+            field_desc_label: "Description",
+            field_desc_placeholder: "Short description...",
+            field_category_label: "Category",
+            field_category_placeholder: "E.g. History, Geography...",
+            field_tags_label: "Tags (separated by commas)",
+            field_tags_placeholder: "E.g. revision, midterm",
+            field_workspace_label: "Workspace",
+            field_workspace_placeholder: "Select workspace",
+            field_isTemplate_label: "Use as template",
+            field_isPublic_label: "Public inside organization",
+            dialog_btn_cancel: "Cancel",
+            dialog_btn_saving: "Saving...",
+            dialog_btn_save_edit: "Save changes",
+            dialog_btn_save_create: "Create question bank",
+
+            // Row menu
+            menu_edit: "Edit info",
+            menu_delete: "Delete",
+            menu_deleting: "Deleting...",
+        },
+        sessionCreate: {
+            back: "← Back",
+            title: "Create session",
+
+            step1_title: "1. Choose workspace",
+            step1_subtitle: "Only workspaces belonging to this organization",
+            workspace_badge: "{count} workspace(s)",
+            no_workspaces_title: "This organization has no workspaces yet",
+            no_workspaces_desc:
+                "Create a new workspace or assign an existing one so you can group sessions by workspace.",
+            manage_workspaces_btn: "Manage workspaces",
+            workspace_no_desc: "No description",
+
+            step2_title: "2. Choose Storymap",
+            step2_workspace_label: "Workspace: {name}",
+            refresh_maps: "Refresh",
+            loading_maps: "Loading Storymap maps...",
+            no_storymaps_title: "This workspace has no Storymap maps yet",
+            no_storymaps_desc:
+                "Create or attach a Storymap map to this workspace so you can start sessions from here.",
+            create_storymap_btn: "Open workspace page",
+            map_no_desc: "No description",
+
+            updated_at: "Updated: {date}",
+            date_not_updated: "Not updated yet",
+            date_unknown: "Unknown",
+            date_locale: "en-GB",
+
+            qb_section_title: "Question banks for this session (optional)",
+            qb_section_desc:
+                "You can select multiple question banks (yours and public) or skip this step.",
+            qb_selected: "{count} question bank(s) selected.",
+            qb_clear: "Do not use question banks",
+            qb_loading: "Loading question banks...",
+            qb_none_for_map:
+                "This Storymap currently has no question bank attached.",
+            qb_hint_prefix:
+                "You can run a session without questions, or attach question banks from the",
+            qb_link_label: "Question banks page",
+            bank_no_desc: "No description",
+            qb_selected_badge: "Selected",
+
+            step3_title: "3. Session information",
+            session_name_label: "Session name",
+            session_name_placeholder: "Example: Chapter 1 review",
+            session_desc_label: "Description (optional)",
+            session_desc_placeholder: "Notes for this session",
+            session_type_label: "Session type",
+            session_type_live: "Live",
+            session_type_practice: "Practice",
+            max_participants_label: "Max participants (0 = unlimited)",
+
+            step4_title: "4. Session settings",
+            setting_allowLateJoin_label: "Allow late join",
+            setting_allowLateJoin_desc:
+                "Students can join after the session has started",
+            setting_showLeaderboard_label: "Show leaderboard",
+            setting_showLeaderboard_desc: "Update scores in real time",
+            setting_showCorrectAnswers_label: "Show correct answers",
+            setting_showCorrectAnswers_desc:
+                "Allow students to see the correct answer after answering",
+            setting_shuffleQuestions_label: "Shuffle questions",
+            setting_shuffleQuestions_desc: "Randomize the order of questions",
+            setting_shuffleOptions_label: "Shuffle options",
+            setting_shuffleOptions_desc:
+                "Randomize the order of answer options",
+            setting_enableHints_label: "Enable hints",
+            setting_enableHints_desc: "Students can see hints",
+            setting_pointsForSpeed_label: "Speed bonus points",
+            setting_pointsForSpeed_desc:
+                "Answering faster gives more points",
+
+            cancel_btn: "Cancel",
+            submit_btn: "Create session",
+            creating_label: "Creating...",
+
+            toast_org_error: "Failed to load organization data.",
+            toast_maps_error: "Failed to load Storymap maps.",
+            maps_error_message:
+                "Could not load maps. Please try again.",
+            question_banks_error:
+                "Failed to load question banks for this Storymap.",
+            toast_no_workspace: "Please select a workspace before creating a session.",
+            toast_no_map:
+                "Please select a Storymap map before creating a session.",
+            toast_success: "Session created successfully!",
+            toast_create_error: "Failed to create session.",
+
+            org_not_found: "Organization not found.",
+        },
+        org_question_builder: {
+            // Header
+            header_back: "← Back",
+            header_title: "Create questions for: {name}",
+            header_save: "Save question bank",
+            header_save_saving: "Saving...",
+
+            // Question types
+            type_multiple_choice: "Multiple choice",
+            type_true_false: "True / False",
+            type_short_answer: "Short answer",
+            type_pin_on_map: "Pin on map",
+
+            // TRUE / FALSE labels
+            tf_true_label: "True",
+            tf_false_label: "False",
+
+            // Step 1
+            step1_title: "1. Question bank info",
+            step1_bank_name_label: "Question bank name",
+            step1_workspace_label: "Workspace",
+
+            // Step 2 summary
+            step2_title: "2. Enter question content",
+            summary_line:
+                "Total questions: {total} (with {filled} filled)",
+
+            add_question_btn: "Add question",
+
+            // Question card
+            question_title: "Question {index}",
+            question_status_filled: "Filled",
+            question_status_empty: "Empty",
+            question_delete_title: "Delete this question",
+
+            question_content_label: "Question text",
+            question_content_placeholder: "Enter question text...",
+            question_type_label: "Question type",
+
+            // Short answer
+            short_answer_label: "Answer / Suggested answer",
+            short_answer_placeholder:
+                "Enter the correct answer or explanation...",
+
+            // Multiple choice
+            mc_list_label: "Options",
+            mc_add_option_btn: "+ Add option",
+            mc_option_label: "Option {index}",
+            mc_delete_option_btn: "Delete",
+            mc_option_placeholder: "Enter option text...",
+            mc_mark_correct_label: "Correct answer",
+
+            // True / False
+            tf_correct_label: "Correct answer",
+
+            // Pin on map
+            pin_exact_label: "Exact coordinates",
+            pin_lat_label: "Latitude",
+            pin_lon_label: "Longitude",
+            pin_radius_label: "Radius (m)",
+            pin_lat_placeholder: "Example: 10.762622",
+            pin_lon_placeholder: "Example: 106.660172",
+            pin_radius_placeholder: "Example: 100",
+            pin_answer_summary:
+                "({lat}, {lon}) ± {radius}m",
+
+            // Optional content
+            optional_title: "Additional content (optional)",
+            optional_subtitle_filled: "Additional content added",
+            optional_subtitle_empty:
+                "Add image, audio, hints or explanation if needed.",
+            optional_toggle_expand: "Add",
+            optional_toggle_collapse: "Collapse",
+
+            optional_image_label: "Illustration image",
+            optional_image_upload: "Click to choose image (JPG, PNG)",
+            optional_image_remove: "Remove image",
+
+            optional_audio_label: "Audio (narration / hint)",
+            optional_audio_upload: "Click to choose audio file (MP3, WAV)",
+            optional_audio_remove: "Remove audio",
+
+            optional_hint_label: "Hint",
+            optional_hint_placeholder:
+                "Enter hints to help students (optional)...",
+
+            optional_explanation_label: "Explanation after answering",
+            optional_explanation_placeholder:
+                "Enter explanation to show after answering...",
+
+            // Step 3
+            step3_title: "3. Question bank overview",
+            overview_subtitle: "{filled}/{total} questions filled",
+            overview_completed_label: "completed questions",
+            overview_list_title: "Questions in this bank",
+            overview_list_count: "{count} question(s)",
+            overview_empty: "There are no questions in this bank yet.",
+
+            // Table header
+            th_index: "#",
+            th_content: "Content",
+            th_type: "Type",
+            th_answer: "Answer",
+            th_actions: "Actions",
+
+            // Table buttons
+            btn_delete: "Delete",
+            btn_deleting: "Deleting...",
+
+            // Toast & errors
+            toast_upload_image_success: "Image uploaded successfully.",
+            toast_upload_image_error: "Could not upload image.",
+            toast_upload_audio_success: "Audio uploaded successfully.",
+            toast_upload_audio_error: "Could not upload audio.",
+            error_missing_question_bank:
+                "Question bank not found. Please go back and try again.",
+            validation_question_text_required:
+                "Please enter the question text.",
+            validation_mc_min_options:
+                "Multiple-choice questions require at least two options.",
+            validation_mc_need_correct:
+                "Please select at least one correct option.",
+            validation_short_answer_required:
+                "Please enter an answer for the short-answer question.",
+            validation_pin_coords_required:
+                "Please enter valid coordinates for the map question.",
+            validation_pin_radius_required:
+                "Please enter an acceptance radius greater than 0.",
+            validation_question_type_not_supported:
+                "Question type is not supported.",
+            validation_question_invalid:
+                "Question is not valid.",
+            validation_question_index_error:
+                "Question {index}: {message}",
+            validation_no_valid_questions:
+                "You have not entered any valid question content.",
+            toast_save_success: "Question bank saved successfully.",
+            toast_save_failed: "Could not save the question bank.",
+            toast_delete_success: "Question deleted.",
+            toast_delete_failed: "Could not delete the question.",
+        },
         organization: {
             not_found_title: "Organization Not Found",
             not_found_description: "This organization does not exist or has been deleted. Please check the URL or create a new organization.",
@@ -2862,6 +3472,15 @@ export const messages = {
             tier_enterprise: "Enterprise",
         },
         workspace_detail: {
+            storymap_section_title: "Storymap maps",
+            storymap_menu_title: "Options",
+            storymap_menu_delete: "Delete map",
+            storymap_published_badge: "Published",
+            storymap_publish_at: "Publish: {date}",
+            storymap_publish_unknown: "Publish: —",
+            storymap_open_btn: "Open storymap",
+            storymap_create_session_btn: "Create session",
+            storymap_empty_text: "No Storymap maps in this workspace yet.",
             loading: "Loading…",
             not_found: "Workspace not found.",
             request_failed: "Request failed",

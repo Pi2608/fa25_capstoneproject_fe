@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
@@ -27,7 +27,6 @@ import {
 import type { PinLocationPickerProps } from "@/components/question-banks/PinLocationPicker";
 import Loading from "@/app/loading";
 
-
 function safeMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message;
   if (err && typeof err === "object" && "message" in err) {
@@ -37,22 +36,14 @@ function safeMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
-const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
-  MULTIPLE_CHOICE: "Trắc nghiệm",
-  TRUE_FALSE: "Đúng / Sai",
-  SHORT_ANSWER: "Tự luận ngắn",
-  PIN_ON_MAP: "Ghim trên bản đồ",
-};
-
-const TRUE_FALSE_CHOICES: Array<{ value: "TRUE" | "FALSE"; label: string }> = [
-  { value: "TRUE", label: "Đúng" },
-  { value: "FALSE", label: "Sai" },
+const TRUE_FALSE_CHOICES: Array<{ value: "TRUE" | "FALSE" }> = [
+  { value: "TRUE" },
+  { value: "FALSE" },
 ];
 
 const DEFAULT_POINTS = 100;
 const DEFAULT_TIME_LIMIT = 30;
 const MIN_OPTIONS = 2;
-
 
 const PinLocationPicker = dynamic<PinLocationPickerProps>(
   () =>
@@ -61,14 +52,11 @@ const PinLocationPicker = dynamic<PinLocationPickerProps>(
     ),
   {
     ssr: false,
-    loading: () => {
-      // We'll need to handle theme in the component itself since this is a static loading component
-      return (
-        <div className="mt-4 flex h-64 items-center justify-center rounded-xl border border-dashed text-sm">
-          <Loading />
-        </div>
-      );
-    },
+    loading: () => (
+      <div className="mt-4 flex h-64 items-center justify-center rounded-xl border border-dashed text-sm">
+        <Loading />
+      </div>
+    ),
   }
 );
 
@@ -89,7 +77,7 @@ function createBlankOption(displayOrder: number): QuestionOptionInput {
   };
 }
 
-function summarizeAnswer(question: QuestionDto): string {
+function summarizeAnswer(question: QuestionDto, t: ReturnType<typeof useI18n>["t"]): string {
   switch (question.questionType) {
     case "MULTIPLE_CHOICE": {
       const correct = question.options
@@ -103,7 +91,9 @@ function summarizeAnswer(question: QuestionDto): string {
         question.options?.find(
           (opt) => opt.optionText?.toLowerCase() === "true"
         )?.isCorrect ?? true;
-      return trueIsCorrect ? "Đúng" : "Sai";
+      return trueIsCorrect
+        ? t("org_question_builder", "tf_true_label")
+        : t("org_question_builder", "tf_false_label");
     }
     case "SHORT_ANSWER":
       return question.correctAnswerText || "—";
@@ -115,14 +105,32 @@ function summarizeAnswer(question: QuestionDto): string {
       ) {
         return "—";
       }
-      return `(${question.correctLatitude}, ${question.correctLongitude}) ± ${question.acceptanceRadiusMeters}m`;
+      return t("org_question_builder", "pin_answer_summary", {
+        lat: question.correctLatitude,
+        lon: question.correctLongitude,
+        radius: question.acceptanceRadiusMeters,
+      });
     default:
       return question.correctAnswerText || "—";
   }
 }
 
-function getQuestionTypeLabel(type: string) {
-  return QUESTION_TYPE_LABELS[type as QuestionType] ?? type;
+function getQuestionTypeLabel(
+  type: string,
+  t: ReturnType<typeof useI18n>["t"]
+) {
+  switch (type as QuestionType) {
+    case "MULTIPLE_CHOICE":
+      return t("org_question_builder", "type_multiple_choice");
+    case "TRUE_FALSE":
+      return t("org_question_builder", "type_true_false");
+    case "SHORT_ANSWER":
+      return t("org_question_builder", "type_short_answer");
+    case "PIN_ON_MAP":
+      return t("org_question_builder", "type_pin_on_map");
+    default:
+      return type;
+  }
 }
 
 export default function QuestionBuilderPage() {
@@ -191,7 +199,8 @@ export default function QuestionBuilderPage() {
       if (nextType === "PIN_ON_MAP") {
         current.correctLatitude = current.correctLatitude ?? "";
         current.correctLongitude = current.correctLongitude ?? "";
-        current.acceptanceRadiusMeters = current.acceptanceRadiusMeters ?? "";
+        current.acceptanceRadiusMeters =
+          current.acceptanceRadiusMeters ?? "";
       }
 
       updated[index] = current;
@@ -266,9 +275,18 @@ export default function QuestionBuilderPage() {
     try {
       const url = await uploadQuestionImage(file);
       handleChangeQuestion(index, "questionImageUrl", url);
-      showToast("success", "Tải ảnh thành công");
+      showToast(
+        "success",
+        t("org_question_builder", "toast_upload_image_success")
+      );
     } catch (error) {
-      showToast("error", safeMessage(error, "Không thể tải ảnh"));
+      showToast(
+        "error",
+        safeMessage(
+          error,
+          t("org_question_builder", "toast_upload_image_error")
+        )
+      );
     } finally {
       setUploadingImageFor(null);
     }
@@ -282,14 +300,22 @@ export default function QuestionBuilderPage() {
     try {
       const url = await uploadQuestionAudio(file);
       handleChangeQuestion(index, "questionAudioUrl", url);
-      showToast("success", "Tải audio thành công");
+      showToast(
+        "success",
+        t("org_question_builder", "toast_upload_audio_success")
+      );
     } catch (error) {
-      showToast("error", safeMessage(error, "Không thể tải audio"));
+      showToast(
+        "error",
+        safeMessage(
+          error,
+          t("org_question_builder", "toast_upload_audio_error")
+        )
+      );
     } finally {
       setUploadingAudioFor(null);
     }
   };
-
 
   const buildQuestionPayload = (
     question: (typeof questions)[number],
@@ -297,7 +323,9 @@ export default function QuestionBuilderPage() {
   ): CreateQuestionRequest => {
     const questionText = question.text.trim();
     if (!questionText) {
-      throw new Error("Vui lòng nhập nội dung câu hỏi.");
+      throw new Error(
+        t("org_question_builder", "validation_question_text_required")
+      );
     }
 
     const payload: CreateQuestionRequest = {
@@ -330,11 +358,15 @@ export default function QuestionBuilderPage() {
           .filter((opt) => opt.optionText.length > 0);
 
         if (preparedOptions.length < MIN_OPTIONS) {
-          throw new Error("Cần ít nhất hai đáp án cho câu hỏi trắc nghiệm.");
+          throw new Error(
+            t("org_question_builder", "validation_mc_min_options")
+          );
         }
 
         if (!preparedOptions.some((opt) => opt.isCorrect)) {
-          throw new Error("Vui lòng chọn ít nhất một đáp án đúng.");
+          throw new Error(
+            t("org_question_builder", "validation_mc_need_correct")
+          );
         }
 
         payload.options = preparedOptions;
@@ -360,7 +392,9 @@ export default function QuestionBuilderPage() {
       case "SHORT_ANSWER": {
         const answer = question.answer.trim();
         if (!answer) {
-          throw new Error("Vui lòng nhập đáp án cho câu hỏi tự luận.");
+          throw new Error(
+            t("org_question_builder", "validation_short_answer_required")
+          );
         }
         payload.correctAnswerText = answer;
         break;
@@ -371,11 +405,15 @@ export default function QuestionBuilderPage() {
         const radius = Number.parseFloat(question.acceptanceRadiusMeters);
 
         if (Number.isNaN(lat) || Number.isNaN(lon)) {
-          throw new Error("Vui lòng nhập toạ độ hợp lệ cho câu hỏi bản đồ.");
+          throw new Error(
+            t("org_question_builder", "validation_pin_coords_required")
+          );
         }
 
         if (Number.isNaN(radius) || radius <= 0) {
-          throw new Error("Vui lòng nhập bán kính chấp nhận lớn hơn 0.");
+          throw new Error(
+            t("org_question_builder", "validation_pin_radius_required")
+          );
         }
 
         payload.correctLatitude = lat;
@@ -384,7 +422,9 @@ export default function QuestionBuilderPage() {
         break;
       }
       default:
-        throw new Error("Loại câu hỏi không được hỗ trợ.");
+        throw new Error(
+          t("org_question_builder", "validation_question_type_not_supported")
+        );
     }
 
     payload.questionImageUrl = question.questionImageUrl || "";
@@ -397,7 +437,7 @@ export default function QuestionBuilderPage() {
     if (!questionBank?.questionBankId) {
       showToast(
         "error",
-        "Không tìm thấy bộ câu hỏi. Vui lòng quay lại workspace và tạo lại."
+        t("org_question_builder", "error_missing_question_bank")
       );
       return;
     }
@@ -413,14 +453,19 @@ export default function QuestionBuilderPage() {
           const message =
             validationError instanceof Error
               ? validationError.message
-              : "Câu hỏi chưa hợp lệ.";
-          throw new Error(`Câu ${idx + 1}: ${message}`);
+              : t("org_question_builder", "validation_question_invalid");
+          throw new Error(
+            t("org_question_builder", "validation_question_index_error", {
+              index: idx + 1,
+              message,
+            })
+          );
         }
       });
 
       if (payloads.length === 0) {
         throw new Error(
-          "Bạn chưa nhập nội dung hợp lệ cho bất kỳ câu hỏi nào."
+          t("org_question_builder", "validation_no_valid_questions")
         );
       }
 
@@ -447,9 +492,18 @@ export default function QuestionBuilderPage() {
         setQuestions(questionsFromApi(reloadedQuestions));
       }
 
-      showToast("success", t("workspace_detail.save_success"));
+      showToast(
+        "success",
+        t("org_question_builder", "toast_save_success")
+      );
     } catch (e) {
-      showToast("error", safeMessage(e, t("workspace_detail.save_failed")));
+      showToast(
+        "error",
+        safeMessage(
+          e,
+          t("org_question_builder", "toast_save_failed")
+        )
+      );
     } finally {
       setSaving(false);
     }
@@ -466,9 +520,18 @@ export default function QuestionBuilderPage() {
         setQuestions(questionsFromApi(reloadedQuestions));
       }
 
-      showToast("success", t("workspace_detail.delete_success"));
+      showToast(
+        "success",
+        t("org_question_builder", "toast_delete_success")
+      );
     } catch (e) {
-      showToast("error", safeMessage(e, t("workspace_detail.delete_failed")));
+      showToast(
+        "error",
+        safeMessage(
+          e,
+          t("org_question_builder", "toast_delete_failed")
+        )
+      );
     } finally {
       setDeletingQuestionId(null);
     }
@@ -484,19 +547,28 @@ export default function QuestionBuilderPage() {
     [questionBank]
   );
 
- if (loading) {
+  if (loading) {
     return null;
   }
+
   if (err || !workspace || !org || !questionBank)
     return (
-      <div className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"}`}>
+      <div
+        className={`max-w-3xl px-4 ${
+          isDark ? "text-red-400" : "text-red-600"
+        }`}
+      >
         {err ?? t("common.not_found")}
       </div>
     );
 
   return (
     <div className="min-w-0 relative px-4 pb-10">
-      <div className={`max-w-6xl mx-auto ${isDark ? "text-zinc-50" : "text-zinc-900"}`}>
+      <div
+        className={`max-w-6xl mx-auto ${
+          isDark ? "text-zinc-50" : "text-zinc-900"
+        }`}
+      >
         {/* Header */}
         <div className="flex items-center justify-between gap-3 mb-6">
           <div className="flex items-center gap-3">
@@ -506,11 +578,17 @@ export default function QuestionBuilderPage() {
               }
               className={`px-3 py-1.5 rounded-lg border text-sm ${themeClasses.button}`}
             >
-              ←
+              {t("org_question_builder", "header_back")}
             </button>
             <div>
-              <h1 className={`text-2xl sm:text-3xl font-semibold ${isDark ? "text-zinc-100" : "text-emerald-700"}`}>
-                Tạo câu hỏi cho bộ: {questionBank.bankName}
+              <h1
+                className={`text-2xl sm:text-3xl font-semibold ${
+                  isDark ? "text-zinc-100" : "text-emerald-700"
+                }`}
+              >
+                {t("org_question_builder", "header_title", {
+                  name: questionBank.bankName,
+                })}
               </h1>
               <p className={`text-sm ${themeClasses.textMuted}`}>
                 {workspace.workspaceName} · {org.orgName}
@@ -523,21 +601,33 @@ export default function QuestionBuilderPage() {
             disabled={saving}
             className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-600 disabled:opacity-60"
           >
-            {saving ? "Đang lưu..." : "Lưu bộ câu hỏi"}
+            {saving
+              ? t("org_question_builder", "header_save_saving")
+              : t("org_question_builder", "header_save")}
           </button>
         </div>
 
-        {/* 1. Thông tin bộ câu hỏi */}
-        <section className={`mb-8 rounded-2xl border px-4 py-5 shadow-sm ${themeClasses.panel}`}>
-          <h2 className={`text-lg font-semibold mb-4 ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
-            1. Thông tin bộ câu hỏi
+        {/* 1. Info */}
+        <section
+          className={`mb-8 rounded-2xl border px-4 py-5 shadow-sm ${themeClasses.panel}`}
+        >
+          <h2
+            className={`text-lg font-semibold mb-4 ${
+              isDark ? "text-emerald-300" : "text-emerald-600"
+            }`}
+          >
+            {t("org_question_builder", "step1_title")}
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1">
               <div className={`text-xs ${themeClasses.textMuted}`}>
-                Tên bộ câu hỏi
+                {t("org_question_builder", "step1_bank_name_label")}
               </div>
-              <div className={`text-base font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
+              <div
+                className={`text-base font-semibold ${
+                  isDark ? "text-emerald-300" : "text-emerald-600"
+                }`}
+              >
                 {questionBank.bankName}
               </div>
               {questionBank.description && (
@@ -548,559 +638,938 @@ export default function QuestionBuilderPage() {
             </div>
             <div className="space-y-1">
               <div className={`text-xs ${themeClasses.textMuted}`}>
-                Thuộc workspace
+                {t("org_question_builder", "step1_workspace_label")}
               </div>
-              <div className={`text-base font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
+              <div
+                className={`text-base font-semibold ${
+                  isDark ? "text-emerald-300" : "text-emerald-600"
+                }`}
+              >
                 {workspace.workspaceName}
               </div>
             </div>
           </div>
         </section>
 
-        {/* 2. Nhập nội dung câu hỏi */}
+        {/* 2. Input questions */}
         <section className="mb-8">
           <div className="mb-4 flex items-center justify-between flex-wrap gap-3">
-            <h2 className={`text-lg font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
-              2. Nhập nội dung câu hỏi
+            <h2
+              className={`text-lg font-semibold ${
+                isDark ? "text-emerald-300" : "text-emerald-600"
+              }`}
+            >
+              {t("org_question_builder", "step2_title")}
             </h2>
           </div>
 
-          <div className={`rounded-2xl border p-4 sm:p-5 shadow-sm ${themeClasses.panel}`}>
+          <div
+            className={`rounded-2xl border p-4 sm:p-5 shadow-sm ${themeClasses.panel}`}
+          >
             <div className="mb-4 flex items-center justify-between">
-              <div className={`text-sm ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
-                <span className="font-semibold">Tổng số câu hỏi:</span>{" "}
-                <span className={`font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
-                  {questions.length} câu
-                </span>
-                <span className={`ml-2 text-xs ${themeClasses.textMuted}`}>
-                  ({overview.filled} đã nhập)
-                </span>
+              <div
+                className={`text-sm ${
+                  isDark ? "text-zinc-300" : "text-zinc-700"
+                }`}
+              >
+                {t("org_question_builder", "summary_line", {
+                  total: questions.length,
+                  filled: overview.filled,
+                })}
               </div>
               <button
                 onClick={() => handleAddQuestion()}
                 className="px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-600 flex items-center gap-1.5"
               >
                 <Plus className="w-4 h-4" />
-                Thêm câu hỏi
+                {t("org_question_builder", "add_question_btn")}
               </button>
             </div>
 
             <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-1">
-              {questions.map((q, idx) => (
-                <div
-                  key={q.id}
-                  className={`rounded-xl border p-3 sm:p-4 shadow-sm ${isDark ? "border-white/10 bg-zinc-900/80" : "border-zinc-200 bg-zinc-50"}`}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className={`text-sm font-semibold ${isDark ? "text-zinc-50" : "text-zinc-900"}`}>
-                      Câu {idx + 1}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div className={`text-xs ${themeClasses.textMuted}`}>
-                        {q.text.trim() || q.answer.trim()
-                          ? "Đã nhập"
-                          : "Chưa nhập"}
+              {questions.map((q, idx) => {
+                const isFilled =
+                  q.text.trim().length > 0 || q.answer.trim().length > 0;
+                const questionId = q.id;
+
+                const hasOptionalData =
+                  q.questionImageUrl ||
+                  q.questionAudioUrl ||
+                  q.hintText.trim().length > 0 ||
+                  q.explanation.trim().length > 0;
+                const isOpen = optionalOpen[questionId] ?? hasOptionalData;
+
+                return (
+                  <div
+                    key={q.id}
+                    className={`rounded-xl border p-3 sm:p-4 shadow-sm ${
+                      isDark
+                        ? "border-white/10 bg-zinc-900/80"
+                        : "border-zinc-200 bg-zinc-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <div
+                        className={`text-sm font-semibold ${
+                          isDark ? "text-zinc-50" : "text-zinc-900"
+                        }`}
+                      >
+                        {t("org_question_builder", "question_title", {
+                          index: idx + 1,
+                        })}
                       </div>
-                      {questions.length > 1 && (
-                        <button
-                          onClick={() => handleRemoveQuestion(idx)}
-                          className={`text-xs font-semibold p-1.5 rounded transition-colors ${
-                            isDark 
-                              ? "text-red-400 hover:text-red-300 hover:bg-red-900/20" 
-                              : "text-red-500 hover:text-red-600 hover:bg-red-50"
+                      <div className="flex items-center gap-2">
+                        <div className={`text-xs ${themeClasses.textMuted}`}>
+                          {isFilled
+                            ? t(
+                                "org_question_builder",
+                                "question_status_filled"
+                              )
+                            : t(
+                                "org_question_builder",
+                                "question_status_empty"
+                              )}
+                        </div>
+                        {questions.length > 1 && (
+                          <button
+                            onClick={() => handleRemoveQuestion(idx)}
+                            className={`text-xs font-semibold p-1.5 rounded transition-colors ${
+                              isDark
+                                ? "text-red-400 hover:text-red-300 hover:bg-red-900/20"
+                                : "text-red-500 hover:text-red-600 hover:bg-red-50"
+                            }`}
+                            title={t(
+                              "org_question_builder",
+                              "question_delete_title"
+                            )}
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-3 lg:grid-cols-2">
+                      <div>
+                        <label
+                          className={`block text-xs font-semibold mb-1 ${
+                            isDark ? "text-zinc-300" : "text-zinc-700"
                           }`}
-                          title="Xóa câu hỏi này"
                         >
-                          <X className="w-4 h-4" />
-                        </button>
+                          {t(
+                            "org_question_builder",
+                            "question_content_label"
+                          )}
+                        </label>
+                        <textarea
+                          value={q.text}
+                          onChange={(e) =>
+                            handleChangeQuestion(idx, "text", e.target.value)
+                          }
+                          className={`w-full rounded-lg border px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
+                          placeholder={t(
+                            "org_question_builder",
+                            "question_content_placeholder"
+                          )}
+                        />
+                      </div>
+
+                      <div>
+                        <label
+                          className={`block text-xs font-semibold mb-1 ${
+                            isDark ? "text-zinc-300" : "text-zinc-700"
+                          }`}
+                        >
+                          {t(
+                            "org_question_builder",
+                            "question_type_label"
+                          )}
+                        </label>
+                        <select
+                          value={q.questionType}
+                          onChange={(e) =>
+                            handleQuestionTypeChange(
+                              idx,
+                              e.target.value as QuestionType
+                            )
+                          }
+                          className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.select}`}
+                        >
+                          {QUESTION_TYPES.map((type) => (
+                            <option key={type} value={type}>
+                              {getQuestionTypeLabel(type, t)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* SHORT ANSWER */}
+                    {q.questionType === "SHORT_ANSWER" && (
+                      <div className="mt-4">
+                        <label
+                          className={`block text-xs font-semibold mb-1 ${
+                            isDark ? "text-zinc-300" : "text-zinc-700"
+                          }`}
+                        >
+                          {t(
+                            "org_question_builder",
+                            "short_answer_label"
+                          )}
+                        </label>
+                        <textarea
+                          value={q.answer}
+                          onChange={(e) =>
+                            handleChangeQuestion(
+                              idx,
+                              "answer",
+                              e.target.value
+                            )
+                          }
+                          className={`w-full rounded-lg border px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
+                          placeholder={t(
+                            "org_question_builder",
+                            "short_answer_placeholder"
+                          )}
+                        />
+                      </div>
+                    )}
+
+                    {/* MULTIPLE CHOICE */}
+                    {q.questionType === "MULTIPLE_CHOICE" && (
+                      <div className="mt-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <span
+                            className={`text-xs font-semibold ${
+                              isDark ? "text-zinc-300" : "text-zinc-700"
+                            }`}
+                          >
+                            {t(
+                              "org_question_builder",
+                              "mc_list_label"
+                            )}
+                          </span>
+                          <button
+                            onClick={() => handleAddOptionRow(idx)}
+                            className={`text-xs font-semibold ${
+                              isDark
+                                ? "text-emerald-300 hover:text-emerald-200"
+                                : "text-emerald-600 hover:text-emerald-500"
+                            }`}
+                          >
+                            {t(
+                              "org_question_builder",
+                              "mc_add_option_btn"
+                            )}
+                          </button>
+                        </div>
+                        {q.options.map((opt, optIdx) => (
+                          <div
+                            key={opt.id}
+                            className={`rounded-lg border p-3 ${
+                              isDark
+                                ? "border-white/10 bg-zinc-800"
+                                : "border-zinc-200 bg-white"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span
+                                className={`text-xs font-semibold ${themeClasses.textMuted}`}
+                              >
+                                {t(
+                                  "org_question_builder",
+                                  "mc_option_label",
+                                  { index: optIdx + 1 }
+                                )}
+                              </span>
+                              {q.options.length > MIN_OPTIONS && (
+                                <button
+                                  className={`text-xs ${
+                                    isDark
+                                      ? "text-red-400 hover:text-red-300"
+                                      : "text-red-500 hover:text-red-400"
+                                  }`}
+                                  onClick={() =>
+                                    handleRemoveOptionRow(idx, optIdx)
+                                  }
+                                  type="button"
+                                >
+                                  {t(
+                                    "org_question_builder",
+                                    "mc_delete_option_btn"
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                            <input
+                              value={opt.optionText}
+                              onChange={(e) =>
+                                updateOption(idx, optIdx, {
+                                  optionText: e.target.value,
+                                })
+                              }
+                              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
+                              placeholder={t(
+                                "org_question_builder",
+                                "mc_option_placeholder"
+                              )}
+                            />
+                            <label
+                              className={`mt-2 inline-flex items-center gap-2 text-xs font-medium ${themeClasses.textMuted}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={opt.isCorrect}
+                                onChange={() =>
+                                  handleToggleOptionCorrect(idx, optIdx)
+                                }
+                                className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
+                              />
+                              {t(
+                                "org_question_builder",
+                                "mc_mark_correct_label"
+                              )}
+                            </label>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* TRUE/FALSE */}
+                    {q.questionType === "TRUE_FALSE" && (
+                      <div className="mt-4">
+                        <span
+                          className={`block text-xs font-semibold mb-2 ${
+                            isDark ? "text-zinc-300" : "text-zinc-700"
+                          }`}
+                        >
+                          {t(
+                            "org_question_builder",
+                            "tf_correct_label"
+                          )}
+                        </span>
+                        <div className="flex gap-4">
+                          {TRUE_FALSE_CHOICES.map((choice) => (
+                            <label
+                              key={choice.value}
+                              className={`inline-flex items-center gap-2 text-sm ${
+                                isDark ? "text-zinc-200" : "text-zinc-700"
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name={`tf-${idx}`}
+                                value={choice.value}
+                                checked={q.trueFalseAnswer === choice.value}
+                                onChange={() =>
+                                  handleChangeQuestion(
+                                    idx,
+                                    "trueFalseAnswer",
+                                    choice.value
+                                  )
+                                }
+                                className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
+                              />
+                              {choice.value === "TRUE"
+                                ? t(
+                                    "org_question_builder",
+                                    "tf_true_label"
+                                  )
+                                : t(
+                                    "org_question_builder",
+                                    "tf_false_label"
+                                  )}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* PIN ON MAP */}
+                    {q.questionType === "PIN_ON_MAP" && (
+                      <div className="mt-4">
+                        <span
+                          className={`block text-xs font-semibold mb-2 ${
+                            isDark ? "text-zinc-300" : "text-zinc-700"
+                          }`}
+                        >
+                          {t(
+                            "org_question_builder",
+                            "pin_exact_label"
+                          )}
+                        </span>
+                        <div className="grid gap-3 sm:grid-cols-3">
+                          <div>
+                            <label
+                              className={`block text-[11px] uppercase tracking-wide mb-1 ${themeClasses.textMuted}`}
+                            >
+                              {t(
+                                "org_question_builder",
+                                "pin_lat_label"
+                              )}
+                            </label>
+                            <input
+                              type="number"
+                              value={q.correctLatitude}
+                              onChange={(e) =>
+                                handleChangeQuestion(
+                                  idx,
+                                  "correctLatitude",
+                                  e.target.value
+                                )
+                              }
+                              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
+                              placeholder={t(
+                                "org_question_builder",
+                                "pin_lat_placeholder"
+                              )}
+                            />
+                          </div>
+                          <div>
+                            <label
+                              className={`block text-[11px] uppercase tracking-wide mb-1 ${themeClasses.textMuted}`}
+                            >
+                              {t(
+                                "org_question_builder",
+                                "pin_lon_label"
+                              )}
+                            </label>
+                            <input
+                              type="number"
+                              value={q.correctLongitude}
+                              onChange={(e) =>
+                                handleChangeQuestion(
+                                  idx,
+                                  "correctLongitude",
+                                  e.target.value
+                                )
+                              }
+                              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
+                              placeholder={t(
+                                "org_question_builder",
+                                "pin_lon_placeholder"
+                              )}
+                            />
+                          </div>
+                          <div>
+                            <label
+                              className={`block text-[11px] uppercase tracking-wide mb-1 ${themeClasses.textMuted}`}
+                            >
+                              {t(
+                                "org_question_builder",
+                                "pin_radius_label"
+                              )}
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={q.acceptanceRadiusMeters}
+                              onChange={(e) =>
+                                handleChangeQuestion(
+                                  idx,
+                                  "acceptanceRadiusMeters",
+                                  e.target.value
+                                )
+                              }
+                              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
+                              placeholder={t(
+                                "org_question_builder",
+                                "pin_radius_placeholder"
+                              )}
+                            />
+                          </div>
+                        </div>
+                        <PinLocationPicker
+                          latitude={q.correctLatitude}
+                          longitude={q.correctLongitude}
+                          radiusMeters={q.acceptanceRadiusMeters}
+                          onChange={(lat, lng) => {
+                            handleChangeQuestion(idx, "correctLatitude", lat);
+                            handleChangeQuestion(idx, "correctLongitude", lng);
+                          }}
+                          className="mt-4"
+                        />
+                      </div>
+                    )}
+
+                    {/* Optional content */}
+                    <div
+                      className={`mt-6 rounded-xl border border-dashed ${
+                        isDark
+                          ? "border-white/10 bg-white/5"
+                          : "border-zinc-200 bg-white"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOptionalOpen((prev) => ({
+                            ...prev,
+                            [questionId]: !isOpen,
+                          }))
+                        }
+                        className="flex w-full items-center justify-between px-4 py-3 text-left"
+                      >
+                        <div>
+                          <span
+                            className={`block text-sm font-semibold ${
+                              isDark ? "text-zinc-100" : "text-zinc-800"
+                            }`}
+                          >
+                            {t(
+                              "org_question_builder",
+                              "optional_title"
+                            )}
+                          </span>
+                          <p
+                            className={`text-xs ${themeClasses.textMuted}`}
+                          >
+                            {hasOptionalData
+                              ? t(
+                                  "org_question_builder",
+                                  "optional_subtitle_filled"
+                                )
+                              : t(
+                                  "org_question_builder",
+                                  "optional_subtitle_empty"
+                                )}
+                          </p>
+                        </div>
+                        <span
+                          className={`text-xs font-semibold ${
+                            isDark ? "text-emerald-300" : "text-emerald-600"
+                          }`}
+                        >
+                          {isOpen
+                            ? t(
+                                "org_question_builder",
+                                "optional_toggle_collapse"
+                              )
+                            : t(
+                                "org_question_builder",
+                                "optional_toggle_expand"
+                              )}
+                        </span>
+                      </button>
+
+                      {isOpen && (
+                        <div
+                          className={`space-y-4 border-t border-dashed px-4 py-4 ${themeClasses.tableBorder}`}
+                        >
+                          <div className="grid gap-4 md:grid-cols-2">
+                            {/* Image */}
+                            <div className="space-y-2">
+                              <label
+                                className={`text-xs font-semibold ${
+                                  isDark ? "text-zinc-300" : "text-zinc-700"
+                                }`}
+                              >
+                                {t(
+                                  "org_question_builder",
+                                  "optional_image_label"
+                                )}
+                              </label>
+                              {q.questionImageUrl ? (
+                                <div className="space-y-2">
+                                  <img
+                                    src={q.questionImageUrl}
+                                    alt={`Question ${idx + 1} illustration`}
+                                    className={`w-full rounded-lg border object-cover ${themeClasses.tableBorder}`}
+                                  />
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${themeClasses.button}`}
+                                      onClick={() =>
+                                        handleChangeQuestion(
+                                          idx,
+                                          "questionImageUrl",
+                                          ""
+                                        )
+                                      }
+                                      disabled={
+                                        uploadingImageFor === questionId
+                                      }
+                                    >
+                                      {t(
+                                        "org_question_builder",
+                                        "optional_image_remove"
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <label
+                                  className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-4 text-center text-xs ${themeClasses.textMuted} ${
+                                    isDark
+                                      ? "border-white/10 hover:border-emerald-500 hover:text-emerald-400"
+                                      : "border-gray-300 hover:border-emerald-400 hover:text-emerald-600"
+                                  }`}
+                                >
+                                  <span>
+                                    {uploadingImageFor === questionId ? (
+                                      <Loading />
+                                    ) : (
+                                      t(
+                                        "org_question_builder",
+                                        "optional_image_upload"
+                                      )
+                                    )}
+                                  </span>
+
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(event) => {
+                                      const file =
+                                        event.target.files?.[0];
+                                      if (file) {
+                                        void handleUploadQuestionImage(
+                                          idx,
+                                          file
+                                        );
+                                        event.target.value = "";
+                                      }
+                                    }}
+                                    disabled={
+                                      uploadingImageFor === questionId
+                                    }
+                                  />
+                                </label>
+                              )}
+                            </div>
+
+                            {/* Audio */}
+                            <div className="space-y-2">
+                              <label
+                                className={`text-xs font-semibold ${
+                                  isDark ? "text-zinc-300" : "text-zinc-700"
+                                }`}
+                              >
+                                {t(
+                                  "org_question_builder",
+                                  "optional_audio_label"
+                                )}
+                              </label>
+                              {q.questionAudioUrl ? (
+                                <div className="space-y-2">
+                                  <audio
+                                    src={q.questionAudioUrl}
+                                    controls
+                                    className={`w-full rounded-lg p-2 ${
+                                      isDark ? "bg-zinc-800" : "bg-zinc-100"
+                                    }`}
+                                  />
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${themeClasses.button}`}
+                                      onClick={() =>
+                                        handleChangeQuestion(
+                                          idx,
+                                          "questionAudioUrl",
+                                          ""
+                                        )
+                                      }
+                                      disabled={
+                                        uploadingAudioFor === questionId
+                                      }
+                                    >
+                                      {t(
+                                        "org_question_builder",
+                                        "optional_audio_remove"
+                                      )}
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <label
+                                  className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-4 text-center text-xs ${themeClasses.textMuted} ${
+                                    isDark
+                                      ? "border-white/10 hover:border-emerald-500 hover:text-emerald-400"
+                                      : "border-gray-300 hover:border-emerald-400 hover:text-emerald-600"
+                                  }`}
+                                >
+                                  <span>
+                                    {uploadingAudioFor === questionId ? (
+                                      <Loading />
+                                    ) : (
+                                      t(
+                                        "org_question_builder",
+                                        "optional_audio_upload"
+                                      )
+                                    )}
+                                  </span>
+
+                                  <input
+                                    type="file"
+                                    accept="audio/*"
+                                    className="hidden"
+                                    onChange={(event) => {
+                                      const file =
+                                        event.target.files?.[0];
+                                      if (file) {
+                                        void handleUploadQuestionAudio(
+                                          idx,
+                                          file
+                                        );
+                                        event.target.value = "";
+                                      }
+                                    }}
+                                    disabled={
+                                      uploadingAudioFor === questionId
+                                    }
+                                  />
+                                </label>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <div>
+                              <label
+                                className={`mb-1 block text-xs font-semibold ${
+                                  isDark ? "text-zinc-300" : "text-zinc-700"
+                                }`}
+                              >
+                                {t(
+                                  "org_question_builder",
+                                  "optional_hint_label"
+                                )}
+                              </label>
+                              <textarea
+                                value={q.hintText}
+                                onChange={(e) =>
+                                  handleChangeQuestion(
+                                    idx,
+                                    "hintText",
+                                    e.target.value
+                                  )
+                                }
+                                className={`min-h-[80px] w-full rounded-lg border px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
+                                placeholder={t(
+                                  "org_question_builder",
+                                  "optional_hint_placeholder"
+                                )}
+                              />
+                            </div>
+                            <div>
+                              <label
+                                className={`mb-1 block text-xs font-semibold ${
+                                  isDark ? "text-zinc-300" : "text-zinc-700"
+                                }`}
+                              >
+                                {t(
+                                  "org_question_builder",
+                                  "optional_explanation_label"
+                                )}
+                              </label>
+                              <textarea
+                                value={q.explanation}
+                                onChange={(e) =>
+                                  handleChangeQuestion(
+                                    idx,
+                                    "explanation",
+                                    e.target.value
+                                  )
+                                }
+                                className={`min-h-[80px] w-full rounded-lg border px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
+                                placeholder={t(
+                                  "org_question_builder",
+                                  "optional_explanation_placeholder"
+                                )}
+                              />
+                            </div>
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
-
-                  <div className="grid gap-3 lg:grid-cols-2">
-                    <div>
-                      <label className={`block text-xs font-semibold mb-1 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
-                        Nội dung câu hỏi
-                      </label>
-                      <textarea
-                        value={q.text}
-                        onChange={e =>
-                          handleChangeQuestion(
-                            idx,
-                            "text",
-                            e.target.value
-                          )
-                        }
-                        className={`w-full rounded-lg border px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
-                        placeholder="Nhập nội dung câu hỏi..."
-                      />
-                    </div>
-
-                    <div>
-                      <label className={`block text-xs font-semibold mb-1 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
-                        Loại câu hỏi
-                      </label>
-                      <select
-                        value={q.questionType}
-                        onChange={e =>
-                          handleQuestionTypeChange(
-                            idx,
-                            e.target.value as QuestionType
-                          )
-                        }
-                        className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.select}`}
-                      >
-                        {QUESTION_TYPES.map(type => (
-                          <option key={type} value={type}>
-                            {QUESTION_TYPE_LABELS[type]}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {q.questionType === "SHORT_ANSWER" && (
-                    <div className="mt-4">
-                      <label className={`block text-xs font-semibold mb-1 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
-                        Đáp án / Gợi ý trả lời
-                      </label>
-                      <textarea
-                        value={q.answer}
-                        onChange={e =>
-                          handleChangeQuestion(idx, "answer", e.target.value)
-                        }
-                        className={`w-full rounded-lg border px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
-                        placeholder="Nhập đáp án đúng hoặc lời giải thích..."
-                      />
-                    </div>
-                  )}
-
-                  {q.questionType === "MULTIPLE_CHOICE" && (
-                    <div className="mt-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className={`text-xs font-semibold ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
-                          Danh sách lựa chọn
-                        </span>
-                        <button
-                          onClick={() => handleAddOptionRow(idx)}
-                          className={`text-xs font-semibold ${isDark ? "text-emerald-300 hover:text-emerald-200" : "text-emerald-600 hover:text-emerald-500"}`}
-                        >
-                          + Thêm lựa chọn
-                        </button>
-                      </div>
-                      {q.options.map((opt, optIdx) => (
-                        <div
-                          key={opt.id}
-                          className={`rounded-lg border p-3 ${isDark ? "border-white/10 bg-zinc-800" : "border-zinc-200 bg-white"}`}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <span className={`text-xs font-semibold ${themeClasses.textMuted}`}>
-                              Phương án {optIdx + 1}
-                            </span>
-                            {q.options.length > MIN_OPTIONS && (
-                              <button
-                                className={`text-xs ${isDark ? "text-red-400 hover:text-red-300" : "text-red-500 hover:text-red-400"}`}
-                                onClick={() => handleRemoveOptionRow(idx, optIdx)}
-                                type="button"
-                              >
-                                Xóa
-                              </button>
-                            )}
-                          </div>
-                          <input
-                            value={opt.optionText}
-                            onChange={e =>
-                              updateOption(idx, optIdx, {
-                                optionText: e.target.value,
-                              })
-                            }
-                            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
-                            placeholder="Nhập nội dung lựa chọn..."
-                          />
-                          <label className={`mt-2 inline-flex items-center gap-2 text-xs font-medium ${themeClasses.textMuted}`}>
-                            <input
-                              type="checkbox"
-                              checked={opt.isCorrect}
-                              onChange={() => handleToggleOptionCorrect(idx, optIdx)}
-                              className="h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
-                            />
-                            Đáp án đúng
-                          </label>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {q.questionType === "TRUE_FALSE" && (
-                    <div className="mt-4">
-                      <span className={`block text-xs font-semibold mb-2 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
-                        Đáp án đúng
-                      </span>
-                      <div className="flex gap-4">
-                        {TRUE_FALSE_CHOICES.map(choice => (
-                          <label
-                            key={choice.value}
-                            className={`inline-flex items-center gap-2 text-sm ${isDark ? "text-zinc-200" : "text-zinc-700"}`}
-                          >
-                            <input
-                              type="radio"
-                              name={`tf-${idx}`}
-                              value={choice.value}
-                              checked={q.trueFalseAnswer === choice.value}
-                              onChange={() =>
-                                handleChangeQuestion(
-                                  idx,
-                                  "trueFalseAnswer",
-                                  choice.value
-                                )
-                              }
-                              className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
-                            />
-                            {choice.label}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {q.questionType === "PIN_ON_MAP" && (
-                    <div className="mt-4">
-                      <span className={`block text-xs font-semibold mb-2 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
-                        Toạ độ chính xác
-                      </span>
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        <div>
-                          <label className={`block text-[11px] uppercase tracking-wide mb-1 ${themeClasses.textMuted}`}>
-                            Vĩ độ
-                          </label>
-                          <input
-                            type="number"
-                            value={q.correctLatitude}
-                            onChange={e =>
-                              handleChangeQuestion(idx, "correctLatitude", e.target.value)
-                            }
-                            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
-                            placeholder="Ví dụ: 10.762622"
-                          />
-                        </div>
-                        <div>
-                          <label className={`block text-[11px] uppercase tracking-wide mb-1 ${themeClasses.textMuted}`}>
-                            Kinh độ
-                          </label>
-                          <input
-                            type="number"
-                            value={q.correctLongitude}
-                            onChange={e =>
-                              handleChangeQuestion(idx, "correctLongitude", e.target.value)
-                            }
-                            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
-                            placeholder="Ví dụ: 106.660172"
-                          />
-                        </div>
-                        <div>
-                          <label className={`block text-[11px] uppercase tracking-wide mb-1 ${themeClasses.textMuted}`}>
-                            Bán kính (m)
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={q.acceptanceRadiusMeters}
-                            onChange={e =>
-                              handleChangeQuestion(
-                                idx,
-                                "acceptanceRadiusMeters",
-                                e.target.value
-                              )
-                            }
-                            className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 ${themeClasses.input}`}
-                            placeholder="Ví dụ: 100"
-                          />
-                        </div>
-                      </div>
-                      <PinLocationPicker
-                        latitude={q.correctLatitude}
-                        longitude={q.correctLongitude}
-                        radiusMeters={q.acceptanceRadiusMeters}
-                        onChange={(lat, lng) => {
-                          handleChangeQuestion(idx, "correctLatitude", lat);
-                          handleChangeQuestion(idx, "correctLongitude", lng);
-                        }}
-                        className="mt-4"
-                      />
-                    </div>
-                  )}
-
-                  {(() => {
-                    const hasOptionalData =
-                      q.questionImageUrl ||
-                      q.questionAudioUrl ||
-                      q.hintText.trim().length > 0 ||
-                      q.explanation.trim().length > 0;
-                    const isOpen = optionalOpen[q.id] ?? hasOptionalData;
-
-                    return (
-                      <div className={`mt-6 rounded-xl border border-dashed ${isDark ? "border-white/10 bg-white/5" : "border-zinc-200 bg-white"}`}>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setOptionalOpen(prev => ({ ...prev, [q.id]: !isOpen }))
-                          }
-                          className="flex w-full items-center justify-between px-4 py-3 text-left"
-                        >
-                          <div>
-                            <span className={`block text-sm font-semibold ${isDark ? "text-zinc-100" : "text-zinc-800"}`}>
-                              Nội dung bổ trợ (tùy chọn)
-                            </span>
-                            <p className={`text-xs ${themeClasses.textMuted}`}>
-                              {hasOptionalData
-                                ? "Đã thêm nội dung bổ trợ"
-                                : "Thêm ảnh minh hoạ, audio, gợi ý hoặc giải thích khi cần."}
-                            </p>
-                          </div>
-                          <span className={`text-xs font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
-                            {isOpen ? "Thu gọn" : "Thêm"}
-                          </span>
-                        </button>
-
-                        {isOpen && (
-                          <div className={`space-y-4 border-t border-dashed px-4 py-4 ${themeClasses.tableBorder}`}>
-                            <div className="grid gap-4 md:grid-cols-2">
-                              <div className="space-y-2">
-                                <label className={`text-xs font-semibold ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
-                                  Ảnh minh hoạ
-                                </label>
-                                {q.questionImageUrl ? (
-                                  <div className="space-y-2">
-                                    <img
-                                      src={q.questionImageUrl}
-                                      alt={`Question ${idx + 1} illustration`}
-                                      className={`w-full rounded-lg border object-cover ${themeClasses.tableBorder}`}
-                                    />
-                                    <div className="flex gap-2">
-                                      <button
-                                        type="button"
-                                        className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${themeClasses.button}`}
-                                        onClick={() => handleChangeQuestion(idx, "questionImageUrl", "")}
-                                        disabled={uploadingImageFor === q.id}
-                                      >
-                                        Gỡ ảnh
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <label className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-4 text-center text-xs ${themeClasses.textMuted} ${isDark ? "border-white/10 hover:border-emerald-500 hover:text-emerald-400" : "border-gray-300 hover:border-emerald-400 hover:text-emerald-600"}`}>
-                                    <span>
-                                      {uploadingImageFor === q.id
-                                        ? <Loading />
-                                        : "Nhấn để chọn ảnh (JPG, PNG)"}
-                                    </span>
-
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="hidden"
-                                      onChange={event => {
-                                        const file = event.target.files?.[0];
-                                        if (file) {
-                                          void handleUploadQuestionImage(idx, file);
-                                          event.target.value = "";
-                                        }
-                                      }}
-                                      disabled={uploadingImageFor === q.id}
-                                    />
-                                  </label>
-                                )}
-                              </div>
-
-                              <div className="space-y-2">
-                                <label className={`text-xs font-semibold ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
-                                  Audio (thuyết minh / gợi ý)
-                                </label>
-                                {q.questionAudioUrl ? (
-                                  <div className="space-y-2">
-                                    <audio
-                                      src={q.questionAudioUrl}
-                                      controls
-                                      className={`w-full rounded-lg p-2 ${isDark ? "bg-zinc-800" : "bg-zinc-100"}`}
-                                    />
-                                    <div className="flex gap-2">
-                                      <button
-                                        type="button"
-                                        className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold ${themeClasses.button}`}
-                                        onClick={() => handleChangeQuestion(idx, "questionAudioUrl", "")}
-                                        disabled={uploadingAudioFor === q.id}
-                                      >
-                                        Gỡ audio
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <label className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed p-4 text-center text-xs ${themeClasses.textMuted} ${isDark ? "border-white/10 hover:border-emerald-500 hover:text-emerald-400" : "border-gray-300 hover:border-emerald-400 hover:text-emerald-600"}`}>
-                                    <span>
-                                      {uploadingAudioFor === q.id
-                                        ? <Loading />
-                                        : "Nhấn để chọn file audio (MP3, WAV)"}
-                                    </span>
-
-                                    <input
-                                      type="file"
-                                      accept="audio/*"
-                                      className="hidden"
-                                      onChange={event => {
-                                        const file = event.target.files?.[0];
-                                        if (file) {
-                                          void handleUploadQuestionAudio(idx, file);
-                                          event.target.value = "";
-                                        }
-                                      }}
-                                      disabled={uploadingAudioFor === q.id}
-                                    />
-                                  </label>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="grid gap-4 md:grid-cols-2">
-                              <div>
-                                <label className={`mb-1 block text-xs font-semibold ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
-                                  Gợi ý (Hint)
-                                </label>
-                                <textarea
-                                  value={q.hintText}
-                                  onChange={e => handleChangeQuestion(idx, "hintText", e.target.value)}
-                                  className={`min-h-[80px] w-full rounded-lg border px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
-                                  placeholder="Nhập gợi ý để giúp học sinh (tùy chọn)..."
-                                />
-                              </div>
-                              <div>
-                                <label className={`mb-1 block text-xs font-semibold ${isDark ? "text-zinc-300" : "text-zinc-700"}`}>
-                                  Giải thích sau khi trả lời
-                                </label>
-                                <textarea
-                                  value={q.explanation}
-                                  onChange={e => handleChangeQuestion(idx, "explanation", e.target.value)}
-                                  className={`min-h-[80px] w-full rounded-lg border px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
-                                  placeholder="Nhập lời giải thích sẽ hiển thị sau khi trả lời..."
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>
+
+        {/* 3. Overview */}
         <section>
-          {/* tiêu đề block */}
-          <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>
-            3. Tổng quan bộ câu hỏi
+          <h2
+            className={`mb-3 text-lg font-semibold ${
+              isDark ? "text-emerald-300" : "text-emerald-700"
+            }`}
+          >
+            {t("org_question_builder", "step3_title")}
           </h2>
 
-          {/* thẻ info tổng quan */}
-          <div className={`mb-4 rounded-xl border px-4 py-3 shadow-sm ${themeClasses.panel}`}>
+          <div
+            className={`mb-4 rounded-xl border px-4 py-3 shadow-sm ${themeClasses.panel}`}
+          >
             <div className="flex items-center justify-between">
               <div>
-                <div className={`mb-1 text-sm font-semibold ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>
+                <div
+                  className={`mb-1 text-sm font-semibold ${
+                    isDark ? "text-emerald-300" : "text-emerald-700"
+                  }`}
+                >
                   {questionBank.bankName}
                 </div>
                 <div className={`text-xs ${themeClasses.textMuted}`}>
-                  {overview.filled}/{overview.total} câu đã nhập
+                  {t("org_question_builder", "overview_subtitle", {
+                    filled: overview.filled,
+                    total: overview.total,
+                  })}
                 </div>
               </div>
               <div className="text-right">
-                <div className={`text-2xl font-bold ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>
+                <div
+                  className={`text-2xl font-bold ${
+                    isDark ? "text-emerald-400" : "text-emerald-600"
+                  }`}
+                >
                   {overview.filled}
                 </div>
                 <div className={`text-xs ${themeClasses.textMuted}`}>
-                  câu hoàn thành
+                  {t(
+                    "org_question_builder",
+                    "overview_completed_label"
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* bảng câu hỏi trong bộ */}
-          <div className={`rounded-2xl border shadow-sm ${themeClasses.panel}`}>
-            <div className={`flex items-center justify-between border-b px-4 py-3 ${themeClasses.tableBorder}`}>
-              <h3 className={`text-sm font-semibold ${isDark ? "text-zinc-50" : "text-zinc-900"}`}>
-                Danh sách câu hỏi trong bộ
+          <div
+            className={`rounded-2xl border shadow-sm ${themeClasses.panel}`}
+          >
+            <div
+              className={`flex items-center justify-between border-b px-4 py-3 ${themeClasses.tableBorder}`}
+            >
+              <h3
+                className={`text-sm font-semibold ${
+                  isDark ? "text-zinc-50" : "text-zinc-900"
+                }`}
+              >
+                {t(
+                  "org_question_builder",
+                  "overview_list_title"
+                )}
               </h3>
               <span className={`text-xs ${themeClasses.textMuted}`}>
-                {questionsFromBank.length} câu
+                {t(
+                  "org_question_builder",
+                  "overview_list_count",
+                  { count: questionsFromBank.length }
+                )}
               </span>
             </div>
             {questionsFromBank.length === 0 ? (
-              <div className={`px-4 py-4 text-sm ${themeClasses.textMuted}`}>
-                Chưa có câu hỏi nào trong bộ.
+              <div
+                className={`px-4 py-4 text-sm ${themeClasses.textMuted}`}
+              >
+                {t(
+                  "org_question_builder",
+                  "overview_empty"
+                )}
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className={`${isDark ? "bg-zinc-900/70" : "bg-zinc-50/70"} ${themeClasses.tableHeader}`}>
+                    <tr
+                      className={`${
+                        isDark ? "bg-zinc-900/70" : "bg-zinc-50/70"
+                      } ${themeClasses.tableHeader}`}
+                    >
                       <th className="w-16 px-4 py-2 text-left font-semibold">
-                        #
+                        {t("org_question_builder", "th_index")}
                       </th>
                       <th className="px-4 py-2 text-left font-semibold">
-                        Nội dung
+                        {t("org_question_builder", "th_content")}
                       </th>
                       <th className="w-32 px-4 py-2 text-left font-semibold">
-                        Loại
+                        {t("org_question_builder", "th_type")}
                       </th>
                       <th className="px-4 py-2 text-left font-semibold">
-                        Đáp án
+                        {t("org_question_builder", "th_answer")}
                       </th>
                       <th className="w-32 px-4 py-2 text-right font-semibold">
-                        Hành động
+                        {t("org_question_builder", "th_actions")}
                       </th>
                     </tr>
                   </thead>
-                  <tbody className={isDark ? "text-zinc-50" : "text-zinc-700"}>
+                  <tbody
+                    className={
+                      isDark ? "text-zinc-50" : "text-zinc-700"
+                    }
+                  >
                     {questionsFromBank.map((q, idx) => (
                       <tr
                         key={q.questionId}
-                        className={`border-t ${themeClasses.tableBorder} ${isDark ? "hover:bg-zinc-900/60" : "hover:bg-zinc-50/70"}`}
+                        className={`border-t ${themeClasses.tableBorder} ${
+                          isDark
+                            ? "hover:bg-zinc-900/60"
+                            : "hover:bg-zinc-50/70"
+                        }`}
                       >
-                        <td className={`px-4 py-2 text-xs ${themeClasses.textMuted}`}>
+                        <td
+                          className={`px-4 py-2 text-xs ${themeClasses.textMuted}`}
+                        >
                           {idx + 1}
                         </td>
 
                         <td className={`px-4 py-2 ${themeClasses.tableCell}`}>
-                          {q.questionText || q.correctAnswerText || "—"}
+                          {q.questionText ||
+                            q.correctAnswerText ||
+                            "—"}
                         </td>
 
-                        <td className={`px-4 py-2 text-xs uppercase tracking-wide ${themeClasses.textMuted}`}>
-                          {getQuestionTypeLabel(q.questionType)}
+                        <td
+                          className={`px-4 py-2 text-xs uppercase tracking-wide ${themeClasses.textMuted}`}
+                        >
+                          {getQuestionTypeLabel(q.questionType, t)}
                         </td>
-                        <td className={`px-4 py-2 ${isDark ? "text-zinc-300" : "text-zinc-600"}`}>
-                          {summarizeAnswer(q)}
+                        <td
+                          className={`px-4 py-2 ${
+                            isDark ? "text-zinc-300" : "text-zinc-600"
+                          }`}
+                        >
+                          {summarizeAnswer(q, t)}
                         </td>
                         <td className="px-4 py-2 text-right">
                           {q.questionId && (
                             <button
-                              onClick={() => handleDeleteSingleQuestion(q.questionId as string)}
-                              disabled={deletingQuestionId === q.questionId}
+                              onClick={() =>
+                                handleDeleteSingleQuestion(
+                                  q.questionId as string
+                                )
+                              }
+                              disabled={
+                                deletingQuestionId === q.questionId
+                              }
                               className="inline-flex items-center rounded-full bg-red-500 px-3 py-1 text-xs font-semibold text-white hover:bg-red-600 disabled:opacity-60"
                             >
-                              {deletingQuestionId === q.questionId ? "Đang xóa" : "Xóa"}
+                              {deletingQuestionId === q.questionId
+                                ? t(
+                                    "org_question_builder",
+                                    "btn_deleting"
+                                  )
+                                : t(
+                                    "org_question_builder",
+                                    "btn_delete"
+                                  )}
                             </button>
                           )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
-
                 </table>
               </div>
             )}
           </div>
         </section>
-
       </div>
     </div>
   );
 }
-
