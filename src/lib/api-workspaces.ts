@@ -85,6 +85,7 @@ export async function getWorkspaceMaps(workspaceId: string): Promise<MapDto[]> {
       previewImage?: string | null;
       isPublic?: boolean;
       isActive?: boolean;
+      isStoryMap?: boolean;
       createdAt?: string | null;
       updatedAt?: string | null;
     }[];
@@ -101,8 +102,14 @@ export async function getWorkspaceMaps(workspaceId: string): Promise<MapDto[]> {
     isActive: m.isActive ?? true,
     createdAt: m.createdAt ?? undefined,
     updatedAt: m.updatedAt ?? undefined,
+    isStoryMap:
+      (m as any).isStoryMap ??
+      (m as any).is_storymap ??
+      (m as any).IsStoryMap ??
+      false,
   }));
 }
+
 
 export function removeMapFromWorkspace(workspaceId: string, mapId: string) {
   return delJson(`/workspaces/${workspaceId}/maps/${mapId}`);

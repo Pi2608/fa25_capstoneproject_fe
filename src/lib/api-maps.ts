@@ -35,12 +35,27 @@ export type MapDto = {
   workspaceName?: string | null;
 };
 
+export type MapDetailDto = {
+  id: string;
+  name: string;
+  description?: string | null;
+  previewImage?: string | null;
+  defaultBounds?: any;
+  baseLayer?: string | null;
+  viewState?: any;
+  isPublic?: boolean;
+  status?: string | null;
+  isStoryMap?: boolean;
+  publishedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  layers?: any[];
+};
 
 export type DefaultBounds = {
   type: string;
   coordinates: number[];
 }
-
 
 export type LayerStyle = {
   color?: string;
