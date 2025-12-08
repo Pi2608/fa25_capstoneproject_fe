@@ -754,6 +754,84 @@ export const messages = {
 
             prompt_new_workspace: "Nhập tên không gian làm việc mới:"
         },
+        orgSettings: {
+            page_title: "Cài đặt tổ chức",
+            owner_only_badge: "Chỉ Owner",
+            back_button: "Quay lại",
+            refresh: "Làm mới",
+            refreshing: "Đang làm mới…",
+            refresh_tooltip_owner: "Làm mới dữ liệu tổ chức",
+            refresh_tooltip_non_owner: "Chỉ Owner của tổ chức mới được làm mới dữ liệu",
+
+            yes: "Có",
+            no: "Không",
+
+            subscription_section_title: "Gói đăng ký",
+            subscription_active: "Trạng thái:",
+            subscription_period: "Chu kỳ:",
+
+            usage_section_title: "Sử dụng tài nguyên",
+            usage_maps_label: "Bản đồ",
+            usage_members_label: "Thành viên",
+            usage_storage_label: "Dung lượng (MB)",
+
+            billing_section_title: "Thanh toán",
+            billing_invoices_label: "Hóa đơn",
+            billing_transactions_label: "Giao dịch",
+            billing_total_spent_label: "Tổng chi tiêu",
+            billing_period_label: "Chu kỳ thanh toán",
+
+            quota_section_title: "Kiểm tra quota tổ chức",
+            quota_resource_label: "Loại tài nguyên",
+            quota_requested_amount_label: "Số lượng muốn dùng",
+            quota_check_button: "Kiểm tra quota",
+            quota_checking: "Đang kiểm tra…",
+            quota_ok_title: "Quota còn đủ",
+            quota_exceeded_title: "Quota đã vượt giới hạn",
+            quota_remaining_label: "Còn lại:",
+            quota_resources_maps: "Bản đồ",
+            quota_resources_members: "Thành viên",
+            quota_resources_storage_mb: "Dung lượng (MB)",
+
+            notes_section_title: "Ghi chú",
+            notes_item_1:
+                "Chỉ Owner của tổ chức mới được quản lý gói đăng ký, quota và thanh toán.",
+            notes_item_2:
+                "Subscription, Usage và Billing được tải khi mở trang hoặc khi bạn bấm nút Làm mới.",
+            notes_item_3:
+                "Nên kiểm tra quota trước khi thực hiện các thao tác nặng, như tạo nhiều bản đồ hoặc mời nhiều thành viên.",
+
+            errors_load_failed: "Tải dữ liệu tổ chức thất bại.",
+            errors_check_quota_failed: "Kiểm tra quota thất bại.",
+        },
+        org_workspace: {
+            manage_err_has_question_banks:
+                "Không thể xoá workspace vì còn {count} bộ câu hỏi. Hãy xoá hoặc di chuyển tất cả bộ câu hỏi trước.",
+            manage_delete_failed:
+                "Xoá workspace thất bại. Vui lòng thử lại.",
+            close: "Đóng",
+            cancel: "Huỷ",
+            manage_ws: "Quản lý workspace",
+            manage_title: "Quản lý workspace",
+            manage_name_label: "Tên workspace",
+            manage_name_placeholder: "Workspace mới",
+            manage_creating: "Đang tạo…",
+            manage_create: "Tạo",
+            manage_load_failed: "Không thể tải danh sách workspace.",
+            manage_loading: "Đang tải danh sách workspace…",
+            manage_table_name: "Tên",
+            manage_table_desc: "Mô tả",
+            manage_table_maps: "Bản đồ",
+            manage_table_actions: "Hành động",
+            manage_save: "Lưu",
+            manage_saving: "Đang lưu…",
+            manage_rename: "Đổi tên",
+            manage_delete: "Xoá",
+            manage_deleting: "Đang xoá…",
+            manage_no_ws: "Chưa có workspace nào.",
+            manage_delete_title: "Xoá workspace",
+            manage_delete_desc: "Hành động này không thể hoàn tác."
+        },
         org_detail: {
             loading: "Đang tải…",
             not_found: "Không tìm thấy workspace.",
@@ -877,7 +955,15 @@ export const messages = {
             // Delete dialog
             delete_ws: "Xoá workspace",
             delete_ws_desc: "Bạn sắp xoá workspace {title}. Hành động này không thể hoàn tác. Nhập {title} để xác nhận.",
-            deleting: "Đang xoá..."
+            deleting: "Đang xoá...",
+
+            refresh: "Làm mới",
+            refreshing: "Đang làm mới…",
+            manage_ws: "Quản lý workspace",
+            domain_label: "Domain email",
+            email_label: "Email",
+            col_email: "Email",
+            plan_basic: "Gói cơ bản"
         },
         devdocs: {
             hero_eyebrow: "NHÀ PHÁT TRIỂN",
@@ -2542,41 +2628,119 @@ export const messages = {
             quota_notEnough: "Not enough quota.",
             quota_failed: "Quota check failed."
         },
+        orgSettings: {
+            page_title: "Organization settings",
+            owner_only_badge: "Owner only",
+            back_button: "Back",
+            refresh: "Refresh",
+            refreshing: "Refreshing…",
+            refresh_tooltip_owner: "Refresh organization data",
+            refresh_tooltip_non_owner: "Only the organization owner can refresh data",
+
+            yes: "Yes",
+            no: "No",
+
+            subscription_section_title: "Subscription",
+            subscription_active: "Active:",
+            subscription_period: "Period:",
+
+            usage_section_title: "Usage",
+            usage_maps_label: "Maps",
+            usage_members_label: "Members",
+            usage_storage_label: "Storage (MB)",
+
+            billing_section_title: "Billing",
+            billing_invoices_label: "Invoices",
+            billing_transactions_label: "Transactions",
+            billing_total_spent_label: "Total spent",
+            billing_period_label: "Billing period",
+
+            quota_section_title: "Check organization quota",
+            quota_resource_label: "Resource type",
+            quota_requested_amount_label: "Requested amount",
+            quota_check_button: "Check quota",
+            quota_checking: "Checking…",
+            quota_ok_title: "Quota available",
+            quota_exceeded_title: "Quota exceeded",
+            quota_remaining_label: "Remaining:",
+            quota_resources_maps: "Maps",
+            quota_resources_members: "Members",
+            quota_resources_storage_mb: "Storage (MB)",
+
+            notes_section_title: "Notes",
+            notes_item_1:
+                "Only the organization owner can manage subscription, quota and billing.",
+            notes_item_2:
+                "Subscription, usage and billing are loaded when the page opens or when you click Refresh.",
+            notes_item_3:
+                "Check the quota before running heavy operations such as creating many maps or inviting many members.",
+
+            errors_load_failed: "Failed to load organization data.",
+            errors_check_quota_failed: "Failed to check quota.",
+        },
+        org_workspace: {
+            manage_err_has_question_banks:
+                "Cannot delete this workspace because it still contains {count} question banks. Please delete or move all question banks first.",
+            manage_delete_failed:
+                "Failed to delete workspace. Please try again.",
+            close: "Close",
+            cancel: "Cancel",
+            manage_ws: "Manage workspaces",
+            manage_title: "Manage workspaces",
+            manage_name_label: "Workspace name",
+            manage_name_placeholder: "New workspace",
+            manage_creating: "Creating…",
+            manage_create: "Create",
+            manage_load_failed: "Failed to load workspaces.",
+            manage_loading: "Loading workspaces…",
+            manage_table_name: "Name",
+            manage_table_desc: "Description",
+            manage_table_maps: "Maps",
+            manage_table_actions: "Actions",
+            manage_save: "Save",
+            manage_saving: "Saving…",
+            manage_rename: "Rename",
+            manage_delete: "Delete",
+            manage_deleting: "Deleting…",
+            manage_no_ws: "No workspaces.",
+            manage_delete_title: "Delete workspace",
+            manage_delete_desc: "This action cannot be undone."
+        },
         org_detail: {
             loading: "Loading…",
             not_found: "Workspace not found.",
-            action_failed: "Action failed",
-            load_failed: "Failed to load data.",
+            action_failed: "Action failed.",
+            load_failed: "Unable to load data.",
             delete_failed: "Delete failed. Please try again.",
 
             // Errors & validation
-            err_quota: "Your organization has reached the member limit for the current plan. Upgrade your plan or remove members to continue inviting.",
-            err_already_member: "This email has already been invited or is already a member.",
-            err_forbidden: "You don't have permission to perform this action. Please contact an Owner/Admin.",
-            err_not_found: "Organization or invite not found. Please reload the page.",
+            err_quota: "The organization has reached the member limit of the current plan. Please upgrade your plan or remove some members to continue inviting.",
+            err_already_member: "This email has already been invited or is already a member of the organization.",
+            err_forbidden: "You do not have permission to perform this action. Please contact the Owner/Admin.",
+            err_not_found: "Organization or invitation not found. Please reload the page.",
             err_bad_request: "Invalid data. Please check the email and try again.",
-            err_rate_limited: "You're doing that too fast. Please try again in a few minutes.",
-            err_server: "Server error. Please try again later.",
-            err_generic: "Couldn't complete the request. Please try again.",
-            err_no_permission_role: "You don't have permission to change roles. Contact an Owner/Admin.",
+            err_rate_limited: "You are performing actions too quickly. Please try again in a few minutes.",
+            err_server: "The server is having issues. Please try again later.",
+            err_generic: "Unable to process your request. Please try again.",
+            err_no_permission_role: "You do not have permission to change roles. Please contact the Owner/Admin.",
             err_member_unknown: "Cannot determine which member to remove.",
-            err_no_permission_remove: "You don't have permission to remove members. Contact an Owner/Admin.",
-            err_only_owner_invite: "Only Owners can invite members.",
+            err_no_permission_remove: "You do not have permission to remove members. Please contact the Owner/Admin.",
+            err_only_owner_invite: "Only the Owner can invite members.",
             err_enter_at_least_one_email: "Please enter at least one email.",
             err_invalid_email: "Invalid email: {email}",
-            err_no_permission_delete: "You don't have permission to delete this workspace.",
-            err_only_owner_admin: "Only Owners/Admins can use this feature.",
+            err_no_permission_delete: "You do not have permission to delete this workspace.",
+            err_only_owner_admin: "Only Owner/Admin can use this feature.",
             err_plan_required: "This feature requires plan 2 or 3.",
             err_select_excel: "Please select an Excel (.xlsx) file.",
-            err_enter_domain: "Please enter a domain (e.g., se1739.edu).",
+            err_enter_domain: "Please enter the domain (for example: se1739.edu).",
 
             // Tips / notes
-            tip_only_owner_admin: "Only Owners/Admins can use this",
-            tip_upgrade_plan: "Upgrade to plan 2 or 3 to use",
-            msg_role_updated: "Member role updated.",
-            msg_member_removed: "Member removed.",
-            msg_limited_perm: "You have limited permissions in this workspace. Contact an admin to request full access.",
-            msg_invited: "Invites sent to {list}.",
+            tip_only_owner_admin: "Only Owner/Admin can use this feature.",
+            tip_upgrade_plan: "Upgrade to plan 2 or 3 to use this feature.",
+            msg_role_updated: "Member role has been updated.",
+            msg_member_removed: "Member has been removed.",
+            msg_limited_perm: "You currently have limited permissions in this workspace. To manage workspace settings, please contact an administrator to grant you full access.",
+            msg_invited: "Invitation sent to {list}.",
 
             // Header / actions
             view: "View",
@@ -2592,11 +2756,11 @@ export const messages = {
             order: "Order",
             order_desc: "Descending",
             order_asc: "Ascending",
-            only_owner_share: "Only Owners can share",
+            only_owner_share: "Only the Owner can use Share.",
             share: "Share",
             settings: "Settings",
             settings_title: "Workspace settings",
-            only_owner: "Owners only",
+            only_owner: "Owner only",
             more: "More",
             copy_ws_url: "Copy workspace URL",
             copy_ws_id: "Copy workspace ID (API)",
@@ -2604,14 +2768,14 @@ export const messages = {
             delete_ws_ellipsis: "Delete workspace…",
 
             // Workspaces section
-            section_ws: "Workspace",
-            import_students_btn: "Import students (.xlsx)",
-            no_ws: "No workspaces yet. Create your first workspace to organize projects.",
+            section_ws: "Workspaces",
+            import_students_btn: "Import student list (.xlsx)",
+            no_ws: "No workspaces yet. Create your first workspace to organize your projects.",
             create_ws: "Create workspace",
             no_description: "No description",
             more_lower: "more",
             view_all_ws: "View all workspaces",
-            view_all_ws_count: "See all {count} workspaces",
+            view_all_ws_count: "View all {count} workspaces",
 
             // Overview
             section_overview: "Workspace overview",
@@ -2636,7 +2800,7 @@ export const messages = {
             removing: "Removing…",
             remove: "Remove",
             no_members: "No members yet",
-            share_note: "Only invited people can view this workspace",
+            share_note: "Only invited people can view this workspace.",
             copy_link: "Copy link",
             btn_close: "Close",
             user: "User",
@@ -2644,13 +2808,13 @@ export const messages = {
             confirm_remove_member: "Remove this member from the workspace?",
 
             // Import dialog
-            import_students_title: "Import students (.xlsx)",
+            import_students_title: "Import student list (.xlsx)",
             close: "Close",
             excel_label: "Excel file (.xlsx)",
             selected_file: "Selected: {name}",
-            ph_domain: "e.g., se1739.edu",
+            ph_domain: "e.g. se1739.edu",
             import_processing: "Processing...",
-            import_done: "Created {created} accounts, skipped {skipped}.",
+            import_done: "Successfully created {created} accounts, skipped {skipped}.",
             import_summary: "{created} new accounts, {skipped} skipped.",
             copy: "Copy",
             download_csv: "Download CSV",
@@ -2660,12 +2824,21 @@ export const messages = {
             cancel: "Cancel",
             importing: "Importing...",
             import_list: "Import list",
-            import_copied: "Copied account list to clipboard.",
+            import_copied: "Account list copied to clipboard.",
 
             // Delete dialog
             delete_ws: "Delete workspace",
-            delete_ws_desc: "You're about to delete the workspace {title}. This action cannot be undone. Type {title} to confirm.",
-            deleting: "Deleting..."
+            delete_ws_desc: "You are about to delete the workspace {title}. This action cannot be undone. Type {title} to confirm.",
+            deleting: "Deleting...",
+
+            // NEW – Refresh & extra labels
+            refresh: "Refresh",
+            refreshing: "Refreshing…",
+            manage_ws: "Manage workspaces",
+            domain_label: "Email domain",
+            email_label: "Email",
+            col_email: "Email",
+            plan_basic: "Basic plan"
         },
         organization: {
             not_found_title: "Organization Not Found",
