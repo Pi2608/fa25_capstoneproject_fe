@@ -20,7 +20,9 @@ import {
   type SessionRunningQuestionDto,
   type LeaderboardEntryDto,
   type QuestionDto,
+  getSessionQuestionResponses,
 } from "@/lib/api-ques";
+
 import {
   showQuestionResultsViaSignalR,
   type QuestionResultsEvent,
@@ -53,6 +55,26 @@ type SessionQuestionBankInfo = {
   questionBankId: string;
   bankName?: string;
   totalQuestions: number;
+};
+
+type SessionQuestionResponsesDto = {
+  sessionQuestionId: string;
+  totalResponses: number;
+  answers: {
+    studentResponseId: string;
+    participantId: string;
+    displayName: string;
+    isCorrect: boolean;
+    pointsEarned: number;
+    responseTimeSeconds: number;
+    submittedAt: string;
+    questionOptionId?: string;
+    optionText?: string | null;
+    responseText?: string | null;
+    responseLatitude?: number | null;
+    responseLongitude?: number | null;
+    distanceErrorMeters?: number | null;
+  }[];
 };
 
 export default function StoryMapControlPage() {
@@ -148,10 +170,12 @@ export default function StoryMapControlPage() {
   const [currentQuestionResults, setCurrentQuestionResults] =
     useState<QuestionResultsEvent | null>(null);
 
+  const [currentQuestionResponses, setCurrentQuestionResponses] =
+    useState<SessionQuestionResponsesDto | null>(null);
   const broadcastRef = useRef<BroadcastChannel | null>(null);
 
   // ================== SignalR connection for session ==================
-    const { connection, isConnected: signalRConnected } = useSessionHub({
+  const { connection, isConnected: signalRConnected } = useSessionHub({
     sessionId: session?.sessionId || "",
     enabled: !!session?.sessionId,
     handlers: {
@@ -564,13 +588,14 @@ export default function StoryMapControlPage() {
   };
 
   // ================== Question control handlers ==================
-    const handleBroadcastQuestion = async (question: QuestionDto, index: number) => {
+  const handleBroadcastQuestion = async (question: QuestionDto, index: number) => {
     if (!session || questionControlLoading || !connection) return;
 
     try {
       setQuestionControlLoading(true);
       setCurrentQuestionIndex(index);
-      setCurrentQuestionResults(null); 
+      setCurrentQuestionResults(null);
+      setCurrentQuestionResponses(null);
 
       await broadcastQuestionViaSignalR(connection, session.sessionId, {
 
@@ -621,6 +646,38 @@ export default function StoryMapControlPage() {
     }
   };
 
+  const handleLoadQuestionResponses = async () => {
+    if (!session || questionControlLoading) return;
+    if (
+      currentQuestionIndex == null ||
+      currentQuestionIndex < 0 ||
+      currentQuestionIndex >= questions.length
+    ) {
+      return;
+    }
+
+    const question = questions[currentQuestionIndex];
+    const sessionQuestionId =
+      question.sessionQuestionId ?? question.questionId;
+
+    if (!sessionQuestionId) return;
+
+    try {
+      setQuestionControlLoading(true);
+
+      const res = await getSessionQuestionResponses<SessionQuestionResponsesDto>(
+        sessionQuestionId
+      );
+
+      setCurrentQuestionResponses(res);
+    } catch (e: any) {
+      console.error("Load question responses failed:", e);
+      setError(e?.message || "Không tải được danh sách câu trả lời");
+    } finally {
+      setQuestionControlLoading(false);
+    }
+  };
+
   const handleNextQuestion = async () => {
     if (!session || questionControlLoading) return;
 
@@ -628,7 +685,9 @@ export default function StoryMapControlPage() {
       setQuestionControlLoading(true);
       await activateNextQuestion(session.sessionId);
 
-setCurrentQuestionResults(null);
+      setCurrentQuestionResults(null);
+      setCurrentQuestionResponses(null);
+
       setCurrentQuestionIndex((prev) => {
         if (!questions.length) return prev;
         if (prev == null) return 0;
@@ -651,6 +710,8 @@ setCurrentQuestionResults(null);
       await skipCurrentQuestion(session.sessionId);
 
       setCurrentQuestionResults(null);
+      setCurrentQuestionResponses(null);
+
       setCurrentQuestionIndex((prev) => {
         if (!questions.length) return prev;
         if (prev == null) return 0;
@@ -1280,18 +1341,30 @@ setCurrentQuestionResults(null);
                         </div>
                       )}
                     </div>
-                                        {currentQuestionResults && (
+                    {(currentQuestionResults || currentQuestionResponses) && (
                       <div className="mt-3 pt-2 border-t border-zinc-800">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-500 font-medium">
+                          <button
+                            type="button"
+                            onClick={handleLoadQuestionResponses}
+                            disabled={
+                              !session ||
+                              questionControlLoading ||
+                              currentQuestionIndex == null
+                            }
+                            className="text-[11px] uppercase tracking-[0.12em] text-zinc-200 font-medium underline-offset-2 hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
                             Các câu trả lời của học sinh
-                          </p>
+                          </button>
+
                           <span className="text-[11px] text-zinc-400">
-                            {(currentQuestionResults.results?.length ?? 0)} câu trả lời
+                            {currentQuestionResponses
+                              ? `${currentQuestionResponses.totalResponses} câu trả lời`
+                              : "—"}
                           </span>
                         </div>
 
-                        {typeof currentQuestionResults.correctAnswer === "string" &&
+                        {typeof currentQuestionResults?.correctAnswer === "string" &&
                           currentQuestionResults.correctAnswer.trim() !== "" && (
                             <p className="mb-2 text-[11px] text-emerald-300">
                               Đáp án đúng:{" "}
@@ -1301,31 +1374,45 @@ setCurrentQuestionResults(null);
                             </p>
                           )}
 
-                        {(!currentQuestionResults.results ||
-                          currentQuestionResults.results.length === 0) ? (
+                        {!currentQuestionResponses ? (
+                          <p className="text-[11px] text-zinc-500">
+                            Bấm nút &quot;Các câu trả lời của học sinh&quot; để tải danh sách.
+                          </p>
+                        ) : currentQuestionResponses.answers.length === 0 ? (
                           <p className="text-[11px] text-zinc-500">
                             Chưa có câu trả lời nào cho câu hỏi này.
                           </p>
                         ) : (
                           <div className="max-h-40 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 space-y-1.5">
-                            {currentQuestionResults.results.map((ans, index) => (
+                            {currentQuestionResponses.answers.map((ans, index) => (
                               <div
-                                key={ans.participantId ?? index}
+                                key={ans.studentResponseId ?? index}
                                 className="flex items-start justify-between gap-3 text-[11px] text-zinc-100 border-b border-zinc-800/60 pb-1.5 last:border-0"
                               >
                                 <div className="flex-1">
                                   <p className="font-medium">
                                     {ans.displayName || `Học sinh ${index + 1}`}
                                   </p>
-                                  {typeof ans.answer === "string" && ans.answer.trim() !== "" && (
+
+                                  {ans.optionText && ans.optionText.trim() !== "" && (
                                     <p className="text-zinc-400">
-                                      Câu trả lời:{" "}
+                                      Chọn:{" "}
                                       <span className="text-zinc-100">
-                                        {ans.answer}
+                                        {ans.optionText}
+                                      </span>
+                                    </p>
+                                  )}
+
+                                  {ans.responseText && ans.responseText.trim() !== "" && (
+                                    <p className="text-zinc-400">
+                                      Trả lời:{" "}
+                                      <span className="text-zinc-100">
+                                        {ans.responseText}
                                       </span>
                                     </p>
                                   )}
                                 </div>
+
                                 <div className="text-right text-[10px]">
                                   <p
                                     className={

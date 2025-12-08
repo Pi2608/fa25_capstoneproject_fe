@@ -402,10 +402,7 @@ export async function createSession(
 
   const baseBody = {
     mapId: req.mapId,
-    questionBankId:
-      req.questionBankId && req.questionBankId.length > 0
-        ? req.questionBankId
-        : null,
+    questionBankId: req.questionBankId ?? [],
     sessionName: req.sessionName ?? "New session",
     description: req.description ?? null,
     sessionType: req.sessionType ?? "live",

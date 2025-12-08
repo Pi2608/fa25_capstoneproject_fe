@@ -14,7 +14,7 @@ export interface LayerAnimationDto {
   zIndex: number;
   createdAt: string;
   updatedAt: string;
-  isActive: boolean;
+  is_visible: boolean;
 }
 
 // ============ GET ============
@@ -52,7 +52,7 @@ export interface CreateAnimationRequest {
   rotationDeg?: number;
   scale?: number;
   zIndex?: number;
-  isActive?: boolean;
+  is_visible?: boolean;
 }
 
 // POST /api/v1/animations  (multipart/form-data)
@@ -77,8 +77,8 @@ export function createAnimation(
   if (payload.zIndex !== undefined) {
     formData.append("zIndex", String(payload.zIndex));
   }
-  if (payload.isActive !== undefined) {
-    formData.append("isActive", String(payload.isActive));
+  if (payload.is_visible !== undefined) {
+    formData.append("is_visible", String(payload.is_visible));
   }
 
   return apiFetch<LayerAnimationDto>("/animations", {
@@ -91,12 +91,12 @@ export function createAnimation(
 
 export interface UpdateAnimationRequest {
   name?: string;
-  animationFile?: string; 
+  animationFile?: string;
   coordinates?: string;
   rotationDeg?: number;
   scale?: number;
   zIndex?: number;
-  isActive?: boolean;
+  is_visible?: boolean;
 }
 
 // PUT /api/v1/animations/{animationId}

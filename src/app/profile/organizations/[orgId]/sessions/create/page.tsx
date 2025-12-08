@@ -286,80 +286,59 @@ export default function OrganizationCreateSessionPage() {
     };
   }, [selectedMapId]);
 
-  const handleCreateSession = async (e: React.FormEvent) => {
-    e.preventDefault();
+const handleCreateSession = async (e: React.FormEvent) => {
+  e.preventDefault();
 
-    if (!selectedWorkspaceId) {
-      toast.error("Vui lòng chọn workspace trước khi tạo session");
-      return;
-    }
+  if (!selectedWorkspaceId) {
+    toast.error("Vui lòng chọn workspace trước khi tạo session");
+    return;
+  }
 
-    if (!selectedMapId || !selectedMap) {
-      toast.error("Vui lòng chọn storymap cho session");
-      return;
-    }
+  if (!selectedMapId || !selectedMap) {
+    toast.error("Vui lòng chọn storymap cho session");
+    return;
+  }
 
-    setIsCreating(true);
-    try {
-      const primaryBankId =
-        selectedQuestionBankIds.length > 0 ? selectedQuestionBankIds[0] : undefined;
+  setIsCreating(true);
+  try {
+    const session = await createSession({
+      mapId: selectedMapId,
+      // ✅ gửi toàn bộ mảng questionBankId
+      questionBankId: selectedQuestionBankIds ?? [],
+      sessionName:
+        sessionName || `${selectedMap.name ?? "Storymap"} Session`,
+      description,
+      sessionType,
+      maxParticipants: maxParticipants || undefined,
+      allowLateJoin,
+      showLeaderboard,
+      showCorrectAnswers,
+      shuffleQuestions,
+      shuffleOptions,
+      enableHints,
+      pointsForSpeed,
+      // không truyền scheduledStartTime -> api-ques sẽ tự dùng nowIso
+    });
 
-      const session = await createSession({
-        mapId: selectedMapId,
-        sessionName:
-          sessionName || `${selectedMap.name ?? "Storymap"} Session`,
-        description,
-        sessionType,
-        maxParticipants: maxParticipants || undefined,
-        allowLateJoin,
-        showLeaderboard,
-        showCorrectAnswers,
-        shuffleQuestions,
-        shuffleOptions,
-        enableHints,
-        pointsForSpeed,
-        questionBankId: primaryBankId ? [primaryBankId] : null,
-      });
+    toast.success("Tạo session thành công!");
 
-      if (selectedQuestionBankIds.length > 1) {
-        try {
-          const extraBankIds = selectedQuestionBankIds.filter(
-            (id) => id !== primaryBankId
-          );
+    const params = new URLSearchParams({
+      sessionId: session.sessionId,
+      sessionCode: session.sessionCode,
+    });
 
-          await Promise.all(
-            extraBankIds.map((qbId) =>
-              attachSessionToQuestionBank(qbId, session.sessionId)
-            )
-          );
-        } catch (attachError) {
-          console.error("Failed to attach extra question banks:", attachError);
-          toast.error(
-            "Session đã tạo, nhưng gắn thêm một số bộ câu hỏi bị lỗi. Bạn có thể gắn lại trong trang control."
-          );
-        }
-      }
+    params.set("workspaceId", selectedWorkspaceId);
+    params.set("mapId", selectedMapId);
+    if (selectedMap.name) params.set("mapName", selectedMap.name);
 
-      toast.success("Tạo session thành công!");
-
-      const params = new URLSearchParams({
-        sessionId: session.sessionId,
-        sessionCode: session.sessionCode,
-      });
-
-      params.set("workspaceId", selectedWorkspaceId);
-      params.set("mapId", selectedMapId);
-      if (selectedMap.name) params.set("mapName", selectedMap.name);
-
-      router.push(`/storymap/control/${selectedMapId}?${params.toString()}`);
-    } catch (error: any) {
-      console.error("Failed to create session inside organization:", error);
-      toast.error(error?.message || "Không thể tạo session");
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
+    router.push(`/storymap/control/${selectedMapId}?${params.toString()}`);
+  } catch (error: any) {
+    console.error("Failed to create session inside organization:", error);
+    toast.error(error?.message || "Không thể tạo session");
+  } finally {
+    setIsCreating(false);
+  }
+};
 
   useEffect(() => {
     if (!presetMapId || prefAppliedRef.current) return;
