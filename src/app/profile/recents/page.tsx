@@ -336,11 +336,11 @@ export default function RecentsPage() {
         ms.map((m) =>
           m.id === (edit.map as any).id
             ? ({
-                ...m,
-                name: body.name ?? "",
-                description: body.description ?? "",
-                previewImage: body.previewImageUrl ?? "",
-              } as PublishedMap)
+              ...m,
+              name: body.name ?? "",
+              description: body.description ?? "",
+              previewImage: body.previewImageUrl ?? "",
+            } as PublishedMap)
             : m
         )
       );
@@ -423,9 +423,8 @@ export default function RecentsPage() {
                 {(["grid", "list"] as ViewMode[]).map((m) => (
                   <button
                     key={m}
-                    className={`w-full text-left px-3 py-1.5 text-sm rounded-md hover:bg-white/5 ${
-                      viewMode === m ? (isDark ? "text-emerald-300" : "text-emerald-600") : (isDark ? "text-zinc-200" : "text-gray-700")
-                    }`}
+                    className={`w-full text-left px-3 py-1.5 text-sm rounded-md hover:bg-white/5 ${viewMode === m ? (isDark ? "text-emerald-300" : "text-emerald-600") : (isDark ? "text-zinc-200" : "text-gray-700")
+                      }`}
                     onClick={() => setViewMode(m)}
                   >
                     {m === "grid" ? "Grid" : "List"}
@@ -463,11 +462,10 @@ export default function RecentsPage() {
             {maps.map((m) => (
               <li
                 key={m.id}
-                className={`group relative rounded-3xl border transition-all duration-200 p-4 ${
-                  m.publishedAt || (m as any).status === "Published"
-                    ? (isDark ? "border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 to-zinc-950/40 hover:border-emerald-400 hover:shadow-[0_0_0_1px_rgba(16,185,129,0.5)]" : "border-emerald-500/60 bg-gradient-to-b from-emerald-50/40 to-white hover:border-emerald-400")
-                    : (isDark ? "border-white/10 bg-zinc-900/40 hover:border-white/20" : "border-gray-200 bg-white hover:border-gray-300")
-                }`}
+                className={`group relative rounded-3xl border transition-all duration-200 p-4 ${m.publishedAt || (m as any).status === "Published"
+                  ? (isDark ? "border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 to-zinc-950/40 hover:border-emerald-400 hover:shadow-[0_0_0_1px_rgba(16,185,129,0.5)]" : "border-emerald-500/60 bg-gradient-to-b from-emerald-50/40 to-white hover:border-emerald-400")
+                  : (isDark ? "border-white/10 bg-zinc-900/40 hover:border-white/20" : "border-gray-200 bg-white hover:border-gray-300")
+                  }`}
                 title={m.name}
               >
                 <div className="absolute top-5 right-6 z-10" data-menu-container>
@@ -501,16 +499,25 @@ export default function RecentsPage() {
                   )}
                 </div>
 
-                {(m.publishedAt || (m as any).status === "Published") ? (
-                  <div className={`mb-4 h-28 w-full rounded-2xl border flex items-center justify-center text-sm font-medium ${
-                    isDark 
+                {(m.publishedAt || (m as any).status === "published") ? (
+                  <div className={`mb-4 h-28 w-full rounded-2xl border flex items-center justify-center text-sm font-medium ${isDark
                       ? "border-emerald-500/40 bg-[radial-gradient(circle_at_0_0,#22c55e33,transparent_55%),radial-gradient(circle_at_100%_0,#22c55e22,transparent_55%)] bg-emerald-950/40 text-emerald-300"
                       : "border-emerald-500/60 bg-emerald-50/40 text-emerald-700"
-                  }`}>
+                    }`}>
                     Đã publish
                   </div>
+                ) : m.status === "archived" ? (
+                  <div className={`mb-4 h-28 w-full rounded-2xl border flex items-center justify-center text-sm font-medium ${isDark
+                      ? "border-slate-500/40 bg-[radial-gradient(circle_at_0_0,#64748b33,transparent_55%),radial-gradient(circle_at_100%_0,#64748b22,transparent_55%)] bg-slate-950/40 text-slate-300"
+                      : "border-slate-500/60 bg-slate-50/40 text-slate-700"
+                    }`}>
+                    Archived
+                  </div>
                 ) : (
-                  <div className={`mb-4 h-28 w-full rounded-2xl border flex items-center justify-center text-sm font-medium ${themeClasses.tableBorder} ${themeClasses.textMuted}`}>
+                  <div className={`mb-4 h-28 w-full rounded-2xl border flex items-center justify-center text-sm font-medium ${isDark
+                      ? "border-blue-500/40 bg-[radial-gradient(circle_at_0_0,#3b82f633,transparent_55%),radial-gradient(circle_at_100%_0,#3b82f622,transparent_55%)] bg-blue-950/40 text-blue-300"
+                      : "border-blue-500/60 bg-blue-50/40 text-blue-700"
+                    }`}>
                     Draft
                   </div>
                 )}
@@ -523,8 +530,8 @@ export default function RecentsPage() {
                     {m.publishedAt
                       ? `Publish: ${new Date(m.publishedAt).toLocaleDateString()}`
                       : m.createdAt
-                      ? `Created: ${new Date(m.createdAt).toLocaleDateString()}`
-                      : "—"}
+                        ? `Created: ${new Date(m.createdAt).toLocaleDateString()}`
+                        : "—"}
                   </div>
                 </div>
 
@@ -574,8 +581,8 @@ export default function RecentsPage() {
                       {m.publishedAt
                         ? new Date(m.publishedAt).toLocaleString()
                         : m.createdAt
-                        ? new Date(m.createdAt).toLocaleString()
-                        : "—"}
+                          ? new Date(m.createdAt).toLocaleString()
+                          : "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex items-center gap-1 relative" data-menu-container>

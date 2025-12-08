@@ -777,11 +777,11 @@ export function LeftSidebarToolbox({
                       });
                       window.dispatchEvent(new CustomEvent("locationUpdated"));
                     } else {
-                      await createMapLocation(mapId, {
-                        ...data,
-                        markerGeometry: data.markerGeometry, // Ensure it's not undefined
-                      });
-                      window.dispatchEvent(new CustomEvent("locationCreated"));
+                    await createMapLocation(mapId, {
+                      ...data,
+                      markerGeometry: data.markerGeometry, // Ensure it's not undefined
+                    });
+                    window.dispatchEvent(new CustomEvent("locationCreated"));
                     }
                     setMapLocationFormMode("list");
                     setWaitingForMapLocation(false);

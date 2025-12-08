@@ -1,56 +1,20 @@
 "use client";
 
-import {
-  adminGetSupportTickets,
-  adminGetSupportTicketById,
-  adminUpdateSupportTicket,
-  adminCloseSupportTicket,
-} from "@/lib/admin-api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "../layout";
+import { getSupportTicketById, getSupportTicketsByAdmin, closeSupportTicket, SupportTicket, SupportTicketListResponse, SupportTicketStatus } from "@/lib/api-support";
 
-type TicketStatus = "Open" | "Pending" | "Closed";
-type Priority = "Low" | "Medium" | "High" | string;
-
-type Ticket = {
-  ticketId: number;
-  title: string;
-  description?: string;
-  status: TicketStatus | string;
-  priority: Priority | string;
-  category: string;
-  userName?: string;
-  userEmail?: string;
-  userId?: string;
-  createdAt?: string;
-  updatedAt?: string | null;
-  resolvedAt?: string | null;
-  messageCount?: number;
-  lastMessage?: string | null;
-};
-
-type TicketListResponse = {
-  items: Ticket[];
-  totalPages?: number;
-};
-
-type EditableTicketFields = {
-  title: string;
-  category: string;
-  priority: string;
-  status: TicketStatus;
-};
 
 export default function SupportTicketsPage() {
   const router = useRouter();
   const { isDark } = useTheme();
 
   // List state
-  const [rows, setRows] = useState<Ticket[]>([]);
+  const [rows, setRows] = useState<SupportTicket[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<"Tất cả" | TicketStatus>("Tất cả");
+  const [statusFilter, setStatusFilter] = useState<"Tất cả" | SupportTicketStatus>("Tất cả");
   const [loadingList, setLoadingList] = useState(false);
   const [listError, setListError] = useState<string | null>(null);
 
@@ -58,8 +22,8 @@ export default function SupportTicketsPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-  const [detailTicket, setDetailTicket] = useState<Ticket | null>(null);
-  const [editDraft, setEditDraft] = useState<EditableTicketFields | null>(null);
+  const [detailTicket, setDetailTicket] = useState<SupportTicket | null>(null);
+  const [editDraft, setEditDraft] = useState<SupportTicket | null>(null);
   const [savingUpdate, setSavingUpdate] = useState(false);
   const [closingTicket, setClosingTicket] = useState(false);
 
@@ -71,20 +35,12 @@ export default function SupportTicketsPage() {
       setLoadingList(true);
       setListError(null);
       try {
-        const data = await adminGetSupportTickets<TicketListResponse | Ticket[]>({
-          page,
-          pageSize: 10,
-          status: statusFilter === "Tất cả" ? undefined : statusFilter,
-        });
+        const data = await getSupportTicketsByAdmin(page, 20);
 
         if (cancelled) return;
 
-        const normalized: TicketListResponse = Array.isArray(data)
-          ? { items: data, totalPages: 1 }
-          : data;
-
-        setRows(normalized.items ?? []);
-        setTotalPages(Math.max(1, normalized.totalPages ?? 1));
+        setRows(data.tickets ?? []);
+        setTotalPages(Math.max(1, data.totalPages ?? 1));
       } catch (e: unknown) {
         if (!cancelled) {
           const msg =
@@ -107,18 +63,21 @@ export default function SupportTicketsPage() {
   }, [page, statusFilter]);
 
   // Helpers
-  const renderStatusBadge = (status: TicketStatus | string) => {
-    if (status === "Closed") {
+  const renderStatusBadge = (status: SupportTicketStatus) => {
+    if (status === "closed") {
       return <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18">Đã đóng</span>;
     }
-    if (status === "Pending") {
+    if (status === "inprogress" || status === "waitingforcustomer") {
       return <span className="px-2 py-1 rounded-full text-xs font-extrabold text-blue-600 bg-blue-500/16">Đang chờ</span>;
+    }
+    if (status === "resolved") {
+      return <span className="px-2 py-1 rounded-full text-xs font-extrabold text-green-600 bg-green-500/16">Đã giải quyết</span>;
     }
     return <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16">Đang mở</span>;
   };
 
   const onStatusFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setStatusFilter(e.target.value as "Tất cả" | TicketStatus);
+    setStatusFilter(e.target.value as "Tất cả" | SupportTicketStatus);
     setPage(1);
   };
 
@@ -130,13 +89,19 @@ export default function SupportTicketsPage() {
     setEditDraft(null);
 
     try {
-      const t = await adminGetSupportTicketById<Ticket>(ticketId);
+      const t = await getSupportTicketById(ticketId);
       setDetailTicket(t);
       setEditDraft({
-        title: t.title,
-        category: t.category,
+        ticketId: t.ticketId,
+        userEmail: t.userEmail,
+        userName: t.userName,
+        createdAt: t.createdAt,
+        resolvedAt: t.resolvedAt,
+        messages: t.messages,
+        subject: t.subject,
+        message: t.message,
         priority: String(t.priority ?? ""),
-        status: (t.status as TicketStatus) ?? "Open",
+        status: (t.status as SupportTicketStatus) ?? "open",
       });
     } catch (e: unknown) {
       const msg =
@@ -147,12 +112,12 @@ export default function SupportTicketsPage() {
     }
   };
 
-  const onDraftChange = (field: keyof EditableTicketFields, value: string) => {
+  const onDraftChange = (field: keyof SupportTicket, value: string) => {
     setEditDraft((prev) =>
       prev
         ? {
           ...prev,
-          [field]: field === "status" ? (value as TicketStatus) : value,
+          [field]: field === "status" ? (value as SupportTicketStatus) : value,
         }
         : prev,
     );
@@ -164,31 +129,12 @@ export default function SupportTicketsPage() {
     setSavingUpdate(true);
     setDetailError(null);
 
-    const body = {
-      title: editDraft.title,
-      category: editDraft.category,
-      priority: editDraft.priority,
-      status: editDraft.status,
-    };
-
     try {
-      const updated = await adminUpdateSupportTicket<typeof body, Ticket>(
-        detailTicket.ticketId,
-        body,
-      );
-
-      setDetailTicket(updated);
-      setEditDraft({
-        title: updated.title,
-        category: updated.category,
-        priority: String(updated.priority ?? ""),
-        status: (updated.status as TicketStatus) ?? "Open",
+      setDetailTicket({
+        ...detailTicket,
+        status: editDraft.status,
+        priority: editDraft.priority,
       });
-
-      // cập nhật lại list
-      setRows((prev) =>
-        prev.map((x) => (x.ticketId === updated.ticketId ? updated : x)),
-      );
     } catch (e: unknown) {
       const msg =
         e instanceof Error ? e.message : "Không thể cập nhật phiếu hỗ trợ.";
@@ -200,14 +146,14 @@ export default function SupportTicketsPage() {
 
   const performCloseTicket = async () => {
     if (!detailTicket) return;
-    const ok = confirm(`Đóng yêu cầu "${detailTicket.title}"?`);
+    const ok = confirm(`Đóng yêu cầu "${detailTicket.subject}"?`);
     if (!ok) return;
 
     setClosingTicket(true);
     setDetailError(null);
 
     const prevTicket = detailTicket;
-    const optimisticClosed: Ticket = { ...detailTicket, status: "Closed" };
+    const optimisticClosed: SupportTicket = { ...detailTicket, status: "closed" };
     setDetailTicket(optimisticClosed);
     setRows((prev) =>
       prev.map((x) =>
@@ -216,9 +162,7 @@ export default function SupportTicketsPage() {
     );
 
     try {
-      await adminCloseSupportTicket(detailTicket.ticketId, {
-        resolution: "Đã xử lý",
-      });
+      await closeSupportTicket(detailTicket.ticketId);
     } catch (e: unknown) {
       const msg =
         e instanceof Error ? e.message : "Không thể đóng phiếu hỗ trợ.";
@@ -263,9 +207,9 @@ export default function SupportTicketsPage() {
               onChange={onStatusFilterChange}
             >
               <option value="Tất cả">Tất cả trạng thái</option>
-              <option value="Open">Đang mở</option>
-              <option value="Pending">Đang chờ</option>
-              <option value="Closed">Đã đóng</option>
+              <option value="open">Đang mở</option>
+              <option value="inprogress">Đang chờ</option>
+              <option value="closed">Đã đóng</option>
             </select>
           </div>
         </div>
@@ -329,13 +273,13 @@ export default function SupportTicketsPage() {
                     <tr key={t.ticketId}>
                       <td className={`p-3 border-b text-left ${
                         isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}>{t.title}</td>
+                      }`}>{t.subject}</td>
                       <td className={`p-3 border-b text-left ${
                         isDark ? "border-zinc-800" : "border-gray-200"
                       }`}>{t.userName ?? "Ẩn danh"}</td>
                       <td className={`p-3 border-b text-left ${
                         isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}>{t.category}</td>
+                      }`}>—</td>
                       <td className={`p-3 border-b text-left ${
                         isDark ? "border-zinc-800" : "border-gray-200"
                       }`}>{t.priority}</td>
@@ -352,17 +296,6 @@ export default function SupportTicketsPage() {
                         >
                           Xem
                         </button>
-                        {t.status !== "Closed" && (
-                            <>
-                              <span className="text-zinc-400">|</span>
-                          <button
-                                className="text-[#166534] hover:underline cursor-pointer bg-transparent border-0 p-0"
-                            onClick={() => goToEdit(t.ticketId)}
-                          >
-                            Chỉnh sửa
-                          </button>
-                            </>
-                        )}
                         </div>
                       </td>
                     </tr>
@@ -407,7 +340,7 @@ export default function SupportTicketsPage() {
               {detailTicket && (
                 <div className="text-zinc-400 text-sm mt-1">
                   <span>
-                    #{detailTicket.ticketId} · {detailTicket.title}
+                    #{detailTicket.ticketId} · {detailTicket.subject}
                   </span>
                 </div>
               )}
@@ -440,7 +373,7 @@ export default function SupportTicketsPage() {
 
                 <span className="text-zinc-400">|</span>
 
-                {detailTicket.status !== "Closed" ? (
+                {detailTicket.status !== "closed" ? (
                   <button
                     className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
                     disabled={closingTicket}
@@ -459,17 +392,8 @@ export default function SupportTicketsPage() {
                 <label className="block text-sm font-medium text-zinc-300">Tiêu đề</label>
                 <input
                   className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/96 text-zinc-100 outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700"
-                  value={editDraft.title}
-                  onChange={(e) => onDraftChange("title", e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-zinc-300">Danh mục</label>
-                <input
-                  className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/96 text-zinc-100 outline-none focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700"
-                  value={editDraft.category}
-                  onChange={(e) => onDraftChange("category", e.target.value)}
+                  value={editDraft.subject}
+                  onChange={(e) => onDraftChange("subject", e.target.value)}
                 />
               </div>
 
@@ -489,16 +413,16 @@ export default function SupportTicketsPage() {
                   value={editDraft.status}
                   onChange={(e) => onDraftChange("status", e.target.value)}
                 >
-                  <option value="Open">Đang mở</option>
-                  <option value="Pending">Đang chờ</option>
-                  <option value="Closed">Đã đóng</option>
+                  <option value="open">Đang mở</option>
+                  <option value="inprogress">Đang chờ</option>
+                  <option value="closed">Đã đóng</option>
                 </select>
               </div>
 
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-zinc-300">Mô tả</label>
                 <div className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/50 text-zinc-300">
-                  {detailTicket.description ?? "(Không có mô tả)"}
+                  {detailTicket.message ?? "(Không có mô tả)"}
                 </div>
               </div>
 
@@ -523,12 +447,6 @@ export default function SupportTicketsPage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-zinc-300">Cập nhật gần nhất</label>
-                <div className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/50 text-zinc-300">
-                  {detailTicket.updatedAt ?? "—"}
-                </div>
-              </div>
 
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-zinc-300">Đã giải quyết lúc</label>
@@ -537,16 +455,16 @@ export default function SupportTicketsPage() {
                 </div>
               </div>
 
-              {(detailTicket.messageCount ?? 0) > 0 && (
+              {detailTicket.messages && detailTicket.messages.length > 0 && (
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-zinc-300">Hoạt động gần đây</label>
                   <div className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-800/50 text-zinc-300">
                     <div>
-                      <strong>Số tin nhắn:</strong> {detailTicket.messageCount}
+                      <strong>Số tin nhắn:</strong> {detailTicket.messages.length}
                     </div>
-                    {detailTicket.lastMessage && (
+                    {detailTicket.messages.length > 0 && (
                       <div className="mt-1">
-                        <strong>Tin cuối:</strong> {detailTicket.lastMessage}
+                        <strong>Tin cuối:</strong> {detailTicket.messages[detailTicket.messages.length - 1].message}
                       </div>
                     )}
                   </div>

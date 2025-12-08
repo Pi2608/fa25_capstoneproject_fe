@@ -32,7 +32,8 @@ export default function StoryMapPlayerPage() {
           getSegments(mapId),
         ]);
 
-        if (detail.status !== "Published" && !detail.isPublic) {
+        // Only Published storymaps can be viewed
+        if (detail.status !== "published") {
           setError("This map is not published yet");
           return;
         }
