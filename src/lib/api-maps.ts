@@ -660,21 +660,15 @@ export function getMapFeatureById(mapId: string, featureId: string) {
   return getJson<MapFeatureResponse>(`/maps/${mapId}/features/${featureId}`);
 }
 
-// ===== PUBLISHING =====
-export interface PublishMapRequest {
-  isStoryMap?: boolean;  // true = publish as storymap (can create sessions), false = view-only
-}
+
 
 export interface PublishMapResponse {
   success: boolean;
   message?: string;
 }
 
-export function publishMap(mapId: string, request?: PublishMapRequest) {
-  return postJson<PublishMapRequest | undefined, PublishMapResponse>(
-    `/maps/${mapId}/publish`,
-    request || { isStoryMap: false }
-  );
+export function publishMap(mapId: string) {
+  return postJson<void, PublishMapResponse>(`/maps/${mapId}/publish`, undefined);
 }
 
 export function unpublishMap(mapId: string) {

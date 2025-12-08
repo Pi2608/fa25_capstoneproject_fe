@@ -144,9 +144,10 @@ export function LeftSidebarToolbox({
   const [inlineFormMode, setInlineFormMode] = useState<"list" | "location" | "zone" | "layer" | "route">("list");
 
   // State for map-level location form (when isStoryMap = false)
-  const [mapLocationFormMode, setMapLocationFormMode] = useState<"list" | "create">("list");
+  const [mapLocationFormMode, setMapLocationFormMode] = useState<"list" | "create" | "edit">("list");
   const [mapLocationCoordinates, setMapLocationCoordinates] = useState<[number, number] | null>(null);
   const [waitingForMapLocation, setWaitingForMapLocation] = useState(false);
+  const [mapEditingLocation, setMapEditingLocation] = useState<Location | null>(null);
 
   // Listen for editLocation event from TimelineTrack
   useEffect(() => {
@@ -727,17 +728,38 @@ export function LeftSidebarToolbox({
                   setMapLocationFormMode("create");
                   setWaitingForMapLocation(true);
                   setMapLocationCoordinates(null);
+                  setMapEditingLocation(null);
                   if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('showMapInstruction', {
                       detail: { message: 'Click on the map to place the location marker' }
                     }));
                   }
                 }}
+                onEditLocation={(location) => {
+                  setMapEditingLocation(location);
+                  setMapLocationFormMode("edit");
+                  setWaitingForMapLocation(false);
+                  if (location.markerGeometry) {
+                    try {
+                      const geo = JSON.parse(location.markerGeometry);
+                      if (geo.type === "Point" && Array.isArray(geo.coordinates) && geo.coordinates.length >= 2) {
+                        setMapLocationCoordinates([geo.coordinates[0], geo.coordinates[1]]);
+                      } else {
+                        setMapLocationCoordinates(null);
+                      }
+                    } catch (e) {
+                      console.error("Failed to parse location coordinates:", e);
+                      setMapLocationCoordinates(null);
+                    }
+                  } else {
+                    setMapLocationCoordinates(null);
+                  }
+                }}
               />
             )}
 
-            {/* Map Location Form - create mode (when isStoryMap = false) */}
-            {activeView === "locations" && !isStoryMap && mapLocationFormMode === "create" && mapId && (
+            {/* Map Location Form - create/edit mode (when isStoryMap = false) */}
+            {activeView === "locations" && !isStoryMap && mapLocationFormMode !== "list" && mapId && (
               <LocationForm
                 segmentId={undefined}
                 onSave={async (data: CreateLocationRequest) => {
@@ -746,28 +768,41 @@ export function LeftSidebarToolbox({
                       console.error("markerGeometry is required");
                       return;
                     }
-                    const { createMapLocation } = await import("@/lib/api-location");
-                    await createMapLocation(mapId, {
-                      ...data,
-                      markerGeometry: data.markerGeometry, // Ensure it's not undefined
-                    });
-                    window.dispatchEvent(new CustomEvent("locationCreated"));
+                    const { createMapLocation, updateLocation } = await import("@/lib/api-location");
+
+                    if (mapEditingLocation?.locationId) {
+                      await updateLocation(mapEditingLocation.locationId, {
+                        ...data,
+                        mapId,
+                      });
+                      window.dispatchEvent(new CustomEvent("locationUpdated"));
+                    } else {
+                      await createMapLocation(mapId, {
+                        ...data,
+                        markerGeometry: data.markerGeometry, // Ensure it's not undefined
+                      });
+                      window.dispatchEvent(new CustomEvent("locationCreated"));
+                    }
                     setMapLocationFormMode("list");
                     setWaitingForMapLocation(false);
                     setMapLocationCoordinates(null);
+                    setMapEditingLocation(null);
                   } catch (error) {
-                    console.error("Failed to create location:", error);
+                    console.error("Failed to save location:", error);
                   }
                 }}
                 onCancel={() => {
                   setMapLocationFormMode("list");
                   setWaitingForMapLocation(false);
                   setMapLocationCoordinates(null);
+                  setMapEditingLocation(null);
                 }}
                 initialCoordinates={mapLocationCoordinates}
+                initialLocation={mapEditingLocation as any}
                 onRepickLocation={() => {
                   setWaitingForMapLocation(true);
                   setMapLocationCoordinates(null);
+                  setMapEditingLocation(null);
                   if (typeof window !== 'undefined') {
                     window.dispatchEvent(new CustomEvent('showMapInstruction', {
                       detail: { message: 'Click on the map to place the location marker' }
@@ -3067,10 +3102,12 @@ function MapLocationsView({
   mapId,
   currentMap,
   onShowLocationForm,
+  onEditLocation,
 }: {
   mapId?: string;
   currentMap?: any;
   onShowLocationForm?: () => void;
+  onEditLocation?: (location: Location) => void;
 }) {
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3207,8 +3244,7 @@ function MapLocationsView({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Dispatch event to open edit form
-                    window.dispatchEvent(new CustomEvent("editLocation", { detail: { location } }));
+                    onEditLocation?.(location);
                   }}
                   className="p-1.5 rounded bg-zinc-700 hover:bg-zinc-600 text-white transition-colors"
                   title="Edit location"
