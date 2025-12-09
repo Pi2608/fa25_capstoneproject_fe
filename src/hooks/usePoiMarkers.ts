@@ -189,7 +189,7 @@ export function usePoiMarkers({
             // Add tooltip popup if enabled (similar to slide popup)
             if (poi.showTooltip !== false && poi.tooltipContent) {
               // Process content
-              let rawContent = poi.tooltipContent || "";
+              const rawContent = poi.tooltipContent || "";
               let processedContent = rawContent;
 
               // Method 1: Parse JSON string if needed

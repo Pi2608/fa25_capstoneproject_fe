@@ -187,7 +187,7 @@ const fetchMapsForWorkspace = useCallback(
         detailList
           .filter((d): d is any => {
             if (!d) return false;
-            const status = (d.status ?? d.Status ?? "")
+            const status = (d.status ?? "")
               .toString()
               .toLowerCase();
             return status === "published";
@@ -752,7 +752,7 @@ const fetchMapsForWorkspace = useCallback(
                         >
                           <div className="mb-1 flex items-center justify-between gap-2">
                             <div className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
-                              {bank.bankName ?? bank.name}
+                              {bank.bankName}
                             </div>
                             {isSelected && (
                               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
