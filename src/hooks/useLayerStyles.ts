@@ -100,12 +100,21 @@ export function useLayerStyles() {
 
   /**
    * Apply selection style to a single selected layer
+   * Preserves original weight for thick lines (freehand drawings)
    */
   const applySelectionStyle = useCallback((layer: Layer) => {
     if ('setStyle' in layer && typeof layer.setStyle === 'function') {
+      // Get original style to preserve weight for thick lines
+      const originalStyle = originalStylesRef.current.get(layer);
+      const originalWeight = originalStyle?.weight || 3;
+      
+      // For thick lines (freehand drawings), preserve weight and just add selection indicator
+      // For normal lines, use standard selection weight
+      const selectionWeight = originalWeight > 10 ? originalWeight : Math.max(originalWeight + 1, 4);
+      
       (layer as unknown as PathLayer).setStyle({
         color: '#ff6600',
-        weight: 4,
+        weight: selectionWeight,
         fillOpacity: 0.5
       });
     }
@@ -113,12 +122,20 @@ export function useLayerStyles() {
 
   /**
    * Apply multi-selection style to a layer
+   * Preserves original weight for thick lines (freehand drawings)
    */
   const applyMultiSelectionStyle = useCallback((layer: Layer) => {
     if ('setStyle' in layer && typeof layer.setStyle === 'function') {
+      // Get original style to preserve weight for thick lines
+      const originalStyle = originalStylesRef.current.get(layer);
+      const originalWeight = originalStyle?.weight || 3;
+      
+      // For thick lines (freehand drawings), preserve weight
+      const selectionWeight = originalWeight > 10 ? originalWeight : Math.max(originalWeight + 1, 4);
+      
       (layer as unknown as PathLayer).setStyle({
         color: '#ff0000',
-        weight: 4,
+        weight: selectionWeight,
         fillOpacity: 0.5
       });
     }

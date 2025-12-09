@@ -218,7 +218,8 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
     });
   };
 
-  const supportsColor = ["Polyline", "Polygon", "Rectangle", "Circle", "CircleMarker"].includes(feature.type);
+  // Line is used by freehand drawings (Marker/Highlighter tools)
+  const supportsColor = ["Polyline", "Line", "Polygon", "Rectangle", "Circle", "CircleMarker"].includes(feature.type);
   const supportsFill = ["Polygon", "Rectangle", "Circle", "CircleMarker"].includes(feature.type);
   const supportsRadius = ["Circle", "CircleMarker"].includes(feature.type);
 
@@ -423,21 +424,24 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
               )}
             </div>
 
-            <div>
-              <label className="text-xs text-zinc-400 mb-1.5 block">
-                Kiểu đường viền
-              </label>
-              <select
-                value={dashArray}
-                onChange={(e) => setDashArray(e.target.value)}
-                className="w-full px-2 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded text-zinc-200 focus:border-emerald-500 focus:outline-none transition-colors cursor-pointer"
-              >
-                <option value="">Nét liền</option>
-                <option value="5, 5">Nét đứt</option>
-                <option value="2, 4">Nét chấm</option>
-                <option value="10, 5, 2, 5">Nét gạch-chấm</option>
-              </select>
-            </div>
+            {/* Hide dashArray for freehand drawings (Line type = Marker/Highlighter) */}
+            {feature.type !== "Line" && (
+              <div>
+                <label className="text-xs text-zinc-400 mb-1.5 block">
+                  Kiểu đường viền
+                </label>
+                <select
+                  value={dashArray}
+                  onChange={(e) => setDashArray(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded text-zinc-200 focus:border-emerald-500 focus:outline-none transition-colors cursor-pointer"
+                >
+                  <option value="">Nét liền</option>
+                  <option value="5, 5">Nét đứt</option>
+                  <option value="2, 4">Nét chấm</option>
+                  <option value="10, 5, 2, 5">Nét gạch-chấm</option>
+                </select>
+              </div>
+            )}
           </div>
         )}
 

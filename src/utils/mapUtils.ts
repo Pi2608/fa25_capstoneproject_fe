@@ -909,7 +909,7 @@ export async function loadFeaturesToMap(
         if (feature.annotationType?.toLowerCase() === "text") {
           // Create a simple colored circle marker instead of HTML
           let markerColor = "#3388ff"; // Default blue
-          let markerSize = 16; // 2x the original 8px
+          const markerSize = 16; // 2x the original 8px
 
           // Apply style from database if available
           if (feature.style) {
@@ -1505,7 +1505,7 @@ export async function renderFeatures(
         if (feature.annotationType?.toLowerCase() === "text") {
           // Create a simple colored circle marker instead of HTML
           let markerColor = "#3388ff"; // Default blue
-          let markerSize = 16; // 2x the original 8px
+          const markerSize = 16; // 2x the original 8px
 
           // Apply style from database if available
           if (feature.style) {
@@ -1644,7 +1644,7 @@ export async function toggleLayerVisibility(
       if (layerData.type === 'FeatureCollection' && layerData.features) {
         // Parse layer style and custom style
         let layerStyle = {};
-        let customStyle = {};
+        const customStyle = {};
 
         // layerStyle is already an object from backend
         if (layer.layerStyle) {

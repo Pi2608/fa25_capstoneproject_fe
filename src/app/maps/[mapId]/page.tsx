@@ -2405,10 +2405,14 @@ export default function EditMapPage() {
         }
       });
 
-      // Apply selection style
+      // Apply selection style - preserve original weight for thick lines (freehand drawings)
+      const storedStyle = originalStylesRef.current.get(leafletLayer);
+      const originalWeight = storedStyle?.weight || 3;
+      const selectionWeight = originalWeight > 10 ? originalWeight : Math.max(originalWeight + 1, 4);
+      
       (leafletLayer as any).setStyle({
         color: '#ff6600',
-        weight: 4,
+        weight: selectionWeight,
         fillOpacity: 0.5
       });
 
