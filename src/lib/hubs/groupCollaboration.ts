@@ -46,8 +46,10 @@ export interface GroupTypingEvent {
 
 export interface CreateGroupRequestPayload {
   sessionId: string;
-  name: string;
-  maxMembers?: number;
+  groupName: string;
+  color?: string;
+  memberParticipantIds: string[];
+  leaderParticipantId?: string | null;
   [key: string]: unknown;
 }
 
@@ -85,24 +87,23 @@ export function createGroupCollaborationConnection(
     return null;
   }
 
-  const authToken = token || getToken();
+  let authToken: string | null | undefined = token || getToken();
 
-  if (!authToken || !authToken.trim()) {
-    console.error("[SignalR GroupCollaboration] No token provided");
-    return null;
-  }
-
-  if (!isTokenValid(authToken)) {
-    console.error("[SignalR GroupCollaboration] Invalid token");
-    return null;
+  if (!authToken || authToken.trim().length === 0) {
+    authToken = undefined;
+  } else if (!isTokenValid(authToken)) {
+    console.warn(
+      "[SignalR GroupCollaboration] Token provided but invalid, connecting as guest"
+    );
+    authToken = undefined;
   }
 
   const baseUrl = API_BASE_URL.replace(/\/$/, "");
   const hubUrl = `${baseUrl}/hubs/groupCollaboration`;
 
   return createBaseConnection(hubUrl, {
-    token: authToken,
-    allowGuest: false,
+    token: authToken || undefined, 
+    allowGuest: true,            
     onClose: (error) => {
       console.error(
         "[SignalR GroupCollaboration] Connection closed with error:",
@@ -110,13 +111,10 @@ export function createGroupCollaborationConnection(
       );
     },
     onReconnecting: (error) => {
-      console.warn("[SignalR GroupCollaboration] Reconnecting.", error);
+      console.warn("[SignalR GroupCollaboration] Reconnecting...", error);
     },
     onReconnected: (connectionId) => {
-      console.info(
-        "[SignalR GroupCollaboration] Reconnected:",
-        connectionId
-      );
+      console.info("[SignalR GroupCollaboration] Reconnected:", connectionId);
     },
   });
 }
@@ -241,9 +239,10 @@ export async function createGroupViaSignalR(
 
     await connection.invoke("CreateGroup", {
       SessionId: payload.sessionId,
-      Name: payload.name,
-      MaxMembers: payload.maxMembers ?? null,
-      ...payload,
+      GroupName: payload.groupName,
+      Color: payload.color ?? null,
+      MemberParticipantIds: payload.memberParticipantIds ?? [],
+      LeaderParticipantId: payload.leaderParticipantId ?? null,
     });
 
     return true;
@@ -252,6 +251,7 @@ export async function createGroupViaSignalR(
     return false;
   }
 }
+
 
 export async function submitGroupWorkViaSignalR(
   connection: signalR.HubConnection,
