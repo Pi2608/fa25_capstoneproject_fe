@@ -180,12 +180,25 @@ export function useFeatureManagement({
       }
 
       // Enable dragging and editing via Geoman
+      // But for freehand drawings, only allow dragging, not vertex editing
       if ("pm" in e.layer && e.layer.pm) {
-        (e.layer as GeomanLayer).pm.enable({
-          draggable: true,
-          allowEditing: true,
-          allowSelfIntersection: true,
-        });
+        const isFreehandLayer = (e.layer as any)._isFreehandDrawing === true;
+        
+        if (isFreehandLayer) {
+          // Freehand layers: only allow dragging, no vertex editing
+          (e.layer as GeomanLayer).pm.enable({
+            draggable: true,
+            allowEditing: false,  // Disable vertex editing
+            allowSelfIntersection: true,
+          });
+        } else {
+          // Regular layers: allow both dragging and editing
+          (e.layer as GeomanLayer).pm.enable({
+            draggable: true,
+            allowEditing: true,
+            allowSelfIntersection: true,
+          });
+        }
       }
     },
     [

@@ -21,6 +21,8 @@ import {
   Pencil,
   LineChart,
   Slash,
+  Highlighter,
+  PenTool,
 } from "lucide-react";
 
 interface DrawingToolsBarProps {
@@ -83,6 +85,22 @@ export const DrawingToolsBar: React.FC<DrawingToolsBarProps> = ({
         disabled={isDisabled}
       >
         <Type size={18} strokeWidth={1.8} />
+      </ToolButton>
+
+      <ToolButton
+        title="Vẽ Marker (đường đen)"
+        onClick={() => enableDraw(mapRef, "FreehandMarker")}
+        disabled={isDisabled}
+      >
+        <PenTool size={18} strokeWidth={1.8} />
+      </ToolButton>
+
+      <ToolButton
+        title="Tô sáng (Highlighter vàng)"
+        onClick={() => enableDraw(mapRef, "FreehandHighlighter")}
+        disabled={isDisabled}
+      >
+        <Highlighter size={18} strokeWidth={1.8} />
       </ToolButton>
 
       {/* <ToolButton
