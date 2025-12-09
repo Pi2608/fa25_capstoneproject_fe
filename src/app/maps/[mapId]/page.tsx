@@ -98,7 +98,7 @@ export default function EditMapPage() {
   // Export functionality state
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
-  const [exportFormat, setExportFormat] = useState<"geojson" | "png" | "pdf" | "svg">("geojson");
+  const [exportFormat, setExportFormat] = useState<"geojson" | "png" | "pdf">("geojson");
   const [exportStatus, setExportStatus] = useState<ExportResponse | null>(null);
 
   const [name, setName] = useState<string>("");
@@ -3196,56 +3196,96 @@ export default function EditMapPage() {
           // Now manually draw all vector features using Leaflet's coordinate conversion
           const L = (await import("leaflet")).default;
           
-          // Create a map to track which features we've drawn (to avoid duplicates)
-          const drawnLayers = new Set<any>();
-          
-          // First, draw all layers from sketchRef
-          if (sketchRef.current) {
-            sketchRef.current.eachLayer((layer: any) => {
-              try {
-                drawnLayers.add(layer);
-                
-                // Get layer style
-                const options = layer.options || {};
-                const fillColor = options.fillColor || options.color || '#3388ff';
-                const strokeColor = options.color || '#3388ff';
-                const fillOpacity = options.fillOpacity !== undefined ? options.fillOpacity : 0.2;
-                const strokeOpacity = options.opacity !== undefined ? options.opacity : 1;
-                const weight = options.weight || 2;
-                
-                ctx.fillStyle = fillColor;
-                ctx.strokeStyle = strokeColor;
-                ctx.lineWidth = weight;
-                ctx.globalAlpha = fillOpacity;
-                
-                if (layer instanceof L.Circle || layer instanceof L.CircleMarker) {
-                  const center = layer.getLatLng();
-                  const radius = layer.getRadius ? layer.getRadius() : (options.radius || 10);
-                  const centerPoint = map.latLngToContainerPoint(center);
-                  
-                  // For Circle (not CircleMarker), convert radius from meters to pixels
-                  let radiusPx: number;
-                  if (layer instanceof L.Circle) {
-                    const radiusPoint = map.latLngToContainerPoint([
-                      center.lat,
-                      map.containerPointToLatLng([centerPoint.x + radius, centerPoint.y]).lng
-                    ]);
-                    radiusPx = Math.abs(radiusPoint.x - centerPoint.x);
-                  } else {
-                    // CircleMarker radius is already in pixels
-                    radiusPx = radius;
+          // Helper function to draw a layer on canvas
+          const drawLayerOnCanvas = (layer: any, featureData?: any, isRecursive: boolean = false) => {
+            try {
+              // Check if this is a container layer (GeoJSON, FeatureGroup) that should be traversed
+              if (!isRecursive && (layer instanceof L.GeoJSON || layer instanceof L.FeatureGroup || (layer.eachLayer && typeof layer.eachLayer === 'function'))) {
+                // Handle GeoJSON layers (zones) - iterate through their features recursively
+                layer.eachLayer((subLayer: any) => {
+                  if (!drawnLayers.has(subLayer)) {
+                    drawnLayers.add(subLayer);
+                    drawLayerOnCanvas(subLayer, featureData, true);
                   }
-                  
-                  ctx.beginPath();
-                  ctx.arc(centerPoint.x, centerPoint.y, radiusPx, 0, Math.PI * 2);
-                  ctx.fill();
-                  ctx.globalAlpha = strokeOpacity;
-                  ctx.stroke();
-                } else if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
-                  const latlngs = layer.getLatLngs();
-                  if (Array.isArray(latlngs) && latlngs.length > 0) {
-                    const coords = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
-                    
+                });
+                return; // Don't draw the container itself, only its children
+              }
+              
+              // Get layer style - prefer feature style if available
+              const options = layer.options || {};
+              let fillColor = options.fillColor || options.color || '#3388ff';
+              let strokeColor = options.color || '#3388ff';
+              let fillOpacity = options.fillOpacity !== undefined ? options.fillOpacity : 0.2;
+              let strokeOpacity = options.opacity !== undefined ? options.opacity : 1;
+              let weight = options.weight || 2;
+              
+              // If feature has style data, use it
+              if (featureData?.style) {
+                try {
+                  const style = typeof featureData.style === 'string' 
+                    ? JSON.parse(featureData.style) 
+                    : featureData.style;
+                  if (style.fillColor) fillColor = style.fillColor;
+                  if (style.color) {
+                    strokeColor = style.color;
+                    if (!fillColor || fillColor === '#3388ff') fillColor = style.color;
+                  }
+                  if (style.fillOpacity !== undefined) fillOpacity = style.fillOpacity;
+                  if (style.opacity !== undefined) strokeOpacity = style.opacity;
+                  if (style.weight !== undefined) weight = style.weight;
+                } catch (e) {
+                  console.warn("Failed to parse feature style:", e);
+                }
+              }
+              
+              ctx.fillStyle = fillColor;
+              ctx.strokeStyle = strokeColor;
+              ctx.lineWidth = weight;
+              ctx.globalAlpha = fillOpacity;
+
+              // Use duck-typing instead of instanceof to handle bundled/minified code
+              // Check for Circle or CircleMarker (has getLatLng and getRadius or _mRadius)
+              if (layer.getLatLng && typeof layer.getLatLng === 'function' &&
+                  (layer.getRadius || layer._mRadius !== undefined)) {
+                const center = layer.getLatLng();
+                const centerPoint = map.latLngToContainerPoint(center);
+
+                // For Circle (has _mRadius - radius in meters), convert radius from meters to pixels
+                let radiusPx: number;
+                if (layer._mRadius !== undefined) {
+                  // Calculate a point that is _mRadius meters away from center
+                  const earthRadius = 6378137; // Earth's radius in meters
+                  const radiusInDegrees = (layer._mRadius / earthRadius) * (180 / Math.PI);
+
+                  // Create a point to the east at the radius distance
+                  const edgePoint = L.latLng(center.lat, center.lng + radiusInDegrees / Math.cos(center.lat * Math.PI / 180));
+                  const edgePixel = map.latLngToContainerPoint(edgePoint);
+
+                  radiusPx = Math.abs(edgePixel.x - centerPoint.x);
+                } else {
+                  // CircleMarker radius is already in pixels
+                  radiusPx = layer.getRadius ? layer.getRadius() : (options.radius || 10);
+                }
+
+                console.log(`[EXPORT] Drawing circle/circleMarker at (${centerPoint.x}, ${centerPoint.y}) radius=${radiusPx}px (original: ${layer._mRadius || 'N/A'}m), fillColor=${fillColor}, strokeColor=${strokeColor}, fillOpacity=${fillOpacity}, strokeOpacity=${strokeOpacity}`);
+
+                ctx.beginPath();
+                ctx.arc(centerPoint.x, centerPoint.y, radiusPx, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = strokeOpacity;
+                ctx.stroke();
+              }
+              // Check for Polygon or Rectangle (has getLatLngs and multiple coordinates)
+              else if (layer.getLatLngs && typeof layer.getLatLngs === 'function') {
+                const latlngs = layer.getLatLngs();
+                if (Array.isArray(latlngs) && latlngs.length > 0) {
+                  const coords = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
+
+                  // Check if this is a Polygon (closed shape) or Polyline (open shape)
+                  const isPolygon = layer.getBounds && typeof layer.getBounds === 'function';
+
+                  if (isPolygon && coords.length > 2) {
+                    console.log(`[EXPORT] Drawing polygon with ${coords.length} points, fillColor=${fillColor}, strokeColor=${strokeColor}`);
                     ctx.beginPath();
                     coords.forEach((ll: any, idx: number) => {
                       const pt = map.latLngToContainerPoint(ll);
@@ -3259,10 +3299,9 @@ export default function EditMapPage() {
                     ctx.fill();
                     ctx.globalAlpha = strokeOpacity;
                     ctx.stroke();
-                  }
-                } else if (layer instanceof L.Polyline) {
-                  const latlngs = layer.getLatLngs();
-                  if (Array.isArray(latlngs) && latlngs.length > 0) {
+                  } else {
+                    // Polyline (linestring)
+                    console.log(`[EXPORT] Drawing polyline/linestring with ${latlngs.length} points, strokeColor=${strokeColor}, weight=${weight}, strokeOpacity=${strokeOpacity}`);
                     ctx.beginPath();
                     latlngs.forEach((ll: any, idx: number) => {
                       const pt = map.latLngToContainerPoint(ll);
@@ -3275,89 +3314,157 @@ export default function EditMapPage() {
                     ctx.globalAlpha = strokeOpacity;
                     ctx.stroke();
                   }
-                } else if (layer instanceof L.Marker) {
-                  // Markers are already captured in base canvas, skip
                 }
-              } catch (layerError) {
-                console.warn("Error drawing layer:", layerError);
+              }
+              // Check for Marker (has getLatLng but no getRadius)
+              else if (layer.getLatLng && typeof layer.getLatLng === 'function') {
+                console.log(`[EXPORT] Skipping marker (already captured in base canvas)`);
+                // Markers are already captured in base canvas, skip
+              } else {
+                console.warn(`[EXPORT] Unknown layer type, cannot draw:`, layer.constructor.name, layer);
+              }
+            } catch (layerError) {
+              console.warn("Error drawing layer:", layerError);
+            }
+          };
+          
+          // Create a map to track which layers we've drawn (to avoid duplicates)
+          const drawnLayers = new Set<any>();
+
+          // First, draw all layers directly from the map (this includes route animations, features, etc.)
+          console.log(`[EXPORT] Starting to draw features. Drawing all map layers`);
+          let mapLayerCount = 0;
+          map.eachLayer((layer: any) => {
+            // Skip tile layers and other base layers
+            if (layer._url || layer instanceof L.TileLayer) {
+              return; // Skip tile layers
+            }
+
+            // Skip if already drawn
+            if (drawnLayers.has(layer)) {
+              return;
+            }
+
+            drawnLayers.add(layer);
+            mapLayerCount++;
+            console.log(`[EXPORT] Drawing layer from map: ${layer.constructor.name}, hasLatLng=${!!layer.getLatLng}, hasLatLngs=${!!layer.getLatLngs}`);
+            drawLayerOnCanvas(layer);
+          });
+          console.log(`[EXPORT] Drew ${mapLayerCount} layers from map`);
+
+          // Second, draw all layers from sketchRef (in case they weren't in map.eachLayer)
+          console.log(`[EXPORT] Checking sketchRef: ${sketchRef.current ? 'yes' : 'no'}`);
+          if (sketchRef.current) {
+            let sketchLayerCount = 0;
+            sketchRef.current.eachLayer((layer: any) => {
+              if (!drawnLayers.has(layer)) {
+                drawnLayers.add(layer);
+                sketchLayerCount++;
+                console.log(`[EXPORT] Drawing layer from sketchRef: ${layer.constructor.name}`);
+                drawLayerOnCanvas(layer);
               }
             });
+            console.log(`[EXPORT] Drew ${sketchLayerCount} additional layers from sketchRef`);
           }
           
-          // Now draw text labels for text features
-          // Iterate through features to get text content and draw it
+          // Third, draw all features from the features array (in case they're not in map or sketchRef)
+          console.log(`[EXPORT] Processing features array, total features: ${features.length}`);
+          let featuresDrawnCount = 0;
+          let featuresSkippedCount = 0;
           features.forEach((feature) => {
             try {
               // Only process visible features
               const isVisible = featureVisibility[feature.id] ?? feature.isVisible ?? true;
-              if (!isVisible) return;
-              
-              // Check if it's a text feature
-              if (feature.annotationType?.toLowerCase() === "text" && feature.layer) {
-                const layer = feature.layer as any;
-                
-                // Get text content from feature properties or layer
-                let textContent = "Text";
-                if (feature.properties) {
-                  try {
-                    const props = typeof feature.properties === 'string' 
-                      ? JSON.parse(feature.properties) 
-                      : feature.properties;
-                    if (props.text) {
-                      textContent = props.text;
-                    }
-                  } catch (e) {
-                    // If properties is not JSON, try to get from layer icon
-                    if (layer instanceof L.Marker) {
-                      const icon = layer.options?.icon as L.DivIcon | undefined;
-                      if (icon?.options?.html && typeof icon.options.html === 'string') {
-                        textContent = icon.options.html;
-                      }
-                    }
-                  }
-                }
-                
-                // Get position from layer
-                let position: L.LatLng | null = null;
-                if (layer instanceof L.Marker) {
-                  position = layer.getLatLng();
-                } else if (layer instanceof L.CircleMarker || layer instanceof L.Circle) {
-                  position = layer.getLatLng();
-                }
-                
-                if (position) {
-                  const point = map.latLngToContainerPoint(position);
-                  
-                  // Draw text background (optional, for better readability)
-                  ctx.save();
-                  ctx.font = `${14 * scale}px Arial, sans-serif`;
-                  ctx.textAlign = 'center';
-                  ctx.textBaseline = 'middle';
-                  
-                  // Measure text to draw background
-                  const metrics = ctx.measureText(textContent);
-                  const textWidth = metrics.width;
-                  const textHeight = 14 * scale;
-                  
-                  // Draw background rectangle
-                  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                  ctx.fillRect(
-                    point.x - textWidth / 2 - 4,
-                    point.y - textHeight / 2 - 4,
-                    textWidth + 8,
-                    textHeight + 8
-                  );
-                  
-                  // Draw text
-                  ctx.fillStyle = '#000000';
-                  ctx.fillText(textContent, point.x, point.y);
-                  ctx.restore();
-                }
+
+              if (!isVisible) {
+                console.log(`[EXPORT] Feature ${feature.name || feature.type} (${feature.id}) skipped: isVisible=false`);
+                featuresSkippedCount++;
+                return;
+              }
+
+              if (feature.layer && !drawnLayers.has(feature.layer)) {
+                drawnLayers.add(feature.layer);
+                featuresDrawnCount++;
+                console.log(`[EXPORT] Drawing feature from features array: ${feature.name || feature.type}, layer type: ${feature.layer.constructor.name}`);
+                drawLayerOnCanvas(feature.layer, feature);
+              } else if (!feature.layer) {
+                console.warn(`[EXPORT] Feature ${feature.name || feature.id} has no layer reference, skipping`);
+                featuresSkippedCount++;
+              } else {
+                console.log(`[EXPORT] Feature ${feature.name || feature.id} already in drawnLayers, skipping`);
+                featuresSkippedCount++;
               }
             } catch (featureError) {
-              console.warn("Error drawing text feature:", featureError);
+              console.warn("Error processing feature for export:", featureError);
             }
           });
+          console.log(`[EXPORT] Features array: drew ${featuresDrawnCount}, skipped ${featuresSkippedCount}`);
+
+          // Fourth, draw all layers from dataLayerRefs (zones and other layer data)
+          // Only draw visible layers
+          console.log(`[EXPORT] dataLayerRefs exists: ${dataLayerRefs.current ? 'yes' : 'no'}, layers count: ${layers.length}`);
+          if (dataLayerRefs.current && layers) {
+            let dataLayerCount = 0;
+            dataLayerRefs.current.forEach((layer: any, layerId: string) => {
+              // Check if layer is visible
+              const layerData = layers.find(l => l.id === layerId);
+              const isLayerVisible = layerVisibility[layerId] ?? layerData?.isVisible ?? true;
+
+              console.log(`[EXPORT] Checking dataLayer ${layerId}: visible=${isLayerVisible}, layer type: ${layer?.constructor?.name || 'unknown'}`);
+
+              if (isLayerVisible && !drawnLayers.has(layer)) {
+                drawnLayers.add(layer);
+                dataLayerCount++;
+                console.log(`[EXPORT] Drawing dataLayer ${layerId}: ${layer.constructor.name}`);
+                drawLayerOnCanvas(layer);
+              }
+            });
+            console.log(`[EXPORT] Drew ${dataLayerCount} layers from dataLayerRefs`);
+          }
+          
+          // Now draw text labels for text features (if any markers have text icons)
+          // Check all markers for text content in their icons
+          if (sketchRef.current) {
+            sketchRef.current.eachLayer((layer: any) => {
+              try {
+                if (layer instanceof L.Marker) {
+                  const icon = layer.options?.icon as L.DivIcon | undefined;
+                  if (icon?.options?.html && typeof icon.options.html === 'string') {
+                    const textContent = icon.options.html;
+                    const position = layer.getLatLng();
+                    const point = map.latLngToContainerPoint(position);
+                    
+                    // Draw text background (optional, for better readability)
+                    ctx.save();
+                    ctx.font = `${14 * scale}px Arial, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    // Measure text to draw background
+                    const metrics = ctx.measureText(textContent);
+                    const textWidth = metrics.width;
+                    const textHeight = 14 * scale;
+                    
+                    // Draw background rectangle
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.fillRect(
+                      point.x - textWidth / 2 - 4,
+                      point.y - textHeight / 2 - 4,
+                      textWidth + 8,
+                      textHeight + 8
+                    );
+                    
+                    // Draw text
+                    ctx.fillStyle = '#000000';
+                    ctx.fillText(textContent, point.x, point.y);
+                    ctx.restore();
+                  }
+                }
+              } catch (textError) {
+                console.warn("Error drawing text label:", textError);
+              }
+            });
+          }
           
           // Convert to base64
           mapImageData = canvas.toDataURL('image/png', 1.0);
