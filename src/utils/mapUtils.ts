@@ -909,7 +909,7 @@ export async function loadFeaturesToMap(
         if (feature.annotationType?.toLowerCase() === "text") {
           // Create a simple colored circle marker instead of HTML
           let markerColor = "#3388ff"; // Default blue
-          let markerSize = 16; // 2x the original 8px
+          const markerSize = 16; // 2x the original 8px
 
           // Apply style from database if available
           if (feature.style) {
@@ -950,8 +950,48 @@ export async function loadFeaturesToMap(
         const coords = coordinates as Position[];
         layer = L.polyline(coords.map((c) => [c[1], c[0]])) as ExtendedLayer;
       } else if (feature.geometryType.toLowerCase() === "polygon") {
-        const coords = coordinates as Position[][];
-        layer = L.polygon(coords[0].map((c) => [c[1], c[0]])) as ExtendedLayer;
+        // Handle different coordinate formats for polygons
+        // Coordinates from backend can be:
+        // 1. GeoJSON format: [[[lng, lat], [lng, lat], ...]] (triple nested) - from MongoDB
+        // 2. Simple ring format: [[lng, lat], [lng, lat], ...] (double nested) - legacy format
+        let polygonRing: Position[] | null = null;
+        
+        if (Array.isArray(coordinates) && coordinates.length > 0) {
+          const first = coordinates[0];
+          
+          // Check if coordinates is triple nested (GeoJSON Polygon format)
+          // coordinates = [[[lng, lat], [lng, lat], ...]]
+          // So first = [[lng, lat], [lng, lat], ...] (the ring)
+          // And first[0] = [lng, lat] (first point - an array)
+          if (Array.isArray(first)) {
+            if (first.length > 0 && Array.isArray(first[0])) {
+              // first[0] is an array, so first is an array of coordinate pairs
+              // This means coordinates is triple nested: [[[lng, lat], ...]]
+              polygonRing = first as Position[];
+            } else if (first.length === 2 && typeof first[0] === 'number' && typeof first[1] === 'number') {
+              // first is a single coordinate pair [lng, lat]
+              // This means coordinates is double nested: [[lng, lat], [lng, lat], ...]
+              polygonRing = coordinates as Position[];
+            }
+          }
+        }
+        
+        if (!polygonRing || polygonRing.length === 0) {
+          console.warn("Invalid polygon coordinates structure. Feature:", feature.featureId, "Coordinates:", JSON.stringify(coordinates).substring(0, 300));
+          continue;
+        }
+        
+        // Convert from [lng, lat] to [lat, lng] for Leaflet
+        // Each coordinate in polygonRing is [lng, lat] (GeoJSON format)
+        const leafletCoords = polygonRing.map((c) => {
+          if (Array.isArray(c) && c.length >= 2 && typeof c[0] === 'number' && typeof c[1] === 'number') {
+            // Swap: [lng, lat] -> [lat, lng] for Leaflet
+            return [c[1], c[0]] as [number, number];
+          }
+          console.warn("Invalid coordinate in polygon ring:", c);
+          return [0, 0] as [number, number];
+        });
+        layer = L.polygon(leafletCoords) as ExtendedLayer;
       } else if (feature.geometryType.toLowerCase() === "rectangle") {
         // Rectangle is stored as bounds format: [minLng, minLat, maxLng, maxLat]
 
@@ -1070,7 +1110,8 @@ export async function loadFeaturesToMap(
           continue;
         }
 
-        layer = L.circle([lat, lng], { radius: radius }) as ExtendedLayer;
+        const leafletCenter: [number, number] = [lat, lng];
+        layer = L.circle(leafletCenter, { radius: radius }) as ExtendedLayer;
         
         // Verify the circle was created correctly
         if (layer && (layer as any).getLatLng && typeof (layer as any).getLatLng === 'function') {
@@ -1505,7 +1546,7 @@ export async function renderFeatures(
         if (feature.annotationType?.toLowerCase() === "text") {
           // Create a simple colored circle marker instead of HTML
           let markerColor = "#3388ff"; // Default blue
-          let markerSize = 16; // 2x the original 8px
+          const markerSize = 16; // 2x the original 8px
 
           // Apply style from database if available
           if (feature.style) {
@@ -1546,8 +1587,48 @@ export async function renderFeatures(
         const coords = coordinates as Position[];
         layer = L.polyline(coords.map((c) => [c[1], c[0]])) as ExtendedLayer;
       } else if (feature.geometryType.toLowerCase() === "polygon") {
-        const coords = coordinates as Position[][];
-        layer = L.polygon(coords[0].map((c) => [c[1], c[0]])) as ExtendedLayer;
+        // Handle different coordinate formats for polygons
+        // Coordinates from backend can be:
+        // 1. GeoJSON format: [[[lng, lat], [lng, lat], ...]] (triple nested) - from MongoDB
+        // 2. Simple ring format: [[lng, lat], [lng, lat], ...] (double nested) - legacy format
+        let polygonRing: Position[] | null = null;
+        
+        if (Array.isArray(coordinates) && coordinates.length > 0) {
+          const first = coordinates[0];
+          
+          // Check if coordinates is triple nested (GeoJSON Polygon format)
+          // coordinates = [[[lng, lat], [lng, lat], ...]]
+          // So first = [[lng, lat], [lng, lat], ...] (the ring)
+          // And first[0] = [lng, lat] (first point - an array)
+          if (Array.isArray(first)) {
+            if (first.length > 0 && Array.isArray(first[0])) {
+              // first[0] is an array, so first is an array of coordinate pairs
+              // This means coordinates is triple nested: [[[lng, lat], ...]]
+              polygonRing = first as Position[];
+            } else if (first.length === 2 && typeof first[0] === 'number' && typeof first[1] === 'number') {
+              // first is a single coordinate pair [lng, lat]
+              // This means coordinates is double nested: [[lng, lat], [lng, lat], ...]
+              polygonRing = coordinates as Position[];
+            }
+          }
+        }
+        
+        if (!polygonRing || polygonRing.length === 0) {
+          console.warn("Invalid polygon coordinates structure. Feature:", feature.featureId, "Coordinates:", JSON.stringify(coordinates).substring(0, 300));
+          continue;
+        }
+        
+        // Convert from [lng, lat] to [lat, lng] for Leaflet
+        // Each coordinate in polygonRing is [lng, lat] (GeoJSON format)
+        const leafletCoords = polygonRing.map((c) => {
+          if (Array.isArray(c) && c.length >= 2 && typeof c[0] === 'number' && typeof c[1] === 'number') {
+            // Swap: [lng, lat] -> [lat, lng] for Leaflet
+            return [c[1], c[0]] as [number, number];
+          }
+          console.warn("Invalid coordinate in polygon ring:", c);
+          return [0, 0] as [number, number];
+        });
+        layer = L.polygon(leafletCoords) as ExtendedLayer;
       } else if (feature.geometryType.toLowerCase() === "rectangle") {
         // Rectangle is stored as bounds format: [minLng, minLat, maxLng, maxLat]
 
@@ -1571,8 +1652,106 @@ export async function renderFeatures(
         ) as ExtendedLayer;
 
       } else if (feature.geometryType.toLowerCase() === "circle") {
-        const coords = coordinates as [number, number, number];
-        layer = L.circle([coords[1], coords[0]], { radius: coords[2] }) as ExtendedLayer;
+        // Handle different coordinate formats for circles
+        let circleCoords: [number, number, number];
+        
+        if (Array.isArray(coordinates)) {
+          if (coordinates.length === 3 && typeof coordinates[0] === 'number') {
+            // Simple [lng, lat, radius] format
+            circleCoords = coordinates as [number, number, number];
+          } else if (coordinates.length === 2 && typeof coordinates[0] === 'number') {
+            // If only 2 coordinates, assume radius is 100 meters
+            const coords = coordinates as [number, number];
+            circleCoords = [coords[0], coords[1], 100];
+          } else if (Array.isArray(coordinates[0])) {
+            // GeoJSON Polygon format - coordinates is [[[lng, lat], ...]] for Polygon
+            // OR [[lng, lat], ...] if it's already the ring
+            let polygonRing: Position[];
+            
+            if (Array.isArray(coordinates[0][0]) && Array.isArray(coordinates[0][0][0])) {
+              // Triple nested: [[[[lng, lat], ...]]] - this shouldn't happen but handle it
+              polygonRing = (coordinates[0][0] as unknown as Position[]);
+            } else if (Array.isArray(coordinates[0][0]) && typeof coordinates[0][0][0] === 'number') {
+              // Double nested: [[[lng, lat], ...]] - Polygon format
+              polygonRing = coordinates[0] as unknown as Position[];
+            } else if (Array.isArray(coordinates[0]) && typeof coordinates[0][0] === 'number') {
+              // Single nested: [[lng, lat], ...] - already a ring
+              polygonRing = coordinates as unknown as Position[];
+            } else {
+              console.warn("Invalid circle coordinates structure (polygon format):", coordinates);
+              continue;
+            }
+            
+            if (polygonRing.length > 0) {
+              // Calculate center point (average of all coordinates)
+              let sumLng = 0, sumLat = 0;
+              let validPoints = 0;
+              for (const coord of polygonRing) {
+                if (Array.isArray(coord) && coord.length >= 2 && typeof coord[0] === 'number' && typeof coord[1] === 'number') {
+                  sumLng += coord[0]; // lng
+                  sumLat += coord[1]; // lat
+                  validPoints++;
+                }
+              }
+              
+              if (validPoints === 0) {
+                console.warn("No valid coordinates in polygon ring for circle");
+                continue;
+              }
+              
+              const centerLng = sumLng / validPoints;
+              const centerLat = sumLat / validPoints;
+
+              // Calculate radius (distance from center to first point in meters)
+              const firstPoint = polygonRing[0];
+              if (Array.isArray(firstPoint) && firstPoint.length >= 2 && typeof firstPoint[0] === 'number' && typeof firstPoint[1] === 'number') {
+                // Use Haversine formula for accurate distance calculation
+                const R = 6371000; // Earth radius in meters
+                const dLat = (firstPoint[1] - centerLat) * Math.PI / 180;
+                const dLng = (firstPoint[0] - centerLng) * Math.PI / 180;
+                const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                          Math.cos(centerLat * Math.PI / 180) * Math.cos(firstPoint[1] * Math.PI / 180) *
+                          Math.sin(dLng / 2) * Math.sin(dLng / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                const radius = R * c;
+
+                circleCoords = [centerLng, centerLat, radius];
+              } else {
+                console.warn("Invalid first point in polygon ring for circle");
+                continue;
+              }
+            } else {
+              console.warn("Empty polygon coordinates for circle");
+              continue;
+            }
+          } else {
+            console.warn("Invalid circle coordinates structure:", coordinates);
+            continue;
+          }
+        } else {
+          console.warn("Circle coordinates is not an array:", coordinates);
+          continue;
+        }
+        
+        // Validate that all coordinates are valid numbers
+        if (circleCoords.some(coord => typeof coord !== 'number' || isNaN(coord))) {
+          console.warn("🔴 [RENDER FEATURES] Invalid circle coordinates - contains non-numeric values:", circleCoords);
+          continue;
+        }
+
+        // Validate coordinate ranges
+        const [lng, lat, radius] = circleCoords;
+        console.log("🔍 [RENDER FEATURES] Circle coords (raw):", { lng, lat, radius }, "Original coordinates:", coordinates);
+        if (lng < -180 || lng > 180 || lat < -90 || lat > 90 || radius <= 0) {
+          console.warn("🔴 [RENDER FEATURES] Circle coordinates out of valid range:", circleCoords);
+          continue;
+        }
+        
+        // Convert from [lng, lat, radius] to [lat, lng] for Leaflet center, keep radius
+        const leafletCenter: [number, number] = [lat, lng];
+        console.log("🔍 [RENDER FEATURES] Circle center (swapped):", leafletCenter, "Original was:", [lng, lat]);
+        layer = L.circle(leafletCenter, { radius: radius }) as ExtendedLayer;
+        console.log("✅ [RENDER FEATURES] Created circle at", leafletCenter, "with radius", radius);
       }
 
       if (layer) {
@@ -1644,7 +1823,7 @@ export async function toggleLayerVisibility(
       if (layerData.type === 'FeatureCollection' && layerData.features) {
         // Parse layer style and custom style
         let layerStyle = {};
-        let customStyle = {};
+        const customStyle = {};
 
         // layerStyle is already an object from backend
         if (layer.layerStyle) {
@@ -1783,8 +1962,46 @@ export async function toggleFeatureVisibility(
         const coords = coordinates as Position[];
         layer = L.polyline(coords.map((c) => [c[1], c[0]])) as ExtendedLayer;
       } else if (feature.geometryType.toLowerCase() === "polygon") {
-        const coords = coordinates as Position[][];
-        layer = L.polygon(coords[0].map((c) => [c[1], c[0]])) as ExtendedLayer;
+        // Handle different coordinate formats for polygons
+        // Coordinates can be: [[[lng, lat], ...]] (GeoJSON) or [[lng, lat], ...] (ring)
+        let polygonRing: Position[] | null = null;
+        
+        if (Array.isArray(coordinates) && coordinates.length > 0) {
+          const first = coordinates[0];
+          
+          // Check for triple nested: [[[lng, lat], ...]] - GeoJSON Polygon format
+          // In GeoJSON, coordinates is an array of rings, and each ring is an array of [lng, lat] pairs
+          if (Array.isArray(first) && first.length > 0) {
+            const firstPoint = first[0];
+            // If first element of first ring is an array with 2 numbers, it's triple nested
+            if (Array.isArray(firstPoint) && firstPoint.length === 2 && typeof firstPoint[0] === 'number' && typeof firstPoint[1] === 'number') {
+              // This is [[[lng, lat], ...]] format - extract the first ring
+              polygonRing = first as Position[];
+            }
+            // If first element is a number, it might be double nested [[lng, lat], ...]
+            else if (typeof firstPoint === 'number' && first.length === 2) {
+              // This is [[lng, lat], ...] format - use coordinates directly
+              polygonRing = coordinates as Position[];
+            }
+          }
+        }
+        
+        if (!polygonRing || polygonRing.length === 0) {
+          console.warn("Invalid polygon coordinates structure:", coordinates);
+          return;
+        }
+        
+        // Convert from [lng, lat] to [lat, lng] for Leaflet
+        // Each coordinate in polygonRing is [lng, lat]
+        const leafletCoords = polygonRing.map((c) => {
+          if (Array.isArray(c) && c.length >= 2 && typeof c[0] === 'number' && typeof c[1] === 'number') {
+            // Swap: [lng, lat] -> [lat, lng]
+            return [c[1], c[0]] as [number, number];
+          }
+          console.warn("Invalid coordinate in polygon ring:", c);
+          return [0, 0] as [number, number];
+        });
+        layer = L.polygon(leafletCoords) as ExtendedLayer;
       } else if (feature.geometryType.toLowerCase() === "rectangle") {
         // Rectangle is stored as bounds format: [minLng, minLat, maxLng, maxLat]
         let rectangleCoords: [number, number, number, number];

@@ -83,7 +83,8 @@ const backendToBaseKey = (backendValue: string | null | undefined): BaseKey => {
 export default function EditMapPage() {
   const params = useParams<{ mapId: string }>();
   const sp = useSearchParams();
-  const mapId = params?.mapId ?? "";
+  const mapId = params?.mapId ?? sp?.get("mapId") ?? "";
+  const isViewMode = sp?.get("view") === "true";
 
   const [isMapReady, setIsMapReady] = useState(false);
   const [detail, setDetail] = useState<MapDetail | null>(null);
@@ -234,6 +235,7 @@ export default function EditMapPage() {
 
   // Handle layer click (single or multi-select)
   const handleLayerClick = useCallback((layer: Layer, isShiftKey: boolean) => {
+    if (isViewMode) return;
     if (isShiftKey) {
       // Multi-select mode
       const newSelected = new Set(selectedLayers);
@@ -286,7 +288,7 @@ export default function EditMapPage() {
   }, [selectedLayers, features, resetToOriginalStyle, applySelectionStyle, applyMultiSelectionStyle, mapId]);
 
 
-  // Use feature management hook for Geoman event handling
+  // Use feature management hook for Geoman event handling (only in edit mode)
   const featureManagement = useFeatureManagement({
     mapId: detail?.id || mapId || "",
     features,
@@ -307,8 +309,16 @@ export default function EditMapPage() {
     handleSketchEdit,
     handleSketchDragEnd,
     handleSketchRotateEnd,
-    // handlePolygonCut,
-  } = featureManagement;
+    handlePolygonCut,
+  } = isViewMode ? {
+    lastUpdateRef: { current: new Map() },
+    recentlyCreatedFeatureIdsRef: { current: new Set() },
+    handleFeatureCreate: async () => {},
+    handleSketchEdit: async () => {},
+    handleSketchDragEnd: async () => {},
+    handleSketchRotateEnd: async () => {},
+    handlePolygonCut: async () => {},
+  } : featureManagement;
 
   // Initialize segment playback hook
   const playback = useSegmentPlayback({
@@ -364,67 +374,77 @@ export default function EditMapPage() {
 
         const dbFeatures = await loadFeaturesToMap(detail.id, L, sketchRef.current);
 
-        dbFeatures.forEach(feature => {
-          if (feature.layer) {
-            storeOriginalStyle(feature.layer);
-            feature.layer.on('mouseover', () => handleLayerHover(feature.layer, true));
-            feature.layer.on('mouseout', () => handleLayerHover(feature.layer, false));
-            feature.layer.on('click', (event: LeafletMouseEvent) => {
-              if (event.originalEvent) {
-                event.originalEvent.stopPropagation();
+        if (isViewMode) {
+          // View mode: Only render features, no edit handlers
+          dbFeatures.forEach(feature => {
+            if (feature.layer) {
+              // Just add to map, no event handlers
+            }
+          });
+        } else {
+          // Edit mode: Attach all edit handlers
+          dbFeatures.forEach(feature => {
+            if (feature.layer) {
+              storeOriginalStyle(feature.layer);
+              feature.layer.on('mouseover', () => handleLayerHover(feature.layer, true));
+              feature.layer.on('mouseout', () => handleLayerHover(feature.layer, false));
+              feature.layer.on('click', (event: LeafletMouseEvent) => {
+                if (event.originalEvent) {
+                  event.originalEvent.stopPropagation();
+                }
+                handleLayerClick(feature.layer, event.originalEvent.shiftKey);
+              });
+
+              if (feature.featureId) {
+                feature.layer.on('pm:edit', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+                  try {
+                    resetToOriginalStyle(feature.layer);
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after edit:", error);
+                  }
+                });
+
+                feature.layer.on('pm:dragend', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+                  try {
+                    resetToOriginalStyle(feature.layer);
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after drag:", error);
+                  }
+                });
+
+                feature.layer.on('pm:rotateend', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+                  try {
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after rotation:", error);
+                  }
+                });
               }
-              handleLayerClick(feature.layer, event.originalEvent.shiftKey);
-            });
 
-            if (feature.featureId) {
-              feature.layer.on('pm:edit', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-                try {
-                  resetToOriginalStyle(feature.layer);
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after edit:", error);
-                }
-              });
-
-              feature.layer.on('pm:dragend', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-                try {
-                  resetToOriginalStyle(feature.layer);
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after drag:", error);
-                }
-              });
-
-              feature.layer.on('pm:rotateend', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-                try {
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after rotation:", error);
-                }
-              });
+              if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
+                (feature.layer as GeomanLayer).pm.enable({
+                  draggable: true,
+                  allowEditing: true,
+                  allowSelfIntersection: true,
+                });
+              }
             }
-
-            if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
-              (feature.layer as GeomanLayer).pm.enable({
-                draggable: true,
-                allowEditing: true,
-                allowSelfIntersection: true,
-              });
-            }
-          }
-        });
+          });
+        }
 
         setFeatures(dbFeatures);
         const initialFeatureVisibility: Record<string, boolean> = {};
@@ -439,13 +459,14 @@ export default function EditMapPage() {
     } catch (error) {
       console.error("Failed to reload map data:", error);
     }
-  }, [detail?.id, isMapReady, storeOriginalStyle, handleLayerHover, handleLayerClick, resetToOriginalStyle]);
+  }, [detail?.id, isMapReady, isViewMode, storeOriginalStyle, handleLayerHover, handleLayerClick, resetToOriginalStyle]);
 
   useEffect(() => {
     handleMapDataChangedRef.current = handleMapDataChanged;
   }, [handleMapDataChanged]);
 
   const handleFeatureUpdated = useCallback(async (featureId: string) => {
+    if (isViewMode) return;
     if (!detail?.id || !isMapReady || !mapRef.current || !sketchRef.current) return;
 
     try {
@@ -608,6 +629,7 @@ export default function EditMapPage() {
   }, [detail?.id, isMapReady, features, storeOriginalStyle, extractLayerStyle, applyLayerStyle]);
 
   const handleFeatureCreated = useCallback(async (featureId: string) => {
+    if (isViewMode) return;
     if (!detail?.id || !isMapReady || !mapRef.current || !sketchRef.current) return;
 
     if (recentlyCreatedFeatureIdsRef.current.has(featureId)) {
@@ -818,7 +840,7 @@ export default function EditMapPage() {
       }
 
       // Enable editing
-      if ('pm' in layer && (layer as GeomanLayer).pm) {
+      if ('pm' in layer && (layer as GeomanLayer).pm && !isViewMode) {
         (layer as GeomanLayer).pm.enable({
           draggable: true,
           allowEditing: true,
@@ -858,9 +880,10 @@ export default function EditMapPage() {
     } catch (error) {
       console.error("Failed to add feature:", error);
     }
-  }, [detail?.id, isMapReady, features, storeOriginalStyle, handleLayerHover, handleLayerClick, resetToOriginalStyle, applyLayerStyle]);
+  }, [detail?.id, isMapReady, isViewMode, features, storeOriginalStyle, handleLayerHover, handleLayerClick, resetToOriginalStyle, applyLayerStyle]);
 
   const handleFeatureDeleted = useCallback((featureId: string) => {
+    if (isViewMode) return;
     if (!sketchRef.current) return;
 
     const featureToRemove = features.find(f => f.featureId === featureId);
@@ -874,11 +897,11 @@ export default function EditMapPage() {
         return newVisibility;
       });
     }
-  }, [features]);
+  }, [features, isViewMode]);
 
   const collaboration = useMapCollaboration({
     mapId: mapId || null,
-    enabled: isMapReady && !!mapId,
+    enabled: isMapReady && !!mapId && !isViewMode,
     onSelectionUpdated: (selection) => {
       visualizeRef.current(selection);
     },
@@ -1251,7 +1274,7 @@ export default function EditMapPage() {
       }
 
       // Check if PM is available on map before using it
-      if (map.pm) {
+      if (map.pm && !isViewMode) {
         map.pm.addControls({
           drawMarker: false,
           drawPolyline: false,
@@ -1262,7 +1285,7 @@ export default function EditMapPage() {
           drawText: false,
           editMode: false,
           dragMode: false,
-          // cutPolygon: false,
+          cutPolygon: false,
           rotateMode: false,
           removalMode: false,
         });
@@ -1362,82 +1385,91 @@ export default function EditMapPage() {
 
         const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
 
-        // Attach event listeners to loaded features
-        dbFeatures.forEach(feature => {
-          if (feature.layer) {
-            // Store original style
-            storeOriginalStyle(feature.layer);
+        if (isViewMode) {
+          // View mode: Only render features, no event handlers
+          dbFeatures.forEach(feature => {
+            if (feature.layer) {
+              // Just render, no handlers
+            }
+          });
+        } else {
+          // Edit mode: Attach all event listeners
+          dbFeatures.forEach(feature => {
+            if (feature.layer) {
+              // Store original style
+              storeOriginalStyle(feature.layer);
 
-            // Attach hover and click event listeners (throttled for performance)
-            const hoverOverHandler = rafThrottle(() => handleLayerHover(feature.layer, true));
-            const hoverOutHandler = rafThrottle(() => handleLayerHover(feature.layer, false));
-            feature.layer.on('mouseover', hoverOverHandler);
-            feature.layer.on('mouseout', hoverOutHandler);
-            feature.layer.on('click', (event: LeafletMouseEvent) => {
-              // Stop propagation to prevent base layer click from firing
-              if (event.originalEvent) {
-                event.originalEvent.stopPropagation();
+              // Attach hover and click event listeners (throttled for performance)
+              const hoverOverHandler = rafThrottle(() => handleLayerHover(feature.layer, true));
+              const hoverOutHandler = rafThrottle(() => handleLayerHover(feature.layer, false));
+              feature.layer.on('mouseover', hoverOverHandler);
+              feature.layer.on('mouseout', hoverOutHandler);
+              feature.layer.on('click', (event: LeafletMouseEvent) => {
+                // Stop propagation to prevent base layer click from firing
+                if (event.originalEvent) {
+                  event.originalEvent.stopPropagation();
+                }
+                handleLayerClick(feature.layer, event.originalEvent.shiftKey);
+              });
+
+              // Attach edit/drag/rotate/cut event listeners for database updates
+              if (feature.featureId) {
+                feature.layer.on('pm:edit', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+
+                  try {
+                    // Reset to original style first to remove selection styling
+                    resetToOriginalStyle(feature.layer);
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after edit:", error);
+                  }
+                });
+
+                feature.layer.on('pm:dragend', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+
+                  try {
+                    // Reset to original style first to remove selection styling
+                    resetToOriginalStyle(feature.layer);
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after drag:", error);
+                  }
+                });
+
+                feature.layer.on('pm:rotateend', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+
+                  try {
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after rotation:", error);
+                  }
+                });
+
               }
-              handleLayerClick(feature.layer, event.originalEvent.shiftKey);
-            });
 
-            // Attach edit/drag/rotate/cut event listeners for database updates
-            if (feature.featureId) {
-              feature.layer.on('pm:edit', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-
-                try {
-                  // Reset to original style first to remove selection styling
-                  resetToOriginalStyle(feature.layer);
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after edit:", error);
-                }
-              });
-
-              feature.layer.on('pm:dragend', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-
-                try {
-                  // Reset to original style first to remove selection styling
-                  resetToOriginalStyle(feature.layer);
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after drag:", error);
-                }
-              });
-
-              feature.layer.on('pm:rotateend', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-
-                try {
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after rotation:", error);
-                }
-              });
-
+              // Enable dragging and editing via Geoman
+              if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
+                (feature.layer as GeomanLayer).pm.enable({
+                  draggable: true,
+                  allowEditing: true,
+                  allowSelfIntersection: true,
+                });
+              }
             }
-
-            // Enable dragging and editing via Geoman
-            if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
-              (feature.layer as GeomanLayer).pm.enable({
-                draggable: true,
-                allowEditing: true,
-                allowSelfIntersection: true,
-              });
-            }
-          }
-        });
+          });
+        }
 
         if (alive) {
           setFeatures(dbFeatures);
@@ -1458,10 +1490,11 @@ export default function EditMapPage() {
     return () => {
       alive = false;
     };
-  }, [detail?.id, isMapReady]);
+  }, [detail?.id, isMapReady, isViewMode]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !sketchRef.current) return;
+    if (isViewMode) return;
     if (!handleFeatureCreate || !handleSketchEdit || !handleSketchDragEnd || !handleSketchRotateEnd) return;
 
     const map = mapRef.current;
@@ -1475,7 +1508,7 @@ export default function EditMapPage() {
     map.on("pm:create", createHandler);
 
     // Handle polygon cut event at map level
-    // map.on("pm:cut", handlePolygonCut);
+    map.on("pm:cut", handlePolygonCut);
 
     // Handle sketch-level edit/drag/rotate events
     sketch.on("pm:edit", handleSketchEdit);
@@ -1485,7 +1518,7 @@ export default function EditMapPage() {
     return () => {
       if (mapRef.current) {
         mapRef.current.off("pm:create", createHandler);
-        // mapRef.current.off("pm:cut", handlePolygonCut);
+        mapRef.current.off("pm:cut", handlePolygonCut);
       }
       if (sketchRef.current) {
         sketchRef.current.off("pm:edit", handleSketchEdit);
@@ -1493,8 +1526,7 @@ export default function EditMapPage() {
         sketchRef.current.off("pm:rotateend", handleSketchRotateEnd);
       }
     };
-  }, [isMapReady, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd]);
-  // }, [isMapReady, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd, handlePolygonCut]);
+  }, [isMapReady, isViewMode, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd, handlePolygonCut]);
 
   useEffect(() => {
     if (!mapRef.current || !isMapReady) return;
@@ -1823,6 +1855,7 @@ export default function EditMapPage() {
     let clickHandler: ((e: LeafletMouseEvent) => void) | null = null;
 
     const handleStartPickLocation = () => {
+      if (isViewMode) return;
       const map = mapRef.current;
       if (!map) {
         console.warn('⚠️ Map not ready yet');
@@ -2011,6 +2044,7 @@ export default function EditMapPage() {
     };
 
     const handleStartPlacement = (ev: Event) => {
+      if (isViewMode) return;
       const custom = ev as CustomEvent<{ iconKey: string }>;
       const iconKey = custom.detail?.iconKey;
       const map = mapRef.current;
@@ -3101,267 +3135,28 @@ export default function EditMapPage() {
     try {
       const map = mapRef.current;
 
-      // 1. Capture map canvas as image (for PNG/PDF formats)
+      // 1. Capture map canvas as image (for PNG/PDF/SVG formats)
       let mapImageData: string | undefined = undefined;
-      if (exportFormat === "png" || exportFormat === "pdf") {
+      if (exportFormat === "png" || exportFormat === "pdf" || exportFormat === "svg") {
         showToast("info", t('export_embed', 'info_capturing_map'));
 
-        // Use leaflet-image library - it handles everything internally
-        // Just ensure map is ready
-        if (map) {
-          map.invalidateSize();
-          
-          // Wait a bit for map to stabilize
-          await new Promise(resolve => setTimeout(resolve, 500));
-        }
+        // Wait a bit for tiles to load
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Capture using custom canvas rendering - manually draw all features
-        // This ensures 100% accurate positioning
+        // Capture the map container
         try {
-          const mapContainer = mapEl.current;
-          if (!mapContainer) {
-            throw new Error("Map container not found");
-          }
-          
-          const width = mapContainer.offsetWidth;
-          const height = mapContainer.offsetHeight;
-          const scale = 2;
-          
-          // Create a canvas to draw on
-          const canvas = document.createElement('canvas');
-          canvas.width = width * scale;
-          canvas.height = height * scale;
-          const ctx = canvas.getContext('2d');
-          
-          if (!ctx) {
-            throw new Error("Could not get canvas context");
-          }
-          
-          // Scale the context
-          ctx.scale(scale, scale);
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, width, height);
-          
-          // Wait a bit for all images to load
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // First, capture the base map (tiles) and markers using html2canvas
-          // We'll draw vector features (polygons, circles) manually on top
-          const baseCanvas = await html2canvas(mapContainer, {
+          const canvas = await html2canvas(mapEl.current, {
             useCORS: true,
             allowTaint: false,
             backgroundColor: '#ffffff',
-            scale: scale,
-            width: width,
-            height: height,
-            logging: false, // Disable logging to avoid console errors
-            onclone: (clonedDoc) => {
-              // Remove any broken image references
-              const images = clonedDoc.querySelectorAll('img');
-              images.forEach((img: HTMLImageElement) => {
-                if (!img.complete || img.naturalWidth === 0) {
-                  img.style.display = 'none';
-                }
-              });
-              
-              // Ensure all marker panes are visible
-              const markerPanes = clonedDoc.querySelectorAll('.leaflet-marker-pane');
-              markerPanes.forEach((pane: Element) => {
-                (pane as HTMLElement).style.visibility = 'visible';
-                (pane as HTMLElement).style.display = 'block';
-                (pane as HTMLElement).style.opacity = '1';
-              });
-            },
-            ignoreElements: (element) => {
-              // Only ignore vector overlay layers (polygons, circles, polylines)
-              // Keep markers - they use divIcon and should be captured
-              if (element.classList?.contains('leaflet-overlay-pane')) {
-                // Check if it's a vector layer (has SVG paths)
-                const hasVectorPaths = element.querySelector('svg path, svg circle, svg polygon');
-                return !!hasVectorPaths;
-              }
-              // Ignore broken image elements
-              if (element instanceof HTMLImageElement) {
-                if (!element.complete || element.naturalWidth === 0) {
-                  return true;
-                }
-              }
-              return false;
-            }
+            scale: 1,
+            logging: false,
+            width: mapEl.current.offsetWidth,
+            height: mapEl.current.offsetHeight,
           });
-          
-          // Draw the base map
-          ctx.drawImage(baseCanvas, 0, 0, width, height);
-          
-          // Now manually draw all vector features using Leaflet's coordinate conversion
-          const L = (await import("leaflet")).default;
-          
-          // Create a map to track which features we've drawn (to avoid duplicates)
-          const drawnLayers = new Set<any>();
-          
-          // First, draw all layers from sketchRef
-          if (sketchRef.current) {
-            sketchRef.current.eachLayer((layer: any) => {
-              try {
-                drawnLayers.add(layer);
-                
-                // Get layer style
-                const options = layer.options || {};
-                const fillColor = options.fillColor || options.color || '#3388ff';
-                const strokeColor = options.color || '#3388ff';
-                const fillOpacity = options.fillOpacity !== undefined ? options.fillOpacity : 0.2;
-                const strokeOpacity = options.opacity !== undefined ? options.opacity : 1;
-                const weight = options.weight || 2;
-                
-                ctx.fillStyle = fillColor;
-                ctx.strokeStyle = strokeColor;
-                ctx.lineWidth = weight;
-                ctx.globalAlpha = fillOpacity;
-                
-                if (layer instanceof L.Circle || layer instanceof L.CircleMarker) {
-                  const center = layer.getLatLng();
-                  const radius = layer.getRadius ? layer.getRadius() : (options.radius || 10);
-                  const centerPoint = map.latLngToContainerPoint(center);
-                  
-                  // For Circle (not CircleMarker), convert radius from meters to pixels
-                  let radiusPx: number;
-                  if (layer instanceof L.Circle) {
-                    const radiusPoint = map.latLngToContainerPoint([
-                      center.lat,
-                      map.containerPointToLatLng([centerPoint.x + radius, centerPoint.y]).lng
-                    ]);
-                    radiusPx = Math.abs(radiusPoint.x - centerPoint.x);
-                  } else {
-                    // CircleMarker radius is already in pixels
-                    radiusPx = radius;
-                  }
-                  
-                  ctx.beginPath();
-                  ctx.arc(centerPoint.x, centerPoint.y, radiusPx, 0, Math.PI * 2);
-                  ctx.fill();
-                  ctx.globalAlpha = strokeOpacity;
-                  ctx.stroke();
-                } else if (layer instanceof L.Polygon || layer instanceof L.Rectangle) {
-                  const latlngs = layer.getLatLngs();
-                  if (Array.isArray(latlngs) && latlngs.length > 0) {
-                    const coords = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
-                    
-                    ctx.beginPath();
-                    coords.forEach((ll: any, idx: number) => {
-                      const pt = map.latLngToContainerPoint(ll);
-                      if (idx === 0) {
-                        ctx.moveTo(pt.x, pt.y);
-                      } else {
-                        ctx.lineTo(pt.x, pt.y);
-                      }
-                    });
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.globalAlpha = strokeOpacity;
-                    ctx.stroke();
-                  }
-                } else if (layer instanceof L.Polyline) {
-                  const latlngs = layer.getLatLngs();
-                  if (Array.isArray(latlngs) && latlngs.length > 0) {
-                    ctx.beginPath();
-                    latlngs.forEach((ll: any, idx: number) => {
-                      const pt = map.latLngToContainerPoint(ll);
-                      if (idx === 0) {
-                        ctx.moveTo(pt.x, pt.y);
-                      } else {
-                        ctx.lineTo(pt.x, pt.y);
-                      }
-                    });
-                    ctx.globalAlpha = strokeOpacity;
-                    ctx.stroke();
-                  }
-                } else if (layer instanceof L.Marker) {
-                  // Markers are already captured in base canvas, skip
-                }
-              } catch (layerError) {
-                console.warn("Error drawing layer:", layerError);
-              }
-            });
-          }
-          
-          // Now draw text labels for text features
-          // Iterate through features to get text content and draw it
-          features.forEach((feature) => {
-            try {
-              // Only process visible features
-              const isVisible = featureVisibility[feature.id] ?? feature.isVisible ?? true;
-              if (!isVisible) return;
-              
-              // Check if it's a text feature
-              if (feature.annotationType?.toLowerCase() === "text" && feature.layer) {
-                const layer = feature.layer as any;
-                
-                // Get text content from feature properties or layer
-                let textContent = "Text";
-                if (feature.properties) {
-                  try {
-                    const props = typeof feature.properties === 'string' 
-                      ? JSON.parse(feature.properties) 
-                      : feature.properties;
-                    if (props.text) {
-                      textContent = props.text;
-                    }
-                  } catch (e) {
-                    // If properties is not JSON, try to get from layer icon
-                    if (layer instanceof L.Marker) {
-                      const icon = layer.options?.icon as L.DivIcon | undefined;
-                      if (icon?.options?.html && typeof icon.options.html === 'string') {
-                        textContent = icon.options.html;
-                      }
-                    }
-                  }
-                }
-                
-                // Get position from layer
-                let position: L.LatLng | null = null;
-                if (layer instanceof L.Marker) {
-                  position = layer.getLatLng();
-                } else if (layer instanceof L.CircleMarker || layer instanceof L.Circle) {
-                  position = layer.getLatLng();
-                }
-                
-                if (position) {
-                  const point = map.latLngToContainerPoint(position);
-                  
-                  // Draw text background (optional, for better readability)
-                  ctx.save();
-                  ctx.font = `${14 * scale}px Arial, sans-serif`;
-                  ctx.textAlign = 'center';
-                  ctx.textBaseline = 'middle';
-                  
-                  // Measure text to draw background
-                  const metrics = ctx.measureText(textContent);
-                  const textWidth = metrics.width;
-                  const textHeight = 14 * scale;
-                  
-                  // Draw background rectangle
-                  ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                  ctx.fillRect(
-                    point.x - textWidth / 2 - 4,
-                    point.y - textHeight / 2 - 4,
-                    textWidth + 8,
-                    textHeight + 8
-                  );
-                  
-                  // Draw text
-                  ctx.fillStyle = '#000000';
-                  ctx.fillText(textContent, point.x, point.y);
-                  ctx.restore();
-                }
-              }
-            } catch (featureError) {
-              console.warn("Error drawing text feature:", featureError);
-            }
-          });
-          
+
           // Convert to base64
-          mapImageData = canvas.toDataURL('image/png', 1.0);
-          console.log("✅ Map captured successfully using custom canvas rendering. Canvas size:", canvas.width, "x", canvas.height);
+          mapImageData = canvas.toDataURL('image/png');
         } catch (captureError) {
           console.error("Map capture failed:", captureError);
           showToast("error", t('export_embed', 'error_capture_failed'));
@@ -3396,189 +3191,12 @@ export default function EditMapPage() {
         visibleFeatureIds[feature.id] = featureVisibility[feature.id] ?? feature.isVisible ?? true;
       });
 
-      // Note: SVG path extraction is no longer needed since we're using Canvas renderer
-      // html2canvas can now capture everything directly from the canvas
-      let svgPathData: string | undefined = undefined;
-      // Disabled - using canvas renderer instead
-      if (false && (exportFormat === "png" || exportFormat === "pdf") && sketchRef.current && map && mapEl.current) {
-        try {
-          const svgPaths: Array<{
-            type: 'path' | 'circle' | 'polygon' | 'polyline';
-            data: string;
-            fill: string;
-            stroke: string;
-            strokeWidth: string;
-            fillOpacity: string;
-            strokeOpacity: string;
-            transform?: string;
-          }> = [];
-          
-          const mapBounds = map.getBounds();
-          const mapSize = map.getSize();
-          const containerRect = mapEl.current?.getBoundingClientRect();
-          
-          sketchRef.current?.eachLayer((layer: any) => {
-            if (!layer._path) return;
-            
-            const pathElement = layer._path as SVGElement;
-            if (!pathElement || !pathElement.parentElement) return;
-            
-            // Get computed styles
-            const computedStyle = window.getComputedStyle(pathElement);
-            const fill = pathElement.getAttribute('fill') || computedStyle.fill || '#3388ff';
-            const stroke = pathElement.getAttribute('stroke') || computedStyle.stroke || '#3388ff';
-            const strokeWidth = pathElement.getAttribute('stroke-width') || computedStyle.strokeWidth || '2';
-            const fillOpacity = pathElement.getAttribute('fill-opacity') || computedStyle.fillOpacity || '0.2';
-            const strokeOpacity = pathElement.getAttribute('stroke-opacity') || computedStyle.strokeOpacity || '1';
-            
-            // Get the actual SVG path data based on element type
-            const tagName = pathElement.tagName.toLowerCase();
-            
-            try {
-              // html2canvas captures at scale: 2, so we need to scale coordinates by 2
-              const imageScale = 2;
-              
-              // Use Leaflet's coordinate conversion for accurate positioning
-              if (tagName === 'path') {
-                // For paths (polygons, circles rendered as paths), use layer coordinates
-                if (layer.getLatLngs && typeof layer.getLatLngs === 'function') {
-                  const latlngs = layer.getLatLngs();
-                  if (Array.isArray(latlngs) && latlngs.length > 0) {
-                    // Convert lat/lng to container points and scale
-                    const points = Array.isArray(latlngs[0]) 
-                      ? (latlngs[0] as any[]).map((ll: any) => {
-                          const pt = map.latLngToContainerPoint(ll);
-                          return { x: pt.x * imageScale, y: pt.y * imageScale };
-                        })
-                      : latlngs.map((ll: any) => {
-                          const pt = map.latLngToContainerPoint(ll);
-                          return { x: pt.x * imageScale, y: pt.y * imageScale };
-                        });
-                    
-                    // Build path data from points
-                    const pathCommands = points.map((pt, idx) => 
-                      idx === 0 ? `M ${pt.x} ${pt.y}` : `L ${pt.x} ${pt.y}`
-                    );
-                    pathCommands.push('Z'); // Close path
-                    
-                    svgPaths.push({
-                      type: 'path',
-                      data: pathCommands.join(' '),
-                      fill,
-                      stroke,
-                      strokeWidth: (parseFloat(strokeWidth) * imageScale).toString(),
-                      fillOpacity,
-                      strokeOpacity
-                    });
-                  }
-                } else {
-                  // Fallback: use SVG path as-is with transform and scale
-                  const d = pathElement.getAttribute('d');
-                  if (d) {
-                    const pathRect = pathElement.getBoundingClientRect();
-                    const mapContainerRect = mapEl.current?.getBoundingClientRect();
-                    const offsetX = (pathRect.left - (mapContainerRect?.left ?? 0)) * imageScale;
-                    const offsetY = (pathRect.top - (mapContainerRect?.top ?? 0)) * imageScale;
-                    const bbox = (pathElement as SVGPathElement).getBBox();
-                    
-                    svgPaths.push({
-                      type: 'path',
-                      data: d,
-                      fill,
-                      stroke,
-                      strokeWidth: (parseFloat(strokeWidth) * imageScale).toString(),
-                      fillOpacity,
-                      strokeOpacity,
-                      transform: `translate(${offsetX - bbox.x * imageScale},${offsetY - bbox.y * imageScale}) scale(${imageScale})`
-                    });
-                  }
-                }
-              } else if (tagName === 'circle') {
-                // For circles, use layer center and radius
-                if (layer.getLatLng && typeof layer.getLatLng === 'function' && layer.getRadius && typeof layer.getRadius === 'function') {
-                  const center = layer.getLatLng();
-                  const radius = layer.getRadius();
-                  const centerPoint = map.latLngToContainerPoint(center);
-                  
-                  // Convert radius from meters to pixels and scale
-                  const radiusPoint = map.latLngToContainerPoint([
-                    center.lat,
-                    map.containerPointToLatLng([centerPoint.x + radius, centerPoint.y]).lng
-                  ]);
-                  const radiusPx = Math.abs(radiusPoint.x - centerPoint.x) * imageScale;
-                  
-                  svgPaths.push({
-                    type: 'circle',
-                    data: `${centerPoint.x * imageScale},${centerPoint.y * imageScale},${radiusPx}`,
-                    fill,
-                    stroke,
-                    strokeWidth: (parseFloat(strokeWidth) * imageScale).toString(),
-                    fillOpacity,
-                    strokeOpacity
-                  });
-                } else {
-                  // Fallback: use bounding box and scale
-                  const pathRect = pathElement.getBoundingClientRect();
-                  const mapContainerRect = mapEl.current?.getBoundingClientRect();
-                  const circleCenterX = (pathRect.left + pathRect.width / 2 - (mapContainerRect?.left ?? 0)) * imageScale;
-                  const circleCenterY = (pathRect.top + pathRect.height / 2 - (mapContainerRect?.top ?? 0)) * imageScale;
-                  const circleRadius = Math.max(pathRect.width, pathRect.height) / 2 * imageScale;
-                  
-                  svgPaths.push({
-                    type: 'circle',
-                    data: `${circleCenterX},${circleCenterY},${circleRadius}`,
-                    fill,
-                    stroke,
-                    strokeWidth: (parseFloat(strokeWidth) * imageScale).toString(),
-                    fillOpacity,
-                    strokeOpacity
-                  });
-                }
-              } else if (tagName === 'polygon' || tagName === 'polyline') {
-                // For polygons/polylines, use layer coordinates
-                if (layer.getLatLngs && typeof layer.getLatLngs === 'function') {
-                  const latlngs = layer.getLatLngs();
-                  if (Array.isArray(latlngs) && latlngs.length > 0) {
-                    // Handle nested arrays (polygon with holes)
-                    const coords = Array.isArray(latlngs[0]) ? latlngs[0] : latlngs;
-                    const points = coords.map((ll: any) => {
-                      const pt = map.latLngToContainerPoint(ll);
-                      return `${pt.x * imageScale},${pt.y * imageScale}`;
-                    });
-                    
-                    svgPaths.push({
-                      type: tagName === 'polygon' ? 'polygon' : 'polyline',
-                      data: points.join(' '),
-                      fill,
-                      stroke,
-                      strokeWidth: (parseFloat(strokeWidth) * imageScale).toString(),
-                      fillOpacity,
-                      strokeOpacity
-                    });
-                  }
-                }
-              }
-            } catch (err) {
-              console.warn("Error extracting SVG path data:", err, layer, pathElement);
-            }
-          });
-          
-          if (svgPaths.length > 0) {
-            svgPathData = JSON.stringify(svgPaths);
-            console.log(`✅ [EXPORT] Extracted ${svgPaths.length} SVG paths for export`);
-          }
-        } catch (svgError) {
-          console.warn("Failed to extract SVG paths:", svgError);
-        }
-      }
-
       // 5. Prepare export request
       const exportRequest: ExportRequest = {
         mapId: detail.id,
         format: exportFormat,
         viewState: viewState,
         mapImageData: mapImageData, // Include captured map image
-        svgPathData: svgPathData, // Include extracted SVG path data
         visibleLayerIds: Object.keys(visibleLayerIds).length > 0 ? visibleLayerIds : undefined,
         visibleFeatureIds: Object.keys(visibleFeatureIds).length > 0 ? visibleFeatureIds : undefined,
         options: {
@@ -3595,58 +3213,14 @@ export default function EditMapPage() {
       const response = await createExport(exportRequest);
       setExportStatus(response);
 
-      // GeoJSON exports are auto-approved, PNG/PDF require admin approval
-      if (exportFormat === "geojson") {
-        // GeoJSON is auto-approved, check if it's already approved
-        if (response.status === "Approved" && response.fileUrl) {
-          // Auto-download GeoJSON file
-          window.open(response.fileUrl, '_blank');
-          showToast("success", lang === 'vi' ? 'GeoJSON đã được tải xuống tự động' : 'GeoJSON downloaded automatically');
-        } else if (response.status === "Processing" || response.status === "Pending") {
-          // If still processing, poll a few times to get the final status
-          let pollCount = 0;
-          const maxPolls = 10; // Poll up to 10 times (50 seconds max)
-          
-          const pollInterval = setInterval(async () => {
-            pollCount++;
-            try {
-              const updatedExport = await getExportById(response.exportId);
-              setExportStatus(updatedExport);
-              
-              if (updatedExport.status === "Approved" && updatedExport.fileUrl) {
-                clearInterval(pollInterval);
-                // Auto-download GeoJSON file
-                window.open(updatedExport.fileUrl, '_blank');
-                showToast("success", lang === 'vi' ? 'GeoJSON đã được tải xuống tự động' : 'GeoJSON downloaded automatically');
-              } else if (updatedExport.status === "Rejected" || updatedExport.status === "Failed") {
-                clearInterval(pollInterval);
-                const reason = updatedExport.rejectionReason || updatedExport.errorMessage || '';
-                showToast("error", `${lang === 'vi' ? 'Lỗi xuất GeoJSON' : 'GeoJSON export failed'}: ${reason}`);
-              } else if (pollCount >= maxPolls) {
-                clearInterval(pollInterval);
-                showToast("warning", lang === 'vi' ? 'Hết thời gian chờ xuất GeoJSON' : 'GeoJSON export timeout');
-              }
-            } catch (error) {
-              console.error("Error checking GeoJSON export status:", error);
-              if (pollCount >= maxPolls) {
-                clearInterval(pollInterval);
-              }
-            }
-          }, 5000); // Poll every 5 seconds
-        } else {
-          showToast("success", t('export_embed', 'success_export_created'));
-        }
-      } else {
-        // PNG/PDF require admin approval
-        showToast("success", t('export_embed', 'success_export_created'));
-        
-        // Poll for status updates if pending approval
-        if (response.status === "PendingApproval" || response.status === "Processing") {
-          pollExportStatus(response.exportId);
-        } else if (response.status === "Approved" && response.fileUrl) {
-          // Show download link in toast if already approved
-          showToast("success", `${t('export_embed', 'success_export_approved')} ${response.fileUrl}`);
-        }
+      showToast("success", t('export_embed', 'success_export_created'));
+
+      // Poll for status updates if pending approval
+      if (response.status === "PendingApproval" || response.status === "Processing") {
+        pollExportStatus(response.exportId);
+      } else if (response.status === "Approved" && response.fileUrl) {
+        // Show download link in toast if already approved
+        showToast("success", `${t('export_embed', 'success_export_approved')} ${response.fileUrl}`);
       }
     } catch (error) {
       console.error("Export failed:", error);
@@ -3719,171 +3293,6 @@ export default function EditMapPage() {
       <div className="absolute top-0 left-0 z-[3000] w-full pointer-events-none">
         <div className="pointer-events-auto bg-black/70 backdrop-blur-md ring-1 ring-white/15 shadow-xl py-1 px-3">
           <div className="grid grid-cols-3 place-items-stretch gap-2">
-            <div className="flex items-center justify-start gap-2 overflow-x-auto no-scrollbar">
-              {isEditingMapName ? (
-                <input
-                  type="text"
-                  value={editingMapName}
-                  onChange={(e) => setEditingMapName(e.target.value)}
-                  onKeyDown={async (e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const newName = editingMapName.trim() || "Untitled Map";
-                      if (newName !== name) {
-                        try {
-                          setIsSaving(true);
-                          await updateMap(detail?.id || '', { name: newName });
-                          setName(newName);
-                          showToast("success", "Đã đổi tên bản đồ");
-                        } catch (error) {
-                          showToast("error", "Không thể đổi tên bản đồ");
-                        } finally {
-                          setIsSaving(false);
-                        }
-                      }
-                      setIsEditingMapName(false);
-                      setEditingMapName("");
-                    } else if (e.key === "Escape") {
-                      setIsEditingMapName(false);
-                      setEditingMapName("");
-                    }
-                  }}
-                  onBlur={async () => {
-                    const newName = editingMapName.trim() || "Untitled Map";
-                    if (newName !== name) {
-                      try {
-                        setIsSaving(true);
-                        await updateMap(detail?.id || '', { name: newName });
-                        setName(newName);
-                        showToast("success", "Đã đổi tên bản đồ");
-                      } catch (error) {
-                        showToast("error", "Không thể đổi tên bản đồ");
-                      } finally {
-                        setIsSaving(false);
-                      }
-                    }
-                    setIsEditingMapName(false);
-                    setEditingMapName("");
-                  }}
-                  className="px-2.5 py-1.5 rounded-md bg-white text-black text-sm font-medium w-52 border-2 border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                  placeholder="Untitled Map"
-                  autoFocus
-                  disabled={isSaving}
-                />
-              ) : (
-                <span
-                  onDoubleClick={() => {
-                    setEditingMapName(name);
-                    setIsEditingMapName(true);
-                  }}
-                  className="px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm font-medium w-52 cursor-pointer transition-colors truncate"
-                  title="Double click để đổi tên"
-                >
-                  {name || "Untitled Map"}
-                </span>
-              )}
-            </div>
-            {!loading && mapStatus !== "archived" && (
-            <DrawingToolsBar mapRef={mapRef} />
-            )}
-            <div className="flex items-center justify-end gap-2 overflow-x-auto no-scrollbar">
-              {/* Active Users */}
-              <ActiveUsersIndicator
-                activeUsers={collaboration.activeUsers}
-                isConnected={collaboration.isConnected}
-              />
-
-              {/* Toolbar Group - Canva Style */}
-              <div className="flex items-center gap-0 bg-zinc-800/50 rounded-lg p-0.5 border border-zinc-700/50">
-                <input
-                  type="file"
-                  accept=".geojson,.json,.kml,.gpx"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (file && mapId) {
-                      try {
-                        showToast("info", "Đang tải file lên...");
-
-                        // Backend tự động tạo layer mới, chỉ cần truyền mapId
-                        const result = await uploadGeoJsonToMap(mapId, file);
-
-                        showToast("info", "Đang load dữ liệu...");
-
-                        // Refresh toàn bộ map detail để lấy layer mới
-                        const updatedDetail = await getMapDetail(mapId);
-                        setDetail(updatedDetail);
-
-                        showToast("success", `Tải lên thành công! Đã thêm ${result.featuresAdded} đối tượng vào layer "${result.layerId}".`);
-
-                        // Clear the input
-                        e.target.value = '';
-                      } catch (error) {
-                        console.error("Upload error:", error);
-                        showToast("error", error instanceof Error ? error.message : "Tải file thất bại");
-                        e.target.value = '';
-                      }
-                    }
-                  }}
-                  className="hidden"
-                  id="upload-layer"
-                />
-                <label
-                  htmlFor="upload-layer"
-                  className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white cursor-pointer transition-all flex items-center gap-2"
-                  title="Upload GeoJSON/KML/GPX file to add as layer"
-                >
-                  <UploadIcon className="w-4 h-4" />
-                  Upload
-                </label>
-
-                <div className="h-5 w-px bg-zinc-600/50" />
-
-                <button
-                  className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-                  onClick={saveMap}
-                  disabled={isSaving || !mapRef.current}
-                  title="Lưu thông tin bản đồ và vị trí hiển thị"
-                >
-                  {isSaving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <SaveIcon className="w-4 h-4" />
-                      Save
-                    </>
-                  )}
-                </button>
-
-                <div className="h-5 w-px bg-zinc-600/50" />
-
-                {/* Export Button */}
-                <button
-                  className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-                  onClick={() => setShowExportModal(true)}
-                  disabled={isExporting || !mapRef.current}
-                  title="Xuất bản đồ"
-                >
-                  {isExporting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
-                      Đang xuất...
-                    </>
-                  ) : (
-                    <>
-                      <DownloadIcon className="w-4 h-4" />
-                      Xuất
-                    </>
-                  )}
-                </button>
-
-                <div className="h-5 w-px bg-zinc-600/50" />
-
-                <PublishButton mapId={mapId} status={mapStatus} onStatusChange={setMapStatus} isStoryMap={!loading && detail?.isStoryMap !== false} />
-              </div>
-            </div>
           </div>
           {/* Toast messages are handled globally via ToastProvider */}
         </div>
@@ -3894,71 +3303,12 @@ export default function EditMapPage() {
         ref={mapEl}
         className="absolute inset-0 transition-all duration-300"
         style={{
-          left: mapStatus === "archived" ? "0" : (leftSidebarView ? "376px" : "56px"), // Hide sidebar when Archived
-          right: isPropertiesPanelOpen ? "360px" : "0",
+          left: (mapStatus === "archived" || isViewMode) ? "0" : (leftSidebarView ? "376px" : "56px"), // Hide sidebar when Archived or in View Mode
+          right: (isViewMode ? "0" : (isPropertiesPanelOpen ? "360px" : "0")),
           // top: "60px",
-          bottom: (!loading && detail?.isStoryMap !== false && mapStatus !== "archived") ? "200px" : "0", // Hide timeline when Archived
+          bottom: (!loading && detail?.isStoryMap !== false && mapStatus !== "archived" && !isViewMode) ? "200px" : "0", // Hide timeline when Archived or in View Mode
         }}
       />
-
-      {/* NEW: VSCode-style Left Sidebar - Hide when Archived */}
-      {mapStatus !== "archived" && !loading && (
-        <LeftSidebarToolbox
-        isStoryMap={!loading && detail?.isStoryMap !== false}
-        activeView={leftSidebarView}
-        onViewChange={setLeftSidebarView}
-        features={features}
-        layers={layers}
-        segments={segments}
-        transitions={transitions}
-        baseLayer={baseKey}
-        currentMap={mapRef.current}
-        mapId={mapId}
-        layerVisibility={layerVisibility}
-        onSelectFeature={handleSelectFeature}
-        onSelectLayer={handleSelectLayerNew}
-        onBaseLayerChange={setBaseKey}
-        onFeatureVisibilityChange={onFeatureVisibilityChange}
-        onLayerVisibilityChange={onLayerVisibilityChange}
-        onDeleteFeature={onDeleteFeature}
-        onSegmentClick={handleSegmentClick}
-        onSaveSegment={handleSaveSegment}
-        onDeleteSegment={handleDeleteSegment}
-        onSaveTransition={handleSaveTransition}
-        onDeleteTransition={handleDeleteTransition}
-        currentLayerId={currentLayerId}
-          onLayerChange={setCurrentLayerId}
-        />
-      )}
-
-      {/* NEW: Right Properties Panel */}
-      <PropertiesPanel
-        isOpen={isPropertiesPanelOpen}
-        selectedItem={selectedEntity}
-        onClose={() => setIsPropertiesPanelOpen(false)}
-        onUpdate={handleUpdateFeature}
-      />
-
-      {/*Timeline Workspace - Only show for StoryMap, hide when Archived */}
-      {!loading && detail?.isStoryMap !== false && mapStatus !== "archived" && (
-        <TimelineWorkspace
-          segments={segments}
-          transitions={transitions}
-          activeSegmentId={activeSegmentId}
-          mapId={mapId}
-          isPlaying={isPlayingTimeline}
-          currentTime={currentPlaybackTime}
-          leftOffset={leftSidebarView ? 376 : 56}
-          isOpen={isTimelineOpen}
-          onToggle={() => setIsTimelineOpen((prev) => !prev)}
-          onReorder={handleTimelineReorder}
-          onPlay={handlePlayTimeline}
-          onStop={handleStopTimeline}
-          onPlaySingleSegment={playback.handlePlaySingleSegment}
-          onSegmentClick={handleSegmentClick}
-          onRefreshSegments={handleRefreshSegments}
-        />
-      )}
 
       <ZoomControls
         zoomIn={handleZoomIn}
@@ -3967,83 +3317,6 @@ export default function EditMapPage() {
         currentZoom={currentZoom}
       />
 
-      {/* Route Animations with Sequential Playback */}
-      {playback.routeAnimations && playback.routeAnimations.length > 0 && playbackMap && (() => {
-        // Get current segment for camera state
-        const currentSegment = playback.currentPlayIndex !== undefined && playback.currentPlayIndex >= 0 && playback.currentPlayIndex < segments.length
-          ? segments[playback.currentPlayIndex]
-          : null;
-
-        // Parse segment camera state
-        const segmentCameraState = currentSegment?.cameraState
-          ? (typeof currentSegment.cameraState === 'string'
-            ? (() => {
-              try {
-                const parsed = JSON.parse(currentSegment.cameraState);
-                return parsed?.center && Array.isArray(parsed.center) && parsed.center.length >= 2
-                  ? { center: [parsed.center[0], parsed.center[1]] as [number, number], zoom: parsed.zoom ?? 10 }
-                  : null;
-              } catch {
-                return null;
-              }
-            })()
-            : (currentSegment.cameraState?.center && Array.isArray(currentSegment.cameraState.center) && currentSegment.cameraState.center.length >= 2
-              ? { center: [currentSegment.cameraState.center[0], currentSegment.cameraState.center[1]] as [number, number], zoom: currentSegment.cameraState.zoom ?? 10 }
-              : null))
-          : null;
-
-        return (
-          <SequentialRoutePlaybackWrapper
-            map={playbackMap}
-            routeAnimations={playback.routeAnimations}
-            isPlaying={playback.isPlaying}
-            segmentStartTime={playback.segmentStartTime}
-            onLocationClick={(location) => {
-              setPoiTooltipModal({
-                isOpen: true,
-                poi: location,
-              });
-            }}
-            segmentCameraState={segmentCameraState}
-          />
-        );
-      })()}
-
-      <ZoneContextMenu
-        visible={contextMenu.visible}
-        x={contextMenu.x}
-        y={contextMenu.y}
-        zoneName={contextMenu.feature ? getFeatureName(contextMenu.feature) : 'Zone'}
-        onClose={() => setContextMenu(prev => ({ ...prev, visible: false }))}
-        onZoomToFit={handleZoomToFit}
-        onCopyCoordinates={handleCopyCoordinates}
-        onCopyToExistingLayer={handleCopyToExistingLayer}
-        onCopyToNewLayer={handleCopyToNewLayer}
-        onDeleteZone={handleDeleteZone}
-        mapId={detail?.id}
-        layerId={contextMenu.layerId ?? undefined}
-        featureIndex={
-          detail && contextMenu.feature && contextMenu.layerId
-            ? findFeatureIndex(
-              (detail.layers.find(l => l.id === contextMenu.layerId)?.layerData as FeatureCollection) || {},
-              contextMenu.feature
-            )
-            : 0
-        }
-        feature={contextMenu.feature ?? undefined}
-        onSuccess={handleCopyFeatureSuccess}
-      />
-
-      <CopyFeatureDialog
-        isOpen={copyFeatureDialog.isOpen}
-        onClose={() => setCopyFeatureDialog(prev => ({ ...prev, isOpen: false }))}
-        mapId={detail?.id || ''}
-        sourceLayerId={copyFeatureDialog.sourceLayerId}
-        sourceLayerName={copyFeatureDialog.sourceLayerName}
-        featureIndex={copyFeatureDialog.featureIndex}
-        initialCopyMode={copyFeatureDialog.copyMode}
-        onSuccess={handleCopyFeatureSuccess}
-      />
 
       {/* POI Tooltip Modal */}
       {poiTooltipModal.isOpen && (
@@ -4078,8 +3351,8 @@ export default function EditMapPage() {
         </div>
       )}
 
-      {/* Export Modal */}
-      {showExportModal && (
+      {/* Export Modal - Hide in view mode */}
+      {showExportModal && !isViewMode && (
         <div className="fixed inset-0 z-[4000] flex items-start justify-center pt-32">
           <div
             className="absolute inset-0 bg-black/30"
@@ -4113,13 +3386,14 @@ export default function EditMapPage() {
                 </label>
                 <select
                   value={exportFormat}
-                  onChange={(e) => setExportFormat(e.target.value as "geojson" | "png" | "pdf")}
+                  onChange={(e) => setExportFormat(e.target.value as "geojson" | "png" | "pdf" | "svg")}
                   disabled={isExporting}
                   className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50"
                 >
                   <option value="geojson">GeoJSON</option>
                   <option value="png">PNG Image</option>
                   <option value="pdf">PDF Document</option>
+                  <option value="svg">SVG Vector</option>
                 </select>
               </div>
 
@@ -4143,46 +3417,16 @@ export default function EditMapPage() {
                     </span>
                   </div>
 
-                  {/* Info message for GeoJSON vs PNG/PDF */}
-                  {exportFormat === "geojson" && exportStatus.status === "PendingApproval" && (
-                    <div className="mt-2 text-xs text-blue-400 bg-blue-900/20 border border-blue-800/30 rounded px-2 py-1">
-                      {lang === 'vi' 
-                        ? 'GeoJSON sẽ được tự động phê duyệt và có thể tải xuống ngay sau khi xử lý xong.'
-                        : 'GeoJSON will be auto-approved and available for download once processing is complete.'}
-                    </div>
-                  )}
-                  {exportFormat !== "geojson" && exportStatus.status === "PendingApproval" && (
-                    <div className="mt-2 text-xs text-yellow-400 bg-yellow-900/20 border border-yellow-800/30 rounded px-2 py-1">
-                      {lang === 'vi' 
-                        ? 'PNG/PDF cần được quản trị viên phê duyệt trước khi có thể tải xuống.'
-                        : 'PNG/PDF require admin approval before download is available.'}
-                    </div>
-                  )}
-
                   {/* Download Link */}
                   {exportStatus.status === "Approved" && exportStatus.fileUrl && (
-                    <div className="mt-3 space-y-2">
-                      <a
-                        href={exportStatus.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-center transition-colors"
-                        onClick={(e) => {
-                          // For GeoJSON, also trigger download
-                          if (exportFormat === "geojson") {
-                            e.preventDefault();
-                            window.open(exportStatus.fileUrl!, '_blank');
-                          }
-                        }}
-                      >
-                        {lang === 'vi' ? 'Tải xuống' : 'Download'}
-                      </a>
-                      {exportFormat === "geojson" && (
-                        <p className="text-xs text-zinc-400 text-center">
-                          {lang === 'vi' ? 'GeoJSON sẽ tự động tải xuống khi được phê duyệt' : 'GeoJSON will auto-download when approved'}
-                        </p>
-                      )}
-                    </div>
+                    <a
+                      href={exportStatus.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block w-full mt-3 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-center transition-colors"
+                    >
+                      {lang === 'vi' ? 'Tải xuống' : 'Download'}
+                    </a>
                   )}
 
                   {/* Error/Rejection Reason */}
@@ -4342,15 +3586,6 @@ export default function EditMapPage() {
         }
       `}</style>
 
-      {/* Zone Style Editor Panel */}
-      {selectedZone && (
-        <ZoneStyleEditor
-          mapId={mapId}
-          mapZone={selectedZone.mapZone}
-          zone={selectedZone.zone}
-          onClose={() => setSelectedZone(null)}
-        />
-      )}
     </main>
   );
 }

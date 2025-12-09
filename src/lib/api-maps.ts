@@ -338,6 +338,11 @@ export interface MapTemplate {
   previewImageUrl?: string | null;
   layerCount?: number | null;
   featureCount?: number | null;
+  usageCount?: number | null;
+  isFeatured?: boolean;
+  totalLayers?: number;
+  totalFeatures?: number;
+  createdAt?: string;
 }
 
 export interface MapTemplateLayer {
@@ -350,6 +355,9 @@ export interface MapTemplateDetails extends MapTemplate {
   layers: MapTemplateLayer[];
   annotations?: unknown[];
   images?: string[];
+  previewImage?: string | null;
+  baseLayer?: string;
+  defaultBounds?: string;
 }
 
 export interface GetMapTemplatesResponse {
@@ -702,10 +710,11 @@ export function restoreMap(mapId: string) {
 // ===== EXPORTS =====
 export type ExportRequest = {
   mapId: string;
-  format: "pdf" | "png" | "geojson" | "svg";
+  format: "pdf" | "png" | "geojson";
   membershipId?: string; // Optional
   viewState?: string; // JSON string of { center: [lat, lng], zoom: number }
   mapImageData?: string; // Base64 encoded image data from frontend capture
+  svgPathData?: string; // JSON string of extracted SVG path data from Leaflet layers
   visibleLayerIds?: Record<string, boolean>; // Which layers should be visible
   visibleFeatureIds?: Record<string, boolean>; // Which features should be visible
   options?: {
@@ -725,7 +734,7 @@ export type ExportResponse = {
   mapName?: string;
   userId: string;
   userName?: string;
-  format: "pdf" | "png" | "geojson" | "svg";
+  format: "pdf" | "png" | "geojson";
   status: "Pending" | "Processing" | "PendingApproval" | "Approved" | "Rejected" | "Failed";
   fileUrl?: string;
   canDownload: boolean;
