@@ -83,7 +83,8 @@ const backendToBaseKey = (backendValue: string | null | undefined): BaseKey => {
 export default function EditMapPage() {
   const params = useParams<{ mapId: string }>();
   const sp = useSearchParams();
-  const mapId = params?.mapId ?? "";
+  const mapId = params?.mapId ?? sp?.get("mapId") ?? "";
+  const isViewMode = sp?.get("view") === "true";
 
   const [isMapReady, setIsMapReady] = useState(false);
   const [detail, setDetail] = useState<MapDetail | null>(null);
@@ -234,6 +235,7 @@ export default function EditMapPage() {
 
   // Handle layer click (single or multi-select)
   const handleLayerClick = useCallback((layer: Layer, isShiftKey: boolean) => {
+    if (isViewMode) return;
     if (isShiftKey) {
       // Multi-select mode
       const newSelected = new Set(selectedLayers);
@@ -286,7 +288,7 @@ export default function EditMapPage() {
   }, [selectedLayers, features, resetToOriginalStyle, applySelectionStyle, applyMultiSelectionStyle, mapId]);
 
 
-  // Use feature management hook for Geoman event handling
+  // Use feature management hook for Geoman event handling (only in edit mode)
   const featureManagement = useFeatureManagement({
     mapId: detail?.id || mapId || "",
     features,
@@ -308,7 +310,15 @@ export default function EditMapPage() {
     handleSketchDragEnd,
     handleSketchRotateEnd,
     handlePolygonCut,
-  } = featureManagement;
+  } = isViewMode ? {
+    lastUpdateRef: { current: new Map() },
+    recentlyCreatedFeatureIdsRef: { current: new Set() },
+    handleFeatureCreate: async () => {},
+    handleSketchEdit: async () => {},
+    handleSketchDragEnd: async () => {},
+    handleSketchRotateEnd: async () => {},
+    handlePolygonCut: async () => {},
+  } : featureManagement;
 
   // Initialize segment playback hook
   const playback = useSegmentPlayback({
@@ -364,67 +374,77 @@ export default function EditMapPage() {
 
         const dbFeatures = await loadFeaturesToMap(detail.id, L, sketchRef.current);
 
-        dbFeatures.forEach(feature => {
-          if (feature.layer) {
-            storeOriginalStyle(feature.layer);
-            feature.layer.on('mouseover', () => handleLayerHover(feature.layer, true));
-            feature.layer.on('mouseout', () => handleLayerHover(feature.layer, false));
-            feature.layer.on('click', (event: LeafletMouseEvent) => {
-              if (event.originalEvent) {
-                event.originalEvent.stopPropagation();
+        if (isViewMode) {
+          // View mode: Only render features, no edit handlers
+          dbFeatures.forEach(feature => {
+            if (feature.layer) {
+              // Just add to map, no event handlers
+            }
+          });
+        } else {
+          // Edit mode: Attach all edit handlers
+          dbFeatures.forEach(feature => {
+            if (feature.layer) {
+              storeOriginalStyle(feature.layer);
+              feature.layer.on('mouseover', () => handleLayerHover(feature.layer, true));
+              feature.layer.on('mouseout', () => handleLayerHover(feature.layer, false));
+              feature.layer.on('click', (event: LeafletMouseEvent) => {
+                if (event.originalEvent) {
+                  event.originalEvent.stopPropagation();
+                }
+                handleLayerClick(feature.layer, event.originalEvent.shiftKey);
+              });
+
+              if (feature.featureId) {
+                feature.layer.on('pm:edit', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+                  try {
+                    resetToOriginalStyle(feature.layer);
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after edit:", error);
+                  }
+                });
+
+                feature.layer.on('pm:dragend', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+                  try {
+                    resetToOriginalStyle(feature.layer);
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after drag:", error);
+                  }
+                });
+
+                feature.layer.on('pm:rotateend', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+                  try {
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after rotation:", error);
+                  }
+                });
               }
-              handleLayerClick(feature.layer, event.originalEvent.shiftKey);
-            });
 
-            if (feature.featureId) {
-              feature.layer.on('pm:edit', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-                try {
-                  resetToOriginalStyle(feature.layer);
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after edit:", error);
-                }
-              });
-
-              feature.layer.on('pm:dragend', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-                try {
-                  resetToOriginalStyle(feature.layer);
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after drag:", error);
-                }
-              });
-
-              feature.layer.on('pm:rotateend', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-                try {
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after rotation:", error);
-                }
-              });
+              if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
+                (feature.layer as GeomanLayer).pm.enable({
+                  draggable: true,
+                  allowEditing: true,
+                  allowSelfIntersection: true,
+                });
+              }
             }
-
-            if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
-              (feature.layer as GeomanLayer).pm.enable({
-                draggable: true,
-                allowEditing: true,
-                allowSelfIntersection: true,
-              });
-            }
-          }
-        });
+          });
+        }
 
         setFeatures(dbFeatures);
         const initialFeatureVisibility: Record<string, boolean> = {};
@@ -439,13 +459,14 @@ export default function EditMapPage() {
     } catch (error) {
       console.error("Failed to reload map data:", error);
     }
-  }, [detail?.id, isMapReady, storeOriginalStyle, handleLayerHover, handleLayerClick, resetToOriginalStyle]);
+  }, [detail?.id, isMapReady, isViewMode, storeOriginalStyle, handleLayerHover, handleLayerClick, resetToOriginalStyle]);
 
   useEffect(() => {
     handleMapDataChangedRef.current = handleMapDataChanged;
   }, [handleMapDataChanged]);
 
   const handleFeatureUpdated = useCallback(async (featureId: string) => {
+    if (isViewMode) return;
     if (!detail?.id || !isMapReady || !mapRef.current || !sketchRef.current) return;
 
     try {
@@ -608,6 +629,7 @@ export default function EditMapPage() {
   }, [detail?.id, isMapReady, features, storeOriginalStyle, extractLayerStyle, applyLayerStyle]);
 
   const handleFeatureCreated = useCallback(async (featureId: string) => {
+    if (isViewMode) return;
     if (!detail?.id || !isMapReady || !mapRef.current || !sketchRef.current) return;
 
     if (recentlyCreatedFeatureIdsRef.current.has(featureId)) {
@@ -818,7 +840,7 @@ export default function EditMapPage() {
       }
 
       // Enable editing
-      if ('pm' in layer && (layer as GeomanLayer).pm) {
+      if ('pm' in layer && (layer as GeomanLayer).pm && !isViewMode) {
         (layer as GeomanLayer).pm.enable({
           draggable: true,
           allowEditing: true,
@@ -858,9 +880,10 @@ export default function EditMapPage() {
     } catch (error) {
       console.error("Failed to add feature:", error);
     }
-  }, [detail?.id, isMapReady, features, storeOriginalStyle, handleLayerHover, handleLayerClick, resetToOriginalStyle, applyLayerStyle]);
+  }, [detail?.id, isMapReady, isViewMode, features, storeOriginalStyle, handleLayerHover, handleLayerClick, resetToOriginalStyle, applyLayerStyle]);
 
   const handleFeatureDeleted = useCallback((featureId: string) => {
+    if (isViewMode) return;
     if (!sketchRef.current) return;
 
     const featureToRemove = features.find(f => f.featureId === featureId);
@@ -874,11 +897,11 @@ export default function EditMapPage() {
         return newVisibility;
       });
     }
-  }, [features]);
+  }, [features, isViewMode]);
 
   const collaboration = useMapCollaboration({
     mapId: mapId || null,
-    enabled: isMapReady && !!mapId,
+    enabled: isMapReady && !!mapId && !isViewMode,
     onSelectionUpdated: (selection) => {
       visualizeRef.current(selection);
     },
@@ -1251,7 +1274,7 @@ export default function EditMapPage() {
       }
 
       // Check if PM is available on map before using it
-      if (map.pm) {
+      if (map.pm && !isViewMode) {
         map.pm.addControls({
           drawMarker: false,
           drawPolyline: false,
@@ -1362,82 +1385,91 @@ export default function EditMapPage() {
 
         const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
 
-        // Attach event listeners to loaded features
-        dbFeatures.forEach(feature => {
-          if (feature.layer) {
-            // Store original style
-            storeOriginalStyle(feature.layer);
+        if (isViewMode) {
+          // View mode: Only render features, no event handlers
+          dbFeatures.forEach(feature => {
+            if (feature.layer) {
+              // Just render, no handlers
+            }
+          });
+        } else {
+          // Edit mode: Attach all event listeners
+          dbFeatures.forEach(feature => {
+            if (feature.layer) {
+              // Store original style
+              storeOriginalStyle(feature.layer);
 
-            // Attach hover and click event listeners (throttled for performance)
-            const hoverOverHandler = rafThrottle(() => handleLayerHover(feature.layer, true));
-            const hoverOutHandler = rafThrottle(() => handleLayerHover(feature.layer, false));
-            feature.layer.on('mouseover', hoverOverHandler);
-            feature.layer.on('mouseout', hoverOutHandler);
-            feature.layer.on('click', (event: LeafletMouseEvent) => {
-              // Stop propagation to prevent base layer click from firing
-              if (event.originalEvent) {
-                event.originalEvent.stopPropagation();
+              // Attach hover and click event listeners (throttled for performance)
+              const hoverOverHandler = rafThrottle(() => handleLayerHover(feature.layer, true));
+              const hoverOutHandler = rafThrottle(() => handleLayerHover(feature.layer, false));
+              feature.layer.on('mouseover', hoverOverHandler);
+              feature.layer.on('mouseout', hoverOutHandler);
+              feature.layer.on('click', (event: LeafletMouseEvent) => {
+                // Stop propagation to prevent base layer click from firing
+                if (event.originalEvent) {
+                  event.originalEvent.stopPropagation();
+                }
+                handleLayerClick(feature.layer, event.originalEvent.shiftKey);
+              });
+
+              // Attach edit/drag/rotate/cut event listeners for database updates
+              if (feature.featureId) {
+                feature.layer.on('pm:edit', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+
+                  try {
+                    // Reset to original style first to remove selection styling
+                    resetToOriginalStyle(feature.layer);
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after edit:", error);
+                  }
+                });
+
+                feature.layer.on('pm:dragend', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+
+                  try {
+                    // Reset to original style first to remove selection styling
+                    resetToOriginalStyle(feature.layer);
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after drag:", error);
+                  }
+                });
+
+                feature.layer.on('pm:rotateend', async () => {
+                  const now = Date.now();
+                  const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
+                  if (now - lastUpdate < 1000) return;
+                  lastUpdateRef.current.set(feature.featureId!, now);
+
+                  try {
+                    await updateFeatureInDB(detail.id, feature.featureId!, feature);
+                  } catch (error) {
+                    console.error("Error updating feature after rotation:", error);
+                  }
+                });
+
               }
-              handleLayerClick(feature.layer, event.originalEvent.shiftKey);
-            });
 
-            // Attach edit/drag/rotate/cut event listeners for database updates
-            if (feature.featureId) {
-              feature.layer.on('pm:edit', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-
-                try {
-                  // Reset to original style first to remove selection styling
-                  resetToOriginalStyle(feature.layer);
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after edit:", error);
-                }
-              });
-
-              feature.layer.on('pm:dragend', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-
-                try {
-                  // Reset to original style first to remove selection styling
-                  resetToOriginalStyle(feature.layer);
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after drag:", error);
-                }
-              });
-
-              feature.layer.on('pm:rotateend', async () => {
-                const now = Date.now();
-                const lastUpdate = lastUpdateRef.current.get(feature.featureId!) || 0;
-                if (now - lastUpdate < 1000) return;
-                lastUpdateRef.current.set(feature.featureId!, now);
-
-                try {
-                  await updateFeatureInDB(detail.id, feature.featureId!, feature);
-                } catch (error) {
-                  console.error("Error updating feature after rotation:", error);
-                }
-              });
-
+              // Enable dragging and editing via Geoman
+              if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
+                (feature.layer as GeomanLayer).pm.enable({
+                  draggable: true,
+                  allowEditing: true,
+                  allowSelfIntersection: true,
+                });
+              }
             }
-
-            // Enable dragging and editing via Geoman
-            if ('pm' in feature.layer && (feature.layer as GeomanLayer).pm) {
-              (feature.layer as GeomanLayer).pm.enable({
-                draggable: true,
-                allowEditing: true,
-                allowSelfIntersection: true,
-              });
-            }
-          }
-        });
+          });
+        }
 
         if (alive) {
           setFeatures(dbFeatures);
@@ -1458,10 +1490,11 @@ export default function EditMapPage() {
     return () => {
       alive = false;
     };
-  }, [detail?.id, isMapReady]);
+  }, [detail?.id, isMapReady, isViewMode]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !sketchRef.current) return;
+    if (isViewMode) return;
     if (!handleFeatureCreate || !handleSketchEdit || !handleSketchDragEnd || !handleSketchRotateEnd) return;
 
     const map = mapRef.current;
@@ -1493,7 +1526,7 @@ export default function EditMapPage() {
         sketchRef.current.off("pm:rotateend", handleSketchRotateEnd);
       }
     };
-  }, [isMapReady, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd, handlePolygonCut]);
+  }, [isMapReady, isViewMode, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd, handlePolygonCut]);
 
   useEffect(() => {
     if (!mapRef.current || !isMapReady) return;
@@ -1822,6 +1855,7 @@ export default function EditMapPage() {
     let clickHandler: ((e: LeafletMouseEvent) => void) | null = null;
 
     const handleStartPickLocation = () => {
+      if (isViewMode) return;
       const map = mapRef.current;
       if (!map) {
         console.warn('⚠️ Map not ready yet');
@@ -2010,6 +2044,7 @@ export default function EditMapPage() {
     };
 
     const handleStartPlacement = (ev: Event) => {
+      if (isViewMode) return;
       const custom = ev as CustomEvent<{ iconKey: string }>;
       const iconKey = custom.detail?.iconKey;
       const map = mapRef.current;
@@ -3258,171 +3293,6 @@ export default function EditMapPage() {
       <div className="absolute top-0 left-0 z-[3000] w-full pointer-events-none">
         <div className="pointer-events-auto bg-black/70 backdrop-blur-md ring-1 ring-white/15 shadow-xl py-1 px-3">
           <div className="grid grid-cols-3 place-items-stretch gap-2">
-            <div className="flex items-center justify-start gap-2 overflow-x-auto no-scrollbar">
-              {isEditingMapName ? (
-                <input
-                  type="text"
-                  value={editingMapName}
-                  onChange={(e) => setEditingMapName(e.target.value)}
-                  onKeyDown={async (e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      const newName = editingMapName.trim() || "Untitled Map";
-                      if (newName !== name) {
-                        try {
-                          setIsSaving(true);
-                          await updateMap(detail?.id || '', { name: newName });
-                          setName(newName);
-                          showToast("success", "Đã đổi tên bản đồ");
-                        } catch (error) {
-                          showToast("error", "Không thể đổi tên bản đồ");
-                        } finally {
-                          setIsSaving(false);
-                        }
-                      }
-                      setIsEditingMapName(false);
-                      setEditingMapName("");
-                    } else if (e.key === "Escape") {
-                      setIsEditingMapName(false);
-                      setEditingMapName("");
-                    }
-                  }}
-                  onBlur={async () => {
-                    const newName = editingMapName.trim() || "Untitled Map";
-                    if (newName !== name) {
-                      try {
-                        setIsSaving(true);
-                        await updateMap(detail?.id || '', { name: newName });
-                        setName(newName);
-                        showToast("success", "Đã đổi tên bản đồ");
-                      } catch (error) {
-                        showToast("error", "Không thể đổi tên bản đồ");
-                      } finally {
-                        setIsSaving(false);
-                      }
-                    }
-                    setIsEditingMapName(false);
-                    setEditingMapName("");
-                  }}
-                  className="px-2.5 py-1.5 rounded-md bg-white text-black text-sm font-medium w-52 border-2 border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                  placeholder="Untitled Map"
-                  autoFocus
-                  disabled={isSaving}
-                />
-              ) : (
-                <span
-                  onDoubleClick={() => {
-                    setEditingMapName(name);
-                    setIsEditingMapName(true);
-                  }}
-                  className="px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm font-medium w-52 cursor-pointer transition-colors truncate"
-                  title="Double click để đổi tên"
-                >
-                  {name || "Untitled Map"}
-                </span>
-              )}
-            </div>
-            {!loading && mapStatus !== "archived" && (
-            <DrawingToolsBar mapRef={mapRef} />
-            )}
-            <div className="flex items-center justify-end gap-2 overflow-x-auto no-scrollbar">
-              {/* Active Users */}
-              <ActiveUsersIndicator
-                activeUsers={collaboration.activeUsers}
-                isConnected={collaboration.isConnected}
-              />
-
-              {/* Toolbar Group - Canva Style */}
-              <div className="flex items-center gap-0 bg-zinc-800/50 rounded-lg p-0.5 border border-zinc-700/50">
-                <input
-                  type="file"
-                  accept=".geojson,.json,.kml,.gpx"
-                  onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (file && mapId) {
-                      try {
-                        showToast("info", "Đang tải file lên...");
-
-                        // Backend tự động tạo layer mới, chỉ cần truyền mapId
-                        const result = await uploadGeoJsonToMap(mapId, file);
-
-                        showToast("info", "Đang load dữ liệu...");
-
-                        // Refresh toàn bộ map detail để lấy layer mới
-                        const updatedDetail = await getMapDetail(mapId);
-                        setDetail(updatedDetail);
-
-                        showToast("success", `Tải lên thành công! Đã thêm ${result.featuresAdded} đối tượng vào layer "${result.layerId}".`);
-
-                        // Clear the input
-                        e.target.value = '';
-                      } catch (error) {
-                        console.error("Upload error:", error);
-                        showToast("error", error instanceof Error ? error.message : "Tải file thất bại");
-                        e.target.value = '';
-                      }
-                    }
-                  }}
-                  className="hidden"
-                  id="upload-layer"
-                />
-                <label
-                  htmlFor="upload-layer"
-                  className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white cursor-pointer transition-all flex items-center gap-2"
-                  title="Upload GeoJSON/KML/GPX file to add as layer"
-                >
-                  <UploadIcon className="w-4 h-4" />
-                  Upload
-                </label>
-
-                <div className="h-5 w-px bg-zinc-600/50" />
-
-                <button
-                  className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-                  onClick={saveMap}
-                  disabled={isSaving || !mapRef.current}
-                  title="Lưu thông tin bản đồ và vị trí hiển thị"
-                >
-                  {isSaving ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <SaveIcon className="w-4 h-4" />
-                      Save
-                    </>
-                  )}
-                </button>
-
-                <div className="h-5 w-px bg-zinc-600/50" />
-
-                {/* Export Button */}
-                <button
-                  className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-                  onClick={() => setShowExportModal(true)}
-                  disabled={isExporting || !mapRef.current}
-                  title="Xuất bản đồ"
-                >
-                  {isExporting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
-                      Đang xuất...
-                    </>
-                  ) : (
-                    <>
-                      <DownloadIcon className="w-4 h-4" />
-                      Xuất
-                    </>
-                  )}
-                </button>
-
-                <div className="h-5 w-px bg-zinc-600/50" />
-
-                <PublishButton mapId={mapId} status={mapStatus} onStatusChange={setMapStatus} isStoryMap={!loading && detail?.isStoryMap !== false} />
-              </div>
-            </div>
           </div>
           {/* Toast messages are handled globally via ToastProvider */}
         </div>
@@ -3433,71 +3303,12 @@ export default function EditMapPage() {
         ref={mapEl}
         className="absolute inset-0 transition-all duration-300"
         style={{
-          left: mapStatus === "archived" ? "0" : (leftSidebarView ? "376px" : "56px"), // Hide sidebar when Archived
-          right: isPropertiesPanelOpen ? "360px" : "0",
+          left: (mapStatus === "archived" || isViewMode) ? "0" : (leftSidebarView ? "376px" : "56px"), // Hide sidebar when Archived or in View Mode
+          right: (isViewMode ? "0" : (isPropertiesPanelOpen ? "360px" : "0")),
           // top: "60px",
-          bottom: (!loading && detail?.isStoryMap !== false && mapStatus !== "archived") ? "200px" : "0", // Hide timeline when Archived
+          bottom: (!loading && detail?.isStoryMap !== false && mapStatus !== "archived" && !isViewMode) ? "200px" : "0", // Hide timeline when Archived or in View Mode
         }}
       />
-
-      {/* NEW: VSCode-style Left Sidebar - Hide when Archived */}
-      {mapStatus !== "archived" && !loading && (
-        <LeftSidebarToolbox
-        isStoryMap={!loading && detail?.isStoryMap !== false}
-        activeView={leftSidebarView}
-        onViewChange={setLeftSidebarView}
-        features={features}
-        layers={layers}
-        segments={segments}
-        transitions={transitions}
-        baseLayer={baseKey}
-        currentMap={mapRef.current}
-        mapId={mapId}
-        layerVisibility={layerVisibility}
-        onSelectFeature={handleSelectFeature}
-        onSelectLayer={handleSelectLayerNew}
-        onBaseLayerChange={setBaseKey}
-        onFeatureVisibilityChange={onFeatureVisibilityChange}
-        onLayerVisibilityChange={onLayerVisibilityChange}
-        onDeleteFeature={onDeleteFeature}
-        onSegmentClick={handleSegmentClick}
-        onSaveSegment={handleSaveSegment}
-        onDeleteSegment={handleDeleteSegment}
-        onSaveTransition={handleSaveTransition}
-        onDeleteTransition={handleDeleteTransition}
-        currentLayerId={currentLayerId}
-          onLayerChange={setCurrentLayerId}
-        />
-      )}
-
-      {/* NEW: Right Properties Panel */}
-      <PropertiesPanel
-        isOpen={isPropertiesPanelOpen}
-        selectedItem={selectedEntity}
-        onClose={() => setIsPropertiesPanelOpen(false)}
-        onUpdate={handleUpdateFeature}
-      />
-
-      {/*Timeline Workspace - Only show for StoryMap, hide when Archived */}
-      {!loading && detail?.isStoryMap !== false && mapStatus !== "archived" && (
-        <TimelineWorkspace
-          segments={segments}
-          transitions={transitions}
-          activeSegmentId={activeSegmentId}
-          mapId={mapId}
-          isPlaying={isPlayingTimeline}
-          currentTime={currentPlaybackTime}
-          leftOffset={leftSidebarView ? 376 : 56}
-          isOpen={isTimelineOpen}
-          onToggle={() => setIsTimelineOpen((prev) => !prev)}
-          onReorder={handleTimelineReorder}
-          onPlay={handlePlayTimeline}
-          onStop={handleStopTimeline}
-          onPlaySingleSegment={playback.handlePlaySingleSegment}
-          onSegmentClick={handleSegmentClick}
-          onRefreshSegments={handleRefreshSegments}
-        />
-      )}
 
       <ZoomControls
         zoomIn={handleZoomIn}
@@ -3506,83 +3317,6 @@ export default function EditMapPage() {
         currentZoom={currentZoom}
       />
 
-      {/* Route Animations with Sequential Playback */}
-      {playback.routeAnimations && playback.routeAnimations.length > 0 && playbackMap && (() => {
-        // Get current segment for camera state
-        const currentSegment = playback.currentPlayIndex !== undefined && playback.currentPlayIndex >= 0 && playback.currentPlayIndex < segments.length
-          ? segments[playback.currentPlayIndex]
-          : null;
-
-        // Parse segment camera state
-        const segmentCameraState = currentSegment?.cameraState
-          ? (typeof currentSegment.cameraState === 'string'
-            ? (() => {
-              try {
-                const parsed = JSON.parse(currentSegment.cameraState);
-                return parsed?.center && Array.isArray(parsed.center) && parsed.center.length >= 2
-                  ? { center: [parsed.center[0], parsed.center[1]] as [number, number], zoom: parsed.zoom ?? 10 }
-                  : null;
-              } catch {
-                return null;
-              }
-            })()
-            : (currentSegment.cameraState?.center && Array.isArray(currentSegment.cameraState.center) && currentSegment.cameraState.center.length >= 2
-              ? { center: [currentSegment.cameraState.center[0], currentSegment.cameraState.center[1]] as [number, number], zoom: currentSegment.cameraState.zoom ?? 10 }
-              : null))
-          : null;
-
-        return (
-          <SequentialRoutePlaybackWrapper
-            map={playbackMap}
-            routeAnimations={playback.routeAnimations}
-            isPlaying={playback.isPlaying}
-            segmentStartTime={playback.segmentStartTime}
-            onLocationClick={(location) => {
-              setPoiTooltipModal({
-                isOpen: true,
-                poi: location,
-              });
-            }}
-            segmentCameraState={segmentCameraState}
-          />
-        );
-      })()}
-
-      <ZoneContextMenu
-        visible={contextMenu.visible}
-        x={contextMenu.x}
-        y={contextMenu.y}
-        zoneName={contextMenu.feature ? getFeatureName(contextMenu.feature) : 'Zone'}
-        onClose={() => setContextMenu(prev => ({ ...prev, visible: false }))}
-        onZoomToFit={handleZoomToFit}
-        onCopyCoordinates={handleCopyCoordinates}
-        onCopyToExistingLayer={handleCopyToExistingLayer}
-        onCopyToNewLayer={handleCopyToNewLayer}
-        onDeleteZone={handleDeleteZone}
-        mapId={detail?.id}
-        layerId={contextMenu.layerId ?? undefined}
-        featureIndex={
-          detail && contextMenu.feature && contextMenu.layerId
-            ? findFeatureIndex(
-              (detail.layers.find(l => l.id === contextMenu.layerId)?.layerData as FeatureCollection) || {},
-              contextMenu.feature
-            )
-            : 0
-        }
-        feature={contextMenu.feature ?? undefined}
-        onSuccess={handleCopyFeatureSuccess}
-      />
-
-      <CopyFeatureDialog
-        isOpen={copyFeatureDialog.isOpen}
-        onClose={() => setCopyFeatureDialog(prev => ({ ...prev, isOpen: false }))}
-        mapId={detail?.id || ''}
-        sourceLayerId={copyFeatureDialog.sourceLayerId}
-        sourceLayerName={copyFeatureDialog.sourceLayerName}
-        featureIndex={copyFeatureDialog.featureIndex}
-        initialCopyMode={copyFeatureDialog.copyMode}
-        onSuccess={handleCopyFeatureSuccess}
-      />
 
       {/* POI Tooltip Modal */}
       {poiTooltipModal.isOpen && (
@@ -3617,8 +3351,8 @@ export default function EditMapPage() {
         </div>
       )}
 
-      {/* Export Modal */}
-      {showExportModal && (
+      {/* Export Modal - Hide in view mode */}
+      {showExportModal && !isViewMode && (
         <div className="fixed inset-0 z-[4000] flex items-start justify-center pt-32">
           <div
             className="absolute inset-0 bg-black/30"
@@ -3852,15 +3586,6 @@ export default function EditMapPage() {
         }
       `}</style>
 
-      {/* Zone Style Editor Panel */}
-      {selectedZone && (
-        <ZoneStyleEditor
-          mapId={mapId}
-          mapZone={selectedZone.mapZone}
-          zone={selectedZone.zone}
-          onClose={() => setSelectedZone(null)}
-        />
-      )}
     </main>
   );
 }
