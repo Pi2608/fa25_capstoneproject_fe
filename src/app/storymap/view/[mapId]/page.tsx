@@ -26,7 +26,9 @@ import {
   type QuestionResultsEvent,
   type SessionEndedEvent,
   type JoinedSessionEvent,
+  type MapLayerSyncEvent,
 } from "@/lib/hubs/session";
+import type { BaseKey } from "@/types/common";
 
 import {
   createGroupCollaborationConnection,
@@ -72,6 +74,9 @@ export default function StoryMapViewPage() {
   const [isTeacherPlaying, setIsTeacherPlaying] = useState(false);
   const [hasReceivedSegmentSync, setHasReceivedSegmentSync] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Layer sync state - receives layer from teacher
+  const [selectedLayer, setSelectedLayer] = useState<BaseKey>("osm");
 
   const [currentQuestion, setCurrentQuestion] = useState<QuestionBroadcastEvent | null>(null);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
@@ -125,8 +130,10 @@ export default function StoryMapViewPage() {
         if (cancelled) return;
         setSession(sessionData);
 
-        const status = sessionData.status as string;
-        if (status === "COMPLETED" || status === "Ended") {
+        const status = (sessionData.status as string || "").toUpperCase();
+        console.log("[View] Session status from API:", sessionData.status, "->", status);
+
+        if (status === "COMPLETED" || status === "CANCELLED") {
           setViewState("ended");
           try {
             const lb = await getSessionLeaderboard(sessionId, 100);
@@ -134,6 +141,14 @@ export default function StoryMapViewPage() {
           } catch (e) {
             console.error("Failed to load leaderboard:", e);
           }
+        } else if (status === "IN_PROGRESS") {
+          setViewState("viewing");
+        } else if (status === "PAUSED") {
+          setViewState("viewing");
+          setIsTeacherPlaying(false);
+        } else {
+          // WAITING or other status
+          setViewState("waiting");
         }
       } catch (e: any) {
         console.error("Load session failed:", e);
@@ -192,10 +207,12 @@ export default function StoryMapViewPage() {
     setCurrentIndex(-1);
     setIsTeacherPlaying(false);
 
-    const status = event.status as string;
-    if (status === "IN_PROGRESS" || status === "Running") {
+    const status = (event.status as string || "").toUpperCase();
+    console.log("[View] JoinedSession status:", event.status, "->", status);
+
+    if (status === "IN_PROGRESS") {
       setViewState("viewing");
-    } else if (status === "COMPLETED" || status === "Ended") {
+    } else if (status === "COMPLETED" || status === "CANCELLED") {
       setViewState("ended");
     } else {
       setViewState("waiting");
@@ -203,14 +220,16 @@ export default function StoryMapViewPage() {
   }, []);
 
   const handleSessionStatusChanged = useCallback((event: SessionStatusChangedEvent) => {
-    const status = event.status as string;
-    if (status === "IN_PROGRESS" || status === "Running") {
+    const status = (event.status as string || "").toUpperCase();
+    console.log("[View] SessionStatusChanged:", event.status, "->", status);
+
+    if (status === "IN_PROGRESS") {
       setViewState("viewing");
       toast.info("Tiết học đã bắt đầu!");
-    } else if (status === "PAUSED" || status === "Paused") {
+    } else if (status === "PAUSED") {
       setIsTeacherPlaying(false);
       toast.info("Tiết học đã tạm dừng");
-    } else if (status === "COMPLETED" || status === "Ended") {
+    } else if (status === "COMPLETED" || status === "CANCELLED") {
       setViewState("ended");
       setIsTeacherPlaying(false);
       toast.info("Tiết học đã kết thúc");
@@ -334,6 +353,12 @@ export default function StoryMapViewPage() {
     toast.info("Tiết học đã kết thúc!");
   }, []);
 
+  const handleMapLayerSync = useCallback((event: MapLayerSyncEvent) => {
+    console.log("[View] Received MapLayerSync:", event);
+    setSelectedLayer(event.layerKey as BaseKey);
+    toast.info(`Bản đồ đã chuyển sang: ${event.layerKey}`);
+  }, []);
+
   const { connection, isConnected } = useSessionHub({
     sessionId: sessionId,
     enabled: !!sessionId && !!participantId,
@@ -344,6 +369,7 @@ export default function StoryMapViewPage() {
       onQuestionBroadcast: handleQuestionBroadcast,
       onQuestionResults: handleQuestionResults,
       onSessionEnded: handleSessionEnded,
+      onMapLayerSync: handleMapLayerSync,
     },
   });
 
@@ -463,6 +489,7 @@ export default function StoryMapViewPage() {
     try {
       setGroupSubmitting(true);
       await submitGroupWorkViaSignalR(groupConnection, {
+        sessionId,
         groupId: currentGroupId,
         content: groupWorkContent.trim(),
       });
@@ -569,32 +596,49 @@ export default function StoryMapViewPage() {
 
   if (viewState === "waiting") {
     return (
-      <div className="h-screen flex items-center justify-center bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
-        <div className="text-center max-w-md px-4">
-          <div className="text-6xl mb-6">⏳</div>
-          <h2 className="text-2xl font-bold mb-2 text-zinc-900 dark:text-zinc-100">
-            Chờ giáo viên bắt đầu tiết học...
-          </h2>
-          <p className="text-zinc-600 dark:text-zinc-400 mb-4">Bạn đã tham gia thành công!</p>
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-sky-100 via-emerald-50 to-amber-50">
+        <div className="text-center max-w-md px-6">
+          {/* Animated hourglass */}
+          <div className="text-7xl mb-6 animate-bounce">⏳</div>
 
+          <h2 className="text-3xl font-bold mb-3 text-slate-800">
+            Chờ thầy cô bắt đầu nhé! 🎉
+          </h2>
+          <p className="text-lg text-slate-600 mb-6">
+            Bạn đã vào lớp thành công rồi!
+          </p>
+
+          {/* Session code - colorful and prominent */}
           {sessionCode && (
-            <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 px-4 py-3 mb-4">
-              <p className="text-[11px] text-emerald-400 uppercase tracking-wider">Mã tiết học</p>
-              <p className="text-2xl font-mono font-bold text-emerald-300">{sessionCode}</p>
+            <div className="rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 p-1 mb-6 shadow-lg shadow-emerald-200">
+              <div className="bg-white rounded-xl px-6 py-4">
+                <p className="text-xs font-medium text-emerald-600 uppercase tracking-wider mb-1">
+                  🔑 Mã lớp học
+                </p>
+                <p className="text-4xl font-mono font-bold text-emerald-600 tracking-wider">
+                  {sessionCode}
+                </p>
+              </div>
             </div>
           )}
 
-          <div className="flex items-center justify-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+          {/* Connection status - friendly */}
+          <div className="flex items-center justify-center gap-2 text-base mb-4">
             <span
-              className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"
+              className={`inline-flex h-3 w-3 rounded-full ${isConnected ? "bg-emerald-500" : "bg-amber-500"
                 } animate-pulse`}
             />
-            <span>{isConnected ? "Đã kết nối" : "Đang kết nối..."}</span>
+            <span className={isConnected ? "text-emerald-700 font-medium" : "text-amber-600"}>
+              {isConnected ? "✓ Đã kết nối!" : "Đang kết nối..."}
+            </span>
           </div>
 
-          <p className="mt-2 text-[11px] text-zinc-400">
-            Xin chào, <span className="font-semibold text-emerald-300">{displayName}</span>
-          </p>
+          {/* Student name - welcoming */}
+          <div className="inline-block rounded-full bg-gradient-to-r from-purple-100 to-pink-100 px-6 py-2">
+            <p className="text-slate-700">
+              Xin chào, <span className="font-bold text-purple-600">{displayName}</span> 👋
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -602,55 +646,64 @@ export default function StoryMapViewPage() {
 
   if (viewState === "ended") {
     return (
-      <div className="h-screen flex items-center justify-center bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
-        <div className="text-center max-w-lg px-4">
-          <div className="text-6xl mb-6">🏁</div>
-          <h2 className="text-3xl font-bold mb-2 text-zinc-900 dark:text-zinc-100">
-            Tiết học đã kết thúc!
-          </h2>
-          <p className="text-zinc-600 dark:text-zinc-400 mb-6">Cảm ơn bạn đã tham gia!</p>
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-amber-100 via-rose-50 to-purple-100">
+        <div className="text-center max-w-lg px-6">
+          {/* Celebratory icons */}
+          <div className="text-7xl mb-4 animate-bounce">🎊</div>
 
+          <h2 className="text-3xl font-bold mb-3 text-slate-800">
+            Tuyệt vời! Bạn đã hoàn thành! 🌟
+          </h2>
+          <p className="text-lg text-slate-600 mb-6">
+            Cảm ơn bạn đã tham gia bài học hôm nay!
+          </p>
+
+          {/* Leaderboard - bright and colorful */}
           {leaderboard.length > 0 && (
-            <div className="bg-zinc-900/80 rounded-xl border border-zinc-800 p-4 mb-6">
-              <h3 className="text-sm font-semibold text-zinc-300 mb-3 uppercase tracking-wider">
-                Bảng xếp hạng
+            <div className="bg-white rounded-2xl shadow-xl shadow-purple-100 p-5 mb-6 border border-purple-100">
+              <h3 className="text-base font-bold text-slate-700 mb-4 flex items-center justify-center gap-2">
+                🏆 Bảng xếp hạng
               </h3>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {leaderboard.map((entry, idx) => (
                   <div
                     key={entry.participantId}
-                    className={`flex items-center justify-between px-3 py-2 rounded-lg ${entry.participantId === participantId
-                      ? "bg-emerald-500/20 border border-emerald-500/40"
-                      : "bg-zinc-800/50"
+                    className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all ${entry.participantId === participantId
+                      ? "bg-gradient-to-r from-emerald-100 to-teal-100 border-2 border-emerald-400 scale-105"
+                      : "bg-slate-50 hover:bg-slate-100"
                       }`}
                   >
                     <div className="flex items-center gap-3">
+                      {/* Medal badges - bigger and more colorful */}
                       <span
-                        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${idx === 0
-                          ? "bg-yellow-500 text-yellow-900"
+                        className={`inline-flex items-center justify-center w-10 h-10 rounded-full text-lg font-bold shadow-md ${idx === 0
+                          ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-yellow-900"
                           : idx === 1
-                            ? "bg-gray-300 text-gray-800"
+                            ? "bg-gradient-to-br from-gray-200 to-gray-400 text-gray-800"
                             : idx === 2
-                              ? "bg-amber-600 text-amber-100"
-                              : "bg-zinc-700 text-zinc-300"
+                              ? "bg-gradient-to-br from-amber-400 to-orange-500 text-orange-900"
+                              : "bg-gradient-to-br from-slate-200 to-slate-300 text-slate-600"
                           }`}
                       >
-                        {entry.rank ?? idx + 1}
+                        {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : entry.rank ?? idx + 1}
                       </span>
-                      <span className="text-zinc-100">{entry.displayName}</span>
+                      <span className="font-semibold text-slate-700">{entry.displayName}</span>
                     </div>
-                    <span className="font-bold text-emerald-400">{entry.score} điểm</span>
+                    <span className="font-bold text-lg text-emerald-600">
+                      {entry.score} <span className="text-sm font-normal">điểm</span>
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
+          {/* Action button - playful */}
           <button
             onClick={() => router.push("/session/join")}
-            className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors"
+            className="px-8 py-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white text-lg font-bold rounded-2xl shadow-lg shadow-emerald-200 transition-all hover:scale-105"
           >
-            Tham gia tiết học khác
+            🚀 Tham gia lớp học khác
           </button>
         </div>
       </div>
@@ -658,101 +711,117 @@ export default function StoryMapViewPage() {
   }
 
   return (
-    <div className="h-screen flex bg-zinc-950 text-zinc-50">
-      {/* SIDEBAR TRÁI: giữ như cũ, không có Hoạt động nhóm */}
-      <div className="w-[360px] border-r border-zinc-800 bg-zinc-950/95 flex flex-col">
-        <div className="px-5 pt-5 pb-4 border-b border-zinc-800 bg-gradient-to-b from-zinc-900 to-zinc-950">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 font-medium">
-            Đang xem tiết học
+    <div className="h-screen flex bg-gradient-to-br from-sky-50 to-emerald-50 text-slate-800">
+      {/* SIDEBAR TRÁI - Child-friendly bright design */}
+      <div className="w-[380px] border-r border-emerald-200 bg-white/90 backdrop-blur flex flex-col shadow-xl">
+        {/* Header */}
+        <div className="px-5 pt-5 pb-4 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50">
+          <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider flex items-center gap-2">
+            📖 Đang học
           </p>
-          <h1 className="mt-1 text-lg font-semibold text-white truncate">
-            {mapDetail?.name || "Bản đồ chưa đặt tên"}
+          <h1 className="mt-2 text-xl font-bold text-slate-800 truncate">
+            {mapDetail?.name || "Bài học hôm nay"}
           </h1>
 
-          <div className="mt-3 flex items-center justify-between gap-2">
-            <div className="text-[11px] text-zinc-400">
-              <p className="font-semibold text-zinc-200">{displayName}</p>
-              {currentSegment && currentIndex >= 0 && (
-                <p className="mt-0.5">
-                  Đang xem:{" "}
-                  <span className="text-zinc-50">
-                    {safeCurrentIndex + 1}. {currentSegment.name || "Segment"}
-                  </span>
-                </p>
-              )}
+          <div className="mt-4 flex items-center justify-between gap-3">
+            {/* Student name - cheerful badge */}
+            <div className="flex items-center gap-2 bg-gradient-to-r from-purple-100 to-pink-100 rounded-full px-4 py-2">
+              <span className="text-lg">👋</span>
+              <span className="font-bold text-purple-700">{displayName}</span>
             </div>
 
+            {/* Session code - prominent and colorful */}
             {sessionCode && (
-              <div className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-1.5 text-right">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-emerald-300">
-                  Mã tiết học
-                </p>
-                <p className="mt-1 text-base font-mono font-semibold text-emerald-200">
-                  {sessionCode}
-                </p>
+              <div className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 p-0.5 shadow-lg shadow-emerald-200">
+                <div className="bg-white rounded-lg px-3 py-2 text-center">
+                  <p className="text-[10px] font-semibold text-emerald-600 uppercase">
+                    🔑 Mã lớp
+                  </p>
+                  <p className="text-lg font-mono font-bold text-emerald-600">
+                    {sessionCode}
+                  </p>
+                </div>
               </div>
             )}
           </div>
 
-          <div className="mt-2 flex items-center gap-2 text-[11px] text-zinc-500">
+          {/* Current segment indicator */}
+          {currentSegment && currentIndex >= 0 && (
+            <div className="mt-3 flex items-center gap-2 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
+              <span className="text-lg">📍</span>
+              <span className="text-sm text-amber-800">
+                Đang xem: <span className="font-bold">{safeCurrentIndex + 1}. {currentSegment.name || "Phần học"}</span>
+              </span>
+            </div>
+          )}
+
+          {/* Connection status */}
+          <div className="mt-3 flex items-center gap-2 text-sm">
             <span
-              className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"
+              className={`inline-flex h-3 w-3 rounded-full ${isConnected ? "bg-emerald-500" : "bg-amber-500"
                 } animate-pulse`}
             />
-            <span>{isConnected ? "Đã kết nối với giáo viên" : "Đang kết nối..."}</span>
-            {isTeacherPlaying && <span className="ml-2 text-emerald-400">▶ Đang phát</span>}
+            <span className={isConnected ? "text-emerald-700 font-medium" : "text-amber-600"}>
+              {isConnected ? "✓ Đã kết nối với thầy cô!" : "Đang kết nối..."}
+            </span>
+            {isTeacherPlaying && <span className="ml-2 text-emerald-600 font-medium">▶ Đang phát</span>}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3 space-y-4">
+        <div className="flex-1 overflow-y-auto px-4 pb-4 pt-4 space-y-4">
           {(viewState === "question" || viewState === "results") && currentQuestion && (
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3 space-y-3">
+            <section className="rounded-2xl border-2 border-purple-200 bg-white shadow-lg shadow-purple-100 px-5 py-4 space-y-4">
+              {/* Question header - colorful */}
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium">
-                  {viewState === "results" ? "Kết quả câu hỏi" : "Câu hỏi hiện tại"}
+                <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
+                  {viewState === "results" ? "📊 Kết quả" : "❓ Câu hỏi"}
                 </p>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-zinc-400">
-                    {currentQuestion.points} điểm
+                <div className="flex items-center gap-3">
+                  <span className="px-3 py-1 bg-amber-100 text-amber-700 rounded-full text-sm font-bold">
+                    ⭐ {currentQuestion.points} điểm
                   </span>
                   {viewState === "question" && timeRemaining !== null && (
                     <span
-                      className={`font-mono text-sm font-bold ${timeRemaining <= 10 ? "text-red-400" : "text-emerald-400"
+                      className={`px-3 py-1 rounded-full font-mono text-base font-bold ${timeRemaining <= 10
+                        ? "bg-red-100 text-red-600 animate-pulse"
+                        : "bg-emerald-100 text-emerald-700"
                         }`}
                     >
-                      {timeRemaining}s
+                      ⏱ {timeRemaining}s
                     </span>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-lg bg-zinc-950/70 border border-zinc-800 px-3 py-2">
-                <p className="text-sm text-zinc-50 whitespace-pre-wrap">
+              {/* Question text - prominent */}
+              <div className="rounded-xl bg-gradient-to-r from-sky-50 to-indigo-50 border border-sky-200 px-4 py-3">
+                <p className="text-base text-slate-800 whitespace-pre-wrap font-medium">
                   {currentQuestion.questionText}
                 </p>
                 {currentQuestion.questionImageUrl && (
                   <img
                     src={currentQuestion.questionImageUrl}
                     alt="Question"
-                    className="mt-2 rounded-lg max-h-40 object-contain"
+                    className="mt-3 rounded-xl max-h-48 object-contain border border-sky-200"
                   />
                 )}
               </div>
 
+              {/* Answer options - big colorful buttons */}
               {viewState === "question" &&
                 currentQuestion.options &&
                 currentQuestion.options.length > 0 && (
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     {[...currentQuestion.options]
                       .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
-                      .map((opt) => (
+                      .map((opt, idx) => (
                         <label
                           key={opt.id}
-                          className={`flex items-start gap-2 rounded-lg border px-3 py-2 cursor-pointer text-[13px] transition ${hasSubmitted
+                          className={`flex items-center gap-3 rounded-xl border-2 px-4 py-3 cursor-pointer text-base transition-all ${hasSubmitted
                             ? "opacity-60 cursor-not-allowed"
                             : selectedOptionId === opt.id
-                              ? "border-emerald-500 bg-emerald-500/10 text-emerald-50"
-                              : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
+                              ? "border-emerald-400 bg-emerald-50 text-emerald-800 scale-[1.02] shadow-md"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-purple-300 hover:bg-purple-50"
                             }`}
                         >
                           <input
@@ -768,15 +837,20 @@ export default function StoryMapViewPage() {
                             disabled={
                               hasSubmitted || (timeRemaining !== null && timeRemaining <= 0)
                             }
-                            className="mt-[3px] h-3 w-3 accent-emerald-500"
+                            className="hidden"
                           />
-
-                          <span>{opt.optionText || "(Không có nội dung)"}</span>
+                          <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${selectedOptionId === opt.id
+                            ? "bg-emerald-500 text-white"
+                            : "bg-slate-200 text-slate-600"}`}>
+                            {String.fromCharCode(65 + idx)}
+                          </span>
+                          <span className="font-medium">{opt.optionText || "(Không có nội dung)"}</span>
                         </label>
                       ))}
                   </div>
                 )}
 
+              {/* Submit button - big and colorful */}
               {viewState === "question" && !hasSubmitted && (
                 <button
                   type="button"
@@ -786,55 +860,60 @@ export default function StoryMapViewPage() {
                     !selectedOptionId ||
                     (timeRemaining !== null && timeRemaining <= 0)
                   }
-                  className="mt-2 inline-flex justify-center w-full rounded-lg px-3 py-2 text-[13px] font-medium border border-emerald-500/70 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="mt-2 w-full rounded-xl px-4 py-4 text-lg font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-200 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.02]"
                 >
-                  {answering ? "Đang gửi..." : "Gửi đáp án"}
+                  {answering ? "⏳ Đang gửi..." : "🚀 Gửi đáp án!"}
                 </button>
               )}
 
+              {/* Submitted confirmation */}
               {viewState === "question" && hasSubmitted && (
-                <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2 text-[12px] text-emerald-300">
-                  ✅ Đã gửi đáp án! Chờ giáo viên hiển thị kết quả...
+                <div className="rounded-xl bg-emerald-50 border-2 border-emerald-300 px-4 py-3 text-center">
+                  <p className="text-base font-bold text-emerald-700">
+                    ✅ Tuyệt vời! Đã gửi đáp án!
+                  </p>
+                  <p className="text-sm text-emerald-600 mt-1">Chờ thầy cô hiển thị kết quả nhé...</p>
                 </div>
               )}
 
               {viewState === "results" && questionResults && (
-                <div className="space-y-2">
+                <div className="space-y-3">
+                  {/* Correct answer - bright green */}
                   {questionResults.correctAnswer && (
-                    <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-3 py-2">
-                      <p className="text-[11px] text-emerald-400 uppercase tracking-wider mb-1">
-                        Đáp án đúng
+                    <div className="rounded-xl bg-emerald-50 border-2 border-emerald-300 px-4 py-3">
+                      <p className="text-sm font-bold text-emerald-700 mb-1">
+                        ✅ Đáp án đúng
                       </p>
-                      <p className="text-sm text-emerald-100 font-medium">
+                      <p className="text-base font-medium text-emerald-800">
                         {questionResults.correctAnswer}
                       </p>
                     </div>
                   )}
 
+                  {/* Results list - bright styling */}
                   {questionResults.results && questionResults.results.length > 0 && (
-                    <div className="rounded-lg bg-zinc-950/70 border border-zinc-800 px-3 py-2">
-                      <p className="text-[11px] text-zinc-500 uppercase tracking-wider mb-2">
-                        Kết quả các bạn
+                    <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
+                      <p className="text-sm font-bold text-slate-700 mb-3">
+                        📋 Kết quả các bạn
                       </p>
-                      <div className="space-y-1 max-h-32 overflow-y-auto">
+                      <div className="space-y-2 max-h-32 overflow-y-auto">
                         {questionResults.results.map((result) => (
                           <div
                             key={result.participantId}
-                            className={`flex items-center justify-between text-[11px] ${result.participantId === participantId
-                              ? "text-emerald-300 font-semibold"
-                              : "text-zinc-300"
+                            className={`flex items-center justify-between text-sm rounded-lg px-3 py-2 ${result.participantId === participantId
+                              ? "bg-purple-100 border border-purple-300 font-bold"
+                              : "bg-white"
                               }`}
                           >
-                            <span>
+                            <span className="text-slate-700">
                               {result.displayName}
-                              {result.participantId === participantId && " (Bạn)"}
+                              {result.participantId === participantId && " 👈 (Bạn)"}
                             </span>
                             <span
-                              className={
-                                result.isCorrect ? "text-emerald-400" : "text-red-400"
-                              }
+                              className={`font-bold ${result.isCorrect ? "text-emerald-600" : "text-red-500"
+                                }`}
                             >
-                              {result.isCorrect ? `+${result.pointsEarned}` : "Sai"}
+                              {result.isCorrect ? `✓ +${result.pointsEarned}` : "✗ Sai"}
                             </span>
                           </div>
                         ))}
@@ -842,12 +921,13 @@ export default function StoryMapViewPage() {
                     </div>
                   )}
 
+                  {/* Continue button - colorful */}
                   <button
                     type="button"
                     onClick={handleContinueViewing}
-                    className="mt-2 inline-flex justify-center w-full rounded-lg px-3 py-2 text-[13px] font-medium border border-sky-500/70 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25"
+                    className="mt-2 w-full rounded-xl px-4 py-3 text-base font-bold bg-gradient-to-r from-sky-500 to-blue-500 text-white shadow-lg shadow-sky-200 hover:from-sky-600 hover:to-blue-600 transition-all hover:scale-[1.02]"
                   >
-                    Tiếp tục xem bản đồ
+                    ▶ Tiếp tục xem bản đồ
                   </button>
                 </div>
               )}
@@ -859,21 +939,21 @@ export default function StoryMapViewPage() {
           )}
 
           {viewState === "viewing" && !currentQuestion && (
-            <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium mb-2">
-                Thông tin
+            <section className="rounded-2xl border-2 border-sky-200 bg-white shadow-lg shadow-sky-100 px-5 py-4">
+              <p className="text-sm font-bold text-sky-700 flex items-center gap-2 mb-2">
+                📺 Thông tin
               </p>
-              <p className="text-[12px] text-zinc-400">
-                Giáo viên đang điều khiển bản đồ. Hãy theo dõi màn hình chính.
+              <p className="text-base text-slate-600">
+                Thầy cô đang điều khiển bản đồ. Hãy theo dõi màn hình chính nhé! 👀
               </p>
               {currentSegment && currentIndex >= 0 && (
-                <div className="mt-3 p-2 rounded-lg bg-zinc-950/70 border border-zinc-800">
-                  <p className="text-[11px] text-zinc-500">Segment hiện tại:</p>
-                  <p className="text-[13px] text-zinc-100 font-medium">
+                <div className="mt-4 p-3 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200">
+                  <p className="text-xs font-semibold text-amber-700 uppercase">📍 Phần đang học:</p>
+                  <p className="text-base font-bold text-amber-900 mt-1">
                     {safeCurrentIndex + 1}. {currentSegment.name || "Không có tên"}
                   </p>
                   {currentSegment.description && (
-                    <p className="text-[11px] text-zinc-400 mt-1">
+                    <p className="text-sm text-amber-700 mt-2">
                       {currentSegment.description}
                     </p>
                   )}
@@ -899,9 +979,10 @@ export default function StoryMapViewPage() {
       <div className="flex-1 min-h-0 relative">
         {segments.length > 0 && (
           <StoryMapViewer
+            key={`storymap-${selectedLayer}`}
             mapId={mapId}
             segments={segments}
-            baseMapProvider={mapDetail?.baseMapProvider}
+            baseMapProvider={selectedLayer || mapDetail?.baseMapProvider}
             initialCenter={center}
             initialZoom={mapDetail?.defaultZoom || 10}
             controlledIndex={
@@ -929,81 +1010,56 @@ export default function StoryMapViewPage() {
         )}
       </div>
 
-      {/* PANEL PHẢI: Hoạt động nhóm */}
-      <div className="w-[340px] border-l border-zinc-800 bg-zinc-950/95 flex flex-col">
-        <div className="px-4 pt-5 pb-3 border-b border-zinc-800">
-          <div className="flex items-center justify-between">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500 font-medium">
-              Hoạt động nhóm
-            </p>
-            <span className="text-[10px] text-zinc-500">
-              {currentGroupId ? "Đã vào nhóm" : "Chưa vào nhóm"}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3 space-y-3">
-          <div className="space-y-1 max-h-32 overflow-y-auto">
-            {sessionGroups.length === 0 && (
-              <p className="text-[12px] text-zinc-500">
-                Giáo viên chưa tạo nhóm hoặc chưa cập nhật.
+      {/* PANEL PHẢI: Hoạt động nhóm - chỉ hiển thị khi đã vào nhóm */}
+      {currentGroupId ? (
+        <div className="w-[340px] border-l border-purple-200 bg-white/95 backdrop-blur flex flex-col shadow-xl">
+          <div className="px-4 pt-5 pb-3 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-pink-50">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
+                👥 Hoạt động nhóm
               </p>
-            )}
-            {sessionGroups.map((g, idx) => (
-              <button
-                key={g.id ?? idx}
-                type="button"
-                onClick={() => handleJoinGroup(g.id)}
-                className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-[12px] border ${currentGroupId === g.id
-                    ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
-                    : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
-                  }`}
-              >
-                <span className="truncate">{g.name || `Nhóm ${idx + 1}`}</span>
-                {typeof g.currentMembersCount === "number" &&
-                  typeof g.maxMembers === "number" && (
-                    <span className="text-[11px] text-zinc-400">
-                      {g.currentMembersCount}/{g.maxMembers}
-                    </span>
-                  )}
-              </button>
-            ))}
+              <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
+                ✓ Đã vào nhóm
+              </span>
+            </div>
+          </div>
 
-
-            <div className="space-y-2">
-              <p className="text-[11px] text-zinc-500 uppercase tracking-[0.12em]">
-                Bài làm nhóm
+          <div className="flex-1 overflow-y-auto px-4 pb-4 pt-4 space-y-4">
+            {/* Group work section - bright styling */}
+            <div className="space-y-3">
+              <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
+                ✏️ Bài làm nhóm
               </p>
               <textarea
                 value={groupWorkContent}
                 onChange={(e) => setGroupWorkContent(e.target.value)}
-                placeholder="Nội dung bài làm nhóm..."
-                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-[12px] resize-none h-20"
+                placeholder="Viết nội dung bài làm nhóm tại đây..."
+                className="w-full rounded-xl border-2 border-purple-200 bg-white px-4 py-3 text-base text-slate-700 placeholder:text-slate-400 resize-none h-28 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100"
               />
               <button
                 type="button"
                 onClick={handleSubmitGroupWork}
                 disabled={!currentGroupId || groupSubmitting || !groupWorkContent.trim()}
-                className="w-full inline-flex justify-center rounded-lg px-3 py-2 text-[12px] font-medium border border-emerald-500/70 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full rounded-xl px-4 py-3 text-base font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-200 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
               >
-                {groupSubmitting ? "Đang gửi bài nhóm..." : "Gửi bài nhóm"}
+                {groupSubmitting ? "⏳ Đang gửi..." : "📤 Gửi bài nhóm"}
               </button>
             </div>
-
-            <div className="space-y-2">
-              <p className="text-[11px] text-zinc-500 uppercase tracking-[0.12em]">
-                Chat nhóm
+            {/* Group chat section - bright styling */}
+            <div className="space-y-3">
+              <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
+                💬 Chat nhóm
               </p>
-              <div className="max-h-32 overflow-y-auto space-y-1 rounded-lg border border-zinc-800 bg-zinc-950/60 px-2 py-2">
+              <div className="max-h-40 overflow-y-auto space-y-2 rounded-xl border-2 border-sky-200 bg-sky-50 px-4 py-3">
                 {groupMessages.length === 0 && (
-                  <p className="text-[11px] text-zinc-500">
-                    Tin nhắn nhóm sẽ hiển thị tại đây.
+                  <p className="text-sm text-slate-400 text-center py-2">
+                    Tin nhắn nhóm sẽ hiển thị tại đây 📝
                   </p>
                 )}
                 {groupMessages.map((m, idx) => (
-                  <div key={idx} className="text-[11px] text-zinc-300">
-                    <span className="font-semibold text-emerald-300">{m.userName}:</span>{" "}
-                    <span>{m.message}</span>
+                  <div key={idx} className="text-sm bg-white rounded-lg px-3 py-2 shadow-sm">
+                    <span className="font-bold text-purple-600">{m.userName}:</span>{" "}
+                    <span className="text-slate-700">{m.message}</span>
                   </div>
                 ))}
               </div>
@@ -1012,57 +1068,57 @@ export default function StoryMapViewPage() {
                   value={groupChatInput}
                   onChange={(e) => setGroupChatInput(e.target.value)}
                   placeholder="Nhắn tin cho nhóm..."
-                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-[12px]"
+                  className="flex-1 rounded-xl border-2 border-purple-200 bg-white px-4 py-2 text-base text-slate-700 placeholder:text-slate-400 focus:border-purple-400 focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={handleSendGroupMessage}
                   disabled={!currentGroupId || !groupChatInput.trim()}
-                  className="px-3 py-1.5 rounded-lg text-[12px] border border-sky-500/70 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-4 py-2 rounded-xl text-base font-bold bg-gradient-to-r from-sky-500 to-blue-500 text-white shadow-lg shadow-sky-200 hover:from-sky-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Gửi
+                  📩 Gửi
                 </button>
               </div>
             </div>
           </div>
         </div>
+      ) : null}
 
-        {viewState === "question" && currentQuestion && (
-          <div className="absolute inset-0 z-[9999] flex items-center justify-center pointer-events-none">
-            <div className="bg-zinc-900/95 backdrop-blur-sm border-2 border-emerald-500/50 rounded-2xl p-6 shadow-2xl max-w-lg mx-4 pointer-events-auto">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-500/40 rounded-full text-emerald-300 text-sm font-semibold">
-                    {currentQuestion.points} điểm
+      {viewState === "question" && currentQuestion && (
+        <div className="absolute inset-0 z-[9999] flex items-center justify-center pointer-events-none">
+          <div className="bg-zinc-900/95 backdrop-blur-sm border-2 border-emerald-500/50 rounded-2xl p-6 shadow-2xl max-w-lg mx-4 pointer-events-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-500/40 rounded-full text-emerald-300 text-sm font-semibold">
+                  {currentQuestion.points} điểm
+                </span>
+                {timeRemaining !== null && (
+                  <span
+                    className={`font-mono text-2xl font-bold ${timeRemaining <= 10 ? "text-red-400 animate-pulse" : "text-white"
+                      }`}
+                  >
+                    {timeRemaining}s
                   </span>
-                  {timeRemaining !== null && (
-                    <span
-                      className={`font-mono text-2xl font-bold ${timeRemaining <= 10 ? "text-red-400 animate-pulse" : "text-white"
-                        }`}
-                    >
-                      {timeRemaining}s
-                    </span>
-                  )}
-                </div>
+                )}
               </div>
-
-              <h2 className="text-xl font-bold text-white mb-4">
-                {currentQuestion.questionText}
-              </h2>
-
-              {currentQuestion.questionImageUrl && (
-                <img
-                  src={currentQuestion.questionImageUrl}
-                  alt="Question"
-                  className="mb-4 rounded-lg max-h-48 mx-auto object-contain"
-                />
-              )}
-
-              <p className="text-zinc-400 text-sm">Trả lời câu hỏi ở sidebar bên trái →</p>
             </div>
+
+            <h2 className="text-xl font-bold text-white mb-4">
+              {currentQuestion.questionText}
+            </h2>
+
+            {currentQuestion.questionImageUrl && (
+              <img
+                src={currentQuestion.questionImageUrl}
+                alt="Question"
+                className="mb-4 rounded-lg max-h-48 mx-auto object-contain"
+              />
+            )}
+
+            <p className="text-zinc-400 text-sm">Trả lời câu hỏi ở sidebar bên trái →</p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

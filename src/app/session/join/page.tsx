@@ -30,7 +30,7 @@ function JoinSessionContent() {
         try {
           const session = await getSessionByCode(codeFromUrl);
 
-          if (session.status === "Ended") {
+          if (session.status === "COMPLETED" || session.status === "CANCELLED") {
             setError("This session has ended");
             setStep("pin");
             setIsLoading(false);
@@ -63,7 +63,7 @@ function JoinSessionContent() {
       // Verify session exists
       const session = await getSessionByCode(pinCode);
 
-      if (session.status === "Ended") {
+      if (session.status === "COMPLETED" || session.status === "CANCELLED") {
         setError("This session has ended");
         setIsLoading(false);
         return;

@@ -1,6 +1,6 @@
 // ===================== SESSION TYPES =====================
 
-export type SessionStatus = "Pending" | "Running" | "Paused" | "Ended";
+export type SessionStatus = "WAITING" | "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "CANCELLED";
 
 export type QuestionType =
   | "MultipleChoice"

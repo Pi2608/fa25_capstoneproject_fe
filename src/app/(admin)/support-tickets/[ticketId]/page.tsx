@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useState, FormEvent, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getSupportTicketByIdByAdmin, replyToSupportTicket, closeSupportTicket, SupportTicketStatus } from "@/lib/api-support";
 import { useTheme } from "../../layout";
 import { getThemeClasses } from "@/utils/theme-utils";
-import { SupportTicket } from "@/lib/api-support";
+import { SupportTicket, SupportTicketMessage } from "@/lib/api-support";
+import { useSupportTicketHub } from "@/lib/hubs/support-tickets";
+import type { SupportTicketMessage as SignalRMessage, TicketStatusChangedEvent } from "@/lib/hubs/support-tickets";
 
 
 const fmtDate = (value?: string | null) =>
@@ -26,6 +28,43 @@ export default function SupportTicketDetailPage() {
     const [reply, setReply] = useState("");
     const [saving, setSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
+
+    const handleNewMessage = useCallback((message: SignalRMessage) => {
+        if (message.ticketId === Number(ticketId)) {
+            setTicket(prev => {
+                if (!prev) return prev;
+                const newMessage: SupportTicketMessage = {
+                    messageId: message.messageId,
+                    message: message.message,
+                    isFromUser: message.isFromUser,
+                    createdAt: message.createdAt,
+                };
+                return {
+                    ...prev,
+                    messages: [...(prev.messages || []), newMessage],
+                };
+            });
+        }
+    }, [ticketId]);
+
+    const handleTicketStatusChanged = useCallback((event: TicketStatusChangedEvent) => {
+        if (event.ticketId === Number(ticketId)) {
+            setTicket(prev => 
+                prev ? { ...prev, status: event.status as SupportTicketStatus } : prev
+            );
+        }
+    }, [ticketId]);
+
+    const { isConnected } = useSupportTicketHub(
+        {
+            onNewMessage: handleNewMessage,
+            onTicketStatusChanged: handleTicketStatusChanged,
+        },
+        {
+            enabled: true,
+            ticketId: Number(ticketId) || null,
+        }
+    );
 
     useEffect(() => {
         let alive = true;
@@ -208,7 +247,17 @@ export default function SupportTicketDetailPage() {
             {/* Header */}
             <section className={`${theme.panel} border rounded-xl p-4 shadow-sm`}>
                 <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <h3 className={`m-0 text-base font-extrabold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>Chi tiết yêu cầu hỗ trợ</h3>
+                    <div className="flex items-center gap-3">
+                        <h3 className={`m-0 text-base font-extrabold ${isDark ? 'text-zinc-100' : 'text-gray-900'}`}>Chi tiết yêu cầu hỗ trợ</h3>
+                        <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+                            isConnected 
+                                ? "bg-emerald-500/10 text-emerald-600" 
+                                : "bg-zinc-500/10 text-zinc-600"
+                        }`}>
+                            <span className={`h-2 w-2 rounded-full ${isConnected ? "bg-emerald-500 animate-pulse" : "bg-zinc-500"}`} />
+                            {isConnected ? "Real-time" : "Offline"}
+                        </div>
+                    </div>
 
                     <div className="flex gap-2 items-center">
                         <button
