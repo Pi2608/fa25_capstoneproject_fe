@@ -476,13 +476,15 @@ export default function StoryMapViewPage() {
     }
   };
 
+
   const handleSendGroupMessage = async () => {
     if (!groupConnection || !currentGroupId || !groupChatInput.trim()) return;
     try {
-      await sendMessageViaSignalR(groupConnection, {
-        groupId: currentGroupId,
-        message: groupChatInput.trim(),
-      });
+      await sendMessageViaSignalR(
+        groupConnection,
+        currentGroupId,
+        groupChatInput.trim()
+      );
       setGroupChatInput("");
     } catch (e) {
       console.error("[GroupCollab][View] Send group message failed:", e);
@@ -953,112 +955,114 @@ export default function StoryMapViewPage() {
                 type="button"
                 onClick={() => handleJoinGroup(g.id)}
                 className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-[12px] border ${currentGroupId === g.id
-                  ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
-                  : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
+                    ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
+                    : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
                   }`}
               >
                 <span className="truncate">{g.name || `Nhóm ${idx + 1}`}</span>
-                {typeof g.currentMembers === "number" && typeof g.maxMembers === "number" && (
-                  <span className="text-[11px] text-zinc-400">
-                    {g.currentMembers}/{g.maxMembers}
-                  </span>
-                )}
+                {typeof g.currentMembersCount === "number" &&
+                  typeof g.maxMembers === "number" && (
+                    <span className="text-[11px] text-zinc-400">
+                      {g.currentMembersCount}/{g.maxMembers}
+                    </span>
+                  )}
               </button>
             ))}
-          </div>
 
-          <div className="space-y-2">
-            <p className="text-[11px] text-zinc-500 uppercase tracking-[0.12em]">
-              Bài làm nhóm
-            </p>
-            <textarea
-              value={groupWorkContent}
-              onChange={(e) => setGroupWorkContent(e.target.value)}
-              placeholder="Nội dung bài làm nhóm..."
-              className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-[12px] resize-none h-20"
-            />
-            <button
-              type="button"
-              onClick={handleSubmitGroupWork}
-              disabled={!currentGroupId || groupSubmitting || !groupWorkContent.trim()}
-              className="w-full inline-flex justify-center rounded-lg px-3 py-2 text-[12px] font-medium border border-emerald-500/70 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {groupSubmitting ? "Đang gửi bài nhóm..." : "Gửi bài nhóm"}
-            </button>
-          </div>
 
-          <div className="space-y-2">
-            <p className="text-[11px] text-zinc-500 uppercase tracking-[0.12em]">
-              Chat nhóm
-            </p>
-            <div className="max-h-32 overflow-y-auto space-y-1 rounded-lg border border-zinc-800 bg-zinc-950/60 px-2 py-2">
-              {groupMessages.length === 0 && (
-                <p className="text-[11px] text-zinc-500">
-                  Tin nhắn nhóm sẽ hiển thị tại đây.
-                </p>
-              )}
-              {groupMessages.map((m, idx) => (
-                <div key={idx} className="text-[11px] text-zinc-300">
-                  <span className="font-semibold text-emerald-300">{m.userName}:</span>{" "}
-                  <span>{m.message}</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <input
-                value={groupChatInput}
-                onChange={(e) => setGroupChatInput(e.target.value)}
-                placeholder="Nhắn tin cho nhóm..."
-                className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-[12px]"
+            <div className="space-y-2">
+              <p className="text-[11px] text-zinc-500 uppercase tracking-[0.12em]">
+                Bài làm nhóm
+              </p>
+              <textarea
+                value={groupWorkContent}
+                onChange={(e) => setGroupWorkContent(e.target.value)}
+                placeholder="Nội dung bài làm nhóm..."
+                className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-[12px] resize-none h-20"
               />
               <button
                 type="button"
-                onClick={handleSendGroupMessage}
-                disabled={!currentGroupId || !groupChatInput.trim()}
-                className="px-3 py-1.5 rounded-lg text-[12px] border border-sky-500/70 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={handleSubmitGroupWork}
+                disabled={!currentGroupId || groupSubmitting || !groupWorkContent.trim()}
+                className="w-full inline-flex justify-center rounded-lg px-3 py-2 text-[12px] font-medium border border-emerald-500/70 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Gửi
+                {groupSubmitting ? "Đang gửi bài nhóm..." : "Gửi bài nhóm"}
               </button>
             </div>
-          </div>
-        </div>
-      </div>
 
-      {viewState === "question" && currentQuestion && (
-        <div className="absolute inset-0 z-[9999] flex items-center justify-center pointer-events-none">
-          <div className="bg-zinc-900/95 backdrop-blur-sm border-2 border-emerald-500/50 rounded-2xl p-6 shadow-2xl max-w-lg mx-4 pointer-events-auto">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-500/40 rounded-full text-emerald-300 text-sm font-semibold">
-                  {currentQuestion.points} điểm
-                </span>
-                {timeRemaining !== null && (
-                  <span
-                    className={`font-mono text-2xl font-bold ${timeRemaining <= 10 ? "text-red-400 animate-pulse" : "text-white"
-                      }`}
-                  >
-                    {timeRemaining}s
-                  </span>
+            <div className="space-y-2">
+              <p className="text-[11px] text-zinc-500 uppercase tracking-[0.12em]">
+                Chat nhóm
+              </p>
+              <div className="max-h-32 overflow-y-auto space-y-1 rounded-lg border border-zinc-800 bg-zinc-950/60 px-2 py-2">
+                {groupMessages.length === 0 && (
+                  <p className="text-[11px] text-zinc-500">
+                    Tin nhắn nhóm sẽ hiển thị tại đây.
+                  </p>
                 )}
+                {groupMessages.map((m, idx) => (
+                  <div key={idx} className="text-[11px] text-zinc-300">
+                    <span className="font-semibold text-emerald-300">{m.userName}:</span>{" "}
+                    <span>{m.message}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  value={groupChatInput}
+                  onChange={(e) => setGroupChatInput(e.target.value)}
+                  placeholder="Nhắn tin cho nhóm..."
+                  className="flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-[12px]"
+                />
+                <button
+                  type="button"
+                  onClick={handleSendGroupMessage}
+                  disabled={!currentGroupId || !groupChatInput.trim()}
+                  className="px-3 py-1.5 rounded-lg text-[12px] border border-sky-500/70 bg-sky-500/15 text-sky-100 hover:bg-sky-500/25 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Gửi
+                </button>
               </div>
             </div>
-
-            <h2 className="text-xl font-bold text-white mb-4">
-              {currentQuestion.questionText}
-            </h2>
-
-            {currentQuestion.questionImageUrl && (
-              <img
-                src={currentQuestion.questionImageUrl}
-                alt="Question"
-                className="mb-4 rounded-lg max-h-48 mx-auto object-contain"
-              />
-            )}
-
-            <p className="text-zinc-400 text-sm">Trả lời câu hỏi ở sidebar bên trái →</p>
           </div>
         </div>
-      )}
+
+        {viewState === "question" && currentQuestion && (
+          <div className="absolute inset-0 z-[9999] flex items-center justify-center pointer-events-none">
+            <div className="bg-zinc-900/95 backdrop-blur-sm border-2 border-emerald-500/50 rounded-2xl p-6 shadow-2xl max-w-lg mx-4 pointer-events-auto">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <span className="px-3 py-1 bg-emerald-500/20 border border-emerald-500/40 rounded-full text-emerald-300 text-sm font-semibold">
+                    {currentQuestion.points} điểm
+                  </span>
+                  {timeRemaining !== null && (
+                    <span
+                      className={`font-mono text-2xl font-bold ${timeRemaining <= 10 ? "text-red-400 animate-pulse" : "text-white"
+                        }`}
+                    >
+                      {timeRemaining}s
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <h2 className="text-xl font-bold text-white mb-4">
+                {currentQuestion.questionText}
+              </h2>
+
+              {currentQuestion.questionImageUrl && (
+                <img
+                  src={currentQuestion.questionImageUrl}
+                  alt="Question"
+                  className="mb-4 rounded-lg max-h-48 mx-auto object-contain"
+                />
+              )}
+
+              <p className="text-zinc-400 text-sm">Trả lời câu hỏi ở sidebar bên trái →</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
