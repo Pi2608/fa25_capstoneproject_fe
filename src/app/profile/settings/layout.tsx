@@ -12,7 +12,6 @@ const TABS: Tab[] = [
   { href: "/profile/settings/usage",      i18nKey: "tabs_usage" },
   { href: "/profile/settings/plans",      i18nKey: "tabs_plans" },
   { href: "/profile/settings/billing",    i18nKey: "tabs_billing" },
-  { href: "/profile/settings/developers", i18nKey: "tabs_developers" },
   { href: "/profile/settings/workspace",  i18nKey: "tabs_workspace" },
 ];
 
