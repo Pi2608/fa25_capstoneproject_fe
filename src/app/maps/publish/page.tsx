@@ -3318,39 +3318,6 @@ export default function EditMapPage() {
       />
 
 
-      {/* POI Tooltip Modal */}
-      {poiTooltipModal.isOpen && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-          onClick={() => setPoiTooltipModal({ isOpen: false })}
-        >
-          <div
-            className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 bg-zinc-900 border-b border-zinc-700 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-white">
-                {poiTooltipModal.title || 'Location Info'}
-              </h2>
-              <button
-                onClick={() => setPoiTooltipModal({ isOpen: false })}
-                className="text-zinc-400 hover:text-white transition-colors p-1 rounded hover:bg-zinc-800"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-6">
-              <div
-                className="prose prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: poiTooltipModal.content || '' }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Export Modal - Hide in view mode */}
       {showExportModal && !isViewMode && (
         <div className="fixed inset-0 z-[4000] flex items-start justify-center pt-32">
