@@ -338,6 +338,11 @@ export interface MapTemplate {
   previewImageUrl?: string | null;
   layerCount?: number | null;
   featureCount?: number | null;
+  usageCount?: number | null;
+  isFeatured?: boolean;
+  totalLayers?: number;
+  totalFeatures?: number;
+  createdAt?: string;
 }
 
 export interface MapTemplateLayer {
@@ -350,6 +355,9 @@ export interface MapTemplateDetails extends MapTemplate {
   layers: MapTemplateLayer[];
   annotations?: unknown[];
   images?: string[];
+  previewImage?: string | null;
+  baseLayer?: string;
+  defaultBounds?: string;
 }
 
 export interface GetMapTemplatesResponse {

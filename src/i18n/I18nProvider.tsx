@@ -5,7 +5,7 @@ import { messages, type Lang, type Namespaces, type KeysOf } from './messages';
 
 type Vars = Record<string, string | number>;
 
-type TFunc = {
+export type TFunc = {
   <N extends Namespaces>(ns: N, key: KeysOf<N>, vars?: Vars): string;
   (path: `${Namespaces}.${string}`, vars?: Vars): string;
 };

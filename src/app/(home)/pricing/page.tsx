@@ -14,6 +14,7 @@ import {
   SubscribeRequest,
   SubscribeResponse,
   subscribeToPlan,
+  parsePlanFeatures,
 } from "@/lib/api-membership";
 import {
   getMyInvitations,
@@ -411,6 +412,15 @@ export default function PricingPage() {
             const isCurrentActive = curPlan?.planId === plan.planId && memStatus === "active";
             const isCurrentPending = curPlan?.planId === plan.planId && memStatus === "pending";
 
+            const feats = parsePlanFeatures(plan);
+            const features = feats.length
+              ? feats
+              : [
+                  t("pricing", "feature_max_orgs") + ": " + ((plan.maxOrganizations ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxOrganizations),
+                  t("pricing", "feature_max_users") + ": " + ((plan.maxUsersPerOrg ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxUsersPerOrg),
+                  t("pricing", "feature_max_maps") + ": " + ((plan.maxMapsPerMonth ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxMapsPerMonth),
+                ];
+
             return (
               <div
                 key={plan.planId}
@@ -434,17 +444,25 @@ export default function PricingPage() {
                 <div className="flex h-full flex-col">
                   <div>
                     <h3 className="text-lg font-semibold">{plan.planName}</h3>
-                    {plan.description && <p className="mt-1 text-sm text-zinc-300">{plan.description}</p>}
                   </div>
 
-                  <div className="mt-5">
+                  <div className="mt-3">
                     <span className="text-3xl font-bold text-emerald-400">
                       {isFree ? fmtCurrency.format(0) : fmtCurrency.format(plan.priceMonthly ?? 0)}
                     </span>
                     <span className="ml-1 text-sm text-zinc-300">/{t("pricing", "per_month")}</span>
                   </div>
 
-                  <div className="mt-auto">
+                  <ul className="mt-4 space-y-2 text-sm text-zinc-300 flex-1">
+                    {features.slice(0, 6).map((f, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="text-emerald-400 mt-0.5">•</span>
+                        <span>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className="mt-6">
                     {isCurrentActive ? (
                       <span className="inline-flex w-full items-center justify-center rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-300">
                         {t("pricing", "badge_current")}

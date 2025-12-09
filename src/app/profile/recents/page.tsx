@@ -14,9 +14,16 @@ import {
   MapDto,
   updateMap,
   UpdateMapRequest,
+  getMapTemplates,
+  getMapTemplateWithDetails,
+  getMapTemplateLayerData,
+  uploadGeoJsonToMap,
+  MapTemplate,
+  MapTemplateDetails,
 } from "@/lib/api-maps";
 import { useTheme } from "next-themes";
 import { getThemeClasses } from "@/utils/theme-utils";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type ViewMode = "grid" | "list";
 
@@ -165,10 +172,29 @@ export default function RecentsPage() {
   const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
   const isDark = currentTheme === "dark";
   const themeClasses = getThemeClasses(isDark);
+  const { t } = useI18n();
 
   const [maps, setMaps] = useState<PublishedMap[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+
+  // Templates state
+  const [templates, setTemplates] = useState<MapTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templatesErr, setTemplatesErr] = useState<string | null>(null);
+
+  // Template detail modal state
+  const [templateDetail, setTemplateDetail] = useState<{
+    open: boolean;
+    template: MapTemplateDetails | null;
+    loading: boolean;
+    error: string | null;
+  }>({
+    open: false,
+    template: null,
+    loading: false,
+    error: null,
+  });
 
   const [viewOpen, setViewOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -254,6 +280,127 @@ export default function RecentsPage() {
   useEffect(() => {
     void loadMyMaps();
   }, [loadMyMaps]);
+
+  // Load templates
+  const loadTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    setTemplatesErr(null);
+    try {
+      const data = await getMapTemplates();
+      setTemplates(data);
+    } catch (e) {
+      setTemplatesErr(e instanceof Error ? e.message : t("recents", "templateLoadError"));
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void loadTemplates();
+  }, [loadTemplates]);
+
+  // Open template detail modal
+  const openTemplateDetail = async (template: MapTemplate) => {
+    setTemplateDetail({
+      open: true,
+      template: null,
+      loading: true,
+      error: null,
+    });
+
+    try {
+      const details = await getMapTemplateWithDetails(template.templateId);
+      setTemplateDetail({
+        open: true,
+        template: details,
+        loading: false,
+        error: null,
+      });
+    } catch (e) {
+      setTemplateDetail((prev) => ({
+        ...prev,
+        loading: false,
+        error: e instanceof Error ? e.message : t("recents", "templateDetailLoadError"),
+      }));
+    }
+  };
+
+  const closeTemplateDetail = () => {
+    setTemplateDetail({
+      open: false,
+      template: null,
+      loading: false,
+      error: null,
+    });
+  };
+
+  // Create map from template
+  const createMapFromTemplateHandler = async (template: MapTemplate | MapTemplateDetails) => {
+    setActionErr(null);
+    setBusyKey(template.templateId);
+    try {
+      // Step 1: Create map from template (creates map with metadata only)
+      const r = await createMapFromTemplate({
+        templateId: template.templateId,
+        customName: template.templateName || t("recents", "newMapFromTemplateDefault"),
+        customDescription: template.description,
+        workspaceId: null,
+      });
+
+      const newMapId = r.mapId;
+
+      // Step 2: Load template details to get layers
+      const templateDetails = await getMapTemplateWithDetails(template.templateId);
+
+      // Step 3: Load and upload each layer's data to the new map
+      if (templateDetails.layers && templateDetails.layers.length > 0) {
+        for (const layer of templateDetails.layers) {
+          try {
+            // Get layer data (GeoJSON)
+            const layerDataResponse = await getMapTemplateLayerData(
+              template.templateId,
+              layer.layerId || (layer as any).mapLayerId
+            );
+
+            if (layerDataResponse.layerData) {
+              // layerData is a JSON string, parse it to get the GeoJSON object
+              const geoJsonData = typeof layerDataResponse.layerData === 'string'
+                ? JSON.parse(layerDataResponse.layerData)
+                : layerDataResponse.layerData;
+
+              // Convert to Blob and create File object
+              const geoJsonString = typeof geoJsonData === 'string'
+                ? geoJsonData
+                : JSON.stringify(geoJsonData);
+
+              const geoJsonBlob = new Blob([geoJsonString], {
+                type: "application/json",
+              });
+              const geoJsonFile = new File(
+                [geoJsonBlob],
+                `${layer.layerName || "layer"}.geojson`,
+                { type: "application/json" }
+              );
+
+              // Upload to new map
+              await uploadGeoJsonToMap(newMapId, geoJsonFile, layer.layerName);
+            }
+          } catch (layerError) {
+            console.error(`Failed to load/upload layer ${layer.layerName}:`, layerError);
+            // Continue with other layers even if one fails
+          }
+        }
+      }
+
+      // Step 4: Navigate to the new map
+      router.push(`/maps/${newMapId}`);
+    } catch (error) {
+      console.error("Error creating map from template:", error);
+      setActionErr(t("recents", "errorTemplateCreate"));
+    } finally {
+      setBusyKey(null);
+    }
+  };
 
   const clickNewMap = useCallback(async () => {
     const created = await createDefaultMap({
@@ -385,7 +532,7 @@ export default function RecentsPage() {
   const handleOpenCreateSession = useCallback(
     (map: PublishedMap) => {
       if (!map.workspaceId || !map.orgId) {
-        alert("Map này chưa nằm trong workspace/organization nên không tạo session được.");
+        alert(t("recents", "mapNotInWorkspace"));
         return;
       }
       const search = new URLSearchParams({
@@ -394,23 +541,23 @@ export default function RecentsPage() {
       });
       router.push(`/profile/organizations/${map.orgId}/sessions/create?${search.toString()}`);
     },
-    [router]
+    [router, t]
   );
 
-  if (loading) return <div className={`min-h-[60vh] animate-pulse px-4 ${themeClasses.textMuted}`}>Loading…</div>;
+  if (loading) return <div className={`min-h-[60vh] animate-pulse px-4 ${themeClasses.textMuted}`}>{t("recents", "loading")}</div>;
   if (err) return <div className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"}`}>{err}</div>;
 
   return (
     <div className="min-w-0 relative px-4">
       <div className="flex items-center justify-between gap-3 mb-6">
-        <h1 className={`text-2xl sm:text-3xl font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>Recents</h1>
+        <h1 className={`text-2xl sm:text-3xl font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("recents", "title")}</h1>
         <div className="flex items-center gap-2 relative">
           <div className="relative">
             <button
               onClick={() => setViewOpen((v) => !v)}
               className={`px-3 py-2 rounded-lg border text-sm ${themeClasses.button}`}
             >
-              View ▾
+              {t("recents", "menuView")} ▾
             </button>
             {viewOpen && (
               <div
@@ -418,7 +565,7 @@ export default function RecentsPage() {
                 onMouseLeave={() => setViewOpen(false)}
               >
                 <div className={`px-2 py-1 text-xs uppercase tracking-wide ${themeClasses.textMuted}`}>
-                  Show items as
+                  {t("recents", "menuShowAs")}
                 </div>
                 {(["grid", "list"] as ViewMode[]).map((m) => (
                   <button
@@ -427,7 +574,7 @@ export default function RecentsPage() {
                       }`}
                     onClick={() => setViewMode(m)}
                   >
-                    {m === "grid" ? "Grid" : "List"}
+                    {m === "grid" ? t("recents", "menuGrid") : t("recents", "menuList")}
                   </button>
                 ))}
               </div>
@@ -437,22 +584,22 @@ export default function RecentsPage() {
             onClick={clickNewMap}
             className="px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400"
           >
-            New map
+            {t("recents", "actionNewMap")}
           </button>
         </div>
       </div>
 
       <section className="mb-8">
-        <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>Recent maps</h2>
+        <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("recents", "sectionYourMaps")}</h2>
 
         {maps.length === 0 && (
           <div className={`rounded-xl border p-6 text-center ${themeClasses.panel}`}>
-            <p className={`mb-4 ${themeClasses.textMuted}`}>You have no maps yet.</p>
+            <p className={`mb-4 ${themeClasses.textMuted}`}>{t("recents", "emptyText")}</p>
             <button
               onClick={clickNewMap}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-400"
             >
-              Create a map
+              {t("recents", "emptyButton")}
             </button>
           </div>
         )}
@@ -504,21 +651,21 @@ export default function RecentsPage() {
                       ? "border-emerald-500/40 bg-[radial-gradient(circle_at_0_0,#22c55e33,transparent_55%),radial-gradient(circle_at_100%_0,#22c55e22,transparent_55%)] bg-emerald-950/40 text-emerald-300"
                       : "border-emerald-500/60 bg-emerald-50/40 text-emerald-700"
                     }`}>
-                    Đã publish
+                    {t("recents", "statusPublished")}
                   </div>
                 ) : m.status === "archived" ? (
                   <div className={`mb-4 h-28 w-full rounded-2xl border flex items-center justify-center text-sm font-medium ${isDark
                       ? "border-slate-500/40 bg-[radial-gradient(circle_at_0_0,#64748b33,transparent_55%),radial-gradient(circle_at_100%_0,#64748b22,transparent_55%)] bg-slate-950/40 text-slate-300"
                       : "border-slate-500/60 bg-slate-50/40 text-slate-700"
                     }`}>
-                    Archived
+                    {t("recents", "statusArchived")}
                   </div>
                 ) : (
                   <div className={`mb-4 h-28 w-full rounded-2xl border flex items-center justify-center text-sm font-medium ${isDark
                       ? "border-blue-500/40 bg-[radial-gradient(circle_at_0_0,#3b82f633,transparent_55%),radial-gradient(circle_at_100%_0,#3b82f622,transparent_55%)] bg-blue-950/40 text-blue-300"
                       : "border-blue-500/60 bg-blue-50/40 text-blue-700"
                     }`}>
-                    Draft
+                    {t("recents", "statusDraft")}
                   </div>
                 )}
 
@@ -528,9 +675,9 @@ export default function RecentsPage() {
                   </div>
                   <div className={`text-xs ${themeClasses.textMuted}`}>
                     {m.publishedAt
-                      ? `Publish: ${new Date(m.publishedAt).toLocaleDateString()}`
+                      ? t("recents", "publishedDate", { date: new Date(m.publishedAt).toLocaleDateString() })
                       : m.createdAt
-                        ? `Created: ${new Date(m.createdAt).toLocaleDateString()}`
+                        ? t("recents", "createdDate", { date: new Date(m.createdAt).toLocaleDateString() })
                         : "—"}
                   </div>
                 </div>
@@ -540,14 +687,14 @@ export default function RecentsPage() {
                     className={`w-full px-3 py-2 rounded-xl border text-sm ${themeClasses.button}`}
                     onClick={() => router.push(`/maps/${m.id}`)}
                   >
-                    Mở map
+                    {t("recents", "openMap")}
                   </button>
                   {m.workspaceId && m.orgId && (
                     <button
                       className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400"
                       onClick={() => handleOpenCreateSession(m)}
                     >
-                      Tạo session
+                      {t("recents", "createSession")}
                     </button>
                   )}
                 </div>
@@ -561,8 +708,8 @@ export default function RecentsPage() {
             <table className="w-full text-sm">
               <thead className={`${isDark ? "bg-white/5" : "bg-gray-50"} ${themeClasses.tableHeader}`}>
                 <tr>
-                  <th className="text-left px-3 py-2">Name</th>
-                  <th className="text-left px-3 py-2">Date</th>
+                  <th className="text-left px-3 py-2">{t("recents", "tableName")}</th>
+                  <th className="text-left px-3 py-2">{t("recents", "tableCreated")}</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -590,11 +737,11 @@ export default function RecentsPage() {
                           className={`text-xs px-2 py-1 rounded border ${themeClasses.button}`}
                           onClick={() => openEdit(m)}
                         >
-                          Edit details
+                          {t("recents", "btnEditDetails")}
                         </button>
                         <button
                           className={`text-xl leading-none px-2 py-1 rounded ${isDark ? "hover:bg-white/5" : "hover:bg-gray-100"} ${isDark ? "text-zinc-200" : "text-gray-700"}`}
-                          title="More actions"
+                          title={t("recents", "menuMoreActions")}
                           onClick={(e) => {
                             e.stopPropagation();
                             setMenuOpenId((id) => (id === m.id ? null : m.id));
@@ -612,7 +759,7 @@ export default function RecentsPage() {
                               disabled={deletingId === m.id}
                               onClick={() => openDeleteConfirm(m)}
                             >
-                              {deletingId === m.id ? "Đang xóa..." : "Xóa bản đồ"}
+                              {deletingId === m.id ? t("recents", "menuDeleting") : t("recents", "menuDelete")}
                             </button>
                           </div>
                         )}
@@ -621,14 +768,14 @@ export default function RecentsPage() {
                           className={`text-xs px-2 py-1 rounded border ${themeClasses.button}`}
                           onClick={() => router.push(`/maps/${m.id}`)}
                         >
-                          Mở map
+                          {t("recents", "openMap")}
                         </button>
                         {m.workspaceId && m.orgId && (
                           <button
                             className="text-xs px-2 py-1 rounded bg-emerald-500 text-white hover:bg-emerald-400"
                             onClick={() => handleOpenCreateSession(m)}
                           >
-                            Tạo session
+                            {t("recents", "createSession")}
                           </button>
                         )}
                       </div>
@@ -642,7 +789,7 @@ export default function RecentsPage() {
       </section>
 
       <section className="mb-10">
-        <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>Examples</h2>
+        <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("recents", "sectionExamples")}</h2>
         {actionErr && (
           <div className={`mb-3 rounded-lg border px-3 py-2 ${isDark ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
             {actionErr}
@@ -664,7 +811,7 @@ export default function RecentsPage() {
                   disabled={busyKey === s.key}
                   className="px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
                 >
-                  {busyKey === s.key ? "Creating…" : "Use this template"}
+                  {busyKey === s.key ? t("recents", "samplesCreating") : t("recents", "samplesUseTemplate")}
                 </button>
               </div>
             </li>
@@ -672,17 +819,223 @@ export default function RecentsPage() {
         </ul>
       </section>
 
+      {/* Templates Section */}
+      <section className="mb-10">
+        <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
+          {t("recents", "sectionTemplates")}
+        </h2>
+
+        {templatesLoading && (
+          <div className={`text-center py-8 ${themeClasses.textMuted}`}>
+            {t("recents", "loading")}
+          </div>
+        )}
+
+        {templatesErr && (
+          <div className={`mb-3 rounded-lg border px-3 py-2 ${isDark ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
+            {templatesErr}
+          </div>
+        )}
+
+        {!templatesLoading && !templatesErr && templates.length === 0 && (
+          <div className={`rounded-xl border p-6 text-center ${themeClasses.panel}`}>
+            <p className={themeClasses.textMuted}>{t("recents", "templateNoTemplates")}</p>
+          </div>
+        )}
+
+        {!templatesLoading && !templatesErr && templates.length > 0 && (
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {templates.map((template) => (
+              <li key={template.templateId} className={`rounded-xl border p-4 ${themeClasses.panel}`}>
+                {/* Preview Image */}
+                <div className={`h-32 w-full rounded-lg border overflow-hidden mb-3 ${isDark ? "border-white/10 bg-zinc-900/40" : "border-gray-200 bg-gray-100"}`}>
+                  {template.previewImageUrl ? (
+                    <img
+                      src={template.previewImageUrl}
+                      alt={template.templateName}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="h-full w-full grid place-items-center">
+                      <div className={`h-16 w-16 rounded-full backdrop-blur-sm ${isDark ? "bg-white/10" : "bg-gray-300/20"}`} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Template Info */}
+                <div className="min-w-0 mb-3">
+                  <div className={`truncate font-semibold ${isDark ? "text-zinc-50" : "text-gray-900"}`}>
+                    {template.templateName || "Untitled Template"}
+                  </div>
+                  {template.description && (
+                    <p className={`text-sm mt-1 line-clamp-2 ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
+                      {template.description}
+                    </p>
+                  )}
+                  <div className={`text-xs mt-2 space-y-1 ${themeClasses.textMuted}`}>
+                    {template.category && (
+                      <div>{t("recents", "templateCategory", { category: template.category })}</div>
+                    )}
+                    {template.layerCount !== null && template.layerCount !== undefined && (
+                      <div>{t("recents", "templateLayers", { count: template.layerCount })}</div>
+                    )}
+                    {template.featureCount !== null && template.featureCount !== undefined && (
+                      <div>{t("recents", "templateFeatures", { count: template.featureCount })}</div>
+                    )}
+                    {template.usageCount !== null && template.usageCount !== undefined && (
+                      <div>{t("recents", "templateUsageCount", { count: template.usageCount })}</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col gap-2 mt-auto">
+                  <button
+                    className={`w-full px-3 py-2 rounded-xl border text-sm ${themeClasses.button}`}
+                    onClick={() => openTemplateDetail(template)}
+                  >
+                    {t("recents", "templateViewDetails")}
+                  </button>
+                  <button
+                    className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
+                    onClick={() => createMapFromTemplateHandler(template)}
+                    disabled={busyKey === template.templateId}
+                  >
+                    {busyKey === template.templateId ? t("recents", "creatingFromTemplate") : t("recents", "templateUseTemplate")}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Template Detail Modal */}
+      {templateDetail.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className={`w-full max-w-2xl rounded-2xl border shadow-2xl p-5 max-h-[80vh] overflow-y-auto ${themeClasses.panel}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                {t("recents", "templateModalTitle")}
+              </h3>
+              <button
+                className={`${isDark ? "text-zinc-300 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
+                onClick={closeTemplateDetail}
+              >
+                ✕
+              </button>
+            </div>
+
+            {templateDetail.loading && (
+              <div className={`text-center py-8 ${themeClasses.textMuted}`}>
+                {t("recents", "loading")}
+              </div>
+            )}
+
+            {templateDetail.error && (
+              <div className={`mb-3 rounded-lg border px-3 py-2 ${isDark ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
+                {templateDetail.error}
+              </div>
+            )}
+
+            {templateDetail.template && (
+              <div>
+                {/* Template Preview */}
+                {templateDetail.template.previewImage && (
+                  <div className="mb-4">
+                    <img
+                      src={templateDetail.template.previewImage}
+                      alt={templateDetail.template.templateName}
+                      className="w-full rounded-lg"
+                    />
+                  </div>
+                )}
+
+                {/* Template Details */}
+                <div className="mb-4">
+                  <h4 className={`text-xl font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    {templateDetail.template.templateName}
+                  </h4>
+                  {templateDetail.template.description && (
+                    <p className={`text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
+                      {templateDetail.template.description}
+                    </p>
+                  )}
+                </div>
+
+                {/* Layers */}
+                <div className="mb-4">
+                  <h5 className={`text-sm font-semibold mb-2 ${isDark ? "text-zinc-200" : "text-gray-800"}`}>
+                    {t("recents", "templateLayers", { count: templateDetail.template.layers?.length || 0 })}
+                  </h5>
+                  {templateDetail.template.layers && templateDetail.template.layers.length > 0 ? (
+                    <div className={`rounded-lg border overflow-hidden ${themeClasses.panel}`}>
+                      <table className="w-full text-sm">
+                        <thead className={`${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+                          <tr>
+                            <th className={`text-left px-3 py-2 ${themeClasses.textMuted}`}>
+                              {t("recents", "templateModalLayerName")}
+                            </th>
+                            <th className={`text-left px-3 py-2 ${themeClasses.textMuted}`}>
+                              {t("recents", "templateModalFeatureCount")}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className={`divide-y ${themeClasses.tableBorder}`}>
+                          {templateDetail.template.layers.map((layer: any) => (
+                            <tr key={layer.layerId || layer.mapLayerId}>
+                              <td className={`px-3 py-2 ${isDark ? "text-zinc-200" : "text-gray-800"}`}>
+                                {layer.layerName}
+                              </td>
+                              <td className={`px-3 py-2 ${themeClasses.textMuted}`}>
+                                {layer.featureCount || 0}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className={themeClasses.textMuted}>
+                      {t("recents", "templateModalNoLayers")}
+                    </p>
+                  )}
+                </div>
+
+                {/* Use Template Button */}
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    className={`px-4 py-2 rounded-lg border text-sm ${themeClasses.button}`}
+                    onClick={closeTemplateDetail}
+                  >
+                    {t("recents", "templateModalClose")}
+                  </button>
+                  <button
+                    className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
+                    onClick={() => {
+                      closeTemplateDetail();
+                      createMapFromTemplateHandler(templateDetail.template!);
+                    }}
+                    disabled={busyKey === templateDetail.template.templateId}
+                  >
+                    {busyKey === templateDetail.template.templateId ? t("recents", "creatingFromTemplate") : t("recents", "templateUseTemplate")}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {confirmDelete.open && confirmDelete.map && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div className={`w-full max-w-sm rounded-2xl border shadow-2xl p-5 ${themeClasses.panel}`}>
-            <h3 className={`text-lg font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>Xóa bản đồ?</h3>
+            <h3 className={`text-lg font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>{t("recents", "deleteConfirmTitle")}</h3>
             <p className={`text-sm mb-4 ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
-              Bạn có chắc chắn muốn xóa{" "}
-              <span className={`font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                {confirmDelete.map.name?.trim() || "bản đồ này"}
-              </span>
-              ? Hành động này{" "}
-              <span className={`font-medium ${isDark ? "text-red-400" : "text-red-600"}`}>không thể hoàn tác</span>.
+              {t("recents", "deleteConfirmMessage", {
+                name: confirmDelete.map.name?.trim() || t("recents", "deleteConfirmName")
+              })}
             </p>
 
             <div className="flex items-center justify-end gap-2">
@@ -691,14 +1044,14 @@ export default function RecentsPage() {
                 disabled={!!deletingId}
                 className={`px-3 py-1.5 rounded-lg border text-sm disabled:opacity-60 ${isDark ? "border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700" : "border-gray-300 bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
               >
-                Hủy
+                {t("recents", "deleteCancel")}
               </button>
               <button
                 onClick={() => confirmDelete.map && handleDeleteMap(confirmDelete.map)}
                 disabled={deletingId === confirmDelete.map.id}
                 className="px-3 py-1.5 rounded-lg bg-red-500 text-sm font-semibold text-white hover:bg-red-400 disabled:opacity-60"
               >
-                {deletingId === confirmDelete.map.id ? "Đang xóa..." : "Xóa vĩnh viễn"}
+                {deletingId === confirmDelete.map.id ? t("recents", "deleting") : t("recents", "deleteConfirm")}
               </button>
             </div>
           </div>
@@ -709,7 +1062,7 @@ export default function RecentsPage() {
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
           <div className={`w-full max-w-lg rounded-xl border p-4 ${themeClasses.panel}`}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>Edit map details</h3>
+              <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{t("recents", "modalTitle")}</h3>
               <button className={`${isDark ? "text-zinc-300 hover:text-white" : "text-gray-600 hover:text-gray-900"}`} onClick={closeEdit}>
                 ✕
               </button>
@@ -723,7 +1076,7 @@ export default function RecentsPage() {
 
             <div className="space-y-3">
               <label className="block">
-                <span className={`text-sm ${themeClasses.textMuted}`}>Map name</span>
+                <span className={`text-sm ${themeClasses.textMuted}`}>{t("recents", "modalMapName")}</span>
                 <input
                   className={`mt-1 w-full rounded-md border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/50 ${themeClasses.input}`}
                   value={edit.name}
@@ -733,7 +1086,7 @@ export default function RecentsPage() {
               </label>
 
               <label className="block">
-                <span className={`text-sm ${themeClasses.textMuted}`}>Description</span>
+                <span className={`text-sm ${themeClasses.textMuted}`}>{t("recents", "modalDescription")}</span>
                 <textarea
                   className={`mt-1 w-full rounded-md border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/50 ${themeClasses.input}`}
                   rows={3}
@@ -744,21 +1097,21 @@ export default function RecentsPage() {
               </label>
 
               <div>
-                <div className={`text-sm mb-1 ${themeClasses.textMuted}`}>Preview image</div>
+                <div className={`text-sm mb-1 ${themeClasses.textMuted}`}>{t("recents", "modalPreviewImage")}</div>
                 <div className="flex items-start gap-3">
                   <div className={`h-24 w-40 rounded-md border overflow-hidden ${isDark ? "bg-zinc-800 border-white/10" : "bg-gray-100 border-gray-200"}`}>
                     {edit.previewLocal ? (
                       <img src={edit.previewLocal} alt="preview" className="h-full w-full object-cover" />
                     ) : (
                       <div className={`h-full w-full grid place-items-center text-xs ${themeClasses.textMuted}`}>
-                        No preview
+                        {t("recents", "modalNoPreview")}
                       </div>
                     )}
                   </div>
                   <div className="flex flex-col gap-2">
                     <label className="inline-block">
                       <span className={`px-3 py-1.5 rounded-md border cursor-pointer text-sm ${themeClasses.button}`}>
-                        Choose file
+                        {t("recents", "modalChooseFile")}
                       </span>
                       <input
                         type="file"
@@ -778,11 +1131,11 @@ export default function RecentsPage() {
                       className={`text-xs text-left ${themeClasses.textMuted} hover:${isDark ? "text-zinc-200" : "text-gray-900"}`}
                       onClick={() => setEdit((s) => ({ ...s, previewLocal: null, previewFile: null }))}
                     >
-                      Remove image
+                      {t("recents", "modalRemoveImage")}
                     </button>
                   </div>
                 </div>
-                <p className={`mt-1 text-xs ${themeClasses.textMuted}`}>PNG/JPG, khuyến nghị ≤ 2MB.</p>
+                <p className={`mt-1 text-xs ${themeClasses.textMuted}`}>{t("recents", "modalNote")}</p>
               </div>
             </div>
 
@@ -792,14 +1145,14 @@ export default function RecentsPage() {
                 onClick={closeEdit}
                 disabled={edit.saving}
               >
-                Cancel
+                {t("recents", "modalCancel")}
               </button>
               <button
                 className="px-3 py-1.5 rounded-md bg-emerald-500 text-white font-semibold hover:bg-emerald-400 disabled:opacity-70"
                 onClick={saveEdit}
                 disabled={edit.saving}
               >
-                {edit.saving ? "Saving…" : "Save changes"}
+                {edit.saving ? t("recents", "modalSaving") : t("recents", "modalSave")}
               </button>
             </div>
           </div>

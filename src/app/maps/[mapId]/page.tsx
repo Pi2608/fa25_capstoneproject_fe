@@ -307,7 +307,7 @@ export default function EditMapPage() {
     handleSketchEdit,
     handleSketchDragEnd,
     handleSketchRotateEnd,
-    handlePolygonCut,
+    // handlePolygonCut,
   } = featureManagement;
 
   // Initialize segment playback hook
@@ -1262,7 +1262,7 @@ export default function EditMapPage() {
           drawText: false,
           editMode: false,
           dragMode: false,
-          cutPolygon: false,
+          // cutPolygon: false,
           rotateMode: false,
           removalMode: false,
         });
@@ -1475,7 +1475,7 @@ export default function EditMapPage() {
     map.on("pm:create", createHandler);
 
     // Handle polygon cut event at map level
-    map.on("pm:cut", handlePolygonCut);
+    // map.on("pm:cut", handlePolygonCut);
 
     // Handle sketch-level edit/drag/rotate events
     sketch.on("pm:edit", handleSketchEdit);
@@ -1485,7 +1485,7 @@ export default function EditMapPage() {
     return () => {
       if (mapRef.current) {
         mapRef.current.off("pm:create", createHandler);
-        mapRef.current.off("pm:cut", handlePolygonCut);
+        // mapRef.current.off("pm:cut", handlePolygonCut);
       }
       if (sketchRef.current) {
         sketchRef.current.off("pm:edit", handleSketchEdit);
@@ -1493,7 +1493,8 @@ export default function EditMapPage() {
         sketchRef.current.off("pm:rotateend", handleSketchRotateEnd);
       }
     };
-  }, [isMapReady, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd, handlePolygonCut]);
+  }, [isMapReady, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd]);
+  // }, [isMapReady, handleFeatureCreate, handleSketchEdit, handleSketchDragEnd, handleSketchRotateEnd, handlePolygonCut]);
 
   useEffect(() => {
     if (!mapRef.current || !isMapReady) return;
