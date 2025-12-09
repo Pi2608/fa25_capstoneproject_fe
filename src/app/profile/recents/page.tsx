@@ -103,7 +103,7 @@ const SAMPLES: Sample[] = [
   },
   {
     key: "getting-started",
-    title: "Getting started with Felt",
+    title: "Getting started with IMOS",
     author: "Yen Nhi Dang",
     lastViewed: "Last viewed 3 months ago",
     blurb: "Onboarding sample with basic point and area layers.",
