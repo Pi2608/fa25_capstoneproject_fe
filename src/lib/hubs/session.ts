@@ -7,9 +7,8 @@ import { isTokenValid, createBaseConnection, API_BASE_URL } from "./base";
 
 export interface SessionStatusChangedEvent {
   sessionId: string;
-  // Backend sends: "WAITING", "IN_PROGRESS", "PAUSED", "COMPLETED"
-  // Frontend uses: "Pending", "Running", "Paused", "Ended"
-  status: "Pending" | "Running" | "Paused" | "Ended" | "WAITING" | "IN_PROGRESS" | "PAUSED" | "COMPLETED";
+  // Backend session status values
+  status: "WAITING" | "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "CANCELLED";
   message?: string;
   changedAt?: string;
   timestamp?: string; // Legacy field, use changedAt if available
@@ -138,6 +137,14 @@ export interface SegmentSyncEvent {
   syncedAt: string;
 }
 
+// ===================== MAP LAYER SYNC EVENTS =====================
+
+export interface MapLayerSyncEvent {
+  sessionId: string;
+  layerKey: string;
+  syncedAt: string;
+}
+
 // ===================== QUESTION BROADCAST EVENTS =====================
 
 export interface QuestionBroadcastEvent {
@@ -190,7 +197,7 @@ export function createSessionConnection(
   // For session hub, allow guest connections (no token required)
   // Get token if available, but don't require it to be valid
   let authToken: string | null | undefined = token || getToken();
-  
+
   // If token is empty string or null/undefined, treat as no token (guest mode)
   if (!authToken || (typeof authToken === 'string' && authToken.trim().length === 0)) {
     authToken = undefined; // No token - will connect as guest
@@ -294,6 +301,7 @@ export interface SessionEventHandlers {
   onTeacherFocusChanged?: (event: TeacherFocusChangedEvent) => void;
   onSessionEnded?: (event: SessionEndedEvent) => void;
   onSegmentSync?: (event: SegmentSyncEvent) => void;
+  onMapLayerSync?: (event: MapLayerSyncEvent) => void;
   onQuestionBroadcast?: (event: QuestionBroadcastEvent) => void;
   onQuestionResults?: (event: QuestionResultsEvent) => void;
 }
@@ -373,6 +381,10 @@ export function registerSessionEventHandlers(
     connection.on("QuestionResults", handlers.onQuestionResults);
   }
 
+  if (handlers.onMapLayerSync) {
+    connection.on("MapLayerSync", handlers.onMapLayerSync);
+  }
+
 }
 
 export function unregisterSessionEventHandlers(
@@ -393,6 +405,7 @@ export function unregisterSessionEventHandlers(
   connection.off("SegmentSync");
   connection.off("QuestionBroadcast");
   connection.off("QuestionResults");
+  connection.off("MapLayerSync");
 }
 
 // ===================== TEACHER FOCUS (MAP SYNC) =====================
@@ -473,10 +486,36 @@ export async function sendSegmentSyncViaSignalR(
   }
 }
 
+// ===================== MAP LAYER SYNC =====================
+
+/**
+ * Send Map Layer Sync via SignalR Hub
+ * This syncs the current base map layer to all students
+ */
+export async function sendMapLayerSyncViaSignalR(
+  connection: signalR.HubConnection,
+  sessionId: string,
+  layerKey: string
+): Promise<boolean> {
+  try {
+    if (connection.state !== signalR.HubConnectionState.Connected) {
+      console.error("[SignalR Session] Connection not connected for SyncMapLayer");
+      return false;
+    }
+
+    await connection.invoke("SyncMapLayer", sessionId, layerKey);
+
+    return true;
+  } catch (error) {
+    console.error("[SignalR Session] Failed to send Map Layer sync:", error);
+    return false;
+  }
+}
+
 // ===================== QUESTION BROADCAST =====================
 
 export interface QuestionBroadcastRequest {
-  sessionQuestionId: string;  
+  sessionQuestionId: string;
   questionId: string;
   questionText: string;
   questionType: string;

@@ -54,7 +54,7 @@ export default function SessionResultsPage() {
   const averageScore =
     leaderboard.length > 0
       ? leaderboard.reduce((sum, entry) => sum + entry.score, 0) /
-        leaderboard.length
+      leaderboard.length
       : 0;
 
   const topScore = leaderboard.length > 0 ? leaderboard[0].score : 0;
@@ -115,7 +115,7 @@ export default function SessionResultsPage() {
               Status
             </div>
             <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-100">
-              {session?.status === "Ended" ? "🏁" : "🟢"}
+              {(session?.status === "COMPLETED" || session?.status === "CANCELLED") ? "🏁" : "🟢"}
             </div>
           </div>
         </div>
@@ -166,7 +166,7 @@ export default function SessionResultsPage() {
         {/* Final Leaderboard */}
         <div className="bg-background/80 backdrop-blur rounded-xl border shadow-sm p-6">
           <h2 className="text-xl font-bold mb-4 text-zinc-900 dark:text-zinc-100">Final Rankings</h2>
-          
+
           {leaderboard.length > 0 ? (
             <Leaderboard
               entries={leaderboard}

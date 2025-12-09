@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, FormEvent } from "react";
-import { LifeBuoy, MessageCircle, Plus, AlertCircle, X, CheckCircle, Send, Clock } from "lucide-react";
+import { useEffect, useMemo, useState, FormEvent, useCallback } from "react";
+import { LifeBuoy, MessageCircle, Plus, AlertCircle, X, CheckCircle, Send, Clock, Wifi, WifiOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -18,6 +18,13 @@ import {
     responseToSupportTicket,
     type SupportTicketStatus,
 } from "@/lib/api-support";
+import { useSupportTicketHub } from "@/lib/hubs/support-tickets";
+import type { 
+    SupportTicketMessage as SignalRMessage, 
+    TicketReplyEvent,
+    TicketStatusChangedEvent,
+    TicketClosedEvent 
+} from "@/lib/hubs/support-tickets";
 
 function formatDateTime(iso?: string | null): string {
     if (!iso) return "";
@@ -100,6 +107,78 @@ export default function HelpPage() {
     const [newCategory, setNewCategory] = useState("other");
 
     const [responseText, setResponseText] = useState("");
+    const [realtimeEnabled, setRealtimeEnabled] = useState(true);
+
+    const handleNewMessage = useCallback((message: SignalRMessage) => {
+        if (message.ticketId === selectedId) {
+            setSelectedTicket(prev => {
+                if (!prev) return prev;
+                const newMessage: SupportTicketMessage = {
+                    messageId: message.messageId,
+                    message: message.message,
+                    isFromUser: message.isFromUser,
+                    createdAt: message.createdAt,
+                };
+                return {
+                    ...prev,
+                    messages: [...(prev.messages || []), newMessage],
+                };
+            });
+        }
+    }, [selectedId]);
+
+    const handleTicketReply = useCallback((event: TicketReplyEvent) => {
+        setTickets(prev => 
+            prev.map(t => 
+                t.ticketId === event.ticketId 
+                    ? { ...t, message: event.message } 
+                    : t
+            )
+        );
+    }, []);
+
+    const handleTicketStatusChanged = useCallback((event: TicketStatusChangedEvent) => {
+        if (event.ticketId === selectedId) {
+            setSelectedTicket(prev => 
+                prev ? { ...prev, status: event.status as SupportTicketStatus } : prev
+            );
+        }
+        setTickets(prev => 
+            prev.map(t => 
+                t.ticketId === event.ticketId 
+                    ? { ...t, status: event.status as SupportTicketStatus } 
+                    : t
+            )
+        );
+    }, [selectedId]);
+
+    const handleTicketClosed = useCallback((event: TicketClosedEvent) => {
+        if (event.ticketId === selectedId) {
+            setSelectedTicket(prev => 
+                prev ? { ...prev, status: "closed" } : prev
+            );
+        }
+        setTickets(prev => 
+            prev.map(t => 
+                t.ticketId === event.ticketId 
+                    ? { ...t, status: "closed" } 
+                    : t
+            )
+        );
+    }, [selectedId]);
+
+    const { isConnected } = useSupportTicketHub(
+        {
+            onNewMessage: handleNewMessage,
+            onTicketReply: handleTicketReply,
+            onTicketStatusChanged: handleTicketStatusChanged,
+            onTicketClosed: handleTicketClosed,
+        },
+        {
+            enabled: realtimeEnabled,
+            ticketId: selectedId,
+        }
+    );
 
     const safeMessage = (err: unknown): string => {
         if (err instanceof Error && err.message) return err.message;
@@ -264,6 +343,17 @@ export default function HelpPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                        isConnected 
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
+                            : "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
+                    }`}>
+                        {isConnected ? (
+                            <><Wifi className="h-3 w-3" /> Real-time</>
+                        ) : (
+                            <><WifiOff className="h-3 w-3" /> Offline</>
+                        )}
+                    </div>
                     <Button
                         size="sm"
                         onClick={() => setCreateOpen(true)}

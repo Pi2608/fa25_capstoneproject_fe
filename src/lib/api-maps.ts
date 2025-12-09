@@ -242,6 +242,10 @@ export function deleteMap(mapId: string) {
   return delJson<DeleteMapResponse>(`/maps/${mapId}`);
 }
 
+export function prepareForEmbed(mapId: string): Promise<{ success: boolean }> {
+  return postJson<{}, { success: boolean }>(`/maps/${mapId}/prepare-embed`, {});
+}
+
 export interface GetMyMapsResponse { maps: MapDto[] }
 
 export async function getMyMaps(): Promise<MapDto[]> {
@@ -710,7 +714,7 @@ export function restoreMap(mapId: string) {
 // ===== EXPORTS =====
 export type ExportRequest = {
   mapId: string;
-  format: "pdf" | "png" | "geojson";
+  format: "pdf" | "png" | "geojson" | "svg";
   membershipId?: string; // Optional
   viewState?: string; // JSON string of { center: [lat, lng], zoom: number }
   mapImageData?: string; // Base64 encoded image data from frontend capture
