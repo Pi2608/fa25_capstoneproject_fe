@@ -3400,24 +3400,26 @@ export default function EditMapPage() {
                 <div className="h-5 w-px bg-zinc-600/50" />
 
                 {/* Export Button */}
-                <button
-                  className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-                  onClick={() => setShowExportModal(true)}
-                  disabled={isExporting || !mapRef.current}
-                  title="Xuất bản đồ"
-                >
-                  {isExporting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
-                      Đang xuất...
-                    </>
-                  ) : (
-                    <>
-                      <DownloadIcon className="w-4 h-4" />
-                      Xuất
-                    </>
-                  )}
-                </button>
+                {/* {detail?.isStoryMap !== true && 
+                  <button
+                    className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+                    onClick={() => setShowExportModal(true)}
+                    disabled={isExporting || !mapRef.current}
+                    title="Xuất bản đồ"
+                  >
+                    {isExporting ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
+                        Đang xuất...
+                      </>
+                    ) : (
+                      <>
+                        <DownloadIcon className="w-4 h-4" />
+                        Xuất
+                      </>
+                    )}
+                  </button>
+                } */}
 
                 <div className="h-5 w-px bg-zinc-600/50" />
 
