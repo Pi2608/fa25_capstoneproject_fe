@@ -8,19 +8,92 @@ import { formatDate } from "@/utils/formatUtils";
 import { getOrganizationById, OrganizationDetailDto } from "@/lib/api-organizations";
 import { createDefaultMap, deleteMap, getMapDetail } from "@/lib/api-maps";
 import { getWorkspaceById, getWorkspaceMaps, removeMapFromWorkspace } from "@/lib/api-workspaces";
-import { useI18n } from "@/i18n/I18nProvider";
+import { useI18n, type TFunc } from "@/i18n/I18nProvider";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name" | "author";
 
 function safeMessage(err: unknown, fallback: string): string {
-  if (err instanceof Error) return err.message;
+  if (err instanceof Error) {};
   if (err && typeof err === "object" && "message" in err) {
     const m = (err as { message?: unknown }).message;
     if (typeof m === "string") return m;
   }
   return fallback;
 }
+
+type ApiErr = {
+  status?: number;
+  type?: string;
+  title?: string;
+  detail?: string;
+  message?: string;
+};
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null;
+}
+function pickStr(o: Record<string, unknown>, k: string): string | undefined {
+  const v = o[k];
+  return typeof v === "string" ? v : undefined;
+}
+function pickNum(o: Record<string, unknown>, k: string): number | undefined {
+  const v = o[k];
+  return typeof v === "number" ? v : undefined;
+}
+
+function parseApiError(err: unknown): ApiErr {
+  if (isRecord(err)) {
+    return {
+      status: pickNum(err, "status"),
+      type: pickStr(err, "type"),
+      title: pickStr(err, "title"),
+      detail: pickStr(err, "detail"),
+      message: pickStr(err, "message"),
+    };
+  }
+  if (typeof err === "string") {
+    try {
+      const parsed = JSON.parse(err);
+      if (isRecord(parsed)) {
+        return {
+          status: pickNum(parsed, "status"),
+          type: pickStr(parsed, "type"),
+          title: pickStr(parsed, "title"),
+          detail: pickStr(parsed, "detail"),
+          message: pickStr(parsed, "message"),
+        };
+      }
+    } catch {
+      return { message: err };
+    }
+  }
+  if (err instanceof Error) return { message: err.message };
+  return {};
+}
+
+function userMessage(
+  err: unknown,
+  t: TFunc
+): string {
+  const e = parseApiError(err);
+  const code = String(e.type || e.title || "").toLowerCase();
+  const text = String(e.detail || e.message || "").toLowerCase();
+  const status = e.status ?? 0;
+
+  if (status === 400) {
+    if( text.includes("active") && text.includes("sessions"))
+      {
+        return t("workspace_detail.manage_err_has_active_sessions");
+      }
+    return t("workspace_detail.manage_delete_failed")
+  }
+
+  if (e.detail && !/stack|trace|exception/i.test(e.detail)) return e.detail;
+  if (e.message && !/stack|trace|exception/i.test(e.message)) return e.message;
+  return t("workspace_detail.err_generic");
+}
+
 
 export default function WorkspaceDetailPage() {
   const { t } = useI18n();
@@ -165,7 +238,7 @@ export default function WorkspaceDetailPage() {
       setDeleteMapOpen({ open: false });
       await loadData();
     } catch (e) {
-      showToast("error", safeMessage(e, "Yêu cầu thất bại, vui lòng thử lại."));
+      showToast("error", userMessage(e, t));
     } finally {
       setDeleteMapLoading(false);
     }
@@ -178,7 +251,7 @@ export default function WorkspaceDetailPage() {
         showToast("success", "Đã gỡ bản đồ khỏi workspace.");
         await loadData();
       } catch (e) {
-        showToast("error", safeMessage(e, "Yêu cầu thất bại, vui lòng thử lại."));
+        showToast("error", userMessage(e, t));
       }
     },
     [workspaceId, showToast, loadData]

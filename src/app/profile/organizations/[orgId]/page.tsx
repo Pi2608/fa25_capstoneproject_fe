@@ -123,6 +123,10 @@ function userMessage(
     return t("org_detail.err_not_found");
   }
   if (status === 400) {
+    if( text.includes("active") && text.includes("workspaces"))
+      {
+        return t("org_detail.err_has_active_workspaces");
+      }
     return t("org_detail.err_bad_request");
   }
   if (status === 429) {
@@ -471,7 +475,7 @@ export default function OrgDetailPage() {
       }
       router.push("/profile/information");
     } catch (e) {
-      setDeleteErr(safeMessage(e, t("org_detail.delete_failed")));
+      setDeleteErr(userMessage(e, t));
     } finally {
       setDeleteBusy(false);
     }
