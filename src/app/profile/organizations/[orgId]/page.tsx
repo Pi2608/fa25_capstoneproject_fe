@@ -23,6 +23,7 @@ import { getProjectsByOrganization, getAllWorkspaces } from "@/lib/api-workspace
 import { joinSession, getSession, type ParticipantDto } from "@/lib/api-ques";
 import ManageWorkspaces from "@/components/workspace/ManageWorkspaces";
 import { useI18n } from "@/i18n/I18nProvider";
+import type { TFunc } from "@/i18n/I18nProvider"
 import { useTheme } from "next-themes";
 import { getThemeClasses } from "@/utils/theme-utils";
 
@@ -91,7 +92,7 @@ function parseApiError(err: unknown): ApiErr {
 
 function userMessage(
   err: unknown,
-  t: (k: string, vars?: Record<string, unknown>) => string
+  t: TFunc
 ): string {
   const e = parseApiError(err);
   const code = String(e.type || e.title || "").toLowerCase();
@@ -122,6 +123,10 @@ function userMessage(
     return t("org_detail.err_not_found");
   }
   if (status === 400) {
+    if( text.includes("active") && text.includes("workspaces"))
+      {
+        return t("org_detail.err_has_active_workspaces");
+      }
     return t("org_detail.err_bad_request");
   }
   if (status === 429) {
@@ -447,7 +452,8 @@ export default function OrgDetailPage() {
       setInviteInput("");
       await refreshMembers();
     } catch (e) {
-      setInviteMsg(safeMessage(e, t("org_detail.action_failed")));
+      // setInviteMsg(safeMessage(e, t("org_detail.action_failed")));
+      setInviteMsg(userMessage(e, t));
     } finally {
       setInviteBusy(false);
     }
@@ -469,7 +475,7 @@ export default function OrgDetailPage() {
       }
       router.push("/profile/information");
     } catch (e) {
-      setDeleteErr(safeMessage(e, t("org_detail.delete_failed")));
+      setDeleteErr(userMessage(e, t));
     } finally {
       setDeleteBusy(false);
     }

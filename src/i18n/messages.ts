@@ -99,6 +99,43 @@ export const messages = {
             sampleGettingStartedLastViewed: "Xem lần cuối 3 tháng trước",
             sampleGettingStartedBlurb: "Mẫu onboarding với lớp điểm và vùng cơ bản.",
             sampleGettingStartedPresetName: "Bắt đầu",
+
+            // Templates section
+            sectionTemplates: "Mẫu bản đồ",
+            templateLoadError: "Không tải được danh sách mẫu.",
+            templateDetailLoadError: "Không tải được chi tiết mẫu.",
+            templateNoTemplates: "Chưa có mẫu nào.",
+            templatePublished: "Đã publish",
+            templateDraft: "Bản nháp",
+            templateArchived: "Đã lưu trữ",
+            templateCreated: "Tạo: {date}",
+            templateLayers: "{count} layer",
+            templateFeatures: "{count} feature",
+            templateUsageCount: "Đã dùng {count} lần",
+            templateViewDetails: "Xem chi tiết",
+            templateUseTemplate: "Dùng mẫu này",
+            templateCategory: "Danh mục: {category}",
+            templateModalTitle: "Chi tiết mẫu",
+            templateModalClose: "Đóng",
+            templateModalLayerName: "Tên layer",
+            templateModalFeatureCount: "Số feature",
+            templateModalNoLayers: "Mẫu này chưa có layer nào.",
+            openMap: "Mở map",
+            createSession: "Tạo session",
+            mapNotInWorkspace: "Map này chưa nằm trong workspace/organization nên không tạo session được.",
+            statusPublished: "Đã publish",
+            statusDraft: "Draft",
+            statusArchived: "Archived",
+            publishedDate: "Publish: {date}",
+            createdDate: "Created: {date}",
+            deleteConfirmTitle: "Xóa bản đồ?",
+            deleteConfirmMessage: "Bạn có chắc chắn muốn xóa {name}? Hành động này không thể hoàn tác.",
+            deleteConfirmName: "bản đồ này",
+            deleteCannotUndo: "không thể hoàn tác",
+            deleteCancel: "Hủy",
+            deleteConfirm: "Xóa vĩnh viễn",
+            deleting: "Đang xóa...",
+            creatingFromTemplate: "Đang tạo map từ mẫu...",
         },
         settings_members: {
             unknown_member: "thành viên này",
@@ -891,7 +928,7 @@ export const messages = {
         },
         org_workspace: {
             manage_err_has_question_banks:
-                "Không thể xoá workspace vì còn {count} bộ câu hỏi. Hãy xoá hoặc di chuyển tất cả bộ câu hỏi trước.",
+                "Không thể xoá workspace vì còn các bộ câu hỏi. Hãy xoá hoặc di chuyển tất cả bộ câu hỏi trước.",
             manage_delete_failed:
                 "Xoá workspace thất bại. Vui lòng thử lại.",
             close: "Đóng",
@@ -1016,6 +1053,7 @@ export const messages = {
             err_plan_required: "Tính năng yêu cầu gói (plan 2 hoặc 3).",
             err_select_excel: "Hãy chọn file Excel (.xlsx).",
             err_enter_domain: "Hãy nhập domain (ví dụ: se1739.edu).",
+            err_has_active_workspaces: "Không thể xoá Tổ chức vì còn active workspace. Hãy xoá tất cả workspace trước.",
 
             // Tips / notes
             tip_only_owner_admin: "Chỉ Owner/Admin mới dùng chức năng này",
@@ -1229,12 +1267,15 @@ export const messages = {
             save_failed: "Không thể lưu bộ câu hỏi.",
             delete_success: "Đã xoá bộ câu hỏi.",
             delete_failed: "Không thể xoá bộ câu hỏi.",
+            manage_err_has_active_sessions:
+                "Không thể xoá map vì còn active sessions. Hãy xoá hoặc hủy tất cả active sessions trước.",
         },
         organization: {
             not_found_title: "Không tìm thấy tổ chức",
             not_found_description: "Tổ chức này không tồn tại hoặc đã bị xóa. Vui lòng kiểm tra lại đường dẫn hoặc tạo một tổ chức mới.",
             go_to_profile: "Về trang cá nhân",
             create_new: "Tạo tổ chức mới",
+            manage_delete_failed:"Xóa Tổ chức thất bại. Vui lòng thử lại"
         },
         plans: {
             select_payment_method: "Chọn phương thức thanh toán",
@@ -2426,6 +2467,10 @@ export const messages = {
             footnote_paid: "* Chỉ các gói trả phí mới yêu cầu thanh toán. Gói Free không cần đăng ký.",
             selorg_title: "Chọn tổ chức",
             role: "Vai trò",
+            unlimited: "Không giới hạn",
+            feature_max_orgs: "Số tổ chức tối đa",
+            feature_max_users: "Người dùng/tổ chức",
+            feature_max_maps: "Bản đồ/tháng",
         },
         map_builder: {
             hero_pill: "Xây trực quan. Xuất bản nhanh.",
@@ -3064,7 +3109,7 @@ export const messages = {
         },
         org_workspace: {
             manage_err_has_question_banks:
-                "Cannot delete this workspace because it still contains {count} question banks. Please delete or move all question banks first.",
+                "Cannot delete this workspace because it still contains question banks. Please delete or move all question banks first.",
             manage_delete_failed:
                 "Failed to delete workspace. Please try again.",
             close: "Close",
@@ -3120,6 +3165,7 @@ export const messages = {
             err_plan_required: "This feature requires plan 2 or 3.",
             err_select_excel: "Please select an Excel (.xlsx) file.",
             err_enter_domain: "Please enter the domain (for example: se1739.edu).",
+            err_has_active_workspaces: "Cannot delete organization while it contains active workspaces. Please delete or move all workspaces first.",
 
             // Tips / notes
             tip_only_owner_admin: "Only Owner/Admin can use this feature.",
@@ -3541,6 +3587,7 @@ export const messages = {
             not_found_description: "This organization does not exist or has been deleted. Please check the URL or create a new organization.",
             go_to_profile: "Go to Profile",
             create_new: "Create New Organization",
+            manage_delete_failed: "Failed to delete Organization. Please try again.",
         },
         plans: {
             select_payment_method: "Select a payment method",
@@ -3679,7 +3726,10 @@ export const messages = {
             delete_map_cta: "Delete map",
 
             toast_deleted: "Map deleted!",
-            toast_removed: "Removed map from workspace!"
+            toast_removed: "Removed map from workspace!",
+
+            manage_err_has_active_sessions:
+                "Cannot delete map while it has active sessions. Please end or cancel all active sessions first.",
         },
         support: {
             ticketListSubtitle: "Ticket list",
@@ -4253,6 +4303,43 @@ export const messages = {
             sampleGettingStartedLastViewed: "Last viewed 3 months ago",
             sampleGettingStartedBlurb: "Onboarding sample with basic point and area layers.",
             sampleGettingStartedPresetName: "Getting Started",
+
+            // Templates section
+            sectionTemplates: "Map Templates",
+            templateLoadError: "Failed to load templates.",
+            templateDetailLoadError: "Failed to load template details.",
+            templateNoTemplates: "No templates available.",
+            templatePublished: "Published",
+            templateDraft: "Draft",
+            templateArchived: "Archived",
+            templateCreated: "Created: {date}",
+            templateLayers: "{count} layer(s)",
+            templateFeatures: "{count} feature(s)",
+            templateUsageCount: "Used {count} time(s)",
+            templateViewDetails: "View details",
+            templateUseTemplate: "Use this template",
+            templateCategory: "Category: {category}",
+            templateModalTitle: "Template Details",
+            templateModalClose: "Close",
+            templateModalLayerName: "Layer Name",
+            templateModalFeatureCount: "Feature Count",
+            templateModalNoLayers: "This template has no layers.",
+            openMap: "Open map",
+            createSession: "Create session",
+            mapNotInWorkspace: "This map is not in a workspace/organization, so a session cannot be created.",
+            statusPublished: "Published",
+            statusDraft: "Draft",
+            statusArchived: "Archived",
+            publishedDate: "Published: {date}",
+            createdDate: "Created: {date}",
+            deleteConfirmTitle: "Delete this map?",
+            deleteConfirmMessage: "Are you sure you want to delete {name}? This action cannot be undone.",
+            deleteConfirmName: "this map",
+            deleteCannotUndo: "cannot be undone",
+            deleteCancel: "Cancel",
+            deleteConfirm: "Delete permanently",
+            deleting: "Deleting...",
+            creatingFromTemplate: "Creating map from template...",
         },
         billing: {
             title: "Organization billing management",
@@ -4977,6 +5064,10 @@ export const messages = {
             footnote_paid: "* Only paid plans require payment. The Free plan requires no checkout.",
             selorg_title: "Select Organization",
             role: "Role",
+            unlimited: "Unlimited",
+            feature_max_orgs: "Max organizations",
+            feature_max_users: "Users per organization",
+            feature_max_maps: "Maps per month",
         },
         map_builder: {
             hero_pill: "Build visually. Publish fast.",
