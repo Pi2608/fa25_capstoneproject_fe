@@ -103,13 +103,13 @@ export const DrawingToolsBar: React.FC<DrawingToolsBarProps> = ({
         <Highlighter size={18} strokeWidth={1.8} />
       </ToolButton>
 
-      <ToolButton
+      {/* <ToolButton
         title="Cắt polygon"
         onClick={() => enableCutPolygon(mapRef)}
         disabled={isDisabled}
       >
         <Scissors size={18} strokeWidth={1.8} />
-      </ToolButton>
+      </ToolButton> */}
 
       <ToolButton
         title="Xoay đối tượng"
