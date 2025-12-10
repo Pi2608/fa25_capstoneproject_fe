@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getPendingExports, approveExport, rejectExport, type ExportResponse, getMapDetailAsAdmin, type MapDetail } from "@/lib/api-maps";
+import { getPendingExports, approveExport, rejectExport, type ExportResponse } from "@/lib/api-maps";
 import { useTheme } from "../layout";
 import { getThemeClasses } from "@/utils/theme-utils";
-import MapPreviewModal from "@/components/admin/MapPreviewModal";
+import ExportedImagePreviewModal from "@/components/admin/ExportedImagePreviewModal";
 
 function formatDate(iso: string): string {
   if (!iso) return "";
@@ -49,10 +49,9 @@ export default function AdminExportsPage() {
     exportItem: null
   });
   const [rejectReason, setRejectReason] = useState("");
-  const [previewModal, setPreviewModal] = useState<{ isOpen: boolean; mapId: string | null; mapDetail: MapDetail | null }>({
+  const [exportPreviewModal, setExportPreviewModal] = useState<{ isOpen: boolean; exportItem: ExportResponse | null }>({
     isOpen: false,
-    mapId: null,
-    mapDetail: null
+    exportItem: null
   });
 
   const loadExports = useCallback(async () => {
@@ -117,14 +116,8 @@ export default function AdminExportsPage() {
     }
   };
 
-  const handleViewMap = async (mapId: string) => {
-    try {
-      const mapDetail = await getMapDetailAsAdmin(mapId);
-      setPreviewModal({ isOpen: true, mapId, mapDetail });
-    } catch (error) {
-      console.error("Failed to load map detail:", error);
-      alert("Không thể tải thông tin bản đồ");
-    }
+  const handleViewExport = (exportItem: ExportResponse) => {
+    setExportPreviewModal({ isOpen: true, exportItem });
   };
 
   const filteredExports = exports.filter(exp => {
@@ -224,10 +217,10 @@ export default function AdminExportsPage() {
                               ? "bg-blue-600 hover:bg-blue-700 text-white"
                               : "bg-blue-500 hover:bg-blue-600 text-white"
                           }`}
-                          onClick={() => handleViewMap(exp.mapId)}
+                          onClick={() => handleViewExport(exp)}
                           disabled={actioningId !== null}
                         >
-                          Xem Map
+                          Xem Export
                         </button>
                         <button
                           className={`px-3 py-1.5 text-xs font-bold rounded-md transition-opacity disabled:opacity-50 ${
@@ -320,11 +313,11 @@ export default function AdminExportsPage() {
         </div>
       )}
 
-      {/* Map Preview Modal */}
-      {previewModal.isOpen && previewModal.mapDetail && (
-        <MapPreviewModal
-          mapDetail={previewModal.mapDetail}
-          onClose={() => setPreviewModal({ isOpen: false, mapId: null, mapDetail: null })}
+      {/* Export Preview Modal */}
+      {exportPreviewModal.isOpen && exportPreviewModal.exportItem && (
+        <ExportedImagePreviewModal
+          exportItem={exportPreviewModal.exportItem}
+          onClose={() => setExportPreviewModal({ isOpen: false, exportItem: null })}
           isDark={isDark}
         />
       )}

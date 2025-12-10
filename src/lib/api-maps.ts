@@ -760,6 +760,10 @@ export function getMyExports() {
   return getJson<{ exports: ExportResponse[]; total: number }>("/exports/my");
 }
 
+export function getOrganizationExports(organizationId: string) {
+  return getJson<{ exports: ExportResponse[]; total: number }>(`/exports/organization/${organizationId}`);
+}
+
 // Admin Export Functions
 export async function getPendingExports(): Promise<ExportResponse[]> {
   const res = await getJson<{ exports: ExportResponse[] } | ExportResponse[]>("/api/admin/exports/pending-approval");

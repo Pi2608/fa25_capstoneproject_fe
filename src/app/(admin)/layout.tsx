@@ -26,7 +26,7 @@ const NAV = [
   { href: "/support-tickets", label: "Phiếu hỗ trợ", icon: <TicketIcon /> },
   { href: "/community-admin", label: "Cộng đồng", icon: <FileIcon /> },
   { href: "/map-gallery-admin", label: "Map gallery", icon: <MapIcon /> },
-  // { href: "/exports", label: "Xuất dữ liệu", icon: <FileIcon /> },
+  { href: "/exports", label: "Xuất dữ liệu", icon: <FileIcon /> },
   // { href: "/billing", label: "Lịch sử thanh toán", icon: <CardIcon /> },
   // { href: "/template", label: "Mẫu bản đồ", icon: <MapIcon /> },
 ];
