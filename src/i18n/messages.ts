@@ -775,6 +775,7 @@ export const messages = {
         },
         settings: {
             tabs_members: "Thành viên",
+            tabs_my_exports: "Xuất dữ liệu",
             tabs_usage: "Sử dụng",
             tabs_plans: "Gói",
             tabs_billing: "Thanh toán",
@@ -4015,6 +4016,7 @@ export const messages = {
         },
         settings: {
             tabs_members: "Member",
+            tabs_my_exports: "Exports",
             tabs_usage: "Usage",
             tabs_plans: "Plans",
             tabs_billing: "Billing",

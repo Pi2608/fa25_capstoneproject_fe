@@ -5,11 +5,11 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 
-type Tab = { href: string; i18nKey?: string; label?: string };
+type Tab = { href: string; i18nKey: string };
 
 const TABS: Tab[] = [
   { href: "/profile/settings/members",     i18nKey: "tabs_members" },
-  { href: "/profile/settings/my-exports",  label: "Exports Của Tôi" },
+  { href: "/profile/settings/my-exports",  i18nKey: "tabs_my_exports" },
   { href: "/profile/settings/usage",       i18nKey: "tabs_usage" },
   { href: "/profile/settings/plans",       i18nKey: "tabs_plans" },
   { href: "/profile/settings/billing",     i18nKey: "tabs_billing" },
