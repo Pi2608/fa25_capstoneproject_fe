@@ -39,7 +39,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = rawPathname ?? "";
   const [open, setOpen] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
-  const [isDark, setIsDark] = useState(true);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("admin-theme");
+      if (stored === "dark") return true;
+      if (stored === "light") return false;
+      // fallback: follow system preference
+      return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? false;
+    }
+    return false; // default light
+  });
   const [isVerified, setIsVerified] = useState(false);
   const [loading, setLoading] = useState(true);
 

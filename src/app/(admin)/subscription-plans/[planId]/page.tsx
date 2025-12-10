@@ -70,24 +70,24 @@ export default function PlanDetailPage() {
   }, [planId]);
 
   if (loading) return <div className="p-5">
-    <section className="bg-zinc-900/50 p-6 rounded-lg">
+    <section className="bg-white border border-gray-200 p-6 rounded-lg shadow-sm">
       <Loading />
     </section>
   </div>;
   if (err) return <div className="p-5">
-    <section className="bg-zinc-900/50 p-6 rounded-lg">
+    <section className="bg-white border border-gray-200 p-6 rounded-lg shadow-sm">
       <p>{err}</p>
     </section>
   </div>;
   if (!data) return <div className="p-5">
-    <section className="bg-zinc-900/50 p-6 rounded-lg">
+    <section className="bg-white border border-gray-200 p-6 rounded-lg shadow-sm">
       <p>Không tìm thấy gói đăng ký.</p>
     </section>
   </div>;
 
   return (
     <div className="p-5">
-      <section className="bg-zinc-900/50 p-6 rounded-lg">
+      <section className="bg-white border border-gray-200 p-6 rounded-lg shadow-sm">
         <div className="flex items-center justify-between mb-6">
           <h3>Chi tiết gói</h3>
           <div className="flex items-center gap-2">
@@ -97,48 +97,21 @@ export default function PlanDetailPage() {
           </div>
         </div>
 
-        <div
-          style={{
-            background: "#070b0b",
-            borderRadius: 12,
-            padding: 24,
-            boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: 12,
-              borderBottom: "1px solid #27272a",
-              paddingBottom: 10,
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: 20,
-                fontWeight: 700,
-              }}
-            >
-              {data.name}
-            </h2>
-
+        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+          <div className="flex items-center justify-between gap-3 pb-3 mb-4 border-b border-gray-200">
+            <h2 className="m-0 text-xl font-bold text-gray-900">{data.name}</h2>
             {data.isActive ? (
-              <span className="px-2 py-1 rounded-md bg-green-500/10 text-green-500">Đang hoạt động</span>
+              <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16">
+                Đang hoạt động
+              </span>
             ) : (
-              <span className="px-2 py-1 rounded-md bg-red-500/10 text-red-500">Ngưng</span>
+              <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18">
+                Ngưng
+              </span>
             )}
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0,1fr))",
-              gap: "18px 32px",
-            }}
-          >
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <Field label="Mô tả">
               {data.description ?? "—"}
             </Field>
@@ -205,24 +178,9 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <div
-        style={{
-          fontSize: 13,
-          color: "#6b7280",
-          marginBottom: 4,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontSize: 15,
-          fontWeight: 500,
-        }}
-      >
-        {children}
-      </div>
+    <div className="grid gap-1.5">
+      <div className="text-sm font-medium text-gray-500">{label}</div>
+      <div className="text-base font-semibold text-gray-900">{children}</div>
     </div>
   );
 }

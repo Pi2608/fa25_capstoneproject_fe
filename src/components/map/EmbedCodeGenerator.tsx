@@ -9,8 +9,8 @@ import { useToast } from "@/contexts/ToastContext";
 interface EmbedCodeGeneratorProps {
   mapId: string;
   mapName: string;
-  isPublic: boolean;
   status?: string;
+  isStoryMap?: boolean;
   onMapUpdated?: () => void; // Callback to reload map data
   className?: string;
 }
@@ -18,8 +18,8 @@ interface EmbedCodeGeneratorProps {
 export default function EmbedCodeGenerator({ 
   mapId, 
   mapName, 
-  isPublic,
   status,
+  isStoryMap = false,
   onMapUpdated,
   className = "" 
 }: EmbedCodeGeneratorProps) {
@@ -29,17 +29,35 @@ export default function EmbedCodeGenerator({
   const [showBorder, setShowBorder] = useState(true);
   const [embedCode, setEmbedCode] = useState("");
   const [isPreparing, setIsPreparing] = useState(false);
-  const [isReady, setIsReady] = useState(isPublic && status === "published");
+  const [isReady, setIsReady] = useState(status === "published");
   const { showToast } = useToast();
   const hasPreparedRef = useRef(false);
 
+  const handlePrepareForEmbed = async () => {
+    setIsPreparing(true);
+    try {
+      await prepareForEmbed(mapId);
+      setIsReady(true);
+      if (onMapUpdated) {
+        onMapUpdated(); // Reload map data to get updated status
+      }
+      showToast("success", "Map đã được publish để embed");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Không thể chuẩn bị map cho embed";
+      showToast("error", message);
+    } finally {
+      setIsPreparing(false);
+    }
+  };
+
   // Auto prepare for embed when component mounts if not ready
   useEffect(() => {
-    const shouldPrepare = (!isPublic || status !== "published") && !hasPreparedRef.current;
+    if (isStoryMap) return; // Don't prepare if it's a story map
+    const shouldPrepare = status !== "published" && !hasPreparedRef.current;
     if (shouldPrepare && !isPreparing) {
       hasPreparedRef.current = true;
       handlePrepareForEmbed();
-    } else if (isPublic && status === "published") {
+    } else if (status === "published") {
       setIsReady(true);
     }
   }, []);
@@ -62,22 +80,17 @@ export default function EmbedCodeGenerator({
     }
   }, [mapId, width, height, showBorder, isReady]);
 
-  const handlePrepareForEmbed = async () => {
-    setIsPreparing(true);
-    try {
-      await prepareForEmbed(mapId);
-      setIsReady(true);
-      if (onMapUpdated) {
-        onMapUpdated(); // Reload map data to get updated isPublic and status
-      }
-      showToast("success", "Map đã được publish và set public để embed");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Không thể chuẩn bị map cho embed";
-      showToast("error", message);
-    } finally {
-      setIsPreparing(false);
-    }
-  };
+  // Check if map is story map - story maps cannot be embedded
+  // This check is after hooks to avoid violating Rules of Hooks
+  if (isStoryMap) {
+    return (
+      <div className={`p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg ${className}`}>
+        <p className="text-sm text-amber-800 dark:text-amber-200">
+          Story maps không thể được embed. Chỉ có map bình thường mới có thể embed.
+        </p>
+      </div>
+    );
+  }
 
   const handleCopy = async () => {
     try {
@@ -99,7 +112,7 @@ export default function EmbedCodeGenerator({
         <div className="flex items-center gap-2">
           <Loader2 className="h-4 w-4 animate-spin text-blue-600 dark:text-blue-400" />
           <p className="text-sm text-blue-800 dark:text-blue-200">
-            Đang chuẩn bị map để embed (publish và set public)...
+            Đang chuẩn bị map để embed (publish)...
           </p>
         </div>
       </div>

@@ -1101,6 +1101,20 @@ export default function EditMapPage() {
     };
   }, [mapId]);
 
+  // Auto switch to export tab if map is story map and currently on embed tab
+  useEffect(() => {
+    if (!loading && detail?.isStoryMap === true && exportModalTab === "embed") {
+      setExportModalTab("export");
+    }
+  }, [loading, detail?.isStoryMap, exportModalTab]);
+
+  // Auto switch to export tab when opening modal if map is story map
+  useEffect(() => {
+    if (showExportModal && !loading && detail?.isStoryMap === true) {
+      setExportModalTab("export");
+    }
+  }, [showExportModal, loading, detail?.isStoryMap]);
+
   // Listen for layer created event to refresh map detail
   useEffect(() => {
     if (!mapId) return;
@@ -3971,7 +3985,13 @@ export default function EditMapPage() {
                 {/* Export Button */}
                 <button
                   className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
-                  onClick={() => setShowExportModal(true)}
+                  onClick={() => {
+                    setShowExportModal(true);
+                    // If story map, ensure we're on export tab
+                    if (!loading && detail?.isStoryMap === true) {
+                      setExportModalTab("export");
+                    }
+                  }}
                   disabled={isExporting || !mapRef.current}
                   title="Xuất bản đồ"
                 >
@@ -4181,16 +4201,18 @@ export default function EditMapPage() {
                   >
                     Export
                   </button>
-                  <button
-                    onClick={() => setExportModalTab("embed")}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      exportModalTab === "embed"
-                        ? "bg-emerald-600 text-white"
-                        : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
-                    }`}
-                  >
-                    Embed Code
-                  </button>
+                  {!loading && detail?.isStoryMap !== true && (
+                    <button
+                      onClick={() => setExportModalTab("embed")}
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                        exportModalTab === "embed"
+                          ? "bg-emerald-600 text-white"
+                          : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                      }`}
+                    >
+                      Embed Code
+                    </button>
+                  )}
                 </div>
               </div>
               <button
@@ -4325,12 +4347,12 @@ export default function EditMapPage() {
                     </button>
                   </div>
                 </>
-              ) : (
+              ) : !loading && detail?.isStoryMap !== true ? (
                 <EmbedCodeGenerator
                   mapId={mapId}
                   mapName={detail?.name || "Untitled Map"}
-                  isPublic={detail?.isPublic ?? false}
                   status={detail?.status || undefined}
+                  isStoryMap={detail?.isStoryMap ?? false}
                   onMapUpdated={async () => {
                     // Reload map detail after preparing for embed
                     try {
@@ -4342,6 +4364,12 @@ export default function EditMapPage() {
                     }
                   }}
                 />
+              ) : (
+                <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                    Story maps không thể được embed. Chỉ có map bình thường mới có thể embed.
+                  </p>
+                </div>
               )}
             </div>
           </div>

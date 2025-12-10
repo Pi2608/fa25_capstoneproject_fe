@@ -225,47 +225,72 @@ export default function PlansPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto w-full">
+        <div
+          className={`overflow-auto border rounded-lg mt-2 ${
+            isDark ? "border-zinc-800" : "border-gray-200"
+          }`}
+        >
           <table
             className="w-full border-collapse text-sm"
-            style={{
-              minWidth: 1300,
-              tableLayout: "fixed",
-            }}
+            style={{ minWidth: 1100, tableLayout: "fixed" }}
           >
             <thead>
               <tr>
-                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "22%" }}>Tên gói</th>
-                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Giá / tháng</th>
-                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Giá / năm</th>
-                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Bản đồ</th>
-                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Xuất file</th>
-                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Layer tùy chỉnh</th>
-                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Token / tháng</th>
-                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "10%" }}>Trạng thái</th>
-                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "7%" }}>Người dùng</th>
-                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "7%" }}>Chi tiết</th>
-                <th className={`p-3 border-b ${theme.tableHeader} text-left font-extrabold text-xs`} style={{ width: "9%" }}>Hành động</th>
+                {[
+                  { label: "Tên gói", w: "22%" },
+                  { label: "Giá / tháng", w: "9%" },
+                  { label: "Giá / năm", w: "9%" },
+                  { label: "Bản đồ", w: "9%" },
+                  { label: "Xuất file", w: "9%" },
+                  { label: "Layer tùy chỉnh", w: "9%" },
+                  { label: "Token / tháng", w: "9%" },
+                  { label: "Trạng thái", w: "10%" },
+                  { label: "Người dùng", w: "7%" },
+                  { label: "Chi tiết", w: "7%" },
+                  { label: "Hành động", w: "9%" },
+                ].map((h) => (
+                  <th
+                    key={h.label}
+                    className={`p-3 border-b text-left font-extrabold text-xs ${
+                      isDark
+                        ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                        : "border-gray-200 bg-gray-50 text-gray-600"
+                    }`}
+                    style={{ width: h.w }}
+                  >
+                    {h.label}
+                  </th>
+                ))}
               </tr>
             </thead>
 
             <tbody>
               {loading && rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className={`p-8 text-center ${theme.textMuted}`}>
+                  <td
+                    colSpan={11}
+                    className={`p-8 text-center ${theme.textMuted}`}
+                  >
                     <Loading />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className={`p-8 text-center ${theme.textMuted}`}>
+                  <td
+                    colSpan={11}
+                    className={`p-8 text-center ${theme.textMuted}`}
+                  >
                     Không có dữ liệu.
                   </td>
                 </tr>
               ) : (
                 filtered.map((p) => (
                   <tr key={p.planId}>
-                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
                       <div className="flex items-center gap-2">
                         <b>{p.name}</b>
                         {p.isPopular && (
@@ -274,7 +299,6 @@ export default function PlansPage() {
                           </span>
                         )}
                       </div>
-
                       <div
                         className={`${theme.textMuted} text-sm`}
                         style={{
@@ -288,16 +312,54 @@ export default function PlansPage() {
                       </div>
                     </td>
 
-                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{fmtMoney(p.priceMonthly)}</td>
-                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{fmtMoney(p.priceYearly)}</td>
-                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{fmtNum(p.mapsLimit)}</td>
-                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{fmtNum(p.exportsLimit)}</td>
-                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>{fmtNum(p.customLayersLimit)}</td>
-                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      {fmtMoney(p.priceMonthly)}
+                    </td>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      {fmtMoney(p.priceYearly)}
+                    </td>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      {fmtNum(p.mapsLimit)}
+                    </td>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      {fmtNum(p.exportsLimit)}
+                    </td>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      {fmtNum(p.customLayersLimit)}
+                    </td>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
                       {p.monthlyTokenLimit.toLocaleString("vi-VN")}
                     </td>
 
-                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
                       {p.isActive ? (
                         <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16">
                           Đang hoạt động
@@ -309,11 +371,19 @@ export default function PlansPage() {
                       )}
                     </td>
 
-                    <td className={`p-3 border-b ${theme.tableCell} text-left`}>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
                       {p.totalSubscribers.toLocaleString("vi-VN")}
                     </td>
 
-                    <td className={`p-3 border-b ${theme.tableCell} text-center`}>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
                       <Link
                         className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer ${
                           isDark ? "text-[#3f5f36]" : "text-blue-600"
@@ -324,8 +394,12 @@ export default function PlansPage() {
                       </Link>
                     </td>
 
-                    <td className={`p-3 border-b ${theme.tableCell} text-center`}>
-                      <div className="flex items-center justify-center gap-2 whitespace-nowrap">
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 whitespace-nowrap text-sm font-medium">
                         <Link
                           className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer ${
                             isDark ? "text-[#3f5f36]" : "text-blue-600"
@@ -335,9 +409,7 @@ export default function PlansPage() {
                         >
                           Chỉnh sửa
                         </Link>
-
                         <span className={theme.textMuted}>|</span>
-
                         <button
                           className="text-sm font-bold text-red-600 hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50"
                           onClick={() => confirmDelete(p.planId)}
