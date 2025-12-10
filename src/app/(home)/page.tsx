@@ -310,36 +310,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="relative z-10 max-w-7xl mx-auto px-6 pb-12">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
-          <div className="rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 bg-gray-50 dark:bg-white/5">
-            <h3 className="font-semibold mb-3">{t("home", "apiTitle")}</h3>
-            <pre className="rounded-xl p-4 text-sm overflow-auto bg-black text-gray-100">{`POST /api/maps
-{
-  "name": "Field Survey 2025",
-  "visibility": "public",
-  "layers": [
-    { "type": "Point", "geometry": [106.7, 10.8], "props": { "label": "Point A" } }
-  ]
-}`}</pre>
-            <p className="mt-3 text-sm text-gray-500">{t("home", "apiDesc")}</p>
-          </div>
-          <div className="rounded-2xl p-6 ring-1 ring-black/5 dark:ring-white/10 bg-gray-50 dark:bg-white/5">
-            <h3 className="font-semibold mb-3">{t("home", "testiTitle")}</h3>
-            <div className="flex gap-4 overflow-x-auto snap-x snap-mandatory pb-2">
-              {quotes.map((q, idx) => (
-                <figure key={idx} className="min-w-[80%] md:min-w-[60%] snap-center rounded-xl p-5 bg-white dark:bg-white/5 ring-1 ring-black/5 dark:ring-white/10">
-                  <blockquote className="text-sm md:text-base text-gray-700 dark:text-gray-200">
-                    {q.q}
-                  </blockquote>
-                  <figcaption className="mt-2 text-xs text-gray-500">— {q.by}</figcaption>
-                </figure>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section className="relative z-10 max-w-7xl mx-auto px-6 py-16">
         <div className="rounded-3xl p-8 md:p-12 text-center ring-1 ring-black/5 dark:ring-white/10 bg-gradient-to-br from-emerald-500 to-emerald-600 text-white">
           <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight">

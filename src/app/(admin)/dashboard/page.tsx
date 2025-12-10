@@ -100,14 +100,6 @@ function formatDateTime(iso: string): string {
   return iso ? iso.replace("T", " ").slice(0, 16) : "";
 }
 
-function rangeDates(kind: "7d" | "30d"): { start: Date; end: Date } {
-  const end = new Date();
-  const start = new Date();
-  start.setDate(end.getDate() - (kind === "7d" ? 7 : 30));
-  start.setHours(0, 0, 0, 0);
-  return { start, end };
-}
-
 function getLast12MonthsRange(): { start: Date; end: Date } {
   const end = new Date();
   const start = new Date();
@@ -211,6 +203,49 @@ function normalizeMonthlyData(data: Raw): MonthlyData[] {
   return result;
 }
 
+function aggregateDailyRevenueToMonthly(points: RevenuePoint[]): MonthlyData[] {
+  if (!points || points.length === 0) return [];
+
+  const monthMap = new Map<string, MonthlyData>();
+
+  points.forEach((p) => {
+    if (!p.date) return;
+    const d = new Date(p.date);
+    if (Number.isNaN(d.getTime())) return;
+    const month = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    const existing = monthMap.get(month) || { month, users: 0, revenue: 0, maps: 0, exports: 0 };
+    existing.revenue += Number(p.value ?? 0);
+    monthMap.set(month, existing);
+  });
+
+  // Sort by date
+  const monthly = Array.from(monthMap.values()).sort((a, b) => {
+    const da = new Date(a.month);
+    const db = new Date(b.month);
+    return da.getTime() - db.getTime();
+  });
+
+  return monthly;
+}
+
+function dateInputValue(d: Date) {
+  const z = new Date(d);
+  z.setHours(0, 0, 0, 0);
+  return z.toISOString().slice(0, 10);
+}
+
+function addDays(d: Date, days: number) {
+  const next = new Date(d);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
+function formatMonthLabel(value: string) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
 function normalizeRevenue(list: unknown): RevenuePoint[] {
   if (!list) return [];
   const arr = Array.isArray(list) ? (list as Raw[]) : [];
@@ -277,8 +312,26 @@ export default function AdminDashboard(): JSX.Element {
   const [usage, setUsage] = useState<UsageItem[]>([]);
   const [search, setSearch] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(true);
-  const [revRange, setRevRange] = useState<"7d" | "30d">("7d");
+  const [revStart, setRevStart] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6);
+    d.setHours(0, 0, 0, 0);
+    return dateInputValue(d);
+  });
+  const [revEnd, setRevEnd] = useState<string>(() => {
+    const today = new Date();
+    const tomorrow = addDays(today, 1);
+    return dateInputValue(tomorrow);
+  });
   const [revenue, setRevenue] = useState<RevenuePoint[]>([]);
+  const now = new Date();
+  const defaultMonthlyEnd = dateInputValue(now);
+  const tmpStart = new Date(now);
+  tmpStart.setMonth(now.getMonth() - 11);
+  tmpStart.setDate(1);
+  const defaultMonthlyStart = dateInputValue(tmpStart);
+  const [monthlyStart, setMonthlyStart] = useState<string>(defaultMonthlyStart);
+  const [monthlyEnd, setMonthlyEnd] = useState<string>(defaultMonthlyEnd);
   const [revenueStats, setRevenueStats] = useState<{
     totalRevenue: number;
     totalTransactions: number;
@@ -380,8 +433,24 @@ export default function AdminDashboard(): JSX.Element {
 
   useEffect(() => {
     let mounted = true;
-    const { start, end } = rangeDates(revRange);
-    adminGetRevenueAnalytics<unknown>(start, end)
+    const startDate = new Date(revStart);
+    let endDate = new Date(revEnd);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+      return () => {};
+    }
+
+    // Enforce endDate >= startDate and endDate >= today
+    const today = dateInputValue(new Date());
+    if (endDate < startDate) {
+      endDate = addDays(startDate, 1);
+      setRevEnd(dateInputValue(endDate));
+    }
+    const minEnd = new Date(today);
+    if (endDate < minEnd) {
+      endDate = minEnd;
+      setRevEnd(dateInputValue(endDate));
+    }
+    adminGetRevenueAnalytics<unknown>(startDate, endDate)
       .then((res) => {
         if (!mounted) return;
         const resObj = res as any;
@@ -410,18 +479,61 @@ export default function AdminDashboard(): JSX.Element {
     return () => {
       mounted = false;
     };
-  }, [revRange]);
+  }, [revStart, revEnd]);
 
-  // Load monthly data
+  // Load monthly data (users/maps/exports + revenue) with selectable range
   useEffect(() => {
     let mounted = true;
     setMonthlyLoading(true);
-    const { start, end } = getLast12MonthsRange();
-    adminGetSystemAnalytics<Raw>(start, end)
-      .then((res) => {
+
+    const start = new Date(monthlyStart);
+    const end = new Date(monthlyEnd);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      setMonthlyLoading(false);
+      return () => {};
+    }
+
+    Promise.allSettled([
+      adminGetSystemAnalytics<Raw>(start, end),
+      adminGetRevenueAnalytics<Raw>(start, end),
+    ])
+      .then((results) => {
         if (!mounted) return;
-        const normalized = normalizeMonthlyData(res);
-        setMonthlyData(normalized);
+
+        const analyticsRes = results[0].status === "fulfilled" ? results[0].value : null;
+        const revenueRes = results[1].status === "fulfilled" ? results[1].value : null;
+
+        // 1) Parse monthly data if backend provides it
+        const normalizedFromAnalytics = analyticsRes ? normalizeMonthlyData(analyticsRes as Raw) : [];
+
+        // 2) Aggregate daily revenue -> monthly revenue if available
+        let monthlyFromRevenue: MonthlyData[] = [];
+        if (revenueRes) {
+          const resObj = revenueRes as any;
+          const dailyRevenue = resObj?.dailyRevenue || resObj?.DailyRevenue || (Array.isArray(resObj) ? resObj : []);
+          const normalizedDaily = normalizeRevenue(dailyRevenue);
+          monthlyFromRevenue = aggregateDailyRevenueToMonthly(normalizedDaily);
+        }
+
+        // 3) Merge: prefer analytics for users/maps/exports; fill revenue from either source
+        const mergedMap = new Map<string, MonthlyData>();
+
+        normalizedFromAnalytics.forEach((m) => {
+          mergedMap.set(m.month, { ...m });
+        });
+
+        monthlyFromRevenue.forEach((m) => {
+          const existing = mergedMap.get(m.month) || { ...m, users: 0, maps: 0, exports: 0 };
+          mergedMap.set(m.month, { ...existing, revenue: m.revenue });
+        });
+
+        const merged = Array.from(mergedMap.values()).sort((a, b) => {
+          const da = new Date(a.month);
+          const db = new Date(b.month);
+          return da.getTime() - db.getTime();
+        });
+
+        setMonthlyData(merged.length > 0 ? merged : normalizedFromAnalytics);
       })
       .catch((err) => {
         console.error("Failed to load monthly analytics:", err);
@@ -435,7 +547,7 @@ export default function AdminDashboard(): JSX.Element {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [monthlyStart, monthlyEnd]);
 
   const filteredTopUsers = useMemo(() => {
     if (!search.trim()) return topUsers;
@@ -448,6 +560,14 @@ export default function AdminDashboard(): JSX.Element {
   }, [topUsers, search]);
 
   const spark = useMemo(() => buildSparkPath(revenue), [revenue]);
+  const monthlyDisplay = useMemo(
+    () =>
+      monthlyData.map((m) => ({
+        ...m,
+        monthLabel: formatMonthLabel(m.month),
+      })),
+    [monthlyData]
+  );
 
   return (
     <div className="grid gap-5">
@@ -498,67 +618,175 @@ export default function AdminDashboard(): JSX.Element {
         </div>
       </section>
 
+      {/* Monthly Analytics Chart */}
       <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="m-0 text-base font-extrabold">Revenue analytics</h3>
-          <div className="flex gap-2 flex-wrap">
-            <select
-              className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 ${theme.select}`}
-              value={revRange}
-              onChange={(e) => setRevRange(e.target.value as "7d" | "30d")}
-            >
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
-            </select>
+          <h3 className="m-0 text-base font-extrabold">Thống kê theo tháng (12 tháng gần nhất)</h3>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-zinc-400">Từ</label>
+            <input
+              type="month"
+              value={monthlyStart.slice(0, 7)}
+              onChange={(e) => {
+                const v = e.target.value ? `${e.target.value}-01` : monthlyStart;
+                setMonthlyStart(v);
+              }}
+              className="px-2 py-1 rounded border border-zinc-600 bg-zinc-800 text-white text-sm"
+              max={monthlyEnd.slice(0, 7)}
+            />
+            <label className="text-sm text-zinc-400">Đến</label>
+            <input
+              type="month"
+              value={monthlyEnd.slice(0, 7)}
+              onChange={(e) => {
+                const v = e.target.value ? `${e.target.value}-01` : monthlyEnd;
+                setMonthlyEnd(v);
+              }}
+              className="px-2 py-1 rounded border border-zinc-600 bg-zinc-800 text-white text-sm"
+              min={monthlyStart.slice(0, 7)}
+            />
           </div>
         </div>
-        
-        {revenueStats && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
-            <div className={`${theme.kpiCard} border rounded-lg p-3 shadow-sm`}>
-              <div className={`${theme.textMuted} text-xs mb-1`}>Total Revenue</div>
-              <div className="text-lg font-bold">{formatMoney(revenueStats.totalRevenue)}</div>
-            </div>
-            <div className={`${theme.kpiCard} border rounded-lg p-3 shadow-sm`}>
-              <div className={`${theme.textMuted} text-xs mb-1`}>Total Transactions</div>
-              <div className="text-lg font-bold">{revenueStats.totalTransactions.toLocaleString()}</div>
-            </div>
-            <div className={`${theme.kpiCard} border rounded-lg p-3 shadow-sm`}>
-              <div className={`${theme.textMuted} text-xs mb-1`}>Avg Transaction</div>
-              <div className="text-lg font-bold">{formatMoney(revenueStats.avgTransaction)}</div>
-            </div>
+        {monthlyLoading ? (
+          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
+            Đang tải dữ liệu...
+          </div>
+        ) : monthlyData.length === 0 ? (
+          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
+            Không có dữ liệu
+          </div>
+        ) : (
+          <div className="w-full h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyDisplay} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#3f3f46" : "#e4e4e7"} />
+                <XAxis 
+                  dataKey="monthLabel" 
+                  stroke={isDark ? "#a1a1aa" : "#71717a"}
+                  style={{ fontSize: "12px" }}
+                  tickFormatter={(v: string) => v}
+                />
+                <YAxis 
+                  stroke={isDark ? "#a1a1aa" : "#71717a"}
+                  style={{ fontSize: "12px" }}
+                />
+                <Tooltip 
+                  contentStyle={{
+                    backgroundColor: isDark ? "#27272a" : "#ffffff",
+                    border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`,
+                    borderRadius: "8px",
+                    color: isDark ? "#f4f4f5" : "#18181b",
+                  }}
+                  labelFormatter={(_, payload) => {
+                    const raw = payload?.[0]?.payload?.month ?? payload?.[0]?.payload?.monthLabel ?? "";
+                    return formatMonthLabel(raw);
+                  }}
+                />
+                <Legend 
+                  wrapperStyle={{ paddingTop: "20px" }}
+                  iconType="circle"
+                />
+                <Bar 
+                  dataKey="users" 
+                  name="Người dùng" 
+                  fill="#10b981" 
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar 
+                  dataKey="maps" 
+                  name="Maps" 
+                  fill="#3b82f6" 
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar 
+                  dataKey="exports" 
+                  name="Exports" 
+                  fill="#f59e0b" 
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         )}
+      </section>
 
-        <div className={`h-[240px] border border-dashed ${theme.tableBorder} rounded-xl grid place-items-center ${theme.textMuted} relative`}>
-          {revenue.length === 0 ? (
-            "No data"
-          ) : (
-            <svg width="100%" height="100%" viewBox="0 0 720 220" preserveAspectRatio="none" className="absolute inset-0">
-              <path d={spark.d} fill="none" stroke="currentColor" strokeWidth="2" />
-              {revenue.map((p, i) => {
-                const stepX = revenue.length > 1 ? 720 / (revenue.length - 1) : 720;
-                const vals = revenue.map(r => r.value);
-                const min = Math.min(...vals);
-                const max = Math.max(...vals);
-                const span = Math.max(1, max - min);
-                const toY = (v: number) => {
-                  const norm = (v - min) / span;
-                  return 220 - norm * 220;
-                };
-                const x = Math.round(i * stepX);
-                const y = Math.round(toY(p.value));
-                return (
-                  <g key={i}>
-                    <circle cx={x} cy={y} r="4" fill="currentColor" className="opacity-0 hover:opacity-100 transition-opacity" />
-                    <title>{`${p.date}: ${formatMoney(p.value)}`}</title>
-                  </g>
-                );
-              })}
-            </svg>
-          )}
+      {/* Daily Revenue Chart */}
+      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="m-0 text-base font-extrabold">Doanh thu theo ngày</h3>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-zinc-400">Từ</label>
+            <input
+              type="date"
+              value={revStart}
+              onChange={(e) => setRevStart(e.target.value)}
+              className="px-2 py-1 rounded border border-zinc-600 bg-zinc-800 text-white text-sm"
+              max={revEnd}
+            />
+            <label className="text-sm text-zinc-400">Đến</label>
+            <input
+              type="date"
+              value={revEnd}
+              onChange={(e) => setRevEnd(e.target.value)}
+              className="px-2 py-1 rounded border border-zinc-600 bg-zinc-800 text-white text-sm"
+              min={dateInputValue(new Date())}
+            />
+          </div>
         </div>
-
+        {monthlyLoading ? (
+          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
+            Đang tải dữ liệu...
+          </div>
+        ) : revenue.length === 0 ? (
+          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
+            Không có dữ liệu
+          </div>
+        ) : (
+          <div className="w-full h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={revenue} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#3f3f46" : "#e4e4e7"} />
+                <XAxis 
+                  dataKey="date" 
+                  stroke={isDark ? "#a1a1aa" : "#71717a"}
+                  style={{ fontSize: "12px" }}
+                  tickFormatter={(v: string) => {
+                    const d = new Date(v);
+                    return Number.isNaN(d.getTime())
+                      ? v
+                      : d.toLocaleDateString("vi-VN", { day: "2-digit", month: "short", year: "numeric" });
+                  }}
+                />
+                <YAxis 
+                  stroke={isDark ? "#a1a1aa" : "#71717a"}
+                  style={{ fontSize: "12px" }}
+                  tickFormatter={(value) => formatMoney(value)}
+                />
+                <Tooltip 
+                  contentStyle={{
+                    backgroundColor: isDark ? "#27272a" : "#ffffff",
+                    border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`,
+                    borderRadius: "8px",
+                    color: isDark ? "#f4f4f5" : "#18181b",
+                  }}
+                  formatter={(value: number) => formatMoney(value)}
+                />
+                <Legend 
+                  wrapperStyle={{ paddingTop: "20px" }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="value" 
+                  name="Doanh thu" 
+                  stroke="#8b5cf6" 
+                  strokeWidth={3}
+                  dot={{ fill: "#8b5cf6", r: 5 }}
+                  activeDot={{ r: 7 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </section>
 
       <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
@@ -675,123 +903,7 @@ export default function AdminDashboard(): JSX.Element {
         </div>
       </section>
 
-      {/* Monthly Analytics Chart */}
-      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="m-0 text-base font-extrabold">Thống kê theo tháng (12 tháng gần nhất)</h3>
-        </div>
-        {monthlyLoading ? (
-          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
-            Đang tải dữ liệu...
-          </div>
-        ) : monthlyData.length === 0 ? (
-          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
-            Không có dữ liệu
-          </div>
-        ) : (
-          <div className="w-full h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#3f3f46" : "#e4e4e7"} />
-                <XAxis 
-                  dataKey="month" 
-                  stroke={isDark ? "#a1a1aa" : "#71717a"}
-                  style={{ fontSize: "12px" }}
-                />
-                <YAxis 
-                  stroke={isDark ? "#a1a1aa" : "#71717a"}
-                  style={{ fontSize: "12px" }}
-                />
-                <Tooltip 
-                  contentStyle={{
-                    backgroundColor: isDark ? "#27272a" : "#ffffff",
-                    border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`,
-                    borderRadius: "8px",
-                    color: isDark ? "#f4f4f5" : "#18181b",
-                  }}
-                />
-                <Legend 
-                  wrapperStyle={{ paddingTop: "20px" }}
-                  iconType="circle"
-                />
-                <Bar 
-                  dataKey="users" 
-                  name="Người dùng" 
-                  fill="#10b981" 
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar 
-                  dataKey="maps" 
-                  name="Maps" 
-                  fill="#3b82f6" 
-                  radius={[4, 4, 0, 0]}
-                />
-                <Bar 
-                  dataKey="exports" 
-                  name="Exports" 
-                  fill="#f59e0b" 
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </section>
 
-      {/* Monthly Revenue Chart */}
-      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="m-0 text-base font-extrabold">Doanh thu theo tháng (12 tháng gần nhất)</h3>
-        </div>
-        {monthlyLoading ? (
-          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
-            Đang tải dữ liệu...
-          </div>
-        ) : monthlyData.length === 0 ? (
-          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
-            Không có dữ liệu
-          </div>
-        ) : (
-          <div className="w-full h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#3f3f46" : "#e4e4e7"} />
-                <XAxis 
-                  dataKey="month" 
-                  stroke={isDark ? "#a1a1aa" : "#71717a"}
-                  style={{ fontSize: "12px" }}
-                />
-                <YAxis 
-                  stroke={isDark ? "#a1a1aa" : "#71717a"}
-                  style={{ fontSize: "12px" }}
-                  tickFormatter={(value) => formatMoney(value)}
-                />
-                <Tooltip 
-                  contentStyle={{
-                    backgroundColor: isDark ? "#27272a" : "#ffffff",
-                    border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`,
-                    borderRadius: "8px",
-                    color: isDark ? "#f4f4f5" : "#18181b",
-                  }}
-                  formatter={(value: number) => formatMoney(value)}
-                />
-                <Legend 
-                  wrapperStyle={{ paddingTop: "20px" }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="revenue" 
-                  name="Doanh thu" 
-                  stroke="#8b5cf6" 
-                  strokeWidth={3}
-                  dot={{ fill: "#8b5cf6", r: 5 }}
-                  activeDot={{ r: 7 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </section>
     </div>
   );
 }

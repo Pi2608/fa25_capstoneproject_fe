@@ -220,66 +220,161 @@ export default function OrganizationsPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className={`min-w-full divide-y ${theme.tableBorder}`}>
-              <thead>
+        <div
+          className={`overflow-auto border rounded-lg mt-2 ${
+            isDark ? "border-zinc-800" : "border-gray-200"
+          }`}
+        >
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr>
+                <th
+                  className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}
+                >
+                  Tên tổ chức
+                </th>
+                <th
+                  className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}
+                >
+                  Chủ sở hữu
+                </th>
+                <th
+                  className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}
+                >
+                  Thành viên
+                </th>
+                <th
+                  className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}
+                >
+                  Trạng thái
+                </th>
+                <th
+                  className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}
+                >
+                  Ngày tạo
+                </th>
+                <th
+                  className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}
+                ></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
                 <tr>
-                  <th className={`${isDark ? "text-zinc-400" : "text-gray-600"}`}>Tên tổ chức</th>
-                  <th className={`${isDark ? "text-zinc-400" : "text-gray-600"}`}>Chủ sở hữu</th>
-                  <th className={`${isDark ? "text-zinc-400" : "text-gray-600"}`}>Thành viên</th>
-                  <th className={`${isDark ? "text-zinc-400" : "text-gray-600"}`}>Trạng thái</th>
-                  <th className={`${isDark ? "text-zinc-400" : "text-gray-600"}`}>Ngày tạo</th>
-                  <th className={`${isDark ? "text-zinc-400" : "text-gray-600"}`}></th>
+                  <td
+                    colSpan={6}
+                    className={`p-4 text-center ${
+                      isDark ? "text-zinc-400" : "text-gray-500"
+                    }`}
+                  >
+                    Không có dữ liệu
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                  {rows.map((o) => (
-                    <tr key={o.orgId}>
-                      <td>{o.name}</td>
-                      <td>{o.ownerName}</td>
-                      <td>{o.totalMembers ?? "–"}</td>
-                      <td>
-                        {o.status === "Suspended" ? (
-                          <span className="px-2 py-1 rounded-md bg-red-500/10 text-red-500">Đã khóa</span>
-                        ) : (
-                          <span className="px-2 py-1 rounded-md bg-green-500/10 text-green-500">Hoạt động</span>
-                        )}
-                      </td>
-                      <td>
-                        {o.createdAt
-                          ? new Date(o.createdAt).toLocaleDateString("vi-VN")
-                          : "–"}
-                      </td>
-                      <td className="flex items-center gap-2">
+              ) : (
+                rows.map((o) => (
+                  <tr key={o.orgId}>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      {o.name}
+                    </td>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      {o.ownerName}
+                    </td>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      {o.totalMembers ?? "–"}
+                    </td>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      {o.status === "Suspended" ? (
+                        <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18">
+                          Đã khóa
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16">
+                          Hoạt động
+                        </span>
+                      )}
+                    </td>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      {o.createdAt
+                        ? new Date(o.createdAt).toLocaleDateString("vi-VN")
+                        : "–"}
+                    </td>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 whitespace-nowrap text-sm font-medium">
                         <Link
                           href={`/organizations/${o.orgId}`}
-                          className={`px-4 py-2 rounded-lg border transition-colors ${theme.button}`}
+                          className="text-[#166534] hover:underline cursor-pointer bg-transparent border-0 p-0"
                         >
                           Chi tiết
                         </Link>
-
-                        <span className={theme.textMuted}>|</span>
-
+                        <span className="text-zinc-400">|</span>
                         <button
-                          className={`px-4 py-2 rounded-lg border transition-colors ${theme.button}`}
+                          className="text-[#166534] hover:underline cursor-pointer bg-transparent border-0 p-0"
                           onClick={() => openEditModal(o)}
                         >
                           Sửa
                         </button>
-
-                          <span className={theme.textMuted}>|</span>
-
+                        <span className="text-zinc-400">|</span>
                         <button
-                          className={`px-4 py-2 rounded-lg border transition-colors ${theme.button}`}
+                          className="text-red-600 hover:underline cursor-pointer bg-transparent border-0 p-0"
                           onClick={() => openDeleteModal(o)}
                         >
                           Xóa
                         </button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
 
         <div className="flex items-center justify-center gap-2 mt-4">

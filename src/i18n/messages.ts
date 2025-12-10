@@ -311,7 +311,7 @@ export const messages = {
             errEmailRequired: 'Vui lòng nhập email',
             errEmailFormat: 'Định dạng email không hợp lệ',
             errPasswordRequired: 'Vui lòng nhập mật khẩu',
-            toastWelcomeAdmin: 'Chào mừng Admin! Đang chuyển tới trang quản trị viên...',
+            toastWelcomeAdmin: 'Chào mừng Admin!',
             toastLoginSetup: 'Đăng nhập thành công! Hãy thiết lập tài khoản của bạn...',
             toastLoginOk: 'Đăng nhập thành công! Đang chuyển hướng...',
             toastLoginFail: 'Email hoặc mật khẩu không đúng'
@@ -4806,7 +4806,7 @@ export const messages = {
             errEmailRequired: 'Please enter your email',
             errEmailFormat: 'Invalid email format',
             errPasswordRequired: 'Please enter your password',
-            toastWelcomeAdmin: 'Welcome, Admin! Redirecting to dashboard...',
+            toastWelcomeAdmin: 'Welcome, Admin!',
             toastLoginSetup: 'Signed in! Let’s set up your account...',
             toastLoginOk: 'Signed in! Redirecting...',
             toastLoginFail: 'Incorrect email or password'

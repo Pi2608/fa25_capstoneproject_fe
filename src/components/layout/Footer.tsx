@@ -131,7 +131,6 @@ export default function Footer() {
               </h4>
               <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                 <li><Link href="/service/map-builder" className="hover:text-emerald-500">{t("footer", "mapBuilder")}</Link></li>
-                <li><Link href="/service/data-layers" className="hover:text-emerald-500">{t("footer", "dataLayers")}</Link></li>
                 <li><Link href="/service/export-embed" className="hover:text-emerald-500">{t("footer", "exportEmbed")}</Link></li>
                 <li><Link href="/pricing" className="hover:text-emerald-500">{t("footer", "pricing")}</Link></li>
                 <li><Link href="/templates" className="hover:text-emerald-500">{t("footer", "templates")}</Link></li>
@@ -143,9 +142,7 @@ export default function Footer() {
               </h4>
               <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                 <li><Link href="/tutorial" className="hover:text-emerald-500">{t("footer", "tutorial")}</Link></li>
-                <li><Link href="/resources/developer-docs" className="hover:text-emerald-500">{t("footer", "devDocs")}</Link></li>
                 <li><Link href="/resources/help-center" className="hover:text-emerald-500">{t("footer", "helpCenter")}</Link></li>
-                <li><Link href="/resources/webinars" className="hover:text-emerald-500">{t("footer", "webinars")}</Link></li>
                 <li><Link href="/resources/blog" className="hover:text-emerald-500">{t("footer", "blog")}</Link></li>
                 <li><Link href="/community" className="hover:text-emerald-500">{t("footer", "community")}</Link></li>
               </ul>
