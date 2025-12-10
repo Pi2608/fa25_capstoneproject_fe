@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useGsapHomeScroll } from "@/hooks/useGsapHomeScroll";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useToast } from "@/contexts/ToastContext";
 import {
@@ -15,8 +14,6 @@ import {
   MapGalleryDetailResponse,
   MapGallerySummaryResponse,
 } from "@/lib/api-map-gallery";
-
-gsap.registerPlugin(ScrollTrigger);
 
 type GalleryMapDetail = MapGalleryDetailResponse;
 
@@ -120,6 +117,24 @@ export default function GalleryClient() {
 
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // GSAP hook cho hero + fade + card grid
+  useGsapHomeScroll({
+    heroSelectors: {
+      title: ".gal-hero-title",
+      subtitle: ".gal-hero-sub",
+      cta: ".gal-controls",
+    },
+    // Các block fade-in thêm (eyebrow, tags, meta, CTA)
+    fadeSelector: ".gal-hero-eyebrow, .gal-tags, .gal-meta, .gal-cta",
+    fadeStart: "top 90%",
+    // Stagger cho grid card gallery
+    stagger: {
+      container: ".gal-card-grid",
+      card: ".gal-card",
+      start: "top 80%",
+    },
+  });
+
   useEffect(() => {
     let isMounted = true;
 
@@ -154,7 +169,7 @@ export default function GalleryClient() {
     return () => {
       isMounted = false;
     };
-  }, [tagKey, q, featuredOnly]);
+  }, [tagKey, q, featuredOnly, t]);
 
   const handleSelectByGalleryId = async (galleryId: string) => {
     setDetailLoading(true);
@@ -193,7 +208,7 @@ export default function GalleryClient() {
       window.location.href = `/maps/${result.mapId}`;
     } catch (err: any) {
       setDuplicating(null);
-      
+
       // Check if error is 401 Unauthorized
       if (err?.status === 401) {
         showToast("error", t("gallery.error_duplicate_unauthorized"));
@@ -240,119 +255,6 @@ export default function GalleryClient() {
 
   useEffect(() => setPage(1), [q, tagKey, sort, pageSize, featuredOnly]);
 
-  useLayoutEffect(() => {
-    const reduce =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const baseIn = { ease: "power2.out", duration: reduce ? 0 : 0.7 } as const;
-
-    const ctx = gsap.context(() => {
-      gsap.set(
-        [".gal-hero-eyebrow", ".gal-hero-title", ".gal-hero-sub", ".gal-controls", ".gal-tags", ".gal-meta"],
-        { autoAlpha: 0, y: 16 }
-      );
-      gsap
-        .timeline()
-        .to(".gal-hero-eyebrow", {
-          autoAlpha: 1,
-          y: 0,
-          duration: reduce ? 0 : 0.5,
-          ease: "power2.out",
-        })
-        .to(
-          ".gal-hero-title",
-          {
-            autoAlpha: 1,
-            y: 0,
-            duration: reduce ? 0 : 0.7,
-            ease: "power2.out",
-          },
-          "<0.06"
-        )
-        .to(
-          ".gal-hero-sub",
-          {
-            autoAlpha: 1,
-            y: 0,
-            ...baseIn,
-          },
-          "<0.06"
-        )
-        .to(
-          ".gal-controls",
-          {
-            autoAlpha: 1,
-            y: 0,
-            ...baseIn,
-          },
-          "<0.08"
-        )
-        .to(
-          ".gal-tags",
-          {
-            autoAlpha: 1,
-            y: 0,
-            ...baseIn,
-          },
-          "<0.06"
-        )
-        .to(
-          ".gal-meta",
-          {
-            autoAlpha: 1,
-            y: 0,
-            ...baseIn,
-          },
-          "<0.04"
-        );
-
-      ScrollTrigger.batch(".gal-tag-btn", {
-        start: "top 95%",
-        onEnter: (els) =>
-          gsap.to(els, {
-            autoAlpha: 1,
-            y: 0,
-            stagger: 0.05,
-            ...baseIn,
-          }),
-        onLeaveBack: (els) => gsap.set(els, { autoAlpha: 0, y: 10 }),
-      });
-
-      gsap.set(".gal-cta", { autoAlpha: 0, y: 16 });
-      ScrollTrigger.create({
-        trigger: ".gal-cta",
-        start: "top 90%",
-        onEnter: () =>
-          gsap.to(".gal-cta", {
-            autoAlpha: 1,
-            y: 0,
-            ...baseIn,
-          }),
-      });
-    });
-
-    return () => ctx.revert();
-  }, []);
-
-  useEffect(() => {
-    const reduce =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const cards = gsap.utils.toArray<HTMLElement>(".gal-card");
-    if (!cards.length) return;
-    gsap.fromTo(
-      cards,
-      { autoAlpha: 0, y: 18 },
-      {
-        autoAlpha: 1,
-        y: 0,
-        duration: reduce ? 0 : 0.55,
-        ease: "power2.out",
-        stagger: 0.08,
-      }
-    );
-  }, [pageItems, tagKey, sort, q, page, featuredOnly]);
-
   const renderTagFilterLabel = (key: TagKey) => {
     if (key === "All") return t("gallery.tag_All");
     return t(`gallery.category_${key}`);
@@ -376,7 +278,7 @@ export default function GalleryClient() {
         <div className="pointer-events-none absolute -right-20 bottom-0 h-60 w-60 rounded-full bg-emerald-400/10 blur-3xl" />
       </section>
 
-      <section className="gal-controls mt-6 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-4 ring-1 ring-emerald-500/10 opacity-0 translate-y-[16px]">
+      <section className="gal-controls mt-6 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-4 ring-1 ring-emerald-500/10">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="sm:col-span-2">
             <div className="relative">
@@ -413,7 +315,7 @@ export default function GalleryClient() {
               }
               className="w-full rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2.5 text-sm outline-none focus:border-emerald-400/60"
             >
-                <option value={12}>{t("gallery.page_size")}: 12</option>
+              <option value={12}>{t("gallery.page_size")}: 12</option>
               <option value={18}>{t("gallery.page_size")}: 18</option>
               <option value={24}>{t("gallery.page_size")}: 24</option>
             </select>
@@ -432,12 +334,12 @@ export default function GalleryClient() {
           </label>
         </div>
 
-        <div className="gal-tags mt-3 flex flex-wrap gap-2 opacity-0 translate-y-[16px]">
+        <div className="gal-tags mt-3 flex flex-wrap gap-2">
           {TAG_KEYS.map((k) => (
             <button
               key={k}
               onClick={() => setTagKey(k)}
-              className={`gal-tag-btn opacity-0 translate-y-[10px] rounded-full px-3 py-1.5 text-xs font-medium transition ${
+              className={`gal-tag-btn rounded-full px-3 py-1.5 text-xs font-medium transition ${
                 tagKey === k
                   ? "bg-emerald-500 text-zinc-950"
                   : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/70"
@@ -449,7 +351,7 @@ export default function GalleryClient() {
           ))}
         </div>
 
-        <div className="gal-meta mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-400 opacity-0 translate-y-[16px]">
+        <div className="gal-meta mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-400">
           <span>
             {sorted.length} {t("gallery.results")} • {t("gallery.showing")} “
             {renderTagFilterLabel(tagKey)}”
@@ -493,11 +395,11 @@ export default function GalleryClient() {
         </section>
       ) : (
         <>
-          <section className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <section className="gal-card-grid mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {pageItems.map((m) => (
               <article
                 key={m.id}
-                className="gal-card opacity-0 translate-y-[18px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-5"
+                className="gal-card rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-5"
               >
                 <div className="aspect-[16/9] w-full overflow-hidden rounded-xl ring-1 ring-white/5">
                   {m.previewImage ? (
@@ -524,8 +426,8 @@ export default function GalleryClient() {
                   {m.isFeatured && (
                     <TagPill>{t("gallery.featured_badge")}</TagPill>
                   )}
-                  {m.tags.map((t) => (
-                    <TagPill key={t}>{t}</TagPill>
+                  {m.tags.map((tag) => (
+                    <TagPill key={tag}>{tag}</TagPill>
                   ))}
                 </div>
 
@@ -545,7 +447,7 @@ export default function GalleryClient() {
                     href={`/maps/${m.mapId}`}
                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
                   >
-                      {t("gallery.view_map")}
+                    {t("gallery.view_map")}
                   </Link>
                   <button
                     type="button"
@@ -658,13 +560,13 @@ export default function GalleryClient() {
                   {detail.isFeatured && (
                     <TagPill>{t("gallery.featured_badge")}</TagPill>
                   )}
-                  {detail.tags.map((t) => (
-                    <TagPill key={t}>{t}</TagPill>
+                  {detail.tags.map((tag) => (
+                    <TagPill key={tag}>{tag}</TagPill>
                   ))}
                 </div>
                 <div className="mt-2 text-xs text-zinc-400">
-                  {t("gallery.detail_views")}: {fmt(detail.viewCount)} • {t("gallery.detail_likes")}:{" "}
-                  {fmt(detail.likeCount)}
+                  {t("gallery.detail_views")}: {fmt(detail.viewCount)} •{" "}
+                  {t("gallery.detail_likes")}: {fmt(detail.likeCount)}
                 </div>
                 <div className="mt-2 text-xs text-zinc-400 break-all">
                   {t("gallery.detail_gallery_id")}: {detail.id}
@@ -700,7 +602,7 @@ export default function GalleryClient() {
         </div>
       </section>
 
-      <section className="gal-cta mt-10 opacity-0 translate-y-[16px] overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent p-6 ring-1 ring-emerald-500/10">
+      <section className="gal-cta mt-10 overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent p-6 ring-1 ring-emerald-500/10">
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
             <h3 className="text-xl font-semibold">{t("gallery.cta_title")}</h3>
