@@ -28,7 +28,7 @@ const NAV = [
   { href: "/community-admin", label: "Cộng đồng", icon: <FileIcon /> },
   { href: "/map-gallery-admin", label: "Map gallery", icon: <MapIcon /> },
   { href: "/map-reports", label: "Báo cáo vi phạm map", icon: <AlertTriangleIcon /> },
-  // { href: "/exports", label: "Xuất dữ liệu", icon: <FileIcon /> },
+  { href: "/exports", label: "Xuất dữ liệu", icon: <FileIcon /> },
   // { href: "/billing", label: "Lịch sử thanh toán", icon: <CardIcon /> },
   // { href: "/template", label: "Mẫu bản đồ", icon: <MapIcon /> },
 ];

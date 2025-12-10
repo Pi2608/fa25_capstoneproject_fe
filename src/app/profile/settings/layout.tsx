@@ -8,11 +8,13 @@ import { useI18n } from "@/i18n/I18nProvider";
 type Tab = { href: string; i18nKey: string };
 
 const TABS: Tab[] = [
-  { href: "/profile/settings/members",    i18nKey: "tabs_members" },
-  { href: "/profile/settings/usage",      i18nKey: "tabs_usage" },
-  { href: "/profile/settings/plans",      i18nKey: "tabs_plans" },
-  { href: "/profile/settings/billing",    i18nKey: "tabs_billing" },
-  { href: "/profile/settings/workspace",  i18nKey: "tabs_workspace" },
+  { href: "/profile/settings/members",     i18nKey: "tabs_members" },
+  { href: "/profile/settings/my-exports",  i18nKey: "tabs_my_exports" },
+  { href: "/profile/settings/usage",       i18nKey: "tabs_usage" },
+  { href: "/profile/settings/plans",       i18nKey: "tabs_plans" },
+  { href: "/profile/settings/billing",     i18nKey: "tabs_billing" },
+  { href: "/profile/settings/developers",  i18nKey: "tabs_developers" },
+  { href: "/profile/settings/workspace",   i18nKey: "tabs_workspace" },
 ];
 
 export default function SettingsLayout({ children }: { children: ReactNode }) {
@@ -39,7 +41,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
                     : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white"
                 }
               >
-                {t("settings", tab.i18nKey)}
+                {tab.label || (tab.i18nKey ? t("settings", tab.i18nKey) : "")}
               </span>
               <span
                 aria-hidden
