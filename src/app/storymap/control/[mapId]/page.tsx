@@ -678,15 +678,16 @@ export default function StoryMapControlPage() {
             ...prev,
             status:
               action === "start"
-                ? "IN_PROGRESS"
+                ? "Running"
                 : action === "pause"
-                  ? "PAUSED"
+                  ? "Paused"
                   : action === "resume"
-                    ? "IN_PROGRESS"
-                    : "COMPLETED",
+                    ? "Running"
+                    : "Ended",
           }
           : prev
       );
+
 
       if (action === "start" && connection && segments.length > 0) {
         const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
