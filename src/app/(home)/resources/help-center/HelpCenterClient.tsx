@@ -7,6 +7,7 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { FaqItem } from "@/lib/api-support";
 import { getFaqSuggestions, searchFaqs } from "@/lib/api-support";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -25,8 +26,7 @@ export default function HelpCenterClient() {
   const debounced = useDebounce(query, 300);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // ======= NAV & CONTENT CONFIG (translation keys) =======
-  const LEFT_GROUP_1_TITLE = tr("sec_start"); // "BẮT ĐẦU"
+  const LEFT_GROUP_1_TITLE = tr("sec_start");
   const LEFT_GROUP_1: NavItem[] = [
     { href: "#welcome", labelKey: "nav_welcome" },
     { href: "#what-is", labelKey: "nav_what_is" },
@@ -36,7 +36,7 @@ export default function HelpCenterClient() {
     { href: "#shortcuts", labelKey: "nav_shortcuts" },
   ];
 
-  const LEFT_GROUP_2_TITLE = tr("sec_upload_anything"); // "TẢI LÊN MỌI THỨ"
+  const LEFT_GROUP_2_TITLE = tr("sec_upload_anything");
   const LEFT_GROUP_2: NavItem[] = [
     { href: "#files", labelKey: "nav_files" },
     { href: "#urls", labelKey: "nav_urls" },
@@ -53,55 +53,8 @@ export default function HelpCenterClient() {
     { href: "#tour-interface", titleKey: "tile_tour_title", descKey: "tile_tour_desc" },
   ];
 
-  // ======= ANIMATIONS =======
-  useLayoutEffect(() => {
-    const reduce =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const baseIn = { ease: "power2.out", duration: reduce ? 0 : 0.7 } as const;
+  useHelpCenterAnimations({ touched, loading });
 
-    const ctx = gsap.context(() => {
-      gsap.set([".hc-hero-eyebrow", ".hc-hero-title", ".hc-search"], { autoAlpha: 0, y: 18 });
-      gsap
-        .timeline()
-        .to(".hc-hero-eyebrow", { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.55, ease: "power2.out" })
-        .to(".hc-hero-title", { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.7, ease: "power2.out" }, "<0.06")
-        .to(".hc-search", { autoAlpha: 1, y: 0, ...baseIn }, "<0.06");
-
-      ScrollTrigger.batch(".hc-suggest-chip", {
-        start: "top 95%",
-        onEnter: (els) => gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.06, ...baseIn }),
-        onLeaveBack: (els) => gsap.set(els, { autoAlpha: 0, y: 10 }),
-      });
-
-      ScrollTrigger.batch(".hc-left a", {
-        start: "top 90%",
-        onEnter: (els) => gsap.to(els, { autoAlpha: 1, x: 0, stagger: 0.04, ...baseIn }),
-        onLeaveBack: (els) => gsap.set(els, { autoAlpha: 0, x: -10 }),
-      });
-
-      ScrollTrigger.batch(".hc-right-card", {
-        start: "top 92%",
-        onEnter: (els) => gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.08, ...baseIn }),
-        onLeaveBack: (els) => gsap.set(els, { autoAlpha: 0, y: 12 }),
-      });
-
-      ScrollTrigger.batch(".hc-article h1, .hc-article h2", {
-        start: "top 88%",
-        onEnter: (els) => gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.05, ...baseIn }),
-        onLeaveBack: (els) => gsap.set(els, { autoAlpha: 0, y: 10 }),
-      });
-      ScrollTrigger.batch(".hc-article-tile", {
-        start: "top 90%",
-        onEnter: (els) => gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.06, ...baseIn }),
-        onLeaveBack: (els) => gsap.set(els, { autoAlpha: 0, y: 12 }),
-      });
-    });
-
-    return () => ctx.revert();
-  }, []);
-
-  // ======= DATA FETCH =======
   useEffect(() => {
     getFaqSuggestions(8).then(setSuggestions).catch(() => setSuggestions([]));
   }, []);
@@ -115,26 +68,6 @@ export default function HelpCenterClient() {
   }, [debounced, touched]);
 
   useEffect(() => {
-    if (!touched || loading) return;
-    const reduce =
-      typeof window !== "undefined" &&
-      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const items = gsap.utils.toArray<HTMLElement>(".faq-item");
-    if (items.length === 0) return;
-    gsap.fromTo(
-      items,
-      { autoAlpha: 0, y: 12 },
-      {
-        autoAlpha: 1,
-        y: 0,
-        duration: reduce ? 0 : 0.45,
-        ease: "power2.out",
-        stagger: 0.06,
-      }
-    );
-  }, [results, touched, loading]);
-
-  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -145,13 +78,11 @@ export default function HelpCenterClient() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // ======= RENDER =======
   return (
     <main className="relative mx-auto max-w-7xl px-4 md:px-6 py-6 text-zinc-100">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(900px_400px_at_20%_0%,rgba(16,185,129,0.12),transparent),radial-gradient(900px_400px_at_80%_0%,rgba(16,185,129,0.08),transparent)]" />
 
       <div className="grid grid-cols-12 gap-6">
-        {/* LEFT NAV */}
         <aside className="col-span-12 md:col-span-3 lg:col-span-3">
           <nav className="hc-left sticky top-20 space-y-6">
             <div>
@@ -192,7 +123,6 @@ export default function HelpCenterClient() {
           </nav>
         </aside>
 
-        {/* CENTER CONTENT */}
         <section className="col-span-12 md:col-span-6 lg:col-span-6">
           <div className="mb-5">
             <div className="hc-search relative opacity-0 translate-y-[18px]">
@@ -355,7 +285,6 @@ export default function HelpCenterClient() {
           )}
         </section>
 
-        {/* RIGHT SIDEBAR */}
         <aside className="col-span-12 md:col-span-3 lg:col-span-3">
           <div className="sticky top-20 space-y-6">
             <div className="hc-right-card opacity-0 translate-y-[12px] rounded-xl ring-1 ring-white/10 bg-white/5 p-4">
@@ -382,9 +311,15 @@ export default function HelpCenterClient() {
             <div className="hc-right-card opacity-0 translate-y-[12px] rounded-xl ring-1 ring-white/10 bg-white/5 p-4">
               <div className="text-sm font-semibold mb-3">{tr("feedback_title")}</div>
               <div className="flex gap-2">
-                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">🙂 {tr("feedback_yes")}</button>
-                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">😐 {tr("feedback_ok")}</button>
-                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">🙁 {tr("feedback_no")}</button>
+                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">
+                  🙂 {tr("feedback_yes")}
+                </button>
+                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">
+                  😐 {tr("feedback_ok")}
+                </button>
+                <button className="rounded-lg px-3 py-1.5 bg-white/5 hover:bg-white/10 text-sm">
+                  🙁 {tr("feedback_no")}
+                </button>
               </div>
             </div>
 
@@ -413,6 +348,144 @@ export default function HelpCenterClient() {
       </div>
     </main>
   );
+}
+
+function useHelpCenterAnimations({ touched, loading }: { touched: boolean; loading: boolean }) {
+  const reduce = useReducedMotion();
+
+  useLayoutEffect(() => {
+    const baseIn = { ease: "power2.out", duration: reduce ? 0 : 0.7 } as const;
+
+    const ctx = gsap.context(() => {
+      gsap.set([".hc-hero-eyebrow", ".hc-hero-title", ".hc-search"], { autoAlpha: 0, y: 18 });
+      gsap
+        .timeline()
+        .to(".hc-hero-eyebrow", {
+          autoAlpha: 1,
+          y: 0,
+          duration: reduce ? 0 : 0.55,
+          ease: "power2.out",
+        })
+        .to(
+          ".hc-hero-title",
+          {
+            autoAlpha: 1,
+            y: 0,
+            duration: reduce ? 0 : 0.7,
+            ease: "power2.out",
+          },
+          "<0.06",
+        )
+        .to(
+          ".hc-search",
+          {
+            autoAlpha: 1,
+            y: 0,
+            ...baseIn,
+          },
+          "<0.06",
+        );
+
+      ScrollTrigger.batch(".hc-suggest-chip", {
+        start: "top 95%",
+        onEnter: (els) =>
+          gsap.to(els, {
+            autoAlpha: 1,
+            y: 0,
+            stagger: 0.06,
+            ...baseIn,
+          }),
+        onLeaveBack: (els) =>
+          gsap.set(els, {
+            autoAlpha: 0,
+            y: 10,
+          }),
+      });
+
+      ScrollTrigger.batch(".hc-left a", {
+        start: "top 90%",
+        onEnter: (els) =>
+          gsap.to(els, {
+            autoAlpha: 1,
+            x: 0,
+            stagger: 0.04,
+            ...baseIn,
+          }),
+        onLeaveBack: (els) =>
+          gsap.set(els, {
+            autoAlpha: 0,
+            x: -10,
+          }),
+      });
+
+      ScrollTrigger.batch(".hc-right-card", {
+        start: "top 92%",
+        onEnter: (els) =>
+          gsap.to(els, {
+            autoAlpha: 1,
+            y: 0,
+            stagger: 0.08,
+            ...baseIn,
+          }),
+        onLeaveBack: (els) =>
+          gsap.set(els, {
+            autoAlpha: 0,
+            y: 12,
+          }),
+      });
+
+      ScrollTrigger.batch(".hc-article h1, .hc-article h2", {
+        start: "top 88%",
+        onEnter: (els) =>
+          gsap.to(els, {
+            autoAlpha: 1,
+            y: 0,
+            stagger: 0.05,
+            ...baseIn,
+          }),
+        onLeaveBack: (els) =>
+          gsap.set(els, {
+            autoAlpha: 0,
+            y: 10,
+          }),
+      });
+
+      ScrollTrigger.batch(".hc-article-tile", {
+        start: "top 90%",
+        onEnter: (els) =>
+          gsap.to(els, {
+            autoAlpha: 1,
+            y: 0,
+            stagger: 0.06,
+            ...baseIn,
+          }),
+        onLeaveBack: (els) =>
+          gsap.set(els, {
+            autoAlpha: 0,
+            y: 12,
+          }),
+      });
+    });
+
+    return () => ctx.revert();
+  }, [reduce]);
+
+  useEffect(() => {
+    if (!touched || loading) return;
+    const items = gsap.utils.toArray<HTMLElement>(".faq-item");
+    if (items.length === 0) return;
+    gsap.fromTo(
+      items,
+      { autoAlpha: 0, y: 12 },
+      {
+        autoAlpha: 1,
+        y: 0,
+        duration: reduce ? 0 : 0.45,
+        ease: "power2.out",
+        stagger: 0.06,
+      },
+    );
+  }, [touched, loading, reduce]);
 }
 
 function useDebounce<T>(value: T, delay = 300) {

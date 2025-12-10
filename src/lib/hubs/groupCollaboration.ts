@@ -3,11 +3,13 @@ import { getToken } from "../api-core";
 import { isTokenValid, createBaseConnection, API_BASE_URL } from "./base";
 
 export interface GroupDto {
-  id: string;
+  id?: string;                      
+  groupId?: string;                  
   sessionId: string;
   name: string;
   maxMembers?: number | null;
   currentMembers?: number | null;
+  currentMembersCount?: number | null; 
   [key: string]: unknown;
 }
 
@@ -80,30 +82,35 @@ export interface GroupCollaborationEventHandlers {
 }
 
 export function createGroupCollaborationConnection(
-  token?: string
+  tokenOverride?: string
 ): signalR.HubConnection | null {
   if (!API_BASE_URL) {
     console.error("[SignalR GroupCollaboration] Missing API_BASE_URL");
     return null;
   }
 
-  let authToken: string | null | undefined = token || getToken();
+  let authToken = (tokenOverride ?? getToken() ?? "").trim();
 
-  if (!authToken || authToken.trim().length === 0) {
-    authToken = undefined;
-  } else if (!isTokenValid(authToken)) {
-    console.warn(
-      "[SignalR GroupCollaboration] Token provided but invalid, connecting as guest"
+  if (!authToken) {
+    console.error(
+      "[SignalR GroupCollaboration] Missing auth token. GroupCollaborationHub requires an access token."
     );
-    authToken = undefined;
+    return null;
+  }
+
+  if (!isTokenValid(authToken)) {
+    console.error(
+      "[SignalR GroupCollaboration] Auth token is invalid or expired. Please login again."
+    );
+    return null;
   }
 
   const baseUrl = API_BASE_URL.replace(/\/$/, "");
   const hubUrl = `${baseUrl}/hubs/groupCollaboration`;
 
   return createBaseConnection(hubUrl, {
-    token: authToken || undefined, 
-    allowGuest: true,            
+    token: authToken,
+    allowGuest: false,
     onClose: (error) => {
       console.error(
         "[SignalR GroupCollaboration] Connection closed with error:",
@@ -111,10 +118,13 @@ export function createGroupCollaborationConnection(
       );
     },
     onReconnecting: (error) => {
-      console.warn("[SignalR GroupCollaboration] Reconnecting...", error);
+      console.warn("[SignalR GroupCollaboration] Reconnecting.", error);
     },
     onReconnected: (connectionId) => {
-      console.info("[SignalR GroupCollaboration] Reconnected:", connectionId);
+      console.info(
+        "[SignalR GroupCollaboration] Reconnected, connectionId=",
+        connectionId
+      );
     },
   });
 }

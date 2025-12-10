@@ -3,15 +3,25 @@
 import Link from "next/link";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useI18n } from "@/i18n/I18nProvider";
-import { getHomeStats, type HomeStatsResponse } from "@/lib/api-home";
-import { getCommunityPosts, type CommunityPostSummaryResponse } from "@/lib/api-community";
+import {
+  getHomeStats,
+  type HomeStatsResponse,
+} from "@/lib/api-home";
+import {
+  getCommunityPosts,
+  type CommunityPostSummaryResponse,
+} from "@/lib/api-community";
+import { useGsapHomeScroll } from "@/components/common/useGsapHomeScroll";
 
-gsap.registerPlugin(ScrollTrigger);
-
-type Topic = "All" | "Product" | "Tutorial" | "Stories" | "Education" | "Business";
+type Topic =
+  | "All"
+  | "Product"
+  | "Tutorial"
+  | "Stories"
+  | "Education"
+  | "Business";
 
 type Post = {
   id: string;
@@ -81,7 +91,24 @@ export default function CommunityPage() {
   const [email, setEmail] = useState<string>("");
   const cardsRef = useRef<HTMLDivElement>(null);
   const [stats, setStats] = useState<HomeStatsResponse | null>(null);
-  const [posts, setPosts] = useState<CommunityPostSummaryResponse[] | null>(null);
+  const [posts, setPosts] = useState<CommunityPostSummaryResponse[] | null>(
+    null
+  );
+
+  // DÙNG CHUNG HOOK SCROLL
+  useGsapHomeScroll({
+    reduce,
+    heroSelectors: {
+      title: ".cm-hero-title",
+      subtitle: ".cm-hero-sub",
+      cta: ".cm-hero-cta",
+    },
+    fadeSelector: ".cm-fade",
+    stagger: {
+      container: ".cm-stagger",
+      card: ".card",
+    },
+  });
 
   const TOPIC_LABEL: Record<Topic, string> = useMemo(
     () => ({
@@ -140,7 +167,14 @@ export default function CommunityPage() {
     [t]
   );
 
-  const topics: Topic[] = ["All", "Product", "Tutorial", "Stories", "Education", "Business"];
+  const topics: Topic[] = [
+    "All",
+    "Product",
+    "Tutorial",
+    "Stories",
+    "Education",
+    "Business",
+  ];
 
   const filtered = useMemo(
     () => (topic === "All" ? POSTS : POSTS.filter((p) => p.topic === topic)),
@@ -183,57 +217,31 @@ export default function CommunityPage() {
     };
   }, [topic]);
 
-  useLayoutEffect(() => {
-    const prefersReduced =
-      typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const base = { ease: "power2.out", duration: prefersReduced || reduce ? 0 : 0.9 } as const;
-    const ctx = gsap.context(() => {
-      gsap.set([".cm-hero-title", ".cm-hero-sub", ".cm-hero-cta"], { autoAlpha: 0, y: 20 });
-      gsap
-        .timeline()
-        .to(".cm-hero-title", { autoAlpha: 1, y: 0, ...base })
-        .to(".cm-hero-sub", { autoAlpha: 1, y: 0, ...base }, "<0.08")
-        .to(".cm-hero-cta", { autoAlpha: 1, y: 0, ...base }, "<0.08");
-      gsap.utils.toArray<HTMLElement>(".cm-fade").forEach((el) => {
-        gsap.set(el, { autoAlpha: 0, y: 16 });
-        ScrollTrigger.create({
-          trigger: el,
-          start: "top 85%",
-          onEnter: () =>
-            gsap.to(el, { autoAlpha: 1, y: 0, duration: prefersReduced || reduce ? 0 : 0.7, ease: "power2.out" }),
-        });
-      });
-      gsap.utils.toArray<HTMLElement>(".cm-stagger").forEach((wrap) => {
-        const cards = wrap.querySelectorAll<HTMLElement>(".card");
-        gsap.set(cards, { autoAlpha: 0, y: 18 });
-        ScrollTrigger.create({
-          trigger: wrap,
-          start: "top 80%",
-          onEnter: () =>
-            gsap.to(cards, {
-              autoAlpha: 1,
-              y: 0,
-              stagger: 0.08,
-              duration: prefersReduced || reduce ? 0 : 0.7,
-              ease: "power2.out",
-            }),
-        });
-      });
-    });
-    return () => {
-      ctx.revert();
-    };
-  }, [reduce]);
-
+  // Animation khi đổi topic (giữ nguyên, không liên quan ScrollTrigger)
   useEffect(() => {
     const el = cardsRef.current;
     if (!el) return;
     const q = gsap.utils.selector(el);
     const items = q(".card");
     const tl = gsap.timeline();
-    tl.to(items, { autoAlpha: 0, y: 8, duration: 0.15, ease: "power1.in" })
+    tl.to(items, {
+      autoAlpha: 0,
+      y: 8,
+      duration: 0.15,
+      ease: "power1.in",
+    })
       .set({}, {}, "+=0.02")
-      .fromTo(q(".card"), { autoAlpha: 0, y: 16 }, { autoAlpha: 1, y: 0, duration: 0.25, ease: "power2.out", stagger: 0.05 });
+      .fromTo(
+        q(".card"),
+        { autoAlpha: 0, y: 16 },
+        {
+          autoAlpha: 1,
+          y: 0,
+          duration: 0.25,
+          ease: "power2.out",
+          stagger: 0.05,
+        }
+      );
     return () => {
       tl.kill();
     };
@@ -292,7 +300,9 @@ export default function CommunityPage() {
                   onClick={() => setTopic(tpc)}
                   className={[
                     "px-3 py-1.5 rounded-full text-sm font-semibold transition",
-                    active ? "bg-emerald-500 text-zinc-950" : "bg-white/5 hover:bg-white/10 text-zinc-200 ring-1 ring-white/10",
+                    active
+                      ? "bg-emerald-500 text-zinc-950"
+                      : "bg-white/5 hover:bg-white/10 text-zinc-200 ring-1 ring-white/10",
                   ].join(" ")}
                 >
                   {TOPIC_LABEL[tpc]}
@@ -309,18 +319,29 @@ export default function CommunityPage() {
             href={POSTS[0].href}
             className="group col-span-2 rounded-2xl p-6 md:p-8 ring-1 ring-white/10 bg-gradient-to-br from-zinc-900/60 to-zinc-800/40 backdrop-blur hover:ring-emerald-400/30 transition"
           >
-            <div className="text-sm text-emerald-400 font-semibold mb-2">{t("community", "featured")}</div>
-            <h2 className="text-2xl md:text-3xl font-bold group-hover:text-emerald-300 transition">{POSTS[0].title}</h2>
-            <p className="mt-2 text-zinc-300 max-w-2xl">{POSTS[0].excerpt}</p>
+            <div className="text-sm text-emerald-400 font-semibold mb-2">
+              {t("community", "featured")}
+            </div>
+            <h2 className="text-2xl md:text-3xl font-bold group-hover:text-emerald-300 transition">
+              {POSTS[0].title}
+            </h2>
+            <p className="mt-2 text-zinc-300 max-w-2xl">
+              {POSTS[0].excerpt}
+            </p>
             <div className="mt-4 text-xs text-zinc-400">
-              {POSTS[0].date} • {POSTS[0].readMin} {t("community", "minutes")} {t("community", "read")}
+              {POSTS[0].date} • {POSTS[0].readMin}{" "}
+              {t("community", "minutes")} {t("community", "read")}
             </div>
           </Link>
         )}
 
         <div className="rounded-2xl p-6 ring-1 ring-white/10 bg-white/5 backdrop-blur">
-          <h3 className="font-semibold text-lg">{t("community", "nl_title")}</h3>
-          <p className="mt-1 text-sm text-zinc-300">{t("community", "nl_desc")}</p>
+          <h3 className="font-semibold text-lg">
+            {t("community", "nl_title")}
+          </h3>
+          <p className="mt-1 text-sm text-zinc-300">
+            {t("community", "nl_desc")}
+          </p>
           <div className="mt-4 flex gap-2">
             <input
               className="flex-1 rounded-lg bg-black/30 ring-1 ring-white/15 px-3 py-2 outline-none focus:ring-emerald-400/40"
@@ -341,18 +362,24 @@ export default function CommunityPage() {
       </section>
 
       <section className="mt-10">
-        <div ref={cardsRef} className="cm-stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div
+          ref={cardsRef}
+          className="cm-stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+        >
           {filtered.map((p) => (
             <Link
               key={p.id}
               href={p.href}
               className="card rounded-2xl p-6 ring-1 ring-white/10 bg-white/5 backdrop-blur hover:-translate-y-0.5 hover:ring-emerald-400/30 transition"
             >
-              <div className="text-xs font-bold text-emerald-400">{TOPIC_LABEL[p.topic]}</div>
+              <div className="text-xs font-bold text-emerald-400">
+                {TOPIC_LABEL[p.topic]}
+              </div>
               <h3 className="mt-1 text-lg font-semibold">{p.title}</h3>
               <p className="mt-2 text-sm text-zinc-300">{p.excerpt}</p>
               <div className="mt-4 text-xs text-zinc-400">
-                {p.date} • {p.readMin} {t("community", "minutes")} {t("community", "read")}
+                {p.date} • {p.readMin} {t("community", "minutes")}{" "}
+                {t("community", "read")}
               </div>
             </Link>
           ))}
@@ -363,37 +390,55 @@ export default function CommunityPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="rounded-2xl px-6 py-5 bg-white/5 ring-1 ring-white/10 text-center">
             <CountUp
-              value={stats?.organizationCount ?? COMMUNITY_STATS_FALLBACK.organizationCount}
+              value={
+                stats?.organizationCount ??
+                COMMUNITY_STATS_FALLBACK.organizationCount
+              }
               className="text-3xl font-extrabold tracking-tight"
             />
-            <p className="mt-1 text-sm text-zinc-300">{t("community", "stat_members")}</p>
+            <p className="mt-1 text-sm text-zinc-300">
+              {t("community", "stat_members")}
+            </p>
           </div>
           <div className="rounded-2xl px-6 py-5 bg-white/5 ring-1 ring-white/10 text-center">
             <CountUp
               value={stats?.totalMaps ?? COMMUNITY_STATS_FALLBACK.totalMaps}
               className="text-3xl font-extrabold tracking-tight"
             />
-            <p className="mt-1 text-sm text-zinc-300">{t("community", "stat_posts")}</p>
+            <p className="mt-1 text-sm text-zinc-300">
+              {t("community", "stat_posts")}
+            </p>
           </div>
           <div className="rounded-2xl px-6 py-5 bg-white/5 ring-1 ring-white/10 text-center">
             <CountUp
-              value={stats?.templateCount ?? COMMUNITY_STATS_FALLBACK.templateCount}
+              value={
+                stats?.templateCount ?? COMMUNITY_STATS_FALLBACK.templateCount
+              }
               className="text-3xl font-extrabold tracking-tight"
             />
-            <p className="mt-1 text-sm text-zinc-300">{t("community", "stat_templates")}</p>
+            <p className="mt-1 text-sm text-zinc-300">
+              {t("community", "stat_templates")}
+            </p>
           </div>
           <div className="rounded-2xl px-6 py-5 bg-white/5 ring-1 ring-white/10 text-center">
             <CountUp
-              value={stats?.monthlyExports ?? COMMUNITY_STATS_FALLBACK.monthlyExports}
+              value={
+                stats?.monthlyExports ??
+                COMMUNITY_STATS_FALLBACK.monthlyExports
+              }
               className="text-3xl font-extrabold tracking-tight"
             />
-            <p className="mt-1 text-sm text-zinc-300">{t("community", "stat_collections")}</p>
+            <p className="mt-1 text-sm text-zinc-300">
+              {t("community", "stat_collections")}
+            </p>
           </div>
         </div>
       </section>
 
       <section className="cm-fade mt-12">
-        <h2 className="text-2xl font-bold">{t("community", "whats_happening")}</h2>
+        <h2 className="text-2xl font-bold">
+          {t("community", "whats_happening")}
+        </h2>
         <div className="mt-4 rounded-2xl ring-1 ring-white/10 bg-white/5 backdrop-blur p-4 md:p-5">
           <ol className="relative border-l border-white/10 pl-6">
             {EVENTS.map((ev) => (
@@ -402,7 +447,10 @@ export default function CommunityPage() {
                 <div className="text-xs text-zinc-400">
                   {ev.date} • {typeLabel(ev.type)}
                 </div>
-                <Link href={ev.href} className="font-semibold hover:text-emerald-300 transition">
+                <Link
+                  href={ev.href}
+                  className="font-semibold hover:text-emerald-300 transition"
+                >
                   {ev.title}
                 </Link>
               </li>
@@ -413,13 +461,23 @@ export default function CommunityPage() {
 
       <section className="cm-fade my-12">
         <div className="rounded-3xl p-8 md:p-12 text-center ring-1 ring-white/10 bg-gradient-to-br from-emerald-500 to-emerald-600 text-zinc-950">
-          <h3 className="text-2xl md:text-3xl font-extrabold tracking-tight">{t("community", "share_title")}</h3>
-          <p className="mt-2 opacity-90">{t("community", "share_desc")}</p>
+          <h3 className="text-2xl md:text-3xl font-extrabold tracking-tight">
+            {t("community", "share_title")}
+          </h3>
+          <p className="mt-2 opacity-90">
+            {t("community", "share_desc")}
+          </p>
           <div className="mt-5 flex items-center justify-center gap-3">
-            <Link href="/resources/map-gallery" className="px-6 py-3 rounded-lg bg-black/10 hover:bg-black/15 font-semibold">
+            <Link
+              href="/resources/map-gallery"
+              className="px-6 py-3 rounded-lg bg-black/10 hover:bg-black/15 font-semibold"
+            >
               {t("community", "share_btn_gallery")}
             </Link>
-            <Link href="/resources/map-gallery/submit" className="px-6 py-3 rounded-lg bg-white font-semibold hover:bg-zinc-100">
+            <Link
+              href="/resources/map-gallery/submit"
+              className="px-6 py-3 rounded-lg bg-white font-semibold hover:bg-zinc-100"
+            >
               {t("community", "share_btn_submit")}
             </Link>
           </div>
