@@ -53,8 +53,10 @@ import { useSessionHub } from "@/hooks/useSessionHub";
 import {
   sendSegmentSyncViaSignalR,
   broadcastQuestionViaSignalR,
+  sendMapLayerSyncViaSignalR,
   type SegmentSyncRequest,
 } from "@/lib/hubs/session";
+import type { BaseKey } from "@/types/common";
 
 type QuestionBankMeta = {
   id?: string;
@@ -131,6 +133,9 @@ export default function StoryMapControlPage() {
     []
   );
   const [loadingGroupMembers, setLoadingGroupMembers] = useState(false);
+
+  // ========== NEW: state cho layer sync ==========
+  const [selectedLayer, setSelectedLayer] = useState<BaseKey>("osm");
 
   const totalQuestionsOfAllBanks = sessionQuestionBanks.reduce(
     (sum, bank) => sum + (bank.totalQuestions ?? 0),
@@ -673,12 +678,12 @@ export default function StoryMapControlPage() {
             ...prev,
             status:
               action === "start"
-                ? "Running"
+                ? "IN_PROGRESS"
                 : action === "pause"
-                  ? "Paused"
+                  ? "PAUSED"
                   : action === "resume"
-                    ? "Running"
-                    : "Ended",
+                    ? "IN_PROGRESS"
+                    : "COMPLETED",
           }
           : prev
       );
@@ -1157,6 +1162,36 @@ export default function StoryMapControlPage() {
                     </button>
                   </div>
 
+                  {/* LAYER SYNC DROPDOWN */}
+                  <div className="flex items-center justify-between pt-2 border-t border-zinc-800 mt-2">
+                    <p className="text-[11px] text-zinc-400">
+                      🗺️ Base Map:
+                    </p>
+                    <select
+                      value={selectedLayer}
+                      onChange={(e) => {
+                        const newLayer = e.target.value as BaseKey;
+                        setSelectedLayer(newLayer);
+                        // Sync layer to students
+                        if (connection && session) {
+                          sendMapLayerSyncViaSignalR(
+                            connection,
+                            session.sessionId,
+                            newLayer
+                          );
+                        }
+                      }}
+                      className="rounded-lg bg-zinc-800 border border-zinc-700 px-2 py-1 text-[11px] text-zinc-100 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    >
+                      <option value="osm">OpenStreetMap</option>
+                      <option value="sat">Satellite</option>
+                      <option value="dark">Dark</option>
+                      <option value="positron">Light</option>
+                      <option value="terrain">Terrain</option>
+                      <option value="topo">Topographic</option>
+                    </select>
+                  </div>
+
                   <div className="flex items-center justify-between pt-2">
                     <p className="text-[11px] text-zinc-500">
                       HS truy cập link lớp học rồi nhập code ở trên.
@@ -1397,9 +1432,10 @@ export default function StoryMapControlPage() {
           {/* MIDDLE: Map Viewer */}
           <div className="flex-1 min-h-0">
             <StoryMapViewer
+              key={`control-map-${selectedLayer}`}
               mapId={mapId}
               segments={segments}
-              baseMapProvider={mapDetail?.baseMapProvider}
+              baseMapProvider={selectedLayer}
               initialCenter={center}
               initialZoom={mapDetail?.defaultZoom || 10}
               onSegmentChange={handleSegmentChange}
@@ -1815,8 +1851,8 @@ export default function StoryMapControlPage() {
                 key={seg.segmentId}
                 onClick={() => goToSegment(index)}
                 className={`px-3 py-1.5 rounded-full text-xs whitespace-nowrap border transition ${index === currentIndex
-                    ? "bg-blue-500 text-white border-blue-400"
-                    : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700"
+                  ? "bg-blue-500 text-white border-blue-400"
+                  : "bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700"
                   }`}
               >
                 {index + 1}. {seg.name || "Untitled"}

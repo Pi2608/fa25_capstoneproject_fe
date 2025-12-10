@@ -131,19 +131,15 @@ export default function HomeHeader() {
   const SERVICES: MenuItem[] = [
     { label: t("header", "svc_builder"), desc: t("header", "svc_builder_desc"), href: "/service/map-builder" },
     { label: t("header", "svc_layers"), desc: t("header", "svc_layers_desc"), href: "/service/data-layers" },
-    { label: t("header", "svc_cloud"), desc: t("header", "svc_cloud_desc"), href: "/service/cloud-sources" },
     // { label: t("header", "svc_dash"), desc: t("header", "svc_dash_desc"), href: "/service/dashboards" },
     { label: t("header", "svc_export"), desc: t("header", "svc_export_desc"), href: "/service/export-embed" },
   ];
 
   const RESOURCES: MenuItem[] = [
     { label: t("header", "res_customers"), desc: t("header", "res_customers_desc"), href: "/resources/customers" },
-    { label: t("header", "res_webinars"), desc: t("header", "res_webinars_desc"), href: "/resources/webinars" },
     { label: t("header", "res_help"), desc: t("header", "res_help_desc"), href: "/resources/help-center" },
-    { label: t("header", "res_devdocs"), desc: t("header", "res_devdocs_desc"), href: "/resources/dev-docs" },
     { label: t("header", "res_gallery"), desc: t("header", "res_gallery_desc"), href: "/resources/map-gallery" },
     { label: t("header", "res_blog"), desc: t("header", "res_blog_desc"), href: "/resources/blog" },
-    { label: t("header", "res_qgis"), desc: t("header", "res_qgis_desc"), href: "/resources/qgis-plugin" },
   ];
 
   return (

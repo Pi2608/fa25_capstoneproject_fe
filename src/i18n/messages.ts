@@ -928,7 +928,7 @@ export const messages = {
         },
         org_workspace: {
             manage_err_has_question_banks:
-                "Không thể xoá workspace vì còn {count} bộ câu hỏi. Hãy xoá hoặc di chuyển tất cả bộ câu hỏi trước.",
+                "Không thể xoá workspace vì còn các bộ câu hỏi. Hãy xoá hoặc di chuyển tất cả bộ câu hỏi trước.",
             manage_delete_failed:
                 "Xoá workspace thất bại. Vui lòng thử lại.",
             close: "Đóng",
@@ -1053,6 +1053,7 @@ export const messages = {
             err_plan_required: "Tính năng yêu cầu gói (plan 2 hoặc 3).",
             err_select_excel: "Hãy chọn file Excel (.xlsx).",
             err_enter_domain: "Hãy nhập domain (ví dụ: se1739.edu).",
+            err_has_active_workspaces: "Không thể xoá Tổ chức vì còn active workspace. Hãy xoá tất cả workspace trước.",
 
             // Tips / notes
             tip_only_owner_admin: "Chỉ Owner/Admin mới dùng chức năng này",
@@ -1266,12 +1267,15 @@ export const messages = {
             save_failed: "Không thể lưu bộ câu hỏi.",
             delete_success: "Đã xoá bộ câu hỏi.",
             delete_failed: "Không thể xoá bộ câu hỏi.",
+            manage_err_has_active_sessions:
+                "Không thể xoá map vì còn active sessions. Hãy xoá hoặc hủy tất cả active sessions trước.",
         },
         organization: {
             not_found_title: "Không tìm thấy tổ chức",
             not_found_description: "Tổ chức này không tồn tại hoặc đã bị xóa. Vui lòng kiểm tra lại đường dẫn hoặc tạo một tổ chức mới.",
             go_to_profile: "Về trang cá nhân",
             create_new: "Tạo tổ chức mới",
+            manage_delete_failed:"Xóa Tổ chức thất bại. Vui lòng thử lại"
         },
         plans: {
             select_payment_method: "Chọn phương thức thanh toán",
@@ -3105,7 +3109,7 @@ export const messages = {
         },
         org_workspace: {
             manage_err_has_question_banks:
-                "Cannot delete this workspace because it still contains {count} question banks. Please delete or move all question banks first.",
+                "Cannot delete this workspace because it still contains question banks. Please delete or move all question banks first.",
             manage_delete_failed:
                 "Failed to delete workspace. Please try again.",
             close: "Close",
@@ -3161,6 +3165,7 @@ export const messages = {
             err_plan_required: "This feature requires plan 2 or 3.",
             err_select_excel: "Please select an Excel (.xlsx) file.",
             err_enter_domain: "Please enter the domain (for example: se1739.edu).",
+            err_has_active_workspaces: "Cannot delete organization while it contains active workspaces. Please delete or move all workspaces first.",
 
             // Tips / notes
             tip_only_owner_admin: "Only Owner/Admin can use this feature.",
@@ -3582,6 +3587,7 @@ export const messages = {
             not_found_description: "This organization does not exist or has been deleted. Please check the URL or create a new organization.",
             go_to_profile: "Go to Profile",
             create_new: "Create New Organization",
+            manage_delete_failed: "Failed to delete Organization. Please try again.",
         },
         plans: {
             select_payment_method: "Select a payment method",
@@ -3720,7 +3726,10 @@ export const messages = {
             delete_map_cta: "Delete map",
 
             toast_deleted: "Map deleted!",
-            toast_removed: "Removed map from workspace!"
+            toast_removed: "Removed map from workspace!",
+
+            manage_err_has_active_sessions:
+                "Cannot delete map while it has active sessions. Please end or cancel all active sessions first.",
         },
         support: {
             ticketListSubtitle: "Ticket list",

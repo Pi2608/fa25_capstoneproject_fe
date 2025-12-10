@@ -410,24 +410,33 @@ export default function MembersPage() {
   };
 
   const handleChangeRole = async (memberId: string, newRole: MemberRow["license"]) => {
-    if (!selectedOrgId || !isOwner) return;
+  if (!selectedOrgId || !isOwner) return;
 
-    const previous = members;
-    setMembers((list) =>
-      list.map((m) => (m.memberId === memberId ? { ...m, license: newRole } : m))
-    );
-    setBusy(memberId, true);
-
-    try {
-      await updateMemberRole({ orgId: selectedOrgId, memberId, newRole });
-    } catch {
-      setMembers(previous);
-      const msg = t("settings_members.update_role_failed");
-      showToast("error", msg, 4000);
-    } finally {
-      setBusy(memberId, false);
+  if (newRole === "Owner") {
+    const target = members.find((m) => m.memberId === memberId);
+    if (target) {
+      handleTransferOwnershipClick(target);
+      return;
     }
-  };
+  }
+
+  const previous = members;
+  setMembers((list) =>
+    list.map((m) => (m.memberId === memberId ? { ...m, license: newRole } : m))
+  );
+  setBusy(memberId, true);
+
+  try {
+    await updateMemberRole({ orgId: selectedOrgId, memberId, newRole });
+  } catch {
+    setMembers(previous);
+    const msg = t("settings_members.update_role_failed");
+    showToast("error", msg, 4000);
+  } finally {
+    setBusy(memberId, false);
+  }
+};
+
 
   const handleTransferOwnershipClick = (target: MemberRow) => {
     if (!selectedOrgId) return;

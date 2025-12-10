@@ -41,6 +41,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import PublishButton from "@/components/map/PublishButton";
 import ZoomControls from "@/components/map/controls/ZoomControls";
 import { ZoneStyleEditor } from "@/components/map-editor-ui/ZoneStyleEditor";
+import EmbedCodeGenerator from "@/components/map/EmbedCodeGenerator";
 
 
 const baseKeyToBackend = (key: BaseKey): BaseLayer => {
@@ -100,6 +101,7 @@ export default function EditMapPage() {
   const [showExportModal, setShowExportModal] = useState<boolean>(false);
   const [exportFormat, setExportFormat] = useState<"geojson" | "png" | "pdf">("geojson");
   const [exportStatus, setExportStatus] = useState<ExportResponse | null>(null);
+  const [exportModalTab, setExportModalTab] = useState<"export" | "embed">("export");
 
   const [name, setName] = useState<string>("");
   const [isEditingMapName, setIsEditingMapName] = useState<boolean>(false);
@@ -4152,39 +4154,6 @@ export default function EditMapPage() {
         onSuccess={handleCopyFeatureSuccess}
       />
 
-      {/* POI Tooltip Modal */}
-      {poiTooltipModal.isOpen && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-          onClick={() => setPoiTooltipModal({ isOpen: false })}
-        >
-          <div
-            className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="sticky top-0 bg-zinc-900 border-b border-zinc-700 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-white">
-                {poiTooltipModal.title || 'Location Info'}
-              </h2>
-              <button
-                onClick={() => setPoiTooltipModal({ isOpen: false })}
-                className="text-zinc-400 hover:text-white transition-colors p-1 rounded hover:bg-zinc-800"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-6">
-              <div
-                className="prose prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: poiTooltipModal.content || '' }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Export Modal */}
       {showExportModal && (
         <div className="fixed inset-0 z-[4000] flex items-start justify-center pt-32">
@@ -4195,15 +4164,40 @@ export default function EditMapPage() {
               setExportStatus(null);
             }}
           />
-          <div className="relative bg-zinc-900 rounded-lg shadow-2xl border border-zinc-700 w-full max-w-md mx-4">
-            <div className="sticky top-0 bg-zinc-900 border-b border-zinc-700 px-6 py-4 flex items-center justify-between rounded-t-lg">
-              <h2 className="text-xl font-semibold text-white">
-                {t('export_embed', 'hero_pill')}
-              </h2>
+          <div className="relative bg-zinc-900 rounded-lg shadow-2xl border border-zinc-700 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-zinc-900 border-b border-zinc-700 px-6 py-4 flex items-center justify-between rounded-t-lg z-10">
+              <div className="flex items-center gap-4">
+                <h2 className="text-xl font-semibold text-white">
+                  {t('export_embed', 'hero_pill')}
+                </h2>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setExportModalTab("export")}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      exportModalTab === "export"
+                        ? "bg-emerald-600 text-white"
+                        : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                    }`}
+                  >
+                    Export
+                  </button>
+                  <button
+                    onClick={() => setExportModalTab("embed")}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      exportModalTab === "embed"
+                        ? "bg-emerald-600 text-white"
+                        : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
+                    }`}
+                  >
+                    Embed Code
+                  </button>
+                </div>
+              </div>
               <button
                 onClick={() => {
                   setShowExportModal(false);
                   setExportStatus(null);
+                  setExportModalTab("export");
                 }}
                 className="text-zinc-400 hover:text-white transition-colors p-1 rounded hover:bg-zinc-800"
               >
@@ -4213,8 +4207,10 @@ export default function EditMapPage() {
               </button>
             </div>
             <div className="p-6 space-y-4">
-              {/* Format Selection */}
-              <div>
+              {exportModalTab === "export" ? (
+                <>
+                  {/* Format Selection */}
+                  <div>
                 <label className="block text-sm font-medium text-zinc-300 mb-2">
                   {t('export_embed', 'formats_title')}
                 </label>
@@ -4301,33 +4297,52 @@ export default function EditMapPage() {
                 </div>
               )}
 
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-2">
-                <button
-                  onClick={() => {
-                    setShowExportModal(false);
-                    setExportStatus(null);
+                  {/* Action Buttons */}
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => {
+                        setShowExportModal(false);
+                        setExportStatus(null);
+                      }}
+                      disabled={isExporting}
+                      className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-md transition-colors disabled:opacity-50"
+                    >
+                      {t('common', 'cancel')}
+                    </button>
+                    <button
+                      onClick={handleExport}
+                      disabled={isExporting || !mapRef.current}
+                      className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isExporting ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          {t('export_embed', 'status_processing')}
+                        </>
+                      ) : (
+                        lang === 'vi' ? 'Xuất' : 'Export'
+                      )}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <EmbedCodeGenerator
+                  mapId={mapId}
+                  mapName={detail?.name || "Untitled Map"}
+                  isPublic={detail?.isPublic ?? false}
+                  status={detail?.status || undefined}
+                  onMapUpdated={async () => {
+                    // Reload map detail after preparing for embed
+                    try {
+                      const updatedDetail = await getMapDetail(mapId);
+                      setDetail(updatedDetail);
+                      setMapStatus(updatedDetail.status as MapStatus);
+                    } catch (error) {
+                      console.error("Failed to reload map detail:", error);
+                    }
                   }}
-                  disabled={isExporting}
-                  className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-md transition-colors disabled:opacity-50"
-                >
-                  {t('common', 'cancel')}
-                </button>
-                <button
-                  onClick={handleExport}
-                  disabled={isExporting || !mapRef.current}
-                  className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {isExporting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      {t('export_embed', 'status_processing')}
-                    </>
-                  ) : (
-                    lang === 'vi' ? 'Xuất' : 'Export'
-                  )}
-                </button>
-              </div>
+                />
+              )}
             </div>
           </div>
         </div>

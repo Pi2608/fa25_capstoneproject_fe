@@ -108,6 +108,7 @@ export default function StoryMapViewer({
       setMapInstance(map);
 
       // Add base layer - support all base layer types
+      // Add base layer - support all base layer types
       const baseLayerMap: Record<string, string> = {
         "OSM": "osm",
         "OpenStreetMap": "osm",
@@ -119,6 +120,16 @@ export default function StoryMapViewer({
         "Toner": "toner",
         "Watercolor": "watercolor",
         "Topo": "topo",
+        // Support lowercase keys directly
+        "osm": "osm",
+        "sat": "sat",
+        "dark": "dark",
+        "positron": "positron",
+        "dark-matter": "dark-matter",
+        "terrain": "terrain",
+        "toner": "toner",
+        "watercolor": "watercolor",
+        "topo": "topo",
       };
 
       const baseKey = baseLayerMap[baseMapProvider || "OSM"] || "osm";
@@ -749,8 +760,8 @@ export default function StoryMapViewer({
           <button
             onClick={
               playback.isPlaying
-                ? playback.handlePausePreview      
-                : () => playback.handlePlayPreview() 
+                ? playback.handlePausePreview
+                : () => playback.handlePlayPreview()
             }
             className="p-2 hover:bg-zinc-700 rounded-lg transition-colors"
             title={playback.isPlaying ? "Pause" : "Play"}

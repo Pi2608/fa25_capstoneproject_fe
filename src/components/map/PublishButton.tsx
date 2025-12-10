@@ -2,7 +2,7 @@
 
 import { archiveMap, MapStatus, publishMap, restoreMap, unpublishMap } from "@/lib/api-maps";
 import { ArchiveIcon, RefreshCcwIcon, SendIcon, UndoIcon, ExternalLinkIcon, ChevronDownIcon } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, JSX } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 
@@ -147,18 +147,10 @@ export default function PublishButton({ mapId, status, onStatusChange, isStoryMa
     if (status === "draft") {
       actions.push(
         {
-          label: "Publish thành Storymap",
+          label: "Publish",
           icon: <SendIcon className="w-4 h-4" />,
           onClick: () => handlePublish(true),
           disabled: loading,
-          description: "Có thể tạo session từ bản đồ này",
-        },
-        {
-          label: "Publish để xem",
-          icon: <SendIcon className="w-4 h-4" />,
-          onClick: () => handlePublish(false),
-          disabled: loading,
-          description: "Chỉ để xem, không thể tạo session",
         }
       );
     } else if (status === "published") {

@@ -223,10 +223,6 @@ export default function HomePage() {
             <Link href="/service" className="inline-block px-6 py-3 bg-emerald-500 text-white rounded-lg font-semibold shadow hover:bg-emerald-400 transition">
               {t("home", "ctaPrimary")}
             </Link>
-            <Link href="/resources/webinars" className="inline-flex items-center gap-2 px-5 py-3 rounded-lg ring-1 ring-black/10 dark:ring-white/15">
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
-              {t("home", "ctaSecondary")}
-            </Link>
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">
             {t("home", "freeBadge")}

@@ -88,14 +88,16 @@ function rangeDates(kind: "7d" | "30d"): { start: Date; end: Date } {
 }
 
 function normalizeRevenue(list: unknown): RevenuePoint[] {
+  if (!list) return [];
   const arr = Array.isArray(list) ? (list as Raw[]) : [];
   return arr
     .map((x) => {
-      const date = pickString(x, ["date", "day, timestamp", "createdAt", "created_at"]);
-      const value = pickNumber(x, ["revenue", "amount", "value", "total", "sum"], 0);
-      return { date, value };
+      const date = pickString(x, ["date", "Date", "day", "timestamp", "createdAt", "created_at"]);
+      const value = pickNumber(x, ["value", "Value", "revenue", "amount", "total", "sum"], 0);
+      return { date, value: Number(value) };
     })
-    .filter((p) => p.date);
+    .filter((p) => p.date)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 function buildSparkPath(points: RevenuePoint[], w = 720, h = 220): { d: string; min: number; max: number } {
@@ -120,14 +122,25 @@ function buildSparkPath(points: RevenuePoint[], w = 720, h = 220): { d: string; 
 
 function normalizeUsage(obj: Raw): UsageItem[] {
   const items: UsageItem[] = [];
-  const maps = pickNumber(obj, ["maps", "totalMaps", "mapCount", "total_maps"]);
-  const orgs = pickNumber(obj, ["organizations", "totalOrganizations", "orgCount", "total_organizations"]);
-  const exportsN = pickNumber(obj, ["exports", "totalExports", "exportCount", "total_exports"]);
-  const storageMB = pickNumber(obj, ["storageMB", "storageUsedMb", "storage_used_mb", "storage"]);
-  if (Number.isFinite(maps)) items.push({ label: "Maps", value: maps.toLocaleString() });
-  if (Number.isFinite(orgs)) items.push({ label: "Organizations", value: orgs.toLocaleString() });
-  if (Number.isFinite(exportsN)) items.push({ label: "Exports", value: exportsN.toLocaleString() });
-  if (Number.isFinite(storageMB)) items.push({ label: "Storage (MB)", value: storageMB.toLocaleString() });
+  if (!obj) return items;
+  
+  const userStats = (obj as any).userStats || (obj as any).UserStats;
+  const orgStats = (obj as any).organizationStats || (obj as any).OrganizationStats;
+  const subscriptionStats = (obj as any).subscriptionStats || (obj as any).SubscriptionStats;
+  
+  const totalUsers = pickNumber(userStats || obj, ["totalUsers", "TotalUsers", "userCount", "UserCount"]);
+  const totalOrgs = pickNumber(orgStats || obj, ["totalOrganizations", "TotalOrganizations", "orgCount", "organizations"]);
+  const totalSubscriptions = pickNumber(subscriptionStats || obj, ["totalActiveSubscriptions", "TotalActiveSubscriptions", "activeSubscriptions"]);
+  
+  const maps = pickNumber(obj, ["totalMaps", "TotalMaps", "total_maps", "maps", "mapCount"]);
+  const exportsN = pickNumber(obj, ["totalExports", "TotalExports", "total_exports", "exports", "exportCount"]);
+  
+  if (Number.isFinite(totalUsers) && totalUsers >= 0) items.push({ label: "Total Users", value: totalUsers.toLocaleString() });
+  if (Number.isFinite(totalOrgs) && totalOrgs >= 0) items.push({ label: "Organizations", value: totalOrgs.toLocaleString() });
+  if (Number.isFinite(maps) && maps >= 0) items.push({ label: "Maps", value: maps.toLocaleString() });
+  if (Number.isFinite(exportsN) && exportsN >= 0) items.push({ label: "Exports", value: exportsN.toLocaleString() });
+  if (Number.isFinite(totalSubscriptions) && totalSubscriptions >= 0) items.push({ label: "Active Subscriptions", value: totalSubscriptions.toLocaleString() });
+  
   return items;
 }
 
@@ -142,6 +155,11 @@ export default function AdminDashboard(): JSX.Element {
   const [loading, setLoading] = useState<boolean>(true);
   const [revRange, setRevRange] = useState<"7d" | "30d">("7d");
   const [revenue, setRevenue] = useState<RevenuePoint[]>([]);
+  const [revenueStats, setRevenueStats] = useState<{
+    totalRevenue: number;
+    totalTransactions: number;
+    avgTransaction: number;
+  } | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -154,37 +172,63 @@ export default function AdminDashboard(): JSX.Element {
           adminGetSystemUsage<Raw>(),
         ]);
         if (!mounted) return;
+        
         const d: DashboardStats = {
           totalUsers: pickNumber(dashRes, ["totalUsers", "TotalUsers", "userCount", "UserCount", "users", "total_users"], 0),
-          totalUsersChangePct: pickNumber(dashRes, ["totalUsersChange", "TotalUsersChange", "totalUsersChangePct", "total_users_change_pct"], 0),
+          totalUsersChangePct: pickNumber(dashRes, ["totalUsersChangePct", "TotalUsersChangePct", "totalUsersChange", "TotalUsersChange", "total_users_change_pct"], 0),
           activeToday: pickNumber(dashRes, ["activeToday", "ActiveToday", "activeUsersToday", "active_today"], 0),
-          activeTodayChangePct: pickNumber(dashRes, ["activeTodayChange", "ActiveTodayChange", "activeTodayChangePct", "active_today_change_pct"], 0),
+          activeTodayChangePct: pickNumber(dashRes, ["activeTodayChangePct", "ActiveTodayChangePct", "activeTodayChange", "ActiveTodayChange", "active_today_change_pct"], 0),
           newSignups: pickNumber(dashRes, ["newSignups", "NewSignups", "newUsers", "new_signups"], 0),
-          newSignupsChangePct: pickNumber(dashRes, ["newSignupsChange", "NewSignupsChange", "newSignupsChangePct", "new_signups_change_pct"], 0),
+          newSignupsChangePct: pickNumber(dashRes, ["newSignupsChangePct", "NewSignupsChangePct", "newSignupsChange", "NewSignupsChange", "new_signups_change_pct"], 0),
           errors24h: pickNumber(dashRes, ["errors24h", "Errors24h", "errorCount24h", "errors_24h"], 0),
-          errors24hChangePct: pickNumber(dashRes, ["errors24hChange", "Errors24hChange", "errors24hChangePct", "errors_24h_change_pct"], 0),
+          errors24hChangePct: pickNumber(dashRes, ["errors24hChangePct", "Errors24hChangePct", "errors24hChange", "Errors24hChange", "errors_24h_change_pct"], 0),
         };
         setStats(d);
+        
         const normUsers: TopUserRow[] = (Array.isArray(users) ? users : []).map((u: Raw) => {
-          const userName = pickString(u, ["userName", "username", "fullName", "full_name", "name", "displayName"]);
-          const email = pickString(u, ["email", "userEmail", "user_email"]);
-          const totalMaps = pickNumber(u, ["totalMaps", "maps", "mapCount"], 0);
-          const totalExports = pickNumber(u, ["totalExports", "exports", "exportCount"], 0);
-          const totalSpent = pickNumber(u, ["totalSpent", "spent", "total_spent"], 0);
-          const lastActive = pickString(u, ["lastActive", "last_login", "lastSeen", "last_seen"]);
+          const userName = pickString(u, ["userName", "UserName", "username", "fullName", "FullName", "full_name", "name", "displayName"]);
+          const email = pickString(u, ["email", "Email", "userEmail", "user_email"]);
+          const totalMaps = pickNumber(u, ["totalMaps", "TotalMaps", "maps", "mapCount"], 0);
+          const totalExports = pickNumber(u, ["totalExports", "TotalExports", "exports", "exportCount"], 0);
+          const totalSpent = pickNumber(u, ["totalSpent", "TotalSpent", "spent", "total_spent"], 0);
+          let lastActive = pickString(u, ["lastActive", "LastActive", "last_login", "lastSeen", "last_seen"]);
+          if (!lastActive && u.lastActive) {
+            const dt = u.lastActive;
+            if (dt instanceof Date) {
+              lastActive = dt.toISOString();
+            } else if (typeof dt === "string") {
+              lastActive = dt;
+            }
+          }
           return { userName, email, totalMaps, totalExports, totalSpent, lastActive };
         });
         setTopUsers(normUsers);
+        
         const normOrgs: TopOrgRow[] = (Array.isArray(orgs) ? orgs : []).map((o: Raw) => {
-          const name = pickString(o, ["name", "orgName", "organizationName"]);
-          const owner = pickString(o, ["owner", "ownerName", "ownerEmail"]);
-          const members = pickNumber(o, ["members", "memberCount", "users"], 0);
-          const created = pickString(o, ["createdAt", "created", "createdDate", "created_at"]);
-          return { name: name || "(unnamed)", owner, members, created: created ? created.slice(0, 10) : "" };
+          const name = pickString(o, ["name", "Name", "orgName", "OrgName", "organizationName"]);
+          const owner = pickString(o, ["ownerName", "OwnerName", "owner", "ownerEmail", "owner_name"]);
+          const members = pickNumber(o, ["totalMembers", "TotalMembers", "members", "memberCount", "users"], 0);
+          let created = pickString(o, ["createdAt", "CreatedAt", "created", "createdDate", "created_at"]);
+          if (!created && o.createdAt) {
+            const dt = o.createdAt;
+            if (dt instanceof Date) {
+              created = dt.toISOString();
+            } else if (typeof dt === "string") {
+              created = dt;
+            }
+          }
+          return { 
+            name: name || "(unnamed)", 
+            owner: owner && owner !== "Unknown" ? owner : "", 
+            members, 
+            created: created ? created.slice(0, 10) : "" 
+          };
         });
         setTopOrgs(normOrgs);
+        
         setUsage(normalizeUsage(usageRes));
-      } catch {
+      } catch (err) {
+        console.error("Failed to load dashboard data:", err);
         setStats({
           totalUsers: 0,
           totalUsersChangePct: 0,
@@ -214,10 +258,28 @@ export default function AdminDashboard(): JSX.Element {
     adminGetRevenueAnalytics<unknown>(start, end)
       .then((res) => {
         if (!mounted) return;
-        setRevenue(normalizeRevenue(res));
+        const resObj = res as any;
+        const dailyRevenue = resObj?.dailyRevenue || resObj?.DailyRevenue || (Array.isArray(resObj) ? resObj : []);
+        const normalized = normalizeRevenue(dailyRevenue);
+        setRevenue(normalized);
+        
+        // Extract summary stats
+        if (resObj && typeof resObj === "object") {
+          setRevenueStats({
+            totalRevenue: pickNumber(resObj, ["totalRevenue", "TotalRevenue"], 0),
+            totalTransactions: pickNumber(resObj, ["totalTransactions", "TotalTransactions"], 0),
+            avgTransaction: pickNumber(resObj, ["averageTransactionValue", "AverageTransactionValue"], 0),
+          });
+        } else {
+          setRevenueStats(null);
+        }
       })
-      .catch(() => {
-        if (mounted) setRevenue([]);
+      .catch((err) => {
+        console.error("Failed to load revenue analytics:", err);
+        if (mounted) {
+          setRevenue([]);
+          setRevenueStats(null);
+        }
       });
     return () => {
       mounted = false;
@@ -299,15 +361,53 @@ export default function AdminDashboard(): JSX.Element {
             </select>
           </div>
         </div>
-        <div className={`h-[240px] border border-dashed ${theme.tableBorder} rounded-xl grid place-items-center ${theme.textMuted}`}>
+        
+        {revenueStats && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
+            <div className={`${theme.kpiCard} border rounded-lg p-3 shadow-sm`}>
+              <div className={`${theme.textMuted} text-xs mb-1`}>Total Revenue</div>
+              <div className="text-lg font-bold">{formatMoney(revenueStats.totalRevenue)}</div>
+            </div>
+            <div className={`${theme.kpiCard} border rounded-lg p-3 shadow-sm`}>
+              <div className={`${theme.textMuted} text-xs mb-1`}>Total Transactions</div>
+              <div className="text-lg font-bold">{revenueStats.totalTransactions.toLocaleString()}</div>
+            </div>
+            <div className={`${theme.kpiCard} border rounded-lg p-3 shadow-sm`}>
+              <div className={`${theme.textMuted} text-xs mb-1`}>Avg Transaction</div>
+              <div className="text-lg font-bold">{formatMoney(revenueStats.avgTransaction)}</div>
+            </div>
+          </div>
+        )}
+
+        <div className={`h-[240px] border border-dashed ${theme.tableBorder} rounded-xl grid place-items-center ${theme.textMuted} relative`}>
           {revenue.length === 0 ? (
             "No data"
           ) : (
-            <svg width="100%" height="100%" viewBox="0 0 720 220" preserveAspectRatio="none">
+            <svg width="100%" height="100%" viewBox="0 0 720 220" preserveAspectRatio="none" className="absolute inset-0">
               <path d={spark.d} fill="none" stroke="currentColor" strokeWidth="2" />
+              {revenue.map((p, i) => {
+                const stepX = revenue.length > 1 ? 720 / (revenue.length - 1) : 720;
+                const vals = revenue.map(r => r.value);
+                const min = Math.min(...vals);
+                const max = Math.max(...vals);
+                const span = Math.max(1, max - min);
+                const toY = (v: number) => {
+                  const norm = (v - min) / span;
+                  return 220 - norm * 220;
+                };
+                const x = Math.round(i * stepX);
+                const y = Math.round(toY(p.value));
+                return (
+                  <g key={i}>
+                    <circle cx={x} cy={y} r="4" fill="currentColor" className="opacity-0 hover:opacity-100 transition-opacity" />
+                    <title>{`${p.date}: ${formatMoney(p.value)}`}</title>
+                  </g>
+                );
+              })}
             </svg>
           )}
         </div>
+
       </section>
 
       <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
@@ -380,7 +480,7 @@ export default function AdminDashboard(): JSX.Element {
               {(topOrgs.length ? topOrgs : Array.from({ length: 8 }).map(() => null)).map((row, i) => (
                 <tr key={i}>
                   <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.name : "…"}</td>
-                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.owner : "…"}</td>
+                  <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? (row.owner || "-") : "…"}</td>
                   <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.members : "…"}</td>
                   <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.created : "…"}</td>
                   <td className={`p-3 border-b ${theme.tableCell} text-left`}>

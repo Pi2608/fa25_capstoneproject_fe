@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "../layout";
 import { getSupportTicketById, getSupportTicketsByAdmin, closeSupportTicket, SupportTicket, SupportTicketListResponse, SupportTicketStatus } from "@/lib/api-support";
+import { useSupportTicketHub } from "@/lib/hubs/support-tickets";
+import type { TicketCreatedEvent, TicketUpdatedEvent } from "@/lib/hubs/support-tickets";
 
 
 export default function SupportTicketsPage() {
@@ -26,6 +28,47 @@ export default function SupportTicketsPage() {
   const [editDraft, setEditDraft] = useState<SupportTicket | null>(null);
   const [savingUpdate, setSavingUpdate] = useState(false);
   const [closingTicket, setClosingTicket] = useState(false);
+
+  const handleTicketCreated = useCallback((ticket: TicketCreatedEvent) => {
+    setRows((prev) => {
+      const exists = prev.some((t) => t.ticketId === ticket.ticketId);
+      if (exists) return prev;
+      
+      const newTicket: SupportTicket = {
+        ticketId: ticket.ticketId,
+        userEmail: "",
+        userName: "",
+        subject: ticket.subject,
+        message: ticket.message,
+        status: ticket.status as SupportTicketStatus,
+        priority: ticket.priority,
+        createdAt: ticket.createdAt,
+        resolvedAt: null,
+        messages: [],
+      };
+      return [newTicket, ...prev];
+    });
+  }, []);
+
+  const handleTicketUpdated = useCallback(async (event: TicketUpdatedEvent) => {
+    if (event.hasNewMessage) {
+      setRows((prev) =>
+        prev.map((t) =>
+          t.ticketId === event.ticketId ? { ...t, message: "New message" } : t
+        )
+      );
+    }
+  }, []);
+
+  const { isConnected } = useSupportTicketHub(
+    {
+      onTicketCreated: handleTicketCreated,
+      onTicketUpdated: handleTicketUpdated,
+    },
+    {
+      enabled: true,
+    }
+  );
 
   // Load list
   useEffect(() => {
@@ -195,7 +238,17 @@ export default function SupportTicketsPage() {
     <div className="grid gap-5">
       <section className={`${isDark ? "bg-zinc-900/98 border-zinc-800" : "bg-white border-gray-200"} border rounded-xl p-4 shadow-sm grid gap-3`}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="m-0 text-base font-extrabold">Yêu cầu hỗ trợ</h3>
+          <div className="flex items-center gap-3">
+            <h3 className="m-0 text-base font-extrabold">Yêu cầu hỗ trợ</h3>
+            <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
+              isConnected 
+                ? "bg-emerald-500/10 text-emerald-600" 
+                : "bg-zinc-500/10 text-zinc-600"
+            }`}>
+              <span className={`h-2 w-2 rounded-full ${isConnected ? "bg-emerald-500 animate-pulse" : "bg-zinc-500"}`} />
+              {isConnected ? "Real-time" : "Offline"}
+            </div>
+          </div>
           <div className="flex gap-2 flex-wrap">
             <select
               className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 ${
