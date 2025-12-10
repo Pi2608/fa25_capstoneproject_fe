@@ -7,9 +7,22 @@ import {
   adminGetTopOrganizations,
   adminGetRevenueAnalytics,
   adminGetSystemUsage,
+  adminGetSystemAnalytics,
 } from "@/lib/admin-api";
 import { useTheme } from "../layout";
 import { getThemeClasses } from "@/utils/theme-utils";
+import {
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 
 type Raw = Record<string, unknown>;
 
@@ -43,6 +56,14 @@ type TopOrgRow = {
 type RevenuePoint = { date: string; value: number };
 
 type UsageItem = { label: string; value: string };
+
+type MonthlyData = {
+  month: string;
+  users: number;
+  revenue: number;
+  maps: number;
+  exports: number;
+};
 
 function pickNumber(obj: Raw, keys: string[], d = 0): number {
   for (const k of keys) {
@@ -85,6 +106,109 @@ function rangeDates(kind: "7d" | "30d"): { start: Date; end: Date } {
   start.setDate(end.getDate() - (kind === "7d" ? 7 : 30));
   start.setHours(0, 0, 0, 0);
   return { start, end };
+}
+
+function getLast12MonthsRange(): { start: Date; end: Date } {
+  const end = new Date();
+  const start = new Date();
+  start.setMonth(end.getMonth() - 11);
+  start.setDate(1);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(23, 59, 59, 999);
+  return { start, end };
+}
+
+function normalizeMonthlyData(data: Raw): MonthlyData[] {
+  const monthly: MonthlyData[] = [];
+  if (!data || typeof data !== "object") return monthly;
+
+  // Try to extract monthly data from various possible structures
+  const monthlyRevenue = (data as any).monthlyRevenue || (data as any).MonthlyRevenue || [];
+  const monthlyUsers = (data as any).monthlyUsers || (data as any).MonthlyUsers || [];
+  const monthlyMaps = (data as any).monthlyMaps || (data as any).MonthlyMaps || [];
+  const monthlyExports = (data as any).monthlyExports || (data as any).MonthlyExports || [];
+
+  // Create a map of months
+  const monthMap = new Map<string, MonthlyData>();
+
+  // Process revenue data
+  if (Array.isArray(monthlyRevenue)) {
+    monthlyRevenue.forEach((item: Raw) => {
+      const month = pickString(item, ["month", "Month", "date", "Date", "period"]);
+      const value = pickNumber(item, ["value", "Value", "revenue", "Revenue", "amount", "total"]);
+      if (month) {
+        if (!monthMap.has(month)) {
+          monthMap.set(month, { month, users: 0, revenue: 0, maps: 0, exports: 0 });
+        }
+        monthMap.get(month)!.revenue = value;
+      }
+    });
+  }
+
+  // Process users data
+  if (Array.isArray(monthlyUsers)) {
+    monthlyUsers.forEach((item: Raw) => {
+      const month = pickString(item, ["month", "Month", "date", "Date", "period"]);
+      const value = pickNumber(item, ["value", "Value", "users", "Users", "count", "total"]);
+      if (month) {
+        if (!monthMap.has(month)) {
+          monthMap.set(month, { month, users: 0, revenue: 0, maps: 0, exports: 0 });
+        }
+        monthMap.get(month)!.users = value;
+      }
+    });
+  }
+
+  // Process maps data
+  if (Array.isArray(monthlyMaps)) {
+    monthlyMaps.forEach((item: Raw) => {
+      const month = pickString(item, ["month", "Month", "date", "Date", "period"]);
+      const value = pickNumber(item, ["value", "Value", "maps", "Maps", "count", "total"]);
+      if (month) {
+        if (!monthMap.has(month)) {
+          monthMap.set(month, { month, users: 0, revenue: 0, maps: 0, exports: 0 });
+        }
+        monthMap.get(month)!.maps = value;
+      }
+    });
+  }
+
+  // Process exports data
+  if (Array.isArray(monthlyExports)) {
+    monthlyExports.forEach((item: Raw) => {
+      const month = pickString(item, ["month", "Month", "date", "Date", "period"]);
+      const value = pickNumber(item, ["value", "Value", "exports", "Exports", "count", "total"]);
+      if (month) {
+        if (!monthMap.has(month)) {
+          monthMap.set(month, { month, users: 0, revenue: 0, maps: 0, exports: 0 });
+        }
+        monthMap.get(month)!.exports = value;
+      }
+    });
+  }
+
+  // Convert to array and sort by month
+  const result = Array.from(monthMap.values());
+  
+  // If no data, generate empty data for last 12 months
+  if (result.length === 0) {
+    const { start } = getLast12MonthsRange();
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(start);
+      date.setMonth(start.getMonth() + i);
+      const monthStr = date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+      result.push({ month: monthStr, users: 0, revenue: 0, maps: 0, exports: 0 });
+    }
+  } else {
+    // Sort by month
+    result.sort((a, b) => {
+      const dateA = new Date(a.month);
+      const dateB = new Date(b.month);
+      return dateA.getTime() - dateB.getTime();
+    });
+  }
+
+  return result;
 }
 
 function normalizeRevenue(list: unknown): RevenuePoint[] {
@@ -160,6 +284,8 @@ export default function AdminDashboard(): JSX.Element {
     totalTransactions: number;
     avgTransaction: number;
   } | null>(null);
+  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
+  const [monthlyLoading, setMonthlyLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let mounted = true;
@@ -285,6 +411,31 @@ export default function AdminDashboard(): JSX.Element {
       mounted = false;
     };
   }, [revRange]);
+
+  // Load monthly data
+  useEffect(() => {
+    let mounted = true;
+    setMonthlyLoading(true);
+    const { start, end } = getLast12MonthsRange();
+    adminGetSystemAnalytics<Raw>(start, end)
+      .then((res) => {
+        if (!mounted) return;
+        const normalized = normalizeMonthlyData(res);
+        setMonthlyData(normalized);
+      })
+      .catch((err) => {
+        console.error("Failed to load monthly analytics:", err);
+        if (mounted) {
+          setMonthlyData([]);
+        }
+      })
+      .finally(() => {
+        if (mounted) setMonthlyLoading(false);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const filteredTopUsers = useMemo(() => {
     if (!search.trim()) return topUsers;
@@ -522,6 +673,124 @@ export default function AdminDashboard(): JSX.Element {
             </tbody>
           </table>
         </div>
+      </section>
+
+      {/* Monthly Analytics Chart */}
+      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="m-0 text-base font-extrabold">Thống kê theo tháng (12 tháng gần nhất)</h3>
+        </div>
+        {monthlyLoading ? (
+          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
+            Đang tải dữ liệu...
+          </div>
+        ) : monthlyData.length === 0 ? (
+          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
+            Không có dữ liệu
+          </div>
+        ) : (
+          <div className="w-full h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#3f3f46" : "#e4e4e7"} />
+                <XAxis 
+                  dataKey="month" 
+                  stroke={isDark ? "#a1a1aa" : "#71717a"}
+                  style={{ fontSize: "12px" }}
+                />
+                <YAxis 
+                  stroke={isDark ? "#a1a1aa" : "#71717a"}
+                  style={{ fontSize: "12px" }}
+                />
+                <Tooltip 
+                  contentStyle={{
+                    backgroundColor: isDark ? "#27272a" : "#ffffff",
+                    border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`,
+                    borderRadius: "8px",
+                    color: isDark ? "#f4f4f5" : "#18181b",
+                  }}
+                />
+                <Legend 
+                  wrapperStyle={{ paddingTop: "20px" }}
+                  iconType="circle"
+                />
+                <Bar 
+                  dataKey="users" 
+                  name="Người dùng" 
+                  fill="#10b981" 
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar 
+                  dataKey="maps" 
+                  name="Maps" 
+                  fill="#3b82f6" 
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar 
+                  dataKey="exports" 
+                  name="Exports" 
+                  fill="#f59e0b" 
+                  radius={[4, 4, 0, 0]}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
+
+      {/* Monthly Revenue Chart */}
+      <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="m-0 text-base font-extrabold">Doanh thu theo tháng (12 tháng gần nhất)</h3>
+        </div>
+        {monthlyLoading ? (
+          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
+            Đang tải dữ liệu...
+          </div>
+        ) : monthlyData.length === 0 ? (
+          <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
+            Không có dữ liệu
+          </div>
+        ) : (
+          <div className="w-full h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#3f3f46" : "#e4e4e7"} />
+                <XAxis 
+                  dataKey="month" 
+                  stroke={isDark ? "#a1a1aa" : "#71717a"}
+                  style={{ fontSize: "12px" }}
+                />
+                <YAxis 
+                  stroke={isDark ? "#a1a1aa" : "#71717a"}
+                  style={{ fontSize: "12px" }}
+                  tickFormatter={(value) => formatMoney(value)}
+                />
+                <Tooltip 
+                  contentStyle={{
+                    backgroundColor: isDark ? "#27272a" : "#ffffff",
+                    border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`,
+                    borderRadius: "8px",
+                    color: isDark ? "#f4f4f5" : "#18181b",
+                  }}
+                  formatter={(value: number) => formatMoney(value)}
+                />
+                <Legend 
+                  wrapperStyle={{ paddingTop: "20px" }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="revenue" 
+                  name="Doanh thu" 
+                  stroke="#8b5cf6" 
+                  strokeWidth={3}
+                  dot={{ fill: "#8b5cf6", r: 5 }}
+                  activeDot={{ r: 7 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </section>
     </div>
   );
