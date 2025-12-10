@@ -107,6 +107,9 @@ export default function StoryMapControlPage() {
 
   const [participants, setParticipants] = useState<LeaderboardEntryDto[]>([]);
   const [loadingParticipants, setLoadingParticipants] = useState(false);
+  const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
+
+  const [assignedParticipantIds, setAssignedParticipantIds] = useState<string[]>([]);
 
   const [questions, setQuestions] = useState<QuestionDto[]>([]);
   const [loadingQuestions, setLoadingQuestions] = useState(false);
@@ -493,6 +496,8 @@ export default function StoryMapControlPage() {
       setGroups([]);
       setSelectedGroupId(null);
       setSelectedGroupMembers([]);
+      setAssignedParticipantIds([]);
+      setSelectedParticipantIds([]);
       return;
     }
 
@@ -501,13 +506,38 @@ export default function StoryMapControlPage() {
     (async () => {
       try {
         const data = await getGroupsBySession(session.sessionId);
+        if (cancelled) return;
 
-        if (!cancelled) {
-          setGroups(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        setGroups(list);
+
+        const assigned = new Set<string>();
+
+        for (const g of list as any[]) {
+          const members: any[] = Array.isArray(g.members)
+            ? g.members
+            : Array.isArray(g.groupMembers)
+              ? g.groupMembers
+              : [];
+
+          for (const m of members) {
+            const mid: string | undefined =
+              m.sessionParticipantId ?? m.participantId ?? m.id;
+            if (mid) assigned.add(mid);
+          }
         }
+
+        setAssignedParticipantIds(Array.from(assigned));
+        setSelectedParticipantIds((prev) =>
+          prev.filter((id) => assigned.has(id) === false)
+        );
+
       } catch (e) {
         console.error("[GroupCollab] Load groups failed:", e);
-        if (!cancelled) setGroups([]);
+        if (!cancelled) {
+          setGroups([]);
+          setAssignedParticipantIds([]);
+        }
       }
     })();
 
@@ -883,26 +913,27 @@ export default function StoryMapControlPage() {
     }
   };
 
-  const handleCreateGroup = async (name: string, maxMembers?: number) => {
+  const handleCreateGroup = async (name: string) => {
     if (!groupCollabConnection || !session?.sessionId) return;
 
-    const source = participants ?? [];
+    // Lấy các học sinh đang được chọn nhưng chưa thuộc nhóm nào
+    const memberParticipantIds = selectedParticipantIds.filter(
+      (id) => !assignedParticipantIds.includes(id)
+    );
 
-    const allIds = source
-      .map((p: any) => p.participantId ?? p.sessionParticipantId ?? p.id)
-      .filter((id: unknown): id is string => Boolean(id));
-
-    if (allIds.length === 0) {
+    if (memberParticipantIds.length === 0) {
       console.error(
-        "[GroupCollab] Không tìm được participantId nào từ Danh sách người tham gia để tạo nhóm"
+        "[GroupCollab] Chưa chọn học sinh nào để tạo nhóm"
       );
+      window.alert("Hãy chọn ít nhất 1 học sinh trong danh sách tham gia để tạo nhóm.");
       return;
     }
 
-    const memberParticipantIds =
-      typeof maxMembers === "number" && maxMembers > 0
-        ? allIds.slice(0, maxMembers)
-        : allIds;
+    // Nếu backend yêu cầu tối thiểu 2 hoặc 4 người, bạn chỉnh số ở đây
+    // if (memberParticipantIds.length < 2) {
+    //   window.alert("Mỗi nhóm cần ít nhất 2 học sinh.");
+    //   return;
+    // }
 
     try {
       await createGroupViaSignalR(groupCollabConnection, {
@@ -912,6 +943,10 @@ export default function StoryMapControlPage() {
         memberParticipantIds,
         leaderParticipantId: memberParticipantIds[0],
       });
+
+      setAssignedParticipantIds((prev) => [...prev, ...memberParticipantIds]);
+
+      setSelectedParticipantIds([]);
     } catch (error) {
       console.error("[GroupCollab] Tạo nhóm thất bại", error);
     }
@@ -1267,26 +1302,60 @@ export default function StoryMapControlPage() {
 
                       {!loadingParticipants &&
                         participants.length > 0 &&
-                        participants.map((p, idx) => (
-                          <div
-                            key={p.participantId ?? idx}
-                            className="flex items-center justify-between text-[11px] text-zinc-200 py-1 border-b border-zinc-800/50 last:border-0"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-zinc-800 text-[10px] font-semibold text-zinc-300">
-                                {p.rank ?? idx + 1}
-                              </span>
-                              <span className="text-zinc-100">
-                                {p.displayName}
-                              </span>
+                        participants.map((p, idx) => {
+                          const id: string | undefined =
+                            p.participantId ?? (p as any).sessionParticipantId ?? (p as any).id;
+
+                          if (!id) return null;
+
+                          const isAssigned = assignedParticipantIds.includes(id);
+                          const isSelected = selectedParticipantIds.includes(id);
+
+                          return (
+                            <div
+                              key={id ?? idx}
+                              className="flex items-center justify-between text-[11px] text-zinc-200 py-1 border-b border-zinc-800/50 last:border-0"
+                            >
+                              <div className="flex items-center gap-2">
+                                {/* NEW: checkbox chọn học sinh */}
+                                <input
+                                  type="checkbox"
+                                  disabled={isAssigned}
+                                  checked={isSelected}
+                                  onChange={() => {
+                                    if (isAssigned) return;
+                                    setSelectedParticipantIds((prev) =>
+                                      prev.includes(id)
+                                        ? prev.filter((x) => x !== id)
+                                        : [...prev, id]
+                                    );
+                                  }}
+                                  className="h-3 w-3 rounded border-zinc-600 bg-zinc-900 text-emerald-400 focus:ring-emerald-500"
+                                />
+
+                                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-zinc-800 text-[10px] font-semibold text-zinc-300">
+                                  {p.rank ?? idx + 1}
+                                </span>
+                                <span className="text-zinc-100">
+                                  {p.displayName}
+                                </span>
+
+                                {isAssigned && (
+                                  <span className="ml-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 px-1.5 py-[1px] text-[9px] text-emerald-300">
+                                    Đã có nhóm
+                                  </span>
+                                )}
+                              </div>
+
+                              {typeof p.score === "number" && (
+                                <span className="font-semibold text-emerald-400">
+                                  {p.score} điểm
+                                </span>
+                              )}
                             </div>
-                            {typeof p.score === "number" && (
-                              <span className="font-semibold text-emerald-400">
-                                {p.score} điểm
-                              </span>
-                            )}
-                          </div>
-                        ))}
+                          );
+                        })}
+
                     </div>
 
                     {participants.length > 0 && (
@@ -1307,7 +1376,7 @@ export default function StoryMapControlPage() {
                           type="button"
                           disabled={!groupCollabConnection}
                           onClick={() =>
-                            handleCreateGroup(`Nhóm ${groups.length + 1}`, 4)
+                            handleCreateGroup(`Nhóm ${groups.length + 1}`)
                           }
                           className="text-[11px] rounded-lg px-2.5 py-1 
              bg-emerald-600 text-zinc-100 hover:bg-emerald-500
