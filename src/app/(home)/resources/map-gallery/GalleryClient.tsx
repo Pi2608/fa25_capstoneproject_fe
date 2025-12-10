@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useGsapHomeScroll } from "@/hooks/useGsapHomeScroll";
+import { useGsapHomeScroll } from "@/components/common/useGsapHomeScroll";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useToast } from "@/contexts/ToastContext";
 import {
