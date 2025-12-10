@@ -1276,7 +1276,41 @@ export const messages = {
             not_found_description: "Tổ chức này không tồn tại hoặc đã bị xóa. Vui lòng kiểm tra lại đường dẫn hoặc tạo một tổ chức mới.",
             go_to_profile: "Về trang cá nhân",
             create_new: "Tạo tổ chức mới",
-            manage_delete_failed:"Xóa Tổ chức thất bại. Vui lòng thử lại"
+            manage_delete_failed: "Xóa Tổ chức thất bại. Vui lòng thử lại"
+        },
+        my_exports: {
+            header_title: "Exports của tôi",
+
+            badge_total: "Tổng: {count}",
+            badge_approved: "Đã duyệt: {count}",
+            badge_pending: "Chờ duyệt: {count}",
+
+            label_org: "Tổ chức",
+
+            error_org_load: "Không thể tải danh sách tổ chức",
+            error_exports_load: "Không thể tải danh sách exports",
+
+            table_id: "ID Export",
+            table_map_name: "Tên bản đồ",
+            table_format: "Định dạng",
+            table_status: "Trạng thái",
+            table_created_at: "Ngày tạo",
+            table_actions: "Hành động",
+
+            loading_text: "Đang tải exports...",
+            empty_text: "Không tìm thấy export nào cho tổ chức này",
+
+            mapname_untitled: "(Chưa đặt tên)",
+
+            download_btn: "Tải xuống",
+            download_rejected: "Đã từ chối",
+            download_not_ready: "Chưa sẵn sàng",
+
+            status_pending: "Chờ duyệt",
+            status_processing: "Đang xử lý",
+            status_approved: "Đã duyệt",
+            status_rejected: "Đã từ chối",
+            status_failed: "Thất bại",
         },
         plans: {
             select_payment_method: "Chọn phương thức thanh toán",
@@ -4945,6 +4979,40 @@ export const messages = {
             finalDesc: "Start free — upgrade anytime for team collaboration, exporting, and more.",
             finalPrimary: "Get started",
             finalSecondary: "See pricing"
+        },
+        my_exports: {
+            header_title: "My exports",
+
+            badge_total: "Total: {count}",
+            badge_approved: "Approved: {count}",
+            badge_pending: "Pending: {count}",
+
+            label_org: "Organization",
+
+            error_org_load: "Failed to load organizations",
+            error_exports_load: "Failed to load exports",
+
+            table_id: "Export ID",
+            table_map_name: "Map name",
+            table_format: "Format",
+            table_status: "Status",
+            table_created_at: "Created at",
+            table_actions: "Actions",
+
+            loading_text: "Loading exports...",
+            empty_text: "No exports found for this organization",
+
+            mapname_untitled: "(Untitled)",
+
+            download_btn: "Download",
+            download_rejected: "Rejected",
+            download_not_ready: "Not ready yet",
+
+            status_pending: "Pending",
+            status_processing: "Processing",
+            status_approved: "Approved",
+            status_rejected: "Rejected",
+            status_failed: "Failed",
         },
         header: {
             services: "Services",
