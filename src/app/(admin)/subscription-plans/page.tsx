@@ -226,9 +226,8 @@ export default function PlansPage() {
         </div>
 
         <div
-          className={`overflow-auto border rounded-lg mt-2 ${
-            isDark ? "border-zinc-800" : "border-gray-200"
-          }`}
+          className={`overflow-auto border rounded-lg mt-2 ${isDark ? "border-zinc-800" : "border-gray-200"
+            }`}
         >
           <table
             className="w-full border-collapse text-sm"
@@ -244,18 +243,17 @@ export default function PlansPage() {
                   { label: "Xuất file", w: "9%" },
                   { label: "Layer tùy chỉnh", w: "9%" },
                   { label: "Token / tháng", w: "9%" },
-                  { label: "Trạng thái", w: "10%" },
-                  { label: "Người dùng", w: "7%" },
+                  { label: "Trạng thái", w: "11%" },
+                  { label: "Người dùng", w: "8%" },
                   { label: "Chi tiết", w: "7%" },
                   { label: "Hành động", w: "9%" },
                 ].map((h) => (
                   <th
                     key={h.label}
-                    className={`p-3 border-b text-left font-extrabold text-xs ${
-                      isDark
-                        ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
-                        : "border-gray-200 bg-gray-50 text-gray-600"
-                    }`}
+                    className={`p-3 border-b text-left font-extrabold text-xs ${isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                      }`}
                     style={{ width: h.w }}
                   >
                     {h.label}
@@ -287,9 +285,8 @@ export default function PlansPage() {
                 filtered.map((p) => (
                   <tr key={p.planId}>
                     <td
-                      className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}
+                      className={`p-3 border-b text-left ${isDark ? "border-zinc-800" : "border-gray-200"
+                        }`}
                     >
                       <div className="flex items-center gap-2">
                         <b>{p.name}</b>
@@ -313,81 +310,71 @@ export default function PlansPage() {
                     </td>
 
                     <td
-                      className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}
+                      className={`p-3 border-b text-left ${isDark ? "border-zinc-800" : "border-gray-200"
+                        }`}
                     >
                       {fmtMoney(p.priceMonthly)}
                     </td>
                     <td
-                      className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}
+                      className={`p-3 border-b text-left ${isDark ? "border-zinc-800" : "border-gray-200"
+                        }`}
                     >
                       {fmtMoney(p.priceYearly)}
                     </td>
                     <td
-                      className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}
+                      className={`p-3 border-b text-left ${isDark ? "border-zinc-800" : "border-gray-200"
+                        }`}
                     >
                       {fmtNum(p.mapsLimit)}
                     </td>
                     <td
-                      className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}
+                      className={`p-3 border-b text-left ${isDark ? "border-zinc-800" : "border-gray-200"
+                        }`}
                     >
                       {fmtNum(p.exportsLimit)}
                     </td>
                     <td
-                      className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}
+                      className={`p-3 border-b text-left ${isDark ? "border-zinc-800" : "border-gray-200"
+                        }`}
                     >
                       {fmtNum(p.customLayersLimit)}
                     </td>
                     <td
-                      className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}
+                      className={`p-3 border-b text-left ${isDark ? "border-zinc-800" : "border-gray-200"
+                        }`}
                     >
                       {p.monthlyTokenLimit.toLocaleString("vi-VN")}
                     </td>
 
                     <td
-                      className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}
+                      className={`p-3 border-b text-left ${isDark ? "border-zinc-800" : "border-gray-200"
+                        }`}
                     >
                       {p.isActive ? (
-                        <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16">
+                        <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16 whitespace-nowrap">
                           Đang hoạt động
                         </span>
                       ) : (
-                        <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18">
+                        <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18 whitespace-nowrap">
                           Ngưng
                         </span>
                       )}
                     </td>
 
                     <td
-                      className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}
+                      className={`p-3 border-b text-center ${isDark ? "border-zinc-800" : "border-gray-200"
+                        }`}
                     >
                       {p.totalSubscribers.toLocaleString("vi-VN")}
                     </td>
 
                     <td
-                      className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}
+                      className={`p-3 border-b text-left ${isDark ? "border-zinc-800" : "border-gray-200"
+                        }`}
                     >
                       <Link
-                        className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer ${
-                          isDark ? "text-[#3f5f36]" : "text-blue-600"
-                        }`}
+                        className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer ${isDark ? "text-[#3f5f36]" : "text-blue-600"
+                          }`}
                         href={`/subscription-plans/${p.planId}`}
                       >
                         Chi tiết
@@ -395,15 +382,13 @@ export default function PlansPage() {
                     </td>
 
                     <td
-                      className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}
+                      className={`p-3 border-b text-left ${isDark ? "border-zinc-800" : "border-gray-200"
+                        }`}
                     >
                       <div className="flex items-center gap-2 whitespace-nowrap text-sm font-medium">
                         <Link
-                          className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer ${
-                            isDark ? "text-[#3f5f36]" : "text-blue-600"
-                          }`}
+                          className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer ${isDark ? "text-[#3f5f36]" : "text-blue-600"
+                            }`}
                           href={`/subscription-plans/${p.planId}/edit`}
                           aria-label={`Chỉnh sửa gói ${p.name}`}
                         >
@@ -685,11 +670,10 @@ export default function PlansPage() {
 
               <div className="p-6 flex justify-end gap-3">
                 <button
-                  className={`px-4 py-2 rounded-lg border transition-colors disabled:opacity-50 ${
-                    isDark
-                      ? "border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700"
-                      : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                  }`}
+                  className={`px-4 py-2 rounded-lg border transition-colors disabled:opacity-50 ${isDark
+                    ? "border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700"
+                    : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                    }`}
                   onClick={cancelDelete}
                   disabled={deleting}
                 >
