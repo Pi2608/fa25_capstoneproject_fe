@@ -11,6 +11,7 @@ import {
 } from "@/lib/admin-api";
 import { useTheme } from "../layout";
 import { getThemeClasses } from "@/utils/theme-utils";
+import { useRouter } from "next/navigation";
 import {
   LineChart,
   Line,
@@ -38,6 +39,7 @@ type DashboardStats = {
 };
 
 type TopUserRow = {
+  id: string;
   userName: string;
   email: string;
   totalMaps: number;
@@ -47,6 +49,7 @@ type TopUserRow = {
 };
 
 type TopOrgRow = {
+  id: string;
   name: string;
   owner: string;
   members: number;
@@ -181,7 +184,7 @@ function normalizeMonthlyData(data: Raw): MonthlyData[] {
 
   // Convert to array and sort by month
   const result = Array.from(monthMap.values());
-  
+
   // If no data, generate empty data for last 12 months
   if (result.length === 0) {
     const { start } = getLast12MonthsRange();
@@ -282,28 +285,29 @@ function buildSparkPath(points: RevenuePoint[], w = 720, h = 220): { d: string; 
 function normalizeUsage(obj: Raw): UsageItem[] {
   const items: UsageItem[] = [];
   if (!obj) return items;
-  
+
   const userStats = (obj as any).userStats || (obj as any).UserStats;
   const orgStats = (obj as any).organizationStats || (obj as any).OrganizationStats;
   const subscriptionStats = (obj as any).subscriptionStats || (obj as any).SubscriptionStats;
-  
+
   const totalUsers = pickNumber(userStats || obj, ["totalUsers", "TotalUsers", "userCount", "UserCount"]);
   const totalOrgs = pickNumber(orgStats || obj, ["totalOrganizations", "TotalOrganizations", "orgCount", "organizations"]);
   const totalSubscriptions = pickNumber(subscriptionStats || obj, ["totalActiveSubscriptions", "TotalActiveSubscriptions", "activeSubscriptions"]);
-  
+
   const maps = pickNumber(obj, ["totalMaps", "TotalMaps", "total_maps", "maps", "mapCount"]);
   const exportsN = pickNumber(obj, ["totalExports", "TotalExports", "total_exports", "exports", "exportCount"]);
-  
+
   if (Number.isFinite(totalUsers) && totalUsers >= 0) items.push({ label: "Total Users", value: totalUsers.toLocaleString() });
   if (Number.isFinite(totalOrgs) && totalOrgs >= 0) items.push({ label: "Organizations", value: totalOrgs.toLocaleString() });
   if (Number.isFinite(maps) && maps >= 0) items.push({ label: "Maps", value: maps.toLocaleString() });
   if (Number.isFinite(exportsN) && exportsN >= 0) items.push({ label: "Exports", value: exportsN.toLocaleString() });
   if (Number.isFinite(totalSubscriptions) && totalSubscriptions >= 0) items.push({ label: "Active Subscriptions", value: totalSubscriptions.toLocaleString() });
-  
+
   return items;
 }
 
 export default function AdminDashboard(): JSX.Element {
+  const router = useRouter();
   const { isDark } = useTheme();
   const theme = getThemeClasses(isDark);
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -351,7 +355,7 @@ export default function AdminDashboard(): JSX.Element {
           adminGetSystemUsage<Raw>(),
         ]);
         if (!mounted) return;
-        
+
         const d: DashboardStats = {
           totalUsers: pickNumber(dashRes, ["totalUsers", "TotalUsers", "userCount", "UserCount", "users", "total_users"], 0),
           totalUsersChangePct: pickNumber(dashRes, ["totalUsersChangePct", "TotalUsersChangePct", "totalUsersChange", "TotalUsersChange", "total_users_change_pct"], 0),
@@ -363,9 +367,20 @@ export default function AdminDashboard(): JSX.Element {
           errors24hChangePct: pickNumber(dashRes, ["errors24hChangePct", "Errors24hChangePct", "errors24hChange", "Errors24hChange", "errors_24h_change_pct"], 0),
         };
         setStats(d);
-        
+
         const normUsers: TopUserRow[] = (Array.isArray(users) ? users : []).map((u: Raw) => {
-          const userName = pickString(u, ["userName", "UserName", "username", "fullName", "FullName", "full_name", "name", "displayName"]);
+          const id = pickString(u, ["id", "Id", "userId", "UserId"]);  // ✅ lấy userId
+
+          const userName = pickString(u, [
+            "userName",
+            "UserName",
+            "username",
+            "fullName",
+            "FullName",
+            "full_name",
+            "name",
+            "displayName",
+          ]);
           const email = pickString(u, ["email", "Email", "userEmail", "user_email"]);
           const totalMaps = pickNumber(u, ["totalMaps", "TotalMaps", "maps", "mapCount"], 0);
           const totalExports = pickNumber(u, ["totalExports", "TotalExports", "exports", "exportCount"], 0);
@@ -373,38 +388,38 @@ export default function AdminDashboard(): JSX.Element {
           let lastActive = pickString(u, ["lastActive", "LastActive", "last_login", "lastSeen", "last_seen"]);
           if (!lastActive && u.lastActive) {
             const dt = u.lastActive;
-            if (dt instanceof Date) {
-              lastActive = dt.toISOString();
-            } else if (typeof dt === "string") {
-              lastActive = dt;
-            }
+            if (dt instanceof Date) lastActive = dt.toISOString();
+            else if (typeof dt === "string") lastActive = dt;
           }
-          return { userName, email, totalMaps, totalExports, totalSpent, lastActive };
+
+          return { id, userName, email, totalMaps, totalExports, totalSpent, lastActive };
         });
+
         setTopUsers(normUsers);
-        
+
         const normOrgs: TopOrgRow[] = (Array.isArray(orgs) ? orgs : []).map((o: Raw) => {
+          const id = pickString(o, ["id", "Id", "orgId", "OrgId"]);  // ✅ lấy orgId
+
           const name = pickString(o, ["name", "Name", "orgName", "OrgName", "organizationName"]);
           const owner = pickString(o, ["ownerName", "OwnerName", "owner", "ownerEmail", "owner_name"]);
           const members = pickNumber(o, ["totalMembers", "TotalMembers", "members", "memberCount", "users"], 0);
           let created = pickString(o, ["createdAt", "CreatedAt", "created", "createdDate", "created_at"]);
           if (!created && o.createdAt) {
             const dt = o.createdAt;
-            if (dt instanceof Date) {
-              created = dt.toISOString();
-            } else if (typeof dt === "string") {
-              created = dt;
-            }
+            if (dt instanceof Date) created = dt.toISOString();
+            else if (typeof dt === "string") created = dt;
           }
-          return { 
-            name: name || "(unnamed)", 
-            owner: owner && owner !== "Unknown" ? owner : "", 
-            members, 
-            created: created ? created.slice(0, 10) : "" 
+          return {
+            id,
+            name: name || "(unnamed)",
+            owner: owner && owner !== "Unknown" ? owner : "",
+            members,
+            created: created ? created.slice(0, 10) : "",
           };
         });
+
         setTopOrgs(normOrgs);
-        
+
         setUsage(normalizeUsage(usageRes));
       } catch (err) {
         console.error("Failed to load dashboard data:", err);
@@ -436,7 +451,7 @@ export default function AdminDashboard(): JSX.Element {
     const startDate = new Date(revStart);
     let endDate = new Date(revEnd);
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
-      return () => {};
+      return () => { };
     }
 
     // Enforce endDate >= startDate and endDate >= today
@@ -457,7 +472,7 @@ export default function AdminDashboard(): JSX.Element {
         const dailyRevenue = resObj?.dailyRevenue || resObj?.DailyRevenue || (Array.isArray(resObj) ? resObj : []);
         const normalized = normalizeRevenue(dailyRevenue);
         setRevenue(normalized);
-        
+
         // Extract summary stats
         if (resObj && typeof resObj === "object") {
           setRevenueStats({
@@ -490,7 +505,7 @@ export default function AdminDashboard(): JSX.Element {
     const end = new Date(monthlyEnd);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
       setMonthlyLoading(false);
-      return () => {};
+      return () => { };
     }
 
     Promise.allSettled([
@@ -574,7 +589,7 @@ export default function AdminDashboard(): JSX.Element {
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
           <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
-            <span>Total users</span>
+            <span>Tổng số người dùng</span>
           </div>
           <div className="text-2xl font-extrabold tracking-wide">
             {loading ? "…" : (stats?.totalUsers ?? 0).toLocaleString()}
@@ -585,7 +600,7 @@ export default function AdminDashboard(): JSX.Element {
         </div>
         <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
           <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
-            <span>Active today</span>
+            <span>Hoạt động hôm nay</span>
           </div>
           <div className="text-2xl font-extrabold tracking-wide">
             {loading ? "…" : (stats?.activeToday ?? 0).toLocaleString()}
@@ -596,7 +611,7 @@ export default function AdminDashboard(): JSX.Element {
         </div>
         <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
           <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
-            <span>New signups</span>
+            <span>Đăng ký mới</span>
           </div>
           <div className="text-2xl font-extrabold tracking-wide">
             {loading ? "…" : (stats?.newSignups ?? 0).toLocaleString()}
@@ -607,14 +622,14 @@ export default function AdminDashboard(): JSX.Element {
         </div>
         <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
           <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
-            <span>Errors (24h)</span>
-        </div>
+            <span>Lỗi (24h)</span>
+          </div>
           <div className="text-2xl font-extrabold tracking-wide">
             {loading ? "…" : (stats?.errors24h ?? 0).toLocaleString()}
-        </div>
+          </div>
           <div className="text-green-500 font-bold text-xs">
             {loading ? "" : toPct(stats ? stats.errors24hChangePct : 0)}
-        </div>
+          </div>
         </div>
       </section>
 
@@ -660,17 +675,17 @@ export default function AdminDashboard(): JSX.Element {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={monthlyDisplay} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#3f3f46" : "#e4e4e7"} />
-                <XAxis 
-                  dataKey="monthLabel" 
+                <XAxis
+                  dataKey="monthLabel"
                   stroke={isDark ? "#a1a1aa" : "#71717a"}
                   style={{ fontSize: "12px" }}
                   tickFormatter={(v: string) => v}
                 />
-                <YAxis 
+                <YAxis
                   stroke={isDark ? "#a1a1aa" : "#71717a"}
                   style={{ fontSize: "12px" }}
                 />
-                <Tooltip 
+                <Tooltip
                   contentStyle={{
                     backgroundColor: isDark ? "#27272a" : "#ffffff",
                     border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`,
@@ -682,26 +697,26 @@ export default function AdminDashboard(): JSX.Element {
                     return formatMonthLabel(raw);
                   }}
                 />
-                <Legend 
+                <Legend
                   wrapperStyle={{ paddingTop: "20px" }}
                   iconType="circle"
                 />
-                <Bar 
-                  dataKey="users" 
-                  name="Người dùng" 
-                  fill="#10b981" 
+                <Bar
+                  dataKey="users"
+                  name="Người dùng"
+                  fill="#10b981"
                   radius={[4, 4, 0, 0]}
                 />
-                <Bar 
-                  dataKey="maps" 
-                  name="Maps" 
-                  fill="#3b82f6" 
+                <Bar
+                  dataKey="maps"
+                  name="Maps"
+                  fill="#3b82f6"
                   radius={[4, 4, 0, 0]}
                 />
-                <Bar 
-                  dataKey="exports" 
-                  name="Exports" 
-                  fill="#f59e0b" 
+                <Bar
+                  dataKey="exports"
+                  name="Exports"
+                  fill="#f59e0b"
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>
@@ -746,8 +761,8 @@ export default function AdminDashboard(): JSX.Element {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={revenue} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#3f3f46" : "#e4e4e7"} />
-                <XAxis 
-                  dataKey="date" 
+                <XAxis
+                  dataKey="date"
                   stroke={isDark ? "#a1a1aa" : "#71717a"}
                   style={{ fontSize: "12px" }}
                   tickFormatter={(v: string) => {
@@ -757,12 +772,12 @@ export default function AdminDashboard(): JSX.Element {
                       : d.toLocaleDateString("vi-VN", { day: "2-digit", month: "short", year: "numeric" });
                   }}
                 />
-                <YAxis 
+                <YAxis
                   stroke={isDark ? "#a1a1aa" : "#71717a"}
                   style={{ fontSize: "12px" }}
                   tickFormatter={(value) => formatMoney(value)}
                 />
-                <Tooltip 
+                <Tooltip
                   contentStyle={{
                     backgroundColor: isDark ? "#27272a" : "#ffffff",
                     border: `1px solid ${isDark ? "#3f3f46" : "#e4e4e7"}`,
@@ -771,14 +786,14 @@ export default function AdminDashboard(): JSX.Element {
                   }}
                   formatter={(value: number) => formatMoney(value)}
                 />
-                <Legend 
+                <Legend
                   wrapperStyle={{ paddingTop: "20px" }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="value" 
-                  name="Doanh thu" 
-                  stroke="#8b5cf6" 
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  name="Doanh thu"
+                  stroke="#8b5cf6"
                   strokeWidth={3}
                   dot={{ fill: "#8b5cf6", r: 5 }}
                   activeDot={{ r: 7 }}
@@ -791,11 +806,11 @@ export default function AdminDashboard(): JSX.Element {
 
       <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="m-0 text-base font-extrabold">Top accounts</h3>
+          <h3 className="m-0 text-base font-extrabold">Tài khoản nổi bật</h3>
           <div className="flex gap-2 flex-wrap">
             <input
               className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 min-w-[160px] ${theme.input}`}
-              placeholder="Search account…"
+              placeholder="Tìm kiếm tài khoản…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -825,14 +840,18 @@ export default function AdminDashboard(): JSX.Element {
                   <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? formatDateTime(row.lastActive) : "…"}</td>
                   <td className={`p-3 border-b ${theme.tableCell} text-left`}>
                     <button
-                      className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50 ${
-                        isDark ? "text-[#3f5f36]" : "text-blue-600"
-                      }`}
-                      disabled={!row}
+                      className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50 ${isDark ? "text-[#3f5f36]" : "text-blue-600"
+                        }`}
+                      disabled={!row || !row.id}
+                      onClick={() => {
+                        if (!row?.id) return;
+                        router.push(`/dashboard/users/${encodeURIComponent(row.id)}`);
+                      }}
                     >
                       View
                     </button>
                   </td>
+
                 </tr>
               ))}
             </tbody>
@@ -842,7 +861,7 @@ export default function AdminDashboard(): JSX.Element {
 
       <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="m-0 text-base font-extrabold">Top organizations</h3>
+          <h3 className="m-0 text-base font-extrabold">Tổ chức nổi bật</h3>
         </div>
         <div className={`overflow-auto border ${theme.tableBorder} rounded-lg mt-2`}>
           <table className="w-full border-collapse text-sm">
@@ -864,14 +883,18 @@ export default function AdminDashboard(): JSX.Element {
                   <td className={`p-3 border-b ${theme.tableCell} text-left`}>{row ? row.created : "…"}</td>
                   <td className={`p-3 border-b ${theme.tableCell} text-left`}>
                     <button
-                      className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50 ${
-                        isDark ? "text-[#3f5f36]" : "text-blue-600"
-                      }`}
-                      disabled={!row}
+                      className={`text-sm font-bold hover:opacity-75 transition-opacity bg-transparent border-0 p-0 cursor-pointer disabled:opacity-50 ${isDark ? "text-[#3f5f36]" : "text-blue-600"
+                        }`}
+                      disabled={!row || !row.id}
+                      onClick={() => {
+                        if (!row?.id) return;
+                        router.push(`/dashboard/organizations/${encodeURIComponent(row.id)}`);
+                      }}
                     >
                       View
                     </button>
                   </td>
+
                 </tr>
               ))}
             </tbody>
@@ -881,7 +904,7 @@ export default function AdminDashboard(): JSX.Element {
 
       <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="m-0 text-base font-extrabold">System usage</h3>
+          <h3 className="m-0 text-base font-extrabold">Thống kê hệ thống</h3>
         </div>
         <div className={`overflow-auto border ${theme.tableBorder} rounded-lg mt-2`}>
           <table className="w-full border-collapse text-sm">
