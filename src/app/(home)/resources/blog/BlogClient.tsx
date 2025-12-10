@@ -6,6 +6,8 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useI18n } from "@/i18n/I18nProvider";
 import { getCommunityPosts, type CommunityPostSummaryResponse } from "@/lib/api-community";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { useGsapHomeScroll } from "@/components/common/useGsapHomeScroll";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -19,6 +21,7 @@ function CalendarIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
 function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -50,11 +53,21 @@ export default function BlogClient({
   searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const { t } = useI18n();
+  const reduce = useReducedMotion();
 
   const [posts, setPosts] = useState<CommunityPostSummaryResponse[]>([]);
 
   const topicParamRaw = (searchParams?.topic as string) || "All";
   const activeTopic = topicParamRaw;
+
+  useGsapHomeScroll({
+    reduce,
+    heroSelectors: {
+      title: ".bh-title",
+      subtitle: ".bh-sub",
+      cta: ".bh-cta",
+    },
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -94,35 +107,12 @@ export default function BlogClient({
   const others = featured ? list.filter((p) => p.slug !== featured.slug) : [];
 
   useLayoutEffect(() => {
-    const reduce =
+    const prefersReduced =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const baseIn = { ease: "power2.out", duration: reduce ? 0 : 0.7 } as const;
+    const baseIn = { ease: "power2.out", duration: prefersReduced || reduce ? 0 : 0.7 } as const;
 
     const ctx = gsap.context(() => {
-      gsap.set([".bh-title", ".bh-sub", ".bh-cta"], {
-        autoAlpha: 0,
-        y: 18,
-      });
-      gsap
-        .timeline()
-        .to(".bh-title", {
-          autoAlpha: 1,
-          y: 0,
-          duration: reduce ? 0 : 0.9,
-          ease: "power2.out",
-        })
-        .to(
-          ".bh-sub",
-          { autoAlpha: 1, y: 0, ...baseIn },
-          "<0.08",
-        )
-        .to(
-          ".bh-cta",
-          { autoAlpha: 1, y: 0, ...baseIn },
-          "<0.08",
-        );
-
       ScrollTrigger.batch(".topic-chip", {
         start: "top 90%",
         onEnter: (els) =>
@@ -184,7 +174,7 @@ export default function BlogClient({
     });
 
     return () => ctx.revert();
-  }, []);
+  }, [reduce]);
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-12 text-zinc-100">

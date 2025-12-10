@@ -23,6 +23,8 @@ import {
   MyOrganizationDto,
 } from "@/lib/api-organizations";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { useGsapHomeScroll } from "@/components/common/useGsapHomeScroll";
 
 function safeMessage(err: unknown) {
   if (err instanceof Error) return err.message;
@@ -37,6 +39,7 @@ export default function PricingPage() {
   const router = useRouter();
   const { isLoggedIn, clear } = useAuthStatus();
   const { t, locale } = useI18n();
+  const reduce = useReducedMotion();
 
   const fmtCurrency = useMemo(
     () =>
@@ -56,6 +59,11 @@ export default function PricingPage() {
     router.push("/login");
     router.refresh();
   };
+
+  useGsapHomeScroll({
+    reduce,
+    fadeSelector: "[data-reveal]",
+  });
 
   const handleSelectPlan = async (plan: Plan) => {
     if (!isLoggedIn) {
@@ -85,7 +93,7 @@ export default function PricingPage() {
       }
 
       const req: SubscribeRequest = {
-        userId: "08ddf705-7b38-41a8-8b65-80141dc31d21", 
+        userId: "08ddf705-7b38-41a8-8b65-80141dc31d21",
         orgId: selectedOrg.orgId,
         planId: plan.planId,
         paymentMethod: "payOS",
@@ -99,23 +107,6 @@ export default function PricingPage() {
       alert(safeMessage(err));
     }
   };
-
-  useEffect(() => {
-    const els = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
-    const io = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((e) => {
-          if (e.isIntersecting) {
-            e.target.classList.add("in");
-            io.unobserve(e.target as Element);
-          }
-        });
-      },
-      { threshold: 0.18 }
-    );
-    els.forEach((el) => io.observe(el));
-    return () => io.disconnect();
-  }, []);
 
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
@@ -138,17 +129,14 @@ export default function PricingPage() {
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
-  // Organizations
   const [organizations, setOrganizations] = useState<MyOrganizationDto[]>([]);
   const [invitations, setInvitations] = useState<InvitationDto[]>([]);
   const [selectedOrg, setSelectedOrg] = useState<MyOrganizationDto | null>(null);
   const [showOrgSelection, setShowOrgSelection] = useState(false);
 
-  // Memberships theo org
   const [orgMemberships, setOrgMemberships] = useState<Record<string, CurrentMembershipDto | null>>({});
   const [loadingMemberships, setLoadingMemberships] = useState(false);
 
-  // Load memberships for all orgs
   const loadOrgMemberships = async (orgs: MyOrganizationDto[]) => {
     if (orgs.length === 0) return;
     setLoadingMemberships(true);
@@ -239,7 +227,8 @@ export default function PricingPage() {
     const membership = orgMemberships[orgId];
     if (!membership) return null;
     return plans.find((p) => p.planId === membership.planId) || null;
-    };
+  };
+
   const getMembershipStatusForOrg = (orgId: string): string | null => {
     const membership = orgMemberships[orgId];
     return membership?.status || null;
@@ -416,9 +405,15 @@ export default function PricingPage() {
             const features = feats.length
               ? feats
               : [
-                  t("pricing", "feature_max_orgs") + ": " + ((plan.maxOrganizations ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxOrganizations),
-                  t("pricing", "feature_max_users") + ": " + ((plan.maxUsersPerOrg ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxUsersPerOrg),
-                  t("pricing", "feature_max_maps") + ": " + ((plan.maxMapsPerMonth ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxMapsPerMonth),
+                  t("pricing", "feature_max_orgs") +
+                    ": " +
+                    ((plan.maxOrganizations ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxOrganizations),
+                  t("pricing", "feature_max_users") +
+                    ": " +
+                    ((plan.maxUsersPerOrg ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxUsersPerOrg),
+                  t("pricing", "feature_max_maps") +
+                    ": " +
+                    ((plan.maxMapsPerMonth ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxMapsPerMonth),
                 ];
 
             return (
@@ -575,18 +570,6 @@ export default function PricingPage() {
           </div>
         </div>
       )}
-
-      <style jsx>{`
-        [data-reveal] {
-          opacity: 0;
-          transform: translateY(16px);
-          transition: opacity 0.6s ease, transform 0.6s ease;
-        }
-        [data-reveal].in {
-          opacity: 1;
-          transform: none;
-        }
-      `}</style>
     </main>
   );
 }
