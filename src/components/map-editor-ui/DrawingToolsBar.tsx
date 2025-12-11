@@ -23,10 +23,13 @@ import {
   Slash,
   Highlighter,
   PenTool,
+  Ruler,
+  Square,
 } from "lucide-react";
 
 interface DrawingToolsBarProps {
   mapRef: React.MutableRefObject<MapWithPM | null>;
+  onStartMeasurement?: (mode: 'distance' | 'area') => void;
 }
 
 /**
@@ -34,6 +37,7 @@ interface DrawingToolsBarProps {
  */
 export const DrawingToolsBar: React.FC<DrawingToolsBarProps> = ({ 
   mapRef,
+  onStartMeasurement,
 }) => {
   const isDisabled = !mapRef.current;
 
@@ -134,6 +138,26 @@ export const DrawingToolsBar: React.FC<DrawingToolsBarProps> = ({
       >
         <Pencil size={18} strokeWidth={1.8} />
       </ToolButton>
+
+      {onStartMeasurement && (
+        <>
+          <ToolButton
+            title="Measure Distance (M)"
+            onClick={() => onStartMeasurement('distance')}
+            disabled={isDisabled}
+          >
+            <Ruler size={18} strokeWidth={1.8} />
+          </ToolButton>
+
+          <ToolButton
+            title="Measure Area (M)"
+            onClick={() => onStartMeasurement('area')}
+            disabled={isDisabled}
+          >
+            <Square size={18} strokeWidth={1.8} />
+          </ToolButton>
+        </>
+      )}
     </div>
   );
 };
