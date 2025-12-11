@@ -92,3 +92,20 @@ body {
 .leaflet-container .marker-emoji-lg {
   font-size: 32px;
 }
+
+/* Custom measurement tooltip styles */
+.measurement-tooltip {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  z-index: 9999 !important;
+}
+
+.measurement-tooltip::before {
+  display: none !important; /* Hide default arrow */
+}

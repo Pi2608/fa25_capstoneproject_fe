@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
-
 import { getSegments, type Segment } from "@/lib/api-storymap";
 import { getMapDetail } from "@/lib/api-maps";
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
@@ -85,6 +84,12 @@ export default function StoryMapViewPage() {
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [questionResults, setQuestionResults] = useState<QuestionResultsEvent | null>(null);
 
+  const [shortAnswerText, setShortAnswerText] = useState("");
+
+  const [selectedLocation, setSelectedLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -313,6 +318,8 @@ export default function StoryMapViewPage() {
     setInfoMessage(null);
     setQuestionResults(null);
     setViewState("question");
+    setShortAnswerText("");
+    setSelectedLocation(null);
 
     if (event.timeLimit > 0) {
       setTimeRemaining(event.timeLimit);
@@ -464,10 +471,28 @@ export default function StoryMapViewPage() {
   }, []);
 
   const handleSubmitAnswer = async () => {
-    if (!participantId || !currentQuestion || !selectedOptionId || hasSubmitted) {
-      if (!selectedOptionId) {
-        setInfoMessage("Vui lòng chọn một đáp án trước khi gửi.");
-      }
+    if (!participantId || !currentQuestion || hasSubmitted) {
+      return;
+    }
+
+    const rawType = (currentQuestion as any).questionType as string | undefined;
+    const questionType = rawType ? rawType.toUpperCase() : "";
+    const hasOptions = !!(
+      currentQuestion.options && currentQuestion.options.length > 0
+    );
+
+    if (hasOptions && !selectedOptionId) {
+      setInfoMessage("Vui lòng chọn một đáp án trước khi gửi.");
+      return;
+    }
+
+    if (!hasOptions && questionType === "SHORT_ANSWER" && !shortAnswerText.trim()) {
+      setInfoMessage("Vui lòng nhập câu trả lời trước khi gửi.");
+      return;
+    }
+
+    if (!hasOptions && questionType === "PIN_ON_MAP" && !selectedLocation) {
+      setInfoMessage("Vui lòng chọn vị trí trên bản đồ trước khi gửi.");
       return;
     }
 
@@ -475,10 +500,30 @@ export default function StoryMapViewPage() {
       setAnswering(true);
       setInfoMessage(null);
 
-      await submitParticipantResponse(participantId, {
+      const payload: any = {
         sessionQuestionId: currentQuestion.sessionQuestionId,
-        questionOptionId: selectedOptionId,
-      });
+      };
+
+      if (
+        typeof currentQuestion.timeLimit === "number" &&
+        currentQuestion.timeLimit > 0 &&
+        typeof timeRemaining === "number"
+      ) {
+        const used = currentQuestion.timeLimit - timeRemaining;
+        payload.responseTimeSeconds = used > 0 ? used : 0;
+      }
+
+      if (hasOptions) {
+        // TRUE_FALSE hoặc MULTIPLE_CHOICE
+        payload.questionOptionId = selectedOptionId;
+      } else if (questionType === "SHORT_ANSWER") {
+        payload.responseText = shortAnswerText.trim();
+      } else if (questionType === "PIN_ON_MAP" && selectedLocation) {
+        payload.responseLatitude = selectedLocation.latitude;
+        payload.responseLongitude = selectedLocation.longitude;
+      }
+
+      await submitParticipantResponse(participantId, payload);
 
       setHasSubmitted(true);
       setInfoMessage("Đã gửi đáp án! Chờ giáo viên hiển thị kết quả...");
@@ -639,6 +684,12 @@ export default function StoryMapViewPage() {
     currentIndex >= 0 && currentIndex < segments.length ? currentIndex : 0;
   const currentSegment = segments.length > 0 ? segments[safeCurrentIndex] : null;
 
+  const isPinOnMapQuestion =
+    viewState === "question" &&
+    !!currentQuestion &&
+    String((currentQuestion as any).questionType || "").toUpperCase() === "PIN_ON_MAP" &&
+    !hasSubmitted;
+
   if (viewState === "waiting") {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-sky-100 via-emerald-50 to-amber-50">
@@ -757,7 +808,6 @@ export default function StoryMapViewPage() {
 
   return (
     <div className="h-screen flex bg-gradient-to-br from-sky-50 to-emerald-50 text-slate-800">
-      {/* SIDEBAR TRÁI - Child-friendly bright design */}
       <div className="w-[380px] border-r border-emerald-200 bg-white/90 backdrop-blur flex flex-col shadow-xl">
         {/* Header */}
         <div className="px-5 pt-5 pb-4 border-b border-emerald-100 bg-gradient-to-r from-emerald-50 to-teal-50">
@@ -769,13 +819,11 @@ export default function StoryMapViewPage() {
           </h1>
 
           <div className="mt-4 flex items-center justify-between gap-3">
-            {/* Student name - cheerful badge */}
             <div className="flex items-center gap-2 bg-gradient-to-r from-purple-100 to-pink-100 rounded-full px-4 py-2">
               <span className="text-lg">👋</span>
               <span className="font-bold text-purple-700">{displayName}</span>
             </div>
 
-            {/* Session code - prominent and colorful */}
             {sessionCode && (
               <div className="rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 p-0.5 shadow-lg shadow-emerald-200">
                 <div className="bg-white rounded-lg px-3 py-2 text-center">
@@ -895,16 +943,72 @@ export default function StoryMapViewPage() {
                   </div>
                 )}
 
-              {/* Submit button - big and colorful */}
+              {/* SHORT_ANSWER: ô nhập câu trả lời */}
+              {viewState === "question" &&
+                (!currentQuestion.options || currentQuestion.options.length === 0) &&
+                (currentQuestion as any).questionType === "SHORT_ANSWER" && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-slate-600">
+                      Gõ câu trả lời của bạn bên dưới:
+                    </p>
+                    <input
+                      type="text"
+                      value={shortAnswerText}
+                      onChange={(e) => setShortAnswerText(e.target.value)}
+                      placeholder="Nhập câu trả lời..."
+                      className="w-full rounded-xl border-2 border-sky-200 bg-white px-4 py-3 text-base text-slate-800 focus:outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
+                    />
+                  </div>
+                )}
+
+              {viewState === "question" &&
+                (!currentQuestion.options || currentQuestion.options.length === 0) &&
+                (currentQuestion as any).questionType === "PIN_ON_MAP" && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-slate-600">
+                      Nhấp chuột lên bản đồ để chọn vị trí trả lời.{" "}
+                      <span className="font-semibold text-emerald-600">
+                        Bạn có thể đổi vị trí bằng cách click lại chỗ khác.
+                      </span>
+                    </p>
+
+                    {selectedLocation ? (
+                      <div className="rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 font-mono">
+                        Đã chọn: lat {selectedLocation.latitude.toFixed(4)}, lng{" "}
+                        {selectedLocation.longitude.toFixed(4)}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700">
+                        Chưa chọn vị trí. Hãy click lên bản đồ ở bên phải để chọn.
+                      </div>
+                    )}
+                  </div>
+                )}
+
               {viewState === "question" && !hasSubmitted && (
                 <button
                   type="button"
                   onClick={handleSubmitAnswer}
                   disabled={
                     answering ||
-                    !selectedOptionId ||
-                    (timeRemaining !== null && timeRemaining <= 0)
+                    (timeRemaining !== null && timeRemaining <= 0) ||
+                    (
+                      currentQuestion.options &&
+                      currentQuestion.options.length > 0 &&
+                      !selectedOptionId
+                    ) ||
+                    (
+                      (!currentQuestion.options || currentQuestion.options.length === 0) &&
+                      (currentQuestion as any).questionType === "SHORT_ANSWER" &&
+                      !shortAnswerText.trim()
+                    ) ||
+                    (
+                      (!currentQuestion.options || currentQuestion.options.length === 0) &&
+                      (currentQuestion as any).questionType === "PIN_ON_MAP" &&
+                      !selectedLocation
+                    )
                   }
+
                   className="mt-2 w-full rounded-xl px-4 py-4 text-lg font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-200 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:scale-[1.02]"
                 >
                   {answering ? "⏳ Đang gửi..." : "🚀 Gửi đáp án!"}
@@ -923,7 +1027,6 @@ export default function StoryMapViewPage() {
 
               {viewState === "results" && questionResults && (
                 <div className="space-y-3">
-                  {/* Correct answer - bright green */}
                   {questionResults.correctAnswer && (
                     <div className="rounded-xl bg-emerald-50 border-2 border-emerald-300 px-4 py-3">
                       <p className="text-sm font-bold text-emerald-700 mb-1">
@@ -935,7 +1038,6 @@ export default function StoryMapViewPage() {
                     </div>
                   )}
 
-                  {/* Results list - bright styling */}
                   {questionResults.results && questionResults.results.length > 0 && (
                     <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3">
                       <p className="text-sm font-bold text-slate-700 mb-3">
@@ -966,7 +1068,6 @@ export default function StoryMapViewPage() {
                     </div>
                   )}
 
-                  {/* Continue button - colorful */}
                   <button
                     type="button"
                     onClick={handleContinueViewing}
@@ -1020,7 +1121,6 @@ export default function StoryMapViewPage() {
         </div>
       </div>
 
-      {/* MAP GIỮA */}
       <div className="flex-1 min-h-0 relative">
         {segments.length > 0 && (
           <StoryMapViewer
@@ -1034,8 +1134,14 @@ export default function StoryMapViewPage() {
               hasReceivedSegmentSync && currentIndex >= 0 ? safeCurrentIndex : undefined
             }
             controlledPlaying={hasReceivedSegmentSync ? isTeacherPlaying : false}
-            controlsEnabled={false}
+            controlsEnabled={isPinOnMapQuestion}
+            pinAnswerMode={isPinOnMapQuestion}
+            pinAnswerLocation={selectedLocation}
+            onPinAnswerLocation={(lat: number, lng: number) => {
+              setSelectedLocation({ latitude: lat, longitude: lng });
+            }}
           />
+
         )}
 
         {(!hasReceivedSegmentSync || currentIndex < 0) && (
@@ -1055,8 +1161,6 @@ export default function StoryMapViewPage() {
         )}
       </div>
 
-      {/* PANEL PHẢI: Hoạt động nhóm - chỉ hiển thị khi đã vào nhóm */}
-      {/* PANEL PHẢI: Hoạt động nhóm */}
       <div className="w-[340px] border-l border-purple-200 bg-white/95 backdrop-blur flex flex-col shadow-xl">
         <div className="px-4 pt-5 pb-3 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-pink-50">
           <div className="flex items-center justify-between">
