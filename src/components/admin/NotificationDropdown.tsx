@@ -40,7 +40,15 @@ export default function NotificationDropdown({ isDark }: NotificationDropdownPro
   }, [isOpen]);
 
   const handleNotificationClick = (notification: AdminNotification) => {
+    const notificationId = notification.ticketId || notification.reportId || notification.submissionId || "";
+    const uniqueKey = `${notification.type}-${notificationId}-${notification.createdAt}`;
+    
     setUnreadCount((prev) => Math.max(0, prev - 1));
+    setNotifications((prev) => prev.filter((n) => {
+      const nId = n.ticketId || n.reportId || n.submissionId || "";
+      const nKey = `${n.type}-${nId}-${n.createdAt}`;
+      return nKey !== uniqueKey;
+    }));
     
     if (notification.type === "support_ticket" && notification.ticketId) {
       router.push(`/support-tickets/${notification.ticketId}`);
@@ -123,6 +131,7 @@ export default function NotificationDropdown({ isDark }: NotificationDropdownPro
                 <button
                   onClick={() => {
                     setUnreadCount(0);
+                    setNotifications([]);
                   }}
                   className={`p-1.5 rounded-lg transition-colors ${isDark 
                     ? "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800" 
@@ -145,45 +154,51 @@ export default function NotificationDropdown({ isDark }: NotificationDropdownPro
                 </div>
               ) : (
                 <div className={`divide-y ${isDark ? "divide-zinc-800/50" : "divide-gray-200/50"}`}>
-                  {notifications.map((notification, index) => (
-                    <button
-                      key={`${notification.type}-${notification.ticketId || notification.reportId || notification.submissionId}-${index}`}
-                      onClick={() => handleNotificationClick(notification)}
-                      className={`w-full text-left p-4 transition-all duration-150 group ${isDark
-                        ? "hover:bg-zinc-800/50 active:bg-zinc-800"
-                        : "hover:bg-gray-50 active:bg-gray-100"
-                        }`}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-lg ${isDark
-                          ? notification.type === "support_ticket" ? "bg-blue-500/20" 
-                            : notification.type === "map_report" ? "bg-orange-500/20"
-                            : "bg-purple-500/20"
-                          : notification.type === "support_ticket" ? "bg-blue-100" 
-                            : notification.type === "map_report" ? "bg-orange-100"
-                            : "bg-purple-100"
-                        }`}>
-                          {getNotificationIcon(notification.type)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={`font-semibold mb-1.5 text-sm transition-colors ${isDark ? "text-zinc-100 group-hover:text-white" : "text-gray-900 group-hover:text-gray-950"}`}>
-                            {notification.title}
-                          </p>
-                          <p className={`text-sm mb-2 line-clamp-2 leading-relaxed ${isDark ? "text-zinc-400" : "text-gray-600"}`}>
-                            {notification.message}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <p className={`text-xs ${isDark ? "text-zinc-500" : "text-gray-400"}`}>
-                              {formatTime(notification.createdAt)}
+                  {notifications.map((notification) => {
+                    const notificationId = notification.ticketId || notification.reportId || notification.submissionId || "";
+                    const uniqueKey = `${notification.type}-${notificationId}-${notification.createdAt}`;
+                    const isNewest = notifications.length > 0 && notification.createdAt === notifications[0].createdAt;
+                    
+                    return (
+                      <button
+                        key={uniqueKey}
+                        onClick={() => handleNotificationClick(notification)}
+                        className={`w-full text-left p-4 transition-all duration-150 group ${isDark
+                          ? "hover:bg-zinc-800/50 active:bg-zinc-800"
+                          : "hover:bg-gray-50 active:bg-gray-100"
+                          }`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center text-lg ${isDark
+                            ? notification.type === "support_ticket" ? "bg-blue-500/20" 
+                              : notification.type === "map_report" ? "bg-orange-500/20"
+                              : "bg-purple-500/20"
+                            : notification.type === "support_ticket" ? "bg-blue-100" 
+                              : notification.type === "map_report" ? "bg-orange-100"
+                              : "bg-purple-100"
+                          }`}>
+                            {getNotificationIcon(notification.type)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`font-semibold mb-1.5 text-sm transition-colors ${isDark ? "text-zinc-100 group-hover:text-white" : "text-gray-900 group-hover:text-gray-950"}`}>
+                              {notification.title}
                             </p>
-                            {index === 0 && unreadCount > 0 && (
-                              <span className={`w-2 h-2 rounded-full ${isDark ? "bg-blue-500" : "bg-blue-500"}`} />
-                            )}
+                            <p className={`text-sm mb-2 line-clamp-2 leading-relaxed ${isDark ? "text-zinc-400" : "text-gray-600"}`}>
+                              {notification.message}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <p className={`text-xs ${isDark ? "text-zinc-500" : "text-gray-400"}`}>
+                                {formatTime(notification.createdAt)}
+                              </p>
+                              {isNewest && unreadCount > 0 && (
+                                <span className={`w-2 h-2 rounded-full ${isDark ? "bg-blue-500" : "bg-blue-600"}`} />
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

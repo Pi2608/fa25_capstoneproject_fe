@@ -63,8 +63,7 @@ export function createSupportTicketConnection(
           return "";
         }
         if (token.startsWith("Bearer ")) {
-          console.warn("[SignalR SupportTicket] Token provided but invalid, connecting as guest");
-          return "";
+          return token.substring(7);
         }
         return token;
       },
