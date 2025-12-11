@@ -824,8 +824,28 @@ export default function StoryMapControlPage() {
     try {
       setQuestionControlLoading(true);
 
-      const correctOption = question.options?.find((opt) => opt.isCorrect);
-      const correctAnswerText = correctOption?.optionText ?? undefined;
+      let correctAnswerText: string | undefined;
+
+      // 1) Nếu có options (TRUE_FALSE / MULTIPLE_CHOICE) → lấy option đúng
+      if (question.options && question.options.length > 0) {
+        const correctOption = question.options.find((opt) => opt.isCorrect);
+        correctAnswerText = correctOption?.optionText ?? undefined;
+      }
+      // 2) SHORT_ANSWER → lấy correctAnswerText
+      else if (question.questionType === "SHORT_ANSWER") {
+        correctAnswerText = question.correctAnswerText ?? undefined;
+      }
+      // 3) PIN_ON_MAP → hiển thị toạ độ làm đáp án 
+      else if (
+        question.questionType === "PIN_ON_MAP" &&
+        typeof question.correctLatitude === "number" &&
+        typeof question.correctLongitude === "number"
+      ) {
+        correctAnswerText = `${question.correctLatitude.toFixed(4)}, ${question.correctLongitude.toFixed(4)}`;
+        if (question.acceptanceRadiusMeters) {
+          correctAnswerText += ` (±${question.acceptanceRadiusMeters}m)`;
+        }
+      }
 
       await showQuestionResultsViaSignalR(
         connection,
@@ -1743,20 +1763,14 @@ export default function StoryMapControlPage() {
                                   </div>
                                 </div>
 
-                                {q.options && q.options.length > 0 && (
+                                {q.options && q.options.length > 0 ? (
+                                  // TRUE_FALSE / MULTIPLE_CHOICE
                                   <ul className="mt-1 space-y-0.5">
                                     {[...q.options]
-                                      .sort(
-                                        (a, b) =>
-                                          (a.displayOrder ?? 0) -
-                                          (b.displayOrder ?? 0)
-                                      )
+                                      .sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0))
                                       .map((opt) => (
                                         <li
-                                          key={
-                                            opt.questionOptionId ??
-                                            opt.optionText
-                                          }
+                                          key={opt.questionOptionId ?? opt.optionText}
                                           className="flex items-start gap-2 text-[11px]"
                                         >
                                           <span className="mt-[3px] inline-block h-1.5 w-1.5 rounded-full bg-zinc-500" />
@@ -1767,8 +1781,7 @@ export default function StoryMapControlPage() {
                                                 : "text-zinc-300"
                                             }
                                           >
-                                            {opt.optionText ||
-                                              "(Không có nội dung)"}
+                                            {opt.optionText || "(Không có nội dung)"}
                                           </span>
                                           {opt.isCorrect && (
                                             <span className="ml-1 rounded-full bg-emerald-500/10 border border-emerald-400/40 px-1.5 py-[1px] text-[10px] text-emerald-300">
@@ -1778,7 +1791,29 @@ export default function StoryMapControlPage() {
                                         </li>
                                       ))}
                                   </ul>
-                                )}
+                                ) : q.questionType === "SHORT_ANSWER" && q.correctAnswerText ? (
+                                  // SHORT_ANSWER: hiện trực tiếp text đáp án
+                                  <p className="mt-1 text-[11px]">
+                                    <span className="text-zinc-400">Đáp án: </span>
+                                    <span className="text-emerald-300 font-semibold">
+                                      {q.correctAnswerText}
+                                    </span>
+                                  </p>
+                                ) : q.questionType === "PIN_ON_MAP" &&
+                                  typeof q.correctLatitude === "number" &&
+                                  typeof q.correctLongitude === "number" ? (
+                                  // PIN_ON_MAP: hiện toạ độ / mô tả đáp án
+                                  <p className="mt-1 text-[11px] text-zinc-400">
+                                    Đáp án: vị trí trên bản đồ{" "}
+                                    <span className="font-mono text-emerald-300">
+                                      ({q.correctLatitude.toFixed(4)}, {q.correctLongitude.toFixed(4)})
+                                    </span>
+                                    {q.acceptanceRadiusMeters && (
+                                      <> · bán kính {q.acceptanceRadiusMeters}m</>
+                                    )}
+                                  </p>
+                                ) : null}
+
                               </div>
                             );
                           })}
