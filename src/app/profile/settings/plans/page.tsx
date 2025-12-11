@@ -11,8 +11,12 @@ import {
     createOrRenewMembership,
     subscribeToPlan,
     upgradePlan,
+    cancelPayment,
+    confirmPayment,
     type Plan,
     type CurrentMembershipDto,
+    type PaymentConfirmationRequest,
+    type CancelPaymentRequest,
 } from "@/lib/api-membership";
 import {
     getMyOrganizations,
@@ -21,7 +25,7 @@ import {
 import { useI18n } from "@/i18n/I18nProvider";
 
 type Banner = { type: "info" | "success" | "error"; text: string } | null;
-type PaymentMethod = "payOS" | "stripe" | "vnPay";
+type PaymentMethod = "payOS" | "stripe";
 
 function thongBaoLoi(err: unknown, fallback: string): string {
     if (err instanceof Error) return err.message;
@@ -211,12 +215,11 @@ const PaymentMethodPopup: React.FC<PaymentMethodPopupProps> = ({
     if (!isOpen) return null;
 
     const handleMethodSelect = (method: PaymentMethod) => {
-        if (method === "vnPay") return;
         setSelectedMethod(method);
     };
 
     const handleConfirm = () => {
-        if (selectedMethod && selectedMethod !== "vnPay") {
+        if (selectedMethod) {
             onSelectMethod(selectedMethod);
             onClose();
         }
@@ -263,47 +266,6 @@ const PaymentMethodPopup: React.FC<PaymentMethodPopupProps> = ({
                 </svg>
             ),
             available: true,
-            popular: false,
-        },
-        {
-            id: "vnPay" as PaymentMethod,
-            name: "VNPay",
-            description: t("plans.vnpay_description"),
-            icon: (
-                <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 48 48"
-                >
-                    <path
-                        fill="none"
-                        stroke="currentColor"
-                        strokeLinejoin="round"
-                        d="m28.622 37.722l14.445-14.444c.577-.578.577-1.733 0-2.311L34.4 12.3c-.578-.578-1.733-.578-2.311 0l-6.356 6.356L16.49 9.41c-.578-.578-1.734-.578-2.311 0l-9.245 9.245c-.578.577-.578 1.733 0 2.31L21.69 37.723c1.733 1.734 5.2 1.734 6.933 0Z"
-                        strokeWidth="1"
-                    />
-                    <path
-                        fill="none"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="m25.733 18.656l-8.089 8.089q-3.466 3.465-6.933 0"
-                        strokeWidth="1.5"
-                    />
-                    <g
-                        fill="none"
-                        stroke="currentColor"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="1"
-                    >
-                        <path d="M18.222 30.789q-1.732 1.734-3.467 0m22.534-15.6c-1.262-1.156-2.89-.578-4.045.578L18.222 30.789m0-15.022c-4.622-4.622-10.4 1.155-5.778 5.778l5.2 5.2l-5.2-5.2m10.978-.578l-4.044-4.045" />
-                        <path d="m21.689 22.7l-4.622-4.622c-.578-.578-1.445-1.445-2.311-1.156m0 3.467c-.578-.578-1.445-1.444-1.156-2.311m5.778 6.933l-4.622-4.622" />
-                    </g>
-                </svg>
-            ),
-            available: false,
             popular: false,
         },
     ];
@@ -481,7 +443,7 @@ const PaymentMethodPopup: React.FC<PaymentMethodPopupProps> = ({
                     </button>
                     <button
                         onClick={handleConfirm}
-                        disabled={!selectedMethod || selectedMethod === "vnPay"}
+                        disabled={!selectedMethod}
                         className="flex-1 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-700 disabled:text-zinc-500 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors"
                     >
                         {t("plans.continue")}
@@ -526,6 +488,8 @@ export default function TrangGoiThanhVien() {
         isUpgrade: boolean;
     } | null>(null);
     const paymentHandledRef = React.useRef(false);
+    const [paymentResultPopup, setPaymentResultPopup] = useState<{ type: "success" | "cancel"; msg: string } | null>(null);
+    const paymentRedirectHandledRef = React.useRef(false);
 
     useEffect(() => {
         Promise.all([getMe(), getMyOrganizations(), getPlans()])
@@ -590,38 +554,86 @@ export default function TrangGoiThanhVien() {
             .finally(() => setDangLoadMem(false));
     }, [orgId, laOwner, t]);
 
-    // Handle payment redirect
+    // Handle payment redirect from PayOS
     useEffect(() => {
-        if (typeof window === "undefined" || paymentHandledRef.current) return;
+        if (typeof window === "undefined" || paymentRedirectHandledRef.current) return;
+
         const params = new URLSearchParams(window.location.search);
+        const transactionId = params.get("transactionId");
+        const code = params.get("code");
+        const cancel = params.get("cancel");
         const status = params.get("status");
+        const orderCode = params.get("orderCode");
+        const paymentId = params.get("id");
 
-        if (status) {
-            paymentHandledRef.current = true;
+        if (!transactionId) return;
 
-            if (status === "success") {
-                setBanner({
-                    type: "success",
-                    text: t("plans.payment_success"),
-                });
-                if (orgId) {
-                    getMyMembership(orgId)
-                        .then(setMembership)
-                        .catch(() => {});
-                }
-            } else if (status === "failed") {
-                setBanner({
-                    type: "error",
-                    text: t("plans.payment_failed"),
-                });
-            } else if (status === "cancelled") {
-                setBanner({
-                    type: "info",
-                    text: t("plans.payment_cancelled"),
-                });
-            }
+        paymentRedirectHandledRef.current = true;
 
-            window.history.replaceState({}, "", window.location.pathname);
+        // Restore orgId from localStorage
+        const savedOrgId = localStorage.getItem("pendingPaymentOrgId");
+        if (savedOrgId && savedOrgId !== orgId) {
+            setOrgId(savedOrgId);
+        }
+
+        let finalStatus: "success" | "cancel" | null = null;
+
+        console.log({ transactionId, code, cancel, status, orderCode, paymentId });
+
+        if (code === "00" && cancel === "false" && status?.toUpperCase() === "PAID") {
+            finalStatus = "success";
+        } else if (cancel === "true" || status?.toUpperCase() === "CANCELLED") {
+            finalStatus = "cancel";
+        }
+
+        console.log({ finalStatus });
+
+        if (finalStatus === "success") {
+            const req: PaymentConfirmationRequest = {
+                paymentGateway: "payOS",
+                paymentId: paymentId ?? "",
+                orderCode: orderCode ?? "",
+                purpose: "membership",
+                transactionId,
+                status: "success",
+            };
+
+            confirmPayment(req)
+                .then(() => {
+                    setPaymentResultPopup({ type: "success", msg: t("plans.payment_success") });
+                    if (orgId) {
+                        getMyMembership(orgId)
+                            .then(setMembership)
+                            .catch(() => {});
+                    }
+                })
+                .catch((res) => {
+                    setPaymentResultPopup({ type: "cancel", msg: t("plans.payment_failed") });
+                    console.log(res);
+                });
+        }
+
+        if (finalStatus === "cancel") {
+            // Show cancelled message immediately to user
+            setPaymentResultPopup({ type: "cancel", msg: t("plans.payment_cancelled") });
+
+            // Try to notify backend, but don't show error to user if it fails
+            // (payment is already cancelled on PayOS side)
+            const req: CancelPaymentRequest = {
+                paymentGateway: "payOS",
+                transactionId,
+                paymentId: paymentId ?? "",
+                orderCode: orderCode ?? "",
+            };
+
+            cancelPayment(req)
+                .then(() => {
+                    console.log("Backend notified of payment cancellation");
+                })
+                .catch((error) => {
+                    // Log error but don't show to user (payment is already cancelled)
+                    console.warn("Failed to notify backend of payment cancellation:", error);
+                });
         }
     }, [orgId, t]);
 
@@ -707,6 +719,9 @@ export default function TrangGoiThanhVien() {
             }
 
             if (res.paymentUrl) {
+                // Save orgId to localStorage to restore after payment redirect
+                localStorage.setItem("pendingPaymentOrgId", orgId);
+                localStorage.setItem("pendingPaymentPlanId", String(selectedPlanForPayment.planId));
                 window.location.href = res.paymentUrl;
                 return;
             }
@@ -1109,6 +1124,66 @@ export default function TrangGoiThanhVien() {
                 planPrice={selectedPlanForPayment?.price}
                 isDark={isDark}
             />
+
+            {/* Payment Result Modal - Tailwind UI Style */}
+            {paymentResultPopup && (
+                <div className="relative z-50" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+                    <div className="fixed inset-0 bg-black/30 transition-opacity" aria-hidden="true"></div>
+
+                    <div className="fixed inset-0 z-50 w-screen overflow-y-auto">
+                        <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+                            <div className={`relative transform overflow-hidden rounded-lg ${isDark ? 'bg-zinc-900' : 'bg-white'} px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-sm sm:p-6`}>
+                                <div>
+                                    <div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${paymentResultPopup.type === "success" ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'}`}>
+                                        {paymentResultPopup.type === "success" ? (
+                                            <svg className="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" aria-hidden="true">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                            </svg>
+                                        ) : (
+                                            <svg className="h-6 w-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" aria-hidden="true">
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                            </svg>
+                                        )}
+                                    </div>
+                                    <div className="mt-3 text-center sm:mt-5">
+                                        <h3 className={`text-base font-semibold leading-6 ${isDark ? 'text-zinc-100' : 'text-gray-900'}`} id="modal-title">
+                                            {paymentResultPopup.type === "success"
+                                                ? t("plans.payment_success_title")
+                                                : t("plans.payment_failed_title")}
+                                        </h3>
+                                        <div className="mt-2">
+                                            <p className={`text-sm ${isDark ? 'text-zinc-400' : 'text-gray-500'}`}>
+                                                {paymentResultPopup.msg}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="mt-5 sm:mt-6">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setPaymentResultPopup(null);
+                                            // Clean URL and localStorage after closing popup
+                                            if (typeof window !== "undefined") {
+                                                window.history.replaceState({}, "", window.location.pathname);
+                                                localStorage.removeItem("pendingPaymentOrgId");
+                                                localStorage.removeItem("pendingPaymentPlanId");
+                                            }
+                                        }}
+                                        className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                                            paymentResultPopup.type === "success"
+                                                ? 'bg-emerald-600 hover:bg-emerald-500 focus-visible:outline-emerald-600'
+                                                : 'bg-red-600 hover:bg-red-500 focus-visible:outline-red-600'
+                                        }`}
+                                    >
+                                        {t("plans.close")}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
