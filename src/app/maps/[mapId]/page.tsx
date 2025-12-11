@@ -19,7 +19,7 @@ import { getSegments, reorderSegments, type Segment, type TimelineTransition, ge
 import { getMapDetail, type MapDetail, updateMap, type UpdateMapRequest, type UpdateMapFeatureRequest, uploadGeoJsonToMap, updateLayerData, MapStatus, updateMapFeature, LayerDTO, getMapFeatureById, type BaseLayer, createExport, getExportById, type ExportRequest, type ExportResponse} from "@/lib/api-maps";
 import { createMapLocation, deleteLocation, getMapLocations } from "@/lib/api-location";
 
-import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator } from "@/components/map-editor-ui";
+import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator, MeasurementInfoBox } from "@/components/map-editor-ui";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
 import SequentialRoutePlaybackWrapper from "@/components/storymap/SequentialRoutePlaybackWrapper";
@@ -33,6 +33,7 @@ import { useCollaborationVisualization } from "@/hooks/useCollaborationVisualiza
 import { useFeatureManagement } from "@/hooks/useFeatureManagement";
 import { usePoiMarkers } from "@/hooks/usePoiMarkers";
 import { useZoneMarkers } from "@/hooks/useZoneMarkers";
+import { useMeasurementTools } from "@/hooks/useMeasurementTools";
 import type { FeatureCollection, Feature as GeoJSONFeature, Position } from "geojson";
 import { SaveIcon, UploadIcon, DownloadIcon } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
@@ -233,6 +234,10 @@ export default function EditMapPage() {
     mapRef,
     isMapReady,
   });
+
+  // Measurement tools hook
+  const measurementTools = useMeasurementTools(mapRef);
+  const { state: measurementState, startMeasurement, cancelMeasurement } = measurementTools;
 
   // Handle layer click (single or multi-select)
   const handleLayerClick = useCallback((layer: Layer, isShiftKey: boolean) => {
@@ -2473,6 +2478,45 @@ export default function EditMapPage() {
     };
   }, [selectedLayers]); // Only depend on selectedLayers, not the callback
 
+  // Map right-click handler for measurement tools
+  const [mapContextMenu, setMapContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+  });
+
+  useEffect(() => {
+    if (!mapRef.current) return;
+
+    const handleMapContextMenu = (e: L.LeafletMouseEvent) => {
+      // Only show if clicking on empty map area (not on a feature)
+      const target = e.originalEvent.target;
+      if (
+        target &&
+        target instanceof HTMLElement &&
+        !target.closest('.leaflet-interactive') &&
+        !contextMenu.visible
+      ) {
+        e.originalEvent.preventDefault();
+        setMapContextMenu({
+          visible: true,
+          x: e.originalEvent.clientX,
+          y: e.originalEvent.clientY,
+        });
+      }
+    };
+
+    mapRef.current.on('contextmenu', handleMapContextMenu);
+
+    return () => {
+      mapRef.current?.off('contextmenu', handleMapContextMenu);
+    };
+  }, [mapRef, contextMenu.visible]);
+
   const handleZoomToFit = useCallback(async () => {
     if (!mapRef.current || !contextMenu.feature) return;
     const bounds = getFeatureBounds(contextMenu.feature);
@@ -3064,6 +3108,43 @@ export default function EditMapPage() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedLayers, features, onDeleteFeature]);
+
+  // Keyboard shortcut for measurement tools (M key)
+  const [showMeasurementDropdown, setShowMeasurementDropdown] = useState(false);
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in input/textarea
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target as HTMLElement).isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        // Toggle measurement dropdown
+        setShowMeasurementDropdown((prev) => !prev);
+      }
+    };
+
+    const handleClickOutside = (e: MouseEvent) => {
+      if (showMeasurementDropdown) {
+        const target = e.target as HTMLElement;
+        if (!target.closest('.measurement-dropdown')) {
+          setShowMeasurementDropdown(false);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    document.addEventListener('click', handleClickOutside);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [showMeasurementDropdown]);
 
   const saveMap = useCallback(async () => {
     if (!detail) return;
@@ -3907,7 +3988,7 @@ export default function EditMapPage() {
               )}
             </div>
             {!loading && mapStatus !== "archived" && (
-            <DrawingToolsBar mapRef={mapRef} />
+            <DrawingToolsBar mapRef={mapRef} onStartMeasurement={startMeasurement} />
             )}
             <div className="flex items-center justify-end gap-2 overflow-x-auto no-scrollbar">
               {/* Active Users */}
@@ -4162,6 +4243,99 @@ export default function EditMapPage() {
         feature={contextMenu.feature ?? undefined}
         onSuccess={handleCopyFeatureSuccess}
       />
+
+      {/* Measurement Info Box */}
+      {measurementState.mode && measurementState.points.length > 0 && !measurementState.isActive && (
+        <MeasurementInfoBox
+          mode={measurementState.mode}
+          value={measurementState.currentValue}
+          onDismiss={cancelMeasurement}
+        />
+      )}
+
+      {/* Measurement Dropdown (M key) */}
+      {showMeasurementDropdown && (
+        <>
+          <div
+            className="fixed inset-0 z-[10000]"
+            onClick={() => setShowMeasurementDropdown(false)}
+          />
+          <div
+            className="measurement-dropdown fixed z-[10001] bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[200px]"
+            style={{
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+            }}
+          >
+            <button
+              onClick={() => {
+                startMeasurement('distance');
+                setShowMeasurementDropdown(false);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors flex items-center gap-2"
+            >
+              <span>📏</span>
+              <span>Measure Distance</span>
+            </button>
+            <button
+              onClick={() => {
+                startMeasurement('area');
+                setShowMeasurementDropdown(false);
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors flex items-center gap-2"
+            >
+              <span>📐</span>
+              <span>Measure Area</span>
+            </button>
+            <button
+              onClick={() => setShowMeasurementDropdown(false)}
+              className="w-full px-4 py-2 text-left text-sm text-zinc-400 hover:bg-zinc-800 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Map Context Menu for Measurement */}
+      {mapContextMenu.visible && (
+        <>
+          <div
+            className="fixed inset-0 z-[9999]"
+            onClick={() => setMapContextMenu({ visible: false, x: 0, y: 0 })}
+          />
+          <div
+            className="fixed z-[10000] bg-zinc-900 border border-zinc-700 rounded-lg shadow-lg py-1 min-w-[200px]"
+            style={{
+              left: `${mapContextMenu.x}px`,
+              top: `${mapContextMenu.y}px`,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => {
+                startMeasurement('distance');
+                setMapContextMenu({ visible: false, x: 0, y: 0 });
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors flex items-center gap-2"
+            >
+              <span>📏</span>
+              <span>Measure Distance</span>
+            </button>
+            <button
+              onClick={() => {
+                startMeasurement('area');
+                setMapContextMenu({ visible: false, x: 0, y: 0 });
+              }}
+              className="w-full px-4 py-2 text-left text-sm text-white hover:bg-zinc-800 transition-colors flex items-center gap-2"
+            >
+              <span>📐</span>
+              <span>Measure Area</span>
+            </button>
+          </div>
+        </>
+      )}
 
       <CopyFeatureDialog
         isOpen={copyFeatureDialog.isOpen}
