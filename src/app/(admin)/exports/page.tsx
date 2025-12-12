@@ -35,6 +35,19 @@ function getStatusBadgeClass(status: string, isDark: boolean): string {
   return isDark ? "bg-gray-500/20 text-gray-300" : "bg-gray-100 text-gray-800";
 }
 
+function getStatusLabel(status: string): string {
+  const s = (status || "").toLowerCase();
+
+  if (s === "pendingapproval" || s === "pending") return "Chờ phê duyệt";
+  if (s === "processing") return "Đang xử lý";
+  if (s === "approved") return "Đã phê duyệt";
+  if (s === "rejected") return "Từ chối";
+  if (s === "failed") return "Thất bại";
+  if (s === "completed") return "Hoàn thành";
+
+  return status;
+}
+
 export default function AdminExportsPage() {
   const { isDark } = useTheme();
   const theme = getThemeClasses(isDark);
@@ -144,11 +157,10 @@ export default function AdminExportsPage() {
               onChange={(e) => setSearch(e.target.value)}
             />
             <button
-              className={`h-[34px] px-4 text-sm rounded-lg border font-medium transition-colors ${
-                isDark
+              className={`h-[34px] px-4 text-sm rounded-lg border font-medium transition-colors ${isDark
                   ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
                   : "bg-emerald-500 hover:bg-emerald-600 text-white border-emerald-500"
-              }`}
+                }`}
               onClick={loadExports}
               disabled={loading}
             >
@@ -202,8 +214,11 @@ export default function AdminExportsPage() {
                       <span className="uppercase font-mono text-xs font-bold">{exp.format}</span>
                     </td>
                     <td className={`p-3 border-b ${theme.tableCell} text-left`}>
-                      <span className={`inline-block px-2 py-1 rounded text-xs font-semibold ${getStatusBadgeClass(exp.status, isDark)}`}>
-                        {exp.status}
+                      <span
+                        className={`inline-block px-2 py-1 rounded text-xs font-semibold ${getStatusBadgeClass(exp.status, isDark)}`}
+                        title={exp.status}
+                      >
+                        {getStatusLabel(exp.status)}
                       </span>
                     </td>
                     <td className={`p-3 border-b ${theme.tableCell} text-left`}>
@@ -212,33 +227,30 @@ export default function AdminExportsPage() {
                     <td className={`p-3 border-b ${theme.tableCell} text-center`}>
                       <div className="flex items-center justify-center gap-2">
                         <button
-                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-opacity disabled:opacity-50 ${
-                            isDark
+                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-opacity disabled:opacity-50 ${isDark
                               ? "bg-blue-600 hover:bg-blue-700 text-white"
                               : "bg-blue-500 hover:bg-blue-600 text-white"
-                          }`}
+                            }`}
                           onClick={() => handleViewExport(exp)}
                           disabled={actioningId !== null}
                         >
                           Xem Export
                         </button>
                         <button
-                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-opacity disabled:opacity-50 ${
-                            isDark
+                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-opacity disabled:opacity-50 ${isDark
                               ? "bg-green-600 hover:bg-green-700 text-white"
                               : "bg-green-500 hover:bg-green-600 text-white"
-                          }`}
+                            }`}
                           onClick={() => handleApprove(exp.exportId)}
                           disabled={actioningId !== null}
                         >
                           {actioningId === exp.exportId ? "Đang xử lý..." : "Phê duyệt"}
                         </button>
                         <button
-                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-opacity disabled:opacity-50 ${
-                            isDark
+                          className={`px-3 py-1.5 text-xs font-bold rounded-md transition-opacity disabled:opacity-50 ${isDark
                               ? "bg-red-600 hover:bg-red-700 text-white"
                               : "bg-red-500 hover:bg-red-600 text-white"
-                          }`}
+                            }`}
                           onClick={() => handleRejectClick(exp.exportId, exp)}
                           disabled={actioningId !== null}
                         >
@@ -257,9 +269,8 @@ export default function AdminExportsPage() {
       {/* Reject Modal */}
       {rejectModal.isOpen && (
         <div className="fixed inset-0 z-[5000] flex items-center justify-center bg-black/50">
-          <div className={`relative rounded-xl shadow-2xl border w-full max-w-md mx-4 ${
-            isDark ? "bg-zinc-900 border-zinc-700" : "bg-white border-gray-200"
-          }`}>
+          <div className={`relative rounded-xl shadow-2xl border w-full max-w-md mx-4 ${isDark ? "bg-zinc-900 border-zinc-700" : "bg-white border-gray-200"
+            }`}>
             <div className={`px-6 py-4 border-b ${isDark ? "border-zinc-700" : "border-gray-200"}`}>
               <h3 className="text-lg font-bold">Từ chối Export</h3>
               <p className="text-sm opacity-60 mt-1">
@@ -271,11 +282,10 @@ export default function AdminExportsPage() {
                 Lý do từ chối <span className="text-red-500">*</span>
               </label>
               <textarea
-                className={`w-full px-3 py-2 rounded-lg border outline-none focus:ring-2 min-h-[120px] ${
-                  isDark
+                className={`w-full px-3 py-2 rounded-lg border outline-none focus:ring-2 min-h-[120px] ${isDark
                     ? "bg-zinc-800 border-zinc-700 focus:border-zinc-600 focus:ring-zinc-600"
                     : "bg-white border-gray-300 focus:border-gray-400 focus:ring-gray-400"
-                }`}
+                  }`}
                 placeholder="Nhập lý do từ chối export này..."
                 value={rejectReason}
                 onChange={(e) => setRejectReason(e.target.value)}
@@ -284,11 +294,10 @@ export default function AdminExportsPage() {
             </div>
             <div className={`px-6 py-4 border-t flex gap-3 justify-end ${isDark ? "border-zinc-700" : "border-gray-200"}`}>
               <button
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isDark
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isDark
                     ? "bg-zinc-800 hover:bg-zinc-700 text-white"
                     : "bg-gray-200 hover:bg-gray-300 text-gray-900"
-                }`}
+                  }`}
                 onClick={() => {
                   setRejectModal({ isOpen: false, exportId: null, exportItem: null });
                   setRejectReason("");
@@ -298,11 +307,10 @@ export default function AdminExportsPage() {
                 Hủy
               </button>
               <button
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50 ${
-                  isDark
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-50 ${isDark
                     ? "bg-red-600 hover:bg-red-700 text-white"
                     : "bg-red-500 hover:bg-red-600 text-white"
-                }`}
+                  }`}
                 onClick={handleRejectConfirm}
                 disabled={!rejectReason.trim() || actioningId !== null}
               >
