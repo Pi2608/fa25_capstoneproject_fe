@@ -783,6 +783,10 @@ export const messages = {
             tabs_workspace: "Workspace",
         },
         support: {
+            eyebrow: "Hỗ trợ & Trợ giúp",
+            headline: "Chúng tôi luôn sẵn sàng hỗ trợ",
+            subheadline:
+                "Dù bạn gặp vấn đề kỹ thuật hay cần trợ giúp về tài khoản, đội ngũ của chúng tôi luôn sẵn sàng giúp đỡ.",
             ticketListSubtitle: "Danh sách yêu cầu hỗ trợ",
             createCancel: "Hủy",
             badgeLabel: "Trung tâm trợ giúp",
@@ -3773,6 +3777,10 @@ export const messages = {
                 "Cannot delete map while it has active sessions. Please end or cancel all active sessions first.",
         },
         support: {
+            eyebrow: "Help & Support",
+            headline: "We're here to help",
+            subheadline:
+                "Browse our help center articles or submit a support ticket.",
             ticketListSubtitle: "Ticket list",
             createCancel: "Cancel",
             badgeLabel: "Help center",
