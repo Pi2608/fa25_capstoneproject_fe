@@ -9,6 +9,7 @@ import { debounce, rafThrottle, BatchUpdater } from "@/utils/performance";
 import { type FeatureData, extractLayerStyle, applyLayerStyle, handleLayerVisibilityChange, handleFeatureVisibilityChange, getFeatureType as getFeatureTypeUtil, updateFeatureInDB, deleteFeatureFromDB, loadFeaturesToMap, loadLayerToMap, type ExtendedLayer, saveFeature, } from "@/utils/mapUtils";
 import { getFeatureName, getFeatureBounds, formatCoordinates, copyToClipboard, findFeatureIndex, removeFeatureFromGeoJSON } from "@/utils/zoneOperations";
 import * as mapHelpers from "@/utils/mapHelpers";
+import { calculateEffectiveSegmentDuration } from "@/utils/segmentTiming";
 
 import type { BaseKey, Layer, LeafletMouseEvent, LeafletMapClickEvent, MapWithPM, PMCreateEvent, LayerStyle, PathLayer, LocationType, GeomanLayer } from "@/types";
 
@@ -1615,62 +1616,57 @@ export default function EditMapPage() {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
 
+  // Helper function to load segments with their route animations
+  const loadSegmentsWithRoutes = useCallback(async (mapIdParam: string) => {
+    const segmentsData = await getSegments(mapIdParam);
+
+    // Fetch route animations for each segment
+    const segmentsWithRoutes = await Promise.all(
+      segmentsData.map(async (segment) => {
+        try {
+          const routes = await getRouteAnimationsBySegment(mapIdParam, segment.segmentId);
+          return {
+            ...segment,
+            routeAnimations: routes || []
+          };
+        } catch (e) {
+          console.warn("Failed to load routes for segment:", segment.segmentId, e);
+          return {
+            ...segment,
+            routeAnimations: []
+          };
+        }
+      })
+    );
+
+    return segmentsWithRoutes;
+  }, []);
+
   // Load segments and transitions for timeline
   const loadSegmentsAndTransitions = useCallback(async () => {
     if (!mapId) return;
 
     try {
-      const [segmentsData, transitionsData] = await Promise.all([
-        getSegments(mapId),
+      const [segmentsWithRoutes, transitionsData] = await Promise.all([
+        loadSegmentsWithRoutes(mapId),
         getTimelineTransitions(mapId),
       ]);
-
-      // Fetch route animations for each segment
-      const segmentsWithRoutes = await Promise.all(
-        segmentsData.map(async (segment) => {
-          try {
-            const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
-            return {
-              ...segment,
-              routeAnimations: routes || []
-            };
-          } catch (e) {
-            return segment;
-          }
-        })
-      );
 
       setSegments(segmentsWithRoutes);
       setTransitions(transitionsData);
     } catch (error) {
       console.error("Failed to load segments/transitions:", error);
     }
-  }, [mapId]);
+  }, [mapId, loadSegmentsWithRoutes]);
 
   // Handle refresh segments (used by TimelineWorkspace)
   const handleRefreshSegments = useCallback(async () => {
     try {
       // Reload segments with enhanced details (includes locations, routes, zones, layers)
-      const [segmentsData, transitionsData] = await Promise.all([
-        getSegments(mapId),
+      const [segmentsWithRoutes, transitionsData] = await Promise.all([
+        loadSegmentsWithRoutes(mapId),
         getTimelineTransitions(mapId),
       ]);
-
-      // Load route animations for each segment (GetSegmentsAsync doesn't include routes)
-      const segmentsWithRoutes = await Promise.all(
-        segmentsData.map(async (segment) => {
-          try {
-            // Fetch route animations for this segment
-            const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
-            return {
-              ...segment,
-              routeAnimations: routes || []
-            };
-          } catch (e) {
-            return segment;
-          }
-        })
-      );
 
       // Force new array reference to ensure React re-renders
       setSegments([...segmentsWithRoutes]);
@@ -1678,7 +1674,7 @@ export default function EditMapPage() {
     } catch (error) {
       console.error("Failed to refresh segments:", error);
     }
-  }, [mapId]);
+  }, [mapId, loadSegmentsWithRoutes]);
 
   useEffect(() => {
     if (!mapId || !isMapReady) return;
@@ -2814,13 +2810,13 @@ export default function EditMapPage() {
         showToast("success", "Segment created successfully");
       }
 
-      const updatedSegments = await getSegments(mapId);
-
+      // Reload segments with route animations
+      const updatedSegments = await loadSegmentsWithRoutes(mapId);
       setSegments(updatedSegments);
     } catch (error) {
       showToast("error", "Failed to save segment");
     }
-  }, [mapId, showToast]);
+  }, [mapId, showToast, loadSegmentsWithRoutes]);
 
   // Delete segment
   const handleDeleteSegment = useCallback(async (segmentId: string) => {
@@ -2830,13 +2826,13 @@ export default function EditMapPage() {
       await deleteSegment(mapId, segmentId);
       showToast("success", "Segment deleted successfully");
 
-      const updatedSegments = await getSegments(mapId);
-
+      // Reload segments with route animations
+      const updatedSegments = await loadSegmentsWithRoutes(mapId);
       setSegments(updatedSegments);
     } catch (error) {
       showToast("error", "Failed to delete segment");
     }
-  }, [mapId, showToast]);
+  }, [mapId, showToast, loadSegmentsWithRoutes]);
 
   // Save transition (create only - edit not supported by API yet)
   const handleSaveTransition = useCallback(async (data: any, transitionId?: string) => {
@@ -2982,10 +2978,12 @@ export default function EditMapPage() {
       return;
     }
 
-    // Calculate base time from completed segments
+    // FIXED: Calculate base time from completed segments using effective duration
+    // This accounts for route animations that may extend beyond segment duration
     let baseTime = 0;
     for (let i = 0; i < currentPlayback.currentPlayIndex && i < currentSegments.length; i++) {
-      baseTime += currentSegments[i].durationMs / 1000;
+      const effectiveDuration = calculateEffectiveSegmentDuration(currentSegments[i]);
+      baseTime += effectiveDuration / 1000; // Convert to seconds
     }
 
     // Only set initial time when segment changes (not on every render)
@@ -2997,7 +2995,11 @@ export default function EditMapPage() {
 
     // Start smooth time progression using requestAnimationFrame for better performance
     const startTime = Date.now();
-    const currentSegmentDuration = currentSegments[currentPlayback.currentPlayIndex]?.durationMs || 0;
+    // FIXED: Use effective duration for current segment
+    const currentSegment = currentSegments[currentPlayback.currentPlayIndex];
+    const currentSegmentDuration = currentSegment
+      ? calculateEffectiveSegmentDuration(currentSegment)
+      : 0;
     let animationFrameId: number | null = null;
     let lastUpdateTime = startTime;
     let isCancelled = false;
