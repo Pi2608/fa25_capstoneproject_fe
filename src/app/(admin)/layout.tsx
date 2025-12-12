@@ -7,6 +7,7 @@ import { clearAllAuthData } from "@/utils/authUtils";
 import { getMe, type Me } from "@/lib/api-auth";
 import Loading from "@/app/loading";
 import { AlertTriangleIcon } from "lucide-react";
+import NotificationDropdown from "@/components/admin/NotificationDropdown";
 
 const ThemeContext = createContext<{
   isDark: boolean;
@@ -246,20 +247,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               aria-label="Tìm kiếm"
             />
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${isDark
-                ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200"
-                : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
-                }`}
-              aria-label="Thông báo"
-            >
-              <BellIcon />
-            </button>
-            <div className={`w-9 h-9 rounded-full border ${isDark
-              ? "bg-zinc-700 border-zinc-600"
-              : "bg-gray-300 border-gray-400"
-              }`} />
+          <div className="flex items-center gap-2 ml-auto">
+            <NotificationDropdown isDark={isDark} />
           </div>
         </header>
 
