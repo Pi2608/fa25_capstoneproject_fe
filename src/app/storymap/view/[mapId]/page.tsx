@@ -198,12 +198,17 @@ export default function StoryMapViewPage() {
 
         const groups = Array.isArray(data) ? data : [];
 
-        const myGroup = groups.find((g: any) =>
-          Array.isArray(g.members) &&
-          g.members.some((m: any) =>
-            (m.participantId ?? m.sessionParticipantId ?? m.id) === participantId
-          )
-        );
+        const myGroup = groups.find((g: any) => {
+          const members: any[] = Array.isArray(g.members)
+            ? g.members
+            : Array.isArray(g.groupMembers)
+              ? g.groupMembers
+              : [];
+
+          return members.some((m: any) =>
+            (m.sessionParticipantId ?? m.participantId ?? m.id) === participantId
+          );
+        });
 
         setSessionGroups(myGroup ? [myGroup] : []);
       } catch (e) {
@@ -1161,156 +1166,158 @@ export default function StoryMapViewPage() {
         )}
       </div>
 
-      <div className="w-[340px] border-l border-purple-200 bg-white/95 backdrop-blur flex flex-col shadow-xl">
-        <div className="px-4 pt-5 pb-3 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-pink-50">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
-              👥 Hoạt động nhóm
-            </p>
-
-            {currentGroupId ? (
-              <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
-                ✓ Đã vào nhóm
-              </span>
-            ) : (
-              <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">
-                Chưa vào nhóm
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto px-4 pb-4 pt-4 space-y-4">
-          {/* DANH SÁCH NHÓM */}
-          <div className="space-y-2">
-            <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
-              📌 Chọn nhóm
-            </p>
-
-            {sessionGroups.length === 0 && (
-              <p className="text-[12px] text-zinc-500">
-                Giáo viên chưa tạo nhóm hoặc chưa cập nhật.
+      {sessionGroups.length > 0 && (
+        <div className="w-[340px] border-l border-purple-200 bg-white/95 backdrop-blur flex flex-col shadow-xl">
+          <div className="px-4 pt-5 pb-3 border-b border-purple-100 bg-gradient-to-r from-purple-50 to-pink-50">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
+                👥 Hoạt động nhóm
               </p>
-            )}
 
-            {sessionGroups.map((g, idx) => {
-              const anyGroup = g as any;
-              const groupId = anyGroup.groupId ?? g.id;
-              const currentCount =
-                anyGroup.currentMembersCount ?? anyGroup.currentMembers ?? null;
-              const maxMembers = anyGroup.maxMembers ?? null;
-
-              return (
-                <button
-                  key={groupId ?? g.id ?? idx}
-                  type="button"
-                  onClick={() => handleJoinGroup(groupId)}
-                  className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-[12px] border ${currentGroupId === groupId
-                    ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
-                    : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
-                    }`}
-                >
-                  <span className="truncate">
-                    {g.name || `Nhóm ${idx + 1}`}
-                  </span>
-
-                  {typeof currentCount === "number" &&
-                    typeof maxMembers === "number" && (
-                      <span className="text-[11px] text-zinc-400">
-                        {currentCount}/{maxMembers}
-                      </span>
-                    )}
-                </button>
-              );
-            })}
+              {currentGroupId ? (
+                <span className="px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full text-xs font-bold">
+                  ✓ Đã vào nhóm
+                </span>
+              ) : (
+                <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-full text-xs font-bold">
+                  Chưa vào nhóm
+                </span>
+              )}
+            </div>
           </div>
 
+          <div className="flex-1 overflow-y-auto px-4 pb-4 pt-4 space-y-4">
+            {/* DANH SÁCH NHÓM */}
+            <div className="space-y-2">
+              <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
+                📌 Chọn nhóm
+              </p>
 
-          {/* CHỈ HIỆN BÀI LÀM + CHAT KHI ĐÃ VÀO NHÓM */}
-          {currentGroupId && (
-            <>
-              {/* Group work section - bright styling */}
-              <div className="space-y-3">
-                <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
-                  ✏️ Bài làm nhóm
+              {sessionGroups.length === 0 && (
+                <p className="text-[12px] text-zinc-500">
+                  Giáo viên chưa tạo nhóm hoặc chưa cập nhật.
                 </p>
-                <textarea
-                  value={groupWorkContent}
-                  onChange={(e) => setGroupWorkContent(e.target.value)}
-                  placeholder="Viết nội dung bài làm nhóm tại đây..."
-                  className="w-full rounded-xl border-2 border-purple-200 bg-white px-4 py-3 text-base text-slate-700 placeholder:text-slate-400 resize-none h-28 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100"
-                />
-                <button
-                  type="button"
-                  onClick={handleSubmitGroupWork}
-                  disabled={
-                    !currentGroupId ||
-                    groupSubmitting ||
-                    !groupWorkContent.trim()
-                  }
-                  className="w-full rounded-xl px-4 py-3 text-base font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-200 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
-                >
-                  {groupSubmitting ? "⏳ Đang gửi..." : "📤 Gửi bài nhóm"}
-                </button>
-              </div>
+              )}
 
-              {/* Group chat section - bright styling */}
-              <div className="space-y-3">
-                <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
-                  💬 Chat nhóm
-                </p>
-                <div className="max-h-40 overflow-y-auto space-y-2 rounded-xl border-2 border-sky-200 bg-sky-50 px-4 py-3">
-                  {groupMessages.length === 0 && (
-                    <p className="text-sm text-slate-400 text-center py-2">
-                      Tin nhắn nhóm sẽ hiển thị tại đây 📝
-                    </p>
-                  )}
-                  {groupMessages.map((m, idx) => (
-                    <div
-                      key={idx}
-                      className="text-sm bg-white rounded-lg px-3 py-2 shadow-sm"
-                    >
-                      <span className="font-bold text-purple-600">
-                        {m.userName}:
-                      </span>{" "}
-                      <span className="text-slate-700">{m.message}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    value={groupChatInput}
-                    onChange={(e) => setGroupChatInput(e.target.value)}
-                    placeholder="Nhắn tin cho nhóm..."
-                    className="flex-1 rounded-xl border-2 border-purple-200 bg-white px-4 py-2 text-base text-slate-700 placeholder:text-slate-400 focus:border-purple-400 focus:outline-none"
+              {sessionGroups.map((g, idx) => {
+                const anyGroup = g as any;
+                const groupId = anyGroup.groupId ?? g.id;
+                const currentCount =
+                  anyGroup.currentMembersCount ?? anyGroup.currentMembers ?? null;
+                const maxMembers = anyGroup.maxMembers ?? null;
+
+                return (
+                  <button
+                    key={groupId ?? g.id ?? idx}
+                    type="button"
+                    onClick={() => handleJoinGroup(groupId)}
+                    className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-[12px] border ${currentGroupId === groupId
+                      ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
+                      : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
+                      }`}
+                  >
+                    <span className="truncate">
+                      {g.name || `Nhóm ${idx + 1}`}
+                    </span>
+
+                    {typeof currentCount === "number" &&
+                      typeof maxMembers === "number" && (
+                        <span className="text-[11px] text-zinc-400">
+                          {currentCount}/{maxMembers}
+                        </span>
+                      )}
+                  </button>
+                );
+              })}
+            </div>
+
+
+            {/* CHỈ HIỆN BÀI LÀM + CHAT KHI ĐÃ VÀO NHÓM */}
+            {currentGroupId && (
+              <>
+                {/* Group work section - bright styling */}
+                <div className="space-y-3">
+                  <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
+                    ✏️ Bài làm nhóm
+                  </p>
+                  <textarea
+                    value={groupWorkContent}
+                    onChange={(e) => setGroupWorkContent(e.target.value)}
+                    placeholder="Viết nội dung bài làm nhóm tại đây..."
+                    className="w-full rounded-xl border-2 border-purple-200 bg-white px-4 py-3 text-base text-slate-700 placeholder:text-slate-400 resize-none h-28 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100"
                   />
                   <button
                     type="button"
-                    onClick={handleSendGroupMessage}
-                    disabled={!currentGroupId || !groupChatInput.trim()}
-                    className="px-4 py-2 rounded-xl text-base font-bold bg-gradient-to-r from-sky-500 to-blue-500 text-white shadow-lg shadow-sky-200 hover:from-sky-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    onClick={handleSubmitGroupWork}
+                    disabled={
+                      !currentGroupId ||
+                      groupSubmitting ||
+                      !groupWorkContent.trim()
+                    }
+                    className="w-full rounded-xl px-4 py-3 text-base font-bold bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-200 hover:from-purple-600 hover:to-pink-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                   >
-                    📩 Gửi
+                    {groupSubmitting ? "⏳ Đang gửi..." : "📤 Gửi bài nhóm"}
                   </button>
                 </div>
+
+                {/* Group chat section - bright styling */}
+                <div className="space-y-3">
+                  <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
+                    💬 Chat nhóm
+                  </p>
+                  <div className="max-h-40 overflow-y-auto space-y-2 rounded-xl border-2 border-sky-200 bg-sky-50 px-4 py-3">
+                    {groupMessages.length === 0 && (
+                      <p className="text-sm text-slate-400 text-center py-2">
+                        Tin nhắn nhóm sẽ hiển thị tại đây 📝
+                      </p>
+                    )}
+                    {groupMessages.map((m, idx) => (
+                      <div
+                        key={idx}
+                        className="text-sm bg-white rounded-lg px-3 py-2 shadow-sm"
+                      >
+                        <span className="font-bold text-purple-600">
+                          {m.userName}:
+                        </span>{" "}
+                        <span className="text-slate-700">{m.message}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={groupChatInput}
+                      onChange={(e) => setGroupChatInput(e.target.value)}
+                      placeholder="Nhắn tin cho nhóm..."
+                      className="flex-1 rounded-xl border-2 border-purple-200 bg-white px-4 py-2 text-base text-slate-700 placeholder:text-slate-400 focus:border-purple-400 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendGroupMessage}
+                      disabled={!currentGroupId || !groupChatInput.trim()}
+                      className="px-4 py-2 rounded-xl text-base font-bold bg-gradient-to-r from-sky-500 to-blue-500 text-white shadow-lg shadow-sky-200 hover:from-sky-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      📩 Gửi
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+            {currentGroupId && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={handleLeaveGroup}
+                  className="w-full inline-flex items-center justify-center rounded-lg px-3 py-2 text-[12px] font-semibold border border-rose-500/60 bg-rose-500/5 text-rose-600 hover:bg-rose-500/15 transition"
+                >
+                  🚪 Rời nhóm hiện tại
+                </button>
               </div>
-            </>
-          )}
-          {currentGroupId && (
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={handleLeaveGroup}
-                className="w-full inline-flex items-center justify-center rounded-lg px-3 py-2 text-[12px] font-semibold border border-rose-500/60 bg-rose-500/5 text-rose-600 hover:bg-rose-500/15 transition"
-              >
-                🚪 Rời nhóm hiện tại
-              </button>
-            </div>
-          )}
+            )}
 
+          </div>
         </div>
-      </div>
-
+      )}
+      
       {viewState === "question" && currentQuestion && (
         <div className="absolute inset-0 z-[9999] flex items-center justify-center pointer-events-none">
           <div className="bg-zinc-900/95 backdrop-blur-sm border-2 border-emerald-500/50 rounded-2xl p-6 shadow-2xl max-w-lg mx-4 pointer-events-auto">
