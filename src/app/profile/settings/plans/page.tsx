@@ -487,7 +487,6 @@ export default function TrangGoiThanhVien() {
         price: number;
         isUpgrade: boolean;
     } | null>(null);
-    const paymentHandledRef = React.useRef(false);
     const [paymentResultPopup, setPaymentResultPopup] = useState<{ type: "success" | "cancel"; msg: string } | null>(null);
     const paymentRedirectHandledRef = React.useRef(false);
 
@@ -556,7 +555,7 @@ export default function TrangGoiThanhVien() {
 
     // Handle payment redirect from PayOS
     useEffect(() => {
-        if (typeof window === "undefined" || paymentRedirectHandledRef.current) return;
+        if (typeof window === "undefined") return;
 
         const params = new URLSearchParams(window.location.search);
         const transactionId = params.get("transactionId");
@@ -568,6 +567,29 @@ export default function TrangGoiThanhVien() {
 
         if (!transactionId) return;
 
+        // Check if already handled using localStorage to persist across re-renders
+        const handledKey = `payment_handled_${transactionId}`;
+        const popupDataKey = `payment_popup_${transactionId}`;
+
+        if (localStorage.getItem(handledKey)) {
+            console.log(`Payment ${transactionId} already handled, checking for popup data...`);
+
+            // Restore popup from localStorage if exists
+            const savedPopupData = localStorage.getItem(popupDataKey);
+            if (savedPopupData && !paymentResultPopup) {
+                try {
+                    const popupData = JSON.parse(savedPopupData);
+                    setPaymentResultPopup(popupData);
+                    console.log(`Restored popup from localStorage:`, popupData);
+                } catch (e) {
+                    console.error("Failed to parse popup data:", e);
+                }
+            }
+            return;
+        }
+
+        // Mark as handled immediately before API call
+        localStorage.setItem(handledKey, "true");
         paymentRedirectHandledRef.current = true;
 
         // Restore orgId from localStorage
@@ -600,7 +622,11 @@ export default function TrangGoiThanhVien() {
 
             confirmPayment(req)
                 .then(() => {
-                    setPaymentResultPopup({ type: "success", msg: t("plans.payment_success") });
+                    const popupData = { type: "success" as const, msg: t("plans.payment_success") };
+                    setPaymentResultPopup(popupData);
+                    // Save popup data to localStorage for re-renders
+                    localStorage.setItem(popupDataKey, JSON.stringify(popupData));
+
                     if (orgId) {
                         getMyMembership(orgId)
                             .then(setMembership)
@@ -608,14 +634,26 @@ export default function TrangGoiThanhVien() {
                     }
                 })
                 .catch((res) => {
-                    setPaymentResultPopup({ type: "cancel", msg: t("plans.payment_failed") });
+                    const popupData = { type: "cancel" as const, msg: t("plans.payment_failed") };
+                    setPaymentResultPopup(popupData);
+                    // Save popup data to localStorage for re-renders
+                    localStorage.setItem(popupDataKey, JSON.stringify(popupData));
                     console.log(res);
+                })
+                .finally(() => {
+                    // Cleanup: Remove handled flag after processing (keep popup data)
+                    setTimeout(() => {
+                        localStorage.removeItem(handledKey);
+                    }, 60000); // Keep for 1 minute to prevent accidental re-processing
                 });
         }
 
         if (finalStatus === "cancel") {
             // Show cancelled message immediately to user
-            setPaymentResultPopup({ type: "cancel", msg: t("plans.payment_cancelled") });
+            const popupData = { type: "cancel" as const, msg: t("plans.payment_cancelled") };
+            setPaymentResultPopup(popupData);
+            // Save popup data to localStorage for re-renders
+            localStorage.setItem(popupDataKey, JSON.stringify(popupData));
 
             // Try to notify backend, but don't show error to user if it fails
             // (payment is already cancelled on PayOS side)
@@ -633,6 +671,12 @@ export default function TrangGoiThanhVien() {
                 .catch((error) => {
                     // Log error but don't show to user (payment is already cancelled)
                     console.warn("Failed to notify backend of payment cancellation:", error);
+                })
+                .finally(() => {
+                    // Cleanup: Remove handled flag after processing (keep popup data)
+                    setTimeout(() => {
+                        localStorage.removeItem(handledKey);
+                    }, 60000); // Keep for 1 minute
                 });
         }
     }, [orgId, t]);
@@ -1168,6 +1212,13 @@ export default function TrangGoiThanhVien() {
                                                 window.history.replaceState({}, "", window.location.pathname);
                                                 localStorage.removeItem("pendingPaymentOrgId");
                                                 localStorage.removeItem("pendingPaymentPlanId");
+
+                                                // Remove all payment-related popup data
+                                                Object.keys(localStorage).forEach(key => {
+                                                    if (key.startsWith("payment_popup_") || key.startsWith("payment_handled_")) {
+                                                        localStorage.removeItem(key);
+                                                    }
+                                                });
                                             }
                                         }}
                                         className={`inline-flex w-full justify-center rounded-md px-3 py-2 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
