@@ -64,6 +64,19 @@ function normalizeSessionStatus(raw: unknown): string {
   return upper;
 }
 
+function pick<T = unknown>(obj: any, ...keys: string[]): T | undefined {
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v !== undefined && v !== null) return v as T;
+  }
+  return undefined;
+}
+
+function toInt(v: any): number | null {
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+
 export default function StoryMapViewPage() {
   const params = useParams<{ mapId: string }>();
   const searchParams = useSearchParams();
@@ -148,7 +161,9 @@ export default function StoryMapViewPage() {
         if (cancelled) return;
         setSession(sessionData);
 
-        const status = normalizeSessionStatus((sessionData as any).status);
+        const rawStatus = pick(sessionData as any, "status", "Status");
+        const status = normalizeSessionStatus(rawStatus);
+
 
         console.log("[View] Session status from API:", sessionData.status, "->", status);
 
@@ -240,7 +255,9 @@ export default function StoryMapViewPage() {
     setCurrentIndex(-1);
     setIsTeacherPlaying(false);
 
-    const status = normalizeSessionStatus((event as any).status);
+    const rawStatus = pick(event as any, "status", "Status");
+    const status = normalizeSessionStatus(rawStatus);
+
 
     console.log("[View] JoinedSession status:", event.status, "->", status);
 
@@ -254,7 +271,8 @@ export default function StoryMapViewPage() {
   }, []);
 
   const handleSessionStatusChanged = useCallback((event: SessionStatusChangedEvent) => {
-    const status = normalizeSessionStatus((event as any).status);
+    const rawStatus = pick(event as any, "status", "Status");
+    const status = normalizeSessionStatus(rawStatus);
 
     console.log("[View] SessionStatusChanged:", event.status, "->", status);
 
@@ -281,8 +299,18 @@ export default function StoryMapViewPage() {
 
   const handleSegmentSync = useCallback(
     (event: SegmentSyncEvent) => {
-      const idx = event.segmentIndex;
-      const shouldPlay = typeof event.isPlaying === "boolean" ? event.isPlaying : false;
+      const idxRaw = pick(event as any, "segmentIndex", "SegmentIndex");
+      const playRaw = pick(event as any, "isPlaying", "IsPlaying");
+
+      const idx = toInt(idxRaw);
+      const shouldPlay =
+        typeof playRaw === "boolean" ? playRaw : String(playRaw).toLowerCase() === "true";
+
+      if (idx === null) {
+        console.warn("[View] SegmentSync missing index:", event);
+        return;
+      }
+
       const now = Date.now();
 
       const prev = prevSegmentSyncRef.current;
@@ -299,7 +327,7 @@ export default function StoryMapViewPage() {
 
       prevSegmentSyncRef.current = { index: idx, isPlaying: shouldPlay, timestamp: now };
 
-      if (typeof idx === "number" && idx >= 0) {
+      if (idx >= 0) {
         setCurrentIndex((prevIndex) => {
           const segmentChanged = prevIndex !== idx;
 
@@ -392,8 +420,12 @@ export default function StoryMapViewPage() {
 
   const handleMapLayerSync = useCallback((event: MapLayerSyncEvent) => {
     console.log("[View] Received MapLayerSync:", event);
-    setSelectedLayer(event.layerKey as BaseKey);
-    toast.info(`Bản đồ đã chuyển sang: ${event.layerKey}`);
+    const k = pick(event as any, "layerKey", "LayerKey");
+    if (!k) return;
+
+    setSelectedLayer(k as BaseKey);
+    toast.info(`Bản đồ đã chuyển sang: ${k}`);
+
   }, []);
 
   const { connection, isConnected } = useSessionHub({
