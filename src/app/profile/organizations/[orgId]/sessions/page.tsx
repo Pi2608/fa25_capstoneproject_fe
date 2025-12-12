@@ -8,6 +8,7 @@ import {
   deleteSession,
   type SessionDto,
 } from "@/lib/api-ques";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 type HeaderMode = "light" | "dark";
 
@@ -237,20 +238,16 @@ export default function OrgSessionsPage() {
       )}
 
       {!loading && !error && sessions.length === 0 && (
-        <div className="rounded-2xl border p-6 text-center shadow-sm backdrop-blur border-zinc-200 bg-white/90 dark:border-white/10 dark:bg-zinc-900/60">
-          <p className="mb-4 text-zinc-600 dark:text-zinc-300">
-            Bạn chưa có session nào.
-          </p>
-          <button
-            type="button"
-            onClick={() =>
-              router.push(`/profile/organizations/${orgId}/sessions/create`)
-            }
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-zinc-900 hover:bg-emerald-400"
-          >
-            + Tạo session đầu tiên
-          </button>
-        </div>
+        <EmptyState
+          illustration="teaching"
+          title="No Sessions Yet"
+          description="Start your first live session to engage with students in real-time. Sessions include interactive questions, live leaderboards, and instant feedback."
+          action={{
+            label: "Start First Session",
+            onClick: () =>
+              router.push(`/profile/organizations/${orgId}/sessions/create`),
+          }}
+        />
       )}
 
       {!loading && !error && sessions.length > 0 && (

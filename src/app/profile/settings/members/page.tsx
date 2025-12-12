@@ -18,6 +18,7 @@ import {
   MyOrganizationDto,
 } from "@/lib/api-organizations";
 import { getMe, Me } from "@/lib/api-auth";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 type MemberRow = {
   memberId: string;
@@ -704,48 +705,51 @@ export default function MembersPage() {
         </div>
       )}
 
-      <div className={`overflow-x-auto rounded-lg ring-1 shadow-sm ${isDark ? "ring-white/10" : "ring-gray-200"}`}>
-        <table className={`min-w-full ${isDark ? "bg-zinc-950" : "bg-white"}`}>
-          <thead>
-            <tr className={themeClasses.tableHeader}>
-              <th className="px-3 py-2 text-sm font-medium text-left">
-                {t("settings_members.col_member")}
-              </th>
-              <th className="px-3 py-2 text-sm font-medium text-left">
-                {t("settings_members.col_last_view")}
-              </th>
-              <th className="px-3 py-2 text-sm font-medium text-left">
-                {t("settings_members.col_permissions")}
-              </th>
-              <th className="px-3 py-2 text-sm font-medium text-left">
-                {t("settings_members.col_role")}
-              </th>
-              <th className="w-[280px] px-3 py-2 text-sm font-medium text-left">
-                {t("settings_members.col_actions")}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && (
-              <tr>
-                <td
-                  colSpan={5}
-                  className={`px-3 py-6 text-center text-sm ${themeClasses.textMuted}`}
-                >
-                  {t("settings_members.loading_members")}
-                </td>
+      {loading && (
+        <div className="min-h-[40vh] flex items-center justify-center text-sm text-zinc-600 dark:text-zinc-400">
+          {t("settings_members.loading_members")}
+        </div>
+      )}
+
+      {!loading && members.length === 0 && (
+        <EmptyState
+          illustration="team"
+          title="No Team Members Yet"
+          description="Build your team by inviting members to collaborate. Members can have different roles with varying levels of access to organization resources."
+          action={
+            isOwner
+              ? {
+                  label: "Invite Members",
+                  onClick: () => setInviteOpen(true),
+                }
+              : undefined
+          }
+        />
+      )}
+
+      {!loading && members.length > 0 && (
+        <div className={`overflow-x-auto rounded-lg ring-1 shadow-sm ${isDark ? "ring-white/10" : "ring-gray-200"}`}>
+          <table className={`min-w-full ${isDark ? "bg-zinc-950" : "bg-white"}`}>
+            <thead>
+              <tr className={themeClasses.tableHeader}>
+                <th className="px-3 py-2 text-sm font-medium text-left">
+                  {t("settings_members.col_member")}
+                </th>
+                <th className="px-3 py-2 text-sm font-medium text-left">
+                  {t("settings_members.col_last_view")}
+                </th>
+                <th className="px-3 py-2 text-sm font-medium text-left">
+                  {t("settings_members.col_permissions")}
+                </th>
+                <th className="px-3 py-2 text-sm font-medium text-left">
+                  {t("settings_members.col_role")}
+                </th>
+                <th className="w-[280px] px-3 py-2 text-sm font-medium text-left">
+                  {t("settings_members.col_actions")}
+                </th>
               </tr>
-            )}
-            {!loading && members.length === 0 && (
-              <tr>
-                <td
-                  colSpan={5}
-                  className={`px-3 py-6 text-center text-sm ${themeClasses.textMuted}`}
-                >
-                  {t("settings_members.no_members")}
-                </td>
-              </tr>
-            )}
+            </thead>
+            <tbody>
             {!loading &&
               members.map((m) => {
                 const busy = !!rowBusy[m.memberId];
@@ -853,9 +857,10 @@ export default function MembersPage() {
                   </tr>
                 );
               })}
-          </tbody>
-        </table>
-      </div>
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {transferTarget && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
