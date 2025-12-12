@@ -24,10 +24,20 @@ export default function SessionResultsPage() {
         ]);
 
         setSession(sessionData);
-        setLeaderboard(leaderboardData.map(entry => ({
-          ...entry,
-          rank: entry.rank ?? 0,
-        })));
+        setLeaderboard(
+          leaderboardData
+            .map((entry) => ({
+              participantId: entry.participantId ?? entry.sessionParticipantId ?? "",
+              displayName: entry.displayName ?? "",
+              score: entry.score ?? entry.totalScore ?? 0,
+              rank: entry.rank ?? 0,
+              totalCorrect: entry.totalCorrect ?? 0,
+              totalAnswered: entry.totalAnswered ?? 0,
+              averageResponseTime: entry.averageResponseTime ?? 0,
+              isCurrentUser: entry.isCurrentUser ?? false,
+            }))
+            .filter((e) => e.participantId)
+        );
       } catch (error) {
         console.error("Failed to fetch results:", error);
       } finally {
