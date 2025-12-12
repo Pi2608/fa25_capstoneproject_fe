@@ -42,6 +42,7 @@ export function LocationForm({
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [iconUrl, setIconUrl] = useState("");
+  const [iconSize, setIconSize] = useState(32);
   const [audioUrl, setAudioUrl] = useState("");
   const [iconPreview, setIconPreview] = useState<string | null>(null);
 
@@ -61,6 +62,7 @@ export function LocationForm({
       setIsVisible(initialLocation.isVisible !== false);
       setHighlightOnEnter(initialLocation.highlightOnEnter ?? false);
       setIconUrl(initialLocation.iconUrl || "");
+      setIconSize(initialLocation.iconSize || 32);
       setAudioUrl(initialLocation.audioUrl || "");
       if (initialLocation.markerGeometry) {
         try {
@@ -343,6 +345,18 @@ export function LocationForm({
                 placeholder="https://example.com/icon.png"
                 disabled={saving}
               />
+              {/* set icon size */}
+              <div className="text-xs text-zinc-500">Kích thước hiển thị (px):</div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  value={iconSize}
+                  onChange={(e) => setIconSize(Number(e.target.value))}
+                  className="w-20 bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                  disabled={saving}
+                  min={1}
+                />
+              </div>
             </div>
 
             {/* Audio Upload */}

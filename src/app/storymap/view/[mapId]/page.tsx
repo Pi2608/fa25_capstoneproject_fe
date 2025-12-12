@@ -1197,22 +1197,6 @@ export default function StoryMapViewPage() {
           />
 
         )}
-
-        {(!hasReceivedSegmentSync || currentIndex < 0) && (
-          <div className="absolute inset-0 z-[500] flex items-center justify-center bg-zinc-900/90 backdrop-blur-sm">
-            <div className="text-center">
-              <div className="text-4xl mb-4">🗺️</div>
-              <p className="text-zinc-400">Chờ giáo viên điều khiển bản đồ...</p>
-              <div className="mt-4 flex items-center justify-center gap-2 text-sm text-zinc-500">
-                <span
-                  className={`inline-flex h-2 w-2 rounded-full ${isConnected ? "bg-emerald-400" : "bg-red-400"
-                    } animate-pulse`}
-                />
-                <span>{isConnected ? "Đã kết nối" : "Đang kết nối..."}</span>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {sessionGroups.length > 0 && (
