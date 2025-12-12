@@ -1,22 +1,39 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 export default function RevealOnScroll() {
-  useEffect(() => {
-    const nodes = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((e) => {
-        if (e.isIntersecting) {
-          e.target.classList.add("in");
-          io.unobserve(e.target as Element);
-        }
-      });
-    }, { threshold: 0.16 });
+  const pathname = usePathname();
 
-    nodes.forEach((n) => io.observe(n));
-    return () => io.disconnect();
-  }, []);
+  useEffect(() => {
+    // Reset all elements first
+    const allNodes = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+    allNodes.forEach((n) => n.classList.remove("in"));
+
+    // Small delay to ensure DOM is ready after route change
+    const timer = setTimeout(() => {
+      const nodes = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add("in");
+            io.unobserve(e.target as Element);
+          }
+        });
+      }, { threshold: 0.16 });
+
+      nodes.forEach((n) => io.observe(n));
+
+      return () => {
+        io.disconnect();
+      };
+    }, 50);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [pathname]);
 
   return (
     <style jsx global>{`

@@ -1,13 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useI18n } from "@/i18n/I18nProvider";
-
-gsap.registerPlugin(ScrollTrigger);
+import { useGsapHomeScroll } from "@/components/common/useGsapHomeScroll";
 
 type Level = "Beginner" | "Intermediate" | "Advanced";
 type Topic =
@@ -73,6 +71,18 @@ export default function TutorialPage() {
   const { t } = useI18n();
   const tr = (k: string) => t("tutorials", k);
 
+  useGsapHomeScroll({
+    reduce,
+    heroSelectors: {
+      title: ".tu-hero-title",
+      subtitle: ".tu-hero-sub",
+      cta: ".tu-hero-cta",
+    },
+    fadeSelector: ".tu-fade",
+    staggerSelector: ".tu-stagger",
+    cardSelector: ".card",
+  });
+
   const LEVEL_KEYS: Record<Level | "All", string> = {
     All: "level_all",
     Beginner: "level_beginner",
@@ -82,13 +92,13 @@ export default function TutorialPage() {
 
   const TOPIC_KEYS: Record<Topic | "All", string> = {
     All: "topic_all",
-    "Quickstart": "topic_quickstart",
+    Quickstart: "topic_quickstart",
     "Story Maps": "topic_story_maps",
-    "Styling": "topic_styling",
-    "Data": "topic_data",
-    "Exports": "topic_exports",
-    "API": "topic_api",
-    "Collaboration": "topic_collaboration",
+    Styling: "topic_styling",
+    Data: "topic_data",
+    Exports: "topic_exports",
+    API: "topic_api",
+    Collaboration: "topic_collaboration",
   };
 
   const LEVELS: (Level | "All")[] = ["All", "Beginner", "Intermediate", "Advanced"];
@@ -203,55 +213,7 @@ export default function TutorialPage() {
       const passQuery = !q || textTitle.includes(q) || textExcerpt.includes(q) || textTopic.includes(q);
       return passLevel && passTopic && passQuery;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [TUTORIALS, query, level, topic, t]); // include t to refilter on locale change
-
-  useLayoutEffect(() => {
-    const prefersReduced =
-      typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const base = { ease: "power2.out", duration: prefersReduced || reduce ? 0 : 0.9 } as const;
-    const ctx = gsap.context(() => {
-      gsap.set([".tu-hero-title", ".tu-hero-sub", ".tu-hero-cta"], { autoAlpha: 0, y: 20 });
-      gsap
-        .timeline()
-        .to(".tu-hero-title", { autoAlpha: 1, y: 0, ...base })
-        .to(".tu-hero-sub", { autoAlpha: 1, y: 0, ...base }, "<0.08")
-        .to(".tu-hero-cta", { autoAlpha: 1, y: 0, ...base }, "<0.08");
-
-      gsap.utils.toArray<HTMLElement>(".tu-fade").forEach((el) => {
-        gsap.set(el, { autoAlpha: 0, y: 16 });
-        ScrollTrigger.create({
-          trigger: el,
-          start: "top 85%",
-          onEnter: () =>
-            gsap.to(el, {
-              autoAlpha: 1,
-              y: 0,
-              duration: prefersReduced || reduce ? 0 : 0.7,
-              ease: "power2.out",
-            }),
-        });
-      });
-
-      gsap.utils.toArray<HTMLElement>(".tu-stagger").forEach((wrap) => {
-        const cards = wrap.querySelectorAll<HTMLElement>(".card");
-        gsap.set(cards, { autoAlpha: 0, y: 18 });
-        ScrollTrigger.create({
-          trigger: wrap,
-          start: "top 80%",
-          onEnter: () =>
-            gsap.to(cards, {
-              autoAlpha: 1,
-              y: 0,
-              stagger: 0.08,
-              duration: prefersReduced || reduce ? 0 : 0.7,
-              ease: "power2.out",
-            }),
-        });
-      });
-    });
-    return () => ctx.revert();
-  }, [reduce]);
+  }, [TUTORIALS, query, level, topic, t]);
 
   useEffect(() => {
     const el = gridRef.current;

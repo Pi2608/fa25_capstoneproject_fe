@@ -15,11 +15,17 @@ import type { Workspace } from "@/types/workspace";
 import type { MapDto } from "@/lib/api-maps";
 import { formatDateTime } from "@/utils/formatUtils";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 type Role = "Owner" | "Admin" | "Member" | "Viewer" | string;
 
 export default function WorkspacePage() {
   const { t } = useI18n();
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const [orgs, setOrgs] = useState<MyOrganizationDto[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
@@ -166,15 +172,15 @@ export default function WorkspacePage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight">{t("workspaces.title")}</h2>
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className={`text-sm ${themeClasses.textMuted}`}>
               {t("workspaces.subtitle")}
             </p>
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-sm text-zinc-600 dark:text-zinc-400">{t("workspaces.org_label")}</span>
+              <span className={`text-sm ${themeClasses.textMuted}`}>{t("workspaces.org_label")}</span>
               <select
-                className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                className={`rounded-lg border px-3 py-2 text-sm shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${themeClasses.select} ${isDark ? "dark:hover:bg-zinc-800" : ""}`}
                 value={selectedOrgId ?? ""}
                 onChange={(e) => setSelectedOrgId(e.target.value || null)}
               >
@@ -203,14 +209,14 @@ export default function WorkspacePage() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
           {/* Danh sách workspace */}
-          <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-950 dark:ring-white/10">
-            <div className="border-b border-zinc-200 px-4 py-3 text-sm font-medium text-zinc-700 dark:border-white/10 dark:text-zinc-200">
+          <div className={`rounded-2xl shadow-sm ring-1 ${themeClasses.panel} ${isDark ? "ring-white/10" : "ring-gray-200"}`}>
+            <div className={`border-b px-4 py-3 text-sm font-medium ${themeClasses.tableBorder} ${isDark ? "text-zinc-200" : "text-gray-700"}`}>
               {t("workspaces.list_title")}
             </div>
             <div className="max-h-[620px] overflow-y-auto">
-              {wsLoading && <div className="px-4 py-4 text-sm text-zinc-600 dark:text-zinc-400">{t("workspaces.loading")}</div>}
+              {wsLoading && <div className={`px-4 py-4 text-sm ${themeClasses.textMuted}`}>{t("workspaces.loading")}</div>}
               {!wsLoading && workspaces.length === 0 && (
-                <div className="px-4 py-4 text-sm text-zinc-600 dark:text-zinc-400">{t("workspaces.empty_list")}</div>
+                <div className={`px-4 py-4 text-sm ${themeClasses.textMuted}`}>{t("workspaces.empty_list")}</div>
               )}
               {!wsLoading &&
                 workspaces.map((w) => {
@@ -219,18 +225,18 @@ export default function WorkspacePage() {
                     <button
                       key={w.workspaceId}
                       onClick={() => setSelectedWsId(w.workspaceId)}
-                      className={`w-full px-4 py-4 text-left transition ${
-                        active ? "bg-emerald-50/70 dark:bg-emerald-500/10" : "hover:bg-zinc-50 dark:hover:bg-white/5"
-                      } border-top border-zinc-200 dark:border-white/5`}
+                      className={`w-full px-4 py-4 text-left transition border-top ${
+                        active ? (isDark ? "bg-emerald-500/10" : "bg-emerald-50/70") : (isDark ? "hover:bg-white/5" : "hover:bg-gray-50")
+                      } ${themeClasses.tableBorder}`}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="line-clamp-1 font-medium text-zinc-900 dark:text-zinc-50">{w.workspaceName}</div>
-                        <span className="rounded-full px-2 py-0.5 text-[10px] text-zinc-600 ring-1 ring-zinc-200 dark:text-zinc-300 dark:ring-white/10">
+                        <div className={`line-clamp-1 font-medium ${isDark ? "text-zinc-50" : "text-gray-900"}`}>{w.workspaceName}</div>
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] ring-1 ${themeClasses.textMuted} ${themeClasses.tableBorder}`}>
                           {w.isPersonal ? t("workspaces.personal_badge") : w.orgName || "—"}
                         </span>
                       </div>
                       {w.description && (
-                        <div className="mt-1 line-clamp-2 text-xs text-zinc-600 dark:text-zinc-400">{w.description}</div>
+                        <div className={`mt-1 line-clamp-2 text-xs ${themeClasses.textMuted}`}>{w.description}</div>
                       )}
                     </button>
                   );
@@ -240,12 +246,12 @@ export default function WorkspacePage() {
 
           {/* Chi tiết workspace */}
           <div className="space-y-6">
-            <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-950 dark:ring-white/10">
-              <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium text-zinc-700 dark:border-white/10 dark:text-zinc-200">
+            <div className={`rounded-2xl shadow-sm ring-1 ${themeClasses.panel} ${isDark ? "ring-white/10" : "ring-gray-200"}`}>
+              <div className={`border-b px-5 py-3 text-sm font-medium ${themeClasses.tableBorder} ${isDark ? "text-zinc-200" : "text-gray-700"}`}>
                 {t("workspaces.section_basics")}
               </div>
               {!wsDetail && (
-                <div className="px-5 py-5 text-sm text-zinc-600 dark:text-zinc-400">
+                <div className={`px-5 py-5 text-sm ${themeClasses.textMuted}`}>
                   {t("workspaces.select_workspace_hint")}
                 </div>
               )}
@@ -253,12 +259,12 @@ export default function WorkspacePage() {
                 <div className="p-5 space-y-4">
                   <div className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
                     <div>
-                      <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">{t("workspaces.field_name")}</label>
+                      <label className={`mb-1 block text-xs ${themeClasses.textMuted}`}>{t("workspaces.field_name")}</label>
                       <input
                         value={nameInput}
                         onChange={(e) => setNameInput(e.target.value)}
                         disabled={!canManage || busy}
-                        className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-60 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                        className={`w-full rounded-xl border px-3 py-2 text-sm shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-60 ${themeClasses.input} ${isDark ? "dark:hover:bg-zinc-800" : ""}`}
                         placeholder={t("workspaces.placeholder_untitled")}
                       />
                     </div>
@@ -271,17 +277,17 @@ export default function WorkspacePage() {
                     </button>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">{t("workspaces.field_description")}</label>
+                    <label className={`mb-1 block text-xs ${themeClasses.textMuted}`}>{t("workspaces.field_description")}</label>
                     <textarea
                       value={descInput}
                       onChange={(e) => setDescInput(e.target.value)}
                       disabled={!canManage || busy}
                       rows={3}
-                      className="w-full resize-y rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-60 dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                      className={`w-full resize-y rounded-xl border px-3 py-2 text-sm shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:opacity-60 ${themeClasses.input} ${isDark ? "dark:hover:bg-zinc-800" : ""}`}
                       placeholder={t("workspaces.placeholder_desc")}
                     />
                   </div>
-                  <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <div className={`text-xs ${themeClasses.textMuted}`}>
                     {wsDetail.updatedAt ? `${t("workspaces.updated_prefix")} ${formatDateTime(wsDetail.updatedAt)}` : ""}
                   </div>
                 </div>
@@ -289,24 +295,24 @@ export default function WorkspacePage() {
             </div>
 
             {/* Danh sách bản đồ */}
-            <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-950 dark:ring-white/10">
-              <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium text-zinc-700 dark:border-white/10 dark:text-zinc-200">
+            <div className={`rounded-2xl shadow-sm ring-1 ${themeClasses.panel} ${isDark ? "ring-white/10" : "ring-gray-200"}`}>
+              <div className={`border-b px-5 py-3 text-sm font-medium ${themeClasses.tableBorder} ${isDark ? "text-zinc-200" : "text-gray-700"}`}>
                 {t("workspaces.section_maps")}
               </div>
               {!wsDetail && (
-                <div className="px-5 py-5 text-sm text-zinc-600 dark:text-zinc-400">{t("workspaces.select_workspace_maps_hint")}</div>
+                <div className={`px-5 py-5 text-sm ${themeClasses.textMuted}`}>{t("workspaces.select_workspace_maps_hint")}</div>
               )}
               {wsDetail && (
                 <div className="p-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {maps.length === 0 && (
-                    <div className="text-sm text-zinc-500 dark:text-zinc-400">{t("workspaces.no_maps")}</div>
+                    <div className={`text-sm ${themeClasses.textMuted}`}>{t("workspaces.no_maps")}</div>
                   )}
                   {maps.map((m) => (
-                    <div key={m.mapId} className="rounded-xl border border-zinc-200 dark:border-white/10 p-3">
-                      <div className="truncate text-sm font-medium">
+                    <div key={m.mapId} className={`rounded-xl border p-3 ${themeClasses.tableBorder}`}>
+                      <div className={`truncate text-sm font-medium ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
                         {"name" in m ? (m as { name: string }).name : (m as { mapName: string }).mapName}
                       </div>
-                      <div className="text-xs text-zinc-500">
+                      <div className={`text-xs ${themeClasses.textMuted}`}>
                         {m.updatedAt ? formatDateTime(m.updatedAt) : ""}
                       </div>
                     </div>
@@ -316,8 +322,8 @@ export default function WorkspacePage() {
             </div>
 
             {/* Danger zone */}
-            <div className="rounded-2xl bg-white shadow-sm ring-1 ring-zinc-200 dark:bg-zinc-950 dark:ring-white/10">
-              <div className="border-b border-zinc-200 px-5 py-3 text-sm font-medium text-zinc-700 dark:border-white/10 dark:text-zinc-200">
+            <div className={`rounded-2xl shadow-sm ring-1 ${themeClasses.panel} ${isDark ? "ring-white/10" : "ring-gray-200"}`}>
+              <div className={`border-b px-5 py-3 text-sm font-medium ${themeClasses.tableBorder} ${isDark ? "text-zinc-200" : "text-gray-700"}`}>
                 {t("workspaces.section_danger")}
               </div>
               <div className="p-5">
@@ -329,7 +335,7 @@ export default function WorkspacePage() {
                   {t("workspaces.btn_delete")}
                 </button>
                 {!canManage && (
-                  <div className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  <div className={`mt-2 text-xs ${themeClasses.textMuted}`}>
                     {t("workspaces.delete_permission_hint")}
                   </div>
                 )}

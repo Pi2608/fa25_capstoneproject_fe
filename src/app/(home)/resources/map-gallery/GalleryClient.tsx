@@ -1,23 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useGsapHomeScroll } from "@/components/common/useGsapHomeScroll";
 import { useI18n } from "@/i18n/I18nProvider";
-gsap.registerPlugin(ScrollTrigger);
+import { useToast } from "@/contexts/ToastContext";
+import {
+  getPublishedGalleryMaps,
+  getPublishedGalleryMapById,
+  getPublishedGalleryMapByMapId,
+  duplicateMapFromGallery,
+  MapGalleryCategory,
+  MapGalleryDetailResponse,
+  MapGallerySummaryResponse,
+} from "@/lib/api-map-gallery";
 
-export type MapItem = {
-  id: string;
-  title: string;
-  author: string;
-  tags: string[];
-  views: number;
-  likes: number;
-  updated: string; // ISO
-  href: string;
-  duplicateHref: string;
-};
+type GalleryMapDetail = MapGalleryDetailResponse;
 
 function EyeIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -29,6 +27,7 @@ function EyeIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
 function HeartIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -39,6 +38,7 @@ function HeartIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
 function CopyIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -49,6 +49,7 @@ function CopyIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
 function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -56,6 +57,7 @@ function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
 function TagPill({ children }: { children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-medium text-emerald-300">
@@ -69,33 +71,154 @@ type SortKey = "popular" | "newest" | "likes";
 
 const TAG_KEYS = [
   "All",
-  "Education",
-  "Environment",
-  "Urban",
-  "Disaster",
-  "Transportation",
-  "History",
-  "Zones",
-  "Analytics",
-  "Tourism",
-  "POI",
-  "Raster",
-  "Story",
+  "general",
+  "business",
+  "planning",
+  "logistics",
+  "research",
+  "operations",
+  "education",
 ] as const;
-type TagKey = (typeof TAG_KEYS)[number];
-const TAG_SET = new Set<string>(TAG_KEYS as unknown as string[]);
 
-export default function GalleryClient({ maps }: { maps: MapItem[] }) {
+type TagKey = (typeof TAG_KEYS)[number];
+
+const CATEGORY_BY_TAG: Record<TagKey, MapGalleryCategory | undefined> = {
+  All: undefined,
+  general: "general",
+  business: "business",
+  planning: "planning",
+  logistics: "logistics",
+  research: "research",
+  operations: "operations",
+  education: "education",
+};
+
+export default function GalleryClient() {
   const { t } = useI18n();
-  const tr = (k: string) => t("gallery", k);
+  const { showToast } = useToast();
+
+  const [maps, setMaps] = useState<MapGallerySummaryResponse[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [detail, setDetail] = useState<GalleryMapDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [mapIdQuery, setMapIdQuery] = useState("");
+  const [duplicating, setDuplicating] = useState<string | null>(null);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
   const [tagKey, setTagKey] = useState<TagKey>("All");
   const [sort, setSort] = useState<SortKey>("popular");
   const [pageSize, setPageSize] = useState<12 | 18 | 24>(12);
   const [page, setPage] = useState(1);
+  const [featuredOnly, setFeaturedOnly] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // GSAP hook cho hero + fade + card grid
+  useGsapHomeScroll({
+    heroSelectors: {
+      title: ".gal-hero-title",
+      subtitle: ".gal-hero-sub",
+      cta: ".gal-controls",
+    },
+    // Các block fade-in thêm (eyebrow, tags, meta, CTA)
+    fadeSelector: ".gal-hero-eyebrow, .gal-tags, .gal-meta, .gal-cta",
+    fadeStart: "top 90%",
+    // Stagger cho grid card gallery
+    stagger: {
+      container: ".gal-card-grid",
+      card: ".gal-card",
+      start: "top 80%",
+    },
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const load = async () => {
+      setLoading(true);
+      setLoadError(null);
+
+      try {
+        const category = CATEGORY_BY_TAG[tagKey];
+        const search = q.trim() || undefined;
+        const featured = featuredOnly ? true : undefined;
+
+        const data = await getPublishedGalleryMaps({
+          category,
+          search,
+          featured,
+        });
+
+        if (!isMounted) return;
+
+        setMaps(data);
+      } catch (err: any) {
+        if (!isMounted) return;
+        setLoadError(err?.message || t("gallery.error_load_maps"));
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    load();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [tagKey, q, featuredOnly, t]);
+
+  const handleSelectByGalleryId = async (galleryId: string) => {
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const d = await getPublishedGalleryMapById(galleryId);
+      setDetail(d);
+    } catch (err: any) {
+      setDetailError(err?.message || t("gallery.error_load_detail"));
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleSearchByMapId = async () => {
+    const id = mapIdQuery.trim();
+    if (!id) return;
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const d = await getPublishedGalleryMapByMapId(id);
+      setDetail(d);
+    } catch (err: any) {
+      setDetailError(err?.message || t("gallery.error_load_detail"));
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const handleDuplicate = async (galleryId: string, mapId: string) => {
+    setDuplicating(galleryId);
+    setDuplicateError(null);
+    try {
+      const result = await duplicateMapFromGallery(galleryId, {});
+      // Redirect to the new map
+      window.location.href = `/maps/${result.mapId}`;
+    } catch (err: any) {
+      setDuplicating(null);
+
+      // Check if error is 401 Unauthorized
+      if (err?.status === 401) {
+        showToast("error", t("gallery.error_duplicate_unauthorized"));
+      } else {
+        const errorMessage = err?.message || t("gallery.error_duplicate");
+        setDuplicateError(errorMessage);
+        showToast("error", errorMessage);
+      }
+    }
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -110,103 +233,52 @@ export default function GalleryClient({ maps }: { maps: MapItem[] }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  /** Lọc + sắp xếp */
-  const filtered = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    let list = maps.filter((m) => {
-      const hit =
-        !qq ||
-        m.title.toLowerCase().includes(qq) ||
-        m.author.toLowerCase().includes(qq) ||
-        m.tags.some((t) => t.toLowerCase().includes(qq));
-      const tagOk = tagKey === "All" || m.tags.includes(tagKey);
-      return hit && tagOk;
+  const sorted = useMemo(() => {
+    const list = [...maps];
+    return list.sort((a, b) => {
+      if (sort === "popular") return b.viewCount - a.viewCount;
+      if (sort === "likes") return b.likeCount - a.likeCount;
+      const da = a.publishedAt ?? a.createdAt;
+      const db = b.publishedAt ?? b.createdAt;
+      return +new Date(db) - +new Date(da);
     });
+  }, [maps, sort]);
 
-    list = list.sort((a, b) => {
-      if (sort === "popular") return b.views - a.views;
-      if (sort === "likes") return b.likes - a.likes;
-      return +new Date(b.updated) - +new Date(a.updated);
-    });
-
-    return list;
-  }, [maps, q, tagKey, sort]);
-
-  /** Phân trang */
   const { pageItems, totalPages, from, to } = useMemo(() => {
-    const total = filtered.length;
+    const total = sorted.length;
     const pages = Math.max(1, Math.ceil(total / pageSize));
     const safe = Math.min(page, pages);
     const start = (safe - 1) * pageSize;
     const end = Math.min(start + pageSize, total);
-    return { pageItems: filtered.slice(start, end), totalPages: pages, from: start + 1, to: end };
-  }, [filtered, page, pageSize]);
+    return { pageItems: sorted.slice(start, end), totalPages: pages, from: start + 1, to: end };
+  }, [sorted, page, pageSize]);
 
-  /** Reset trang khi thay filter */
-  useEffect(() => setPage(1), [q, tagKey, sort, pageSize]);
+  useEffect(() => setPage(1), [q, tagKey, sort, pageSize, featuredOnly]);
 
-  /** Hiệu ứng vào màn hình */
-  useLayoutEffect(() => {
-    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const baseIn = { ease: "power2.out", duration: reduce ? 0 : 0.7 } as const;
-
-    const ctx = gsap.context(() => {
-      gsap.set(
-        [".gal-hero-eyebrow", ".gal-hero-title", ".gal-hero-sub", ".gal-controls", ".gal-tags", ".gal-meta"],
-        { autoAlpha: 0, y: 16 }
-      );
-      gsap
-        .timeline()
-        .to(".gal-hero-eyebrow", { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.5, ease: "power2.out" })
-        .to(".gal-hero-title", { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.7, ease: "power2.out" }, "<0.06")
-        .to(".gal-hero-sub", { autoAlpha: 1, y: 0, ...baseIn }, "<0.06")
-        .to(".gal-controls", { autoAlpha: 1, y: 0, ...baseIn }, "<0.08")
-        .to(".gal-tags", { autoAlpha: 1, y: 0, ...baseIn }, "<0.06")
-        .to(".gal-meta", { autoAlpha: 1, y: 0, ...baseIn }, "<0.04");
-
-      ScrollTrigger.batch(".gal-tag-btn", {
-        start: "top 95%",
-        onEnter: (els) => gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.05, ...baseIn }),
-        onLeaveBack: (els) => gsap.set(els, { autoAlpha: 0, y: 10 }),
-      });
-
-      gsap.set(".gal-cta", { autoAlpha: 0, y: 16 });
-      ScrollTrigger.create({
-        trigger: ".gal-cta",
-        start: "top 90%",
-        onEnter: () => gsap.to(".gal-cta", { autoAlpha: 1, y: 0, ...baseIn }),
-      });
-    });
-
-    return () => ctx.revert();
-  }, []);
-
-  /** Animate cards khi đổi bộ lọc/trang */
-  useEffect(() => {
-    const reduce = typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const cards = gsap.utils.toArray<HTMLElement>(".gal-card");
-    if (!cards.length) return;
-    gsap.fromTo(cards, { autoAlpha: 0, y: 18 }, { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.55, ease: "power2.out", stagger: 0.08 });
-  }, [pageItems, tagKey, sort, q, page]);
-
-  /** Helper hiển thị tag an toàn (không crash nếu thiếu key i18n) */
-  const renderTag = (tag: string) => (TAG_SET.has(tag) ? tr(`tag_${tag}`) : tag);
+  const renderTagFilterLabel = (key: TagKey) => {
+    if (key === "All") return t("gallery.tag_All");
+    return t(`gallery.category_${key}`);
+  };
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10 text-zinc-100">
-      {/* Hero */}
       <section className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
         <div className="relative z-10">
-          <p className="gal-hero-eyebrow text-sm tracking-wide text-emerald-300/90">{tr("hero_eyebrow")}</p>
-          <h1 className="gal-hero-title mt-2 text-3xl font-semibold sm:text-4xl">{tr("hero_title")}</h1>
-          <p className="gal-hero-sub mt-3 max-w-2xl text-zinc-300">{tr("hero_sub")}</p>
+          <p className="gal-hero-eyebrow text-sm tracking-wide text-emerald-300/90">
+            {t("gallery.hero_eyebrow")}
+          </p>
+          <h1 className="gal-hero-title mt-2 text-3xl font-semibold sm:text-4xl">
+            {t("gallery.hero_title")}
+          </h1>
+          <p className="gal-hero-sub mt-3 max-w-2xl text-zinc-300">
+            {t("gallery.hero_sub")}
+          </p>
         </div>
         <div className="pointer-events-none absolute -left-32 -top-24 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl" />
         <div className="pointer-events-none absolute -right-20 bottom-0 h-60 w-60 rounded-full bg-emerald-400/10 blur-3xl" />
       </section>
 
-      {/* Controls */}
-      <section className="gal-controls mt-6 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-4 ring-1 ring-emerald-500/10 opacity-0 translate-y-[16px]">
+      <section className="gal-controls mt-6 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-4 ring-1 ring-emerald-500/10">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="sm:col-span-2">
             <div className="relative">
@@ -214,7 +286,7 @@ export default function GalleryClient({ maps }: { maps: MapItem[] }) {
                 ref={inputRef}
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder={tr("search_placeholder")}
+                placeholder={t("gallery.search_placeholder")}
                 className="w-full rounded-xl bg-zinc-900/70 ring-1 ring-white/10 px-4 py-2.5 pr-24 text-sm text-zinc-100 placeholder-zinc-500 outline-none focus:ring-emerald-400/50"
               />
               <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-zinc-400">
@@ -229,135 +301,192 @@ export default function GalleryClient({ maps }: { maps: MapItem[] }) {
               onChange={(e) => setSort(e.target.value as SortKey)}
               className="w-full rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2.5 text-sm outline-none focus:border-emerald-400/60"
             >
-              <option value="popular">{tr("sort_popular")}</option>
-              <option value="newest">{tr("sort_newest")}</option>
-              <option value="likes">{tr("sort_likes")}</option>
+              <option value="popular">{t("gallery.sort_popular")}</option>
+              <option value="newest">{t("gallery.sort_newest")}</option>
+              <option value="likes">{t("gallery.sort_likes")}</option>
             </select>
           </div>
 
           <div className="sm:col-span-1">
             <select
               value={pageSize}
-              onChange={(e) => setPageSize(Number(e.target.value) as 12 | 18 | 24)}
+              onChange={(e) =>
+                setPageSize(Number(e.target.value) as 12 | 18 | 24)
+              }
               className="w-full rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2.5 text-sm outline-none focus:border-emerald-400/60"
             >
-              <option value={12}>{tr("page_size")}: 12</option>
-              <option value={18}>{tr("page_size")}: 18</option>
-              <option value={24}>{tr("page_size")}: 24</option>
+              <option value={12}>{t("gallery.page_size")}: 12</option>
+              <option value={18}>{t("gallery.page_size")}: 18</option>
+              <option value={24}>{t("gallery.page_size")}: 24</option>
             </select>
           </div>
         </div>
 
-        {/* Tags */}
-        <div className="gal-tags mt-3 flex flex-wrap gap-2 opacity-0 translate-y-[16px]">
+        <div className="mt-3 flex items-center gap-3 text-xs text-zinc-300">
+          <label className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={featuredOnly}
+              onChange={(e) => setFeaturedOnly(e.target.checked)}
+              className="h-4 w-4 rounded border-zinc-600 bg-zinc-900"
+            />
+            <span>{t("gallery.featured_only")}</span>
+          </label>
+        </div>
+
+        <div className="gal-tags mt-3 flex flex-wrap gap-2">
           {TAG_KEYS.map((k) => (
             <button
               key={k}
               onClick={() => setTagKey(k)}
-              className={`gal-tag-btn opacity-0 translate-y-[10px] rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                tagKey === k ? "bg-emerald-500 text-zinc-950" : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/70"
+              className={`gal-tag-btn rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                tagKey === k
+                  ? "bg-emerald-500 text-zinc-950"
+                  : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/70"
               }`}
               aria-pressed={tagKey === k}
             >
-              {tr(`tag_${k}`)}
+              {renderTagFilterLabel(k)}
             </button>
           ))}
         </div>
 
-        {/* Meta */}
-        <div className="gal-meta mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-400 opacity-0 translate-y-[16px]">
+        <div className="gal-meta mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-400">
           <span>
-            {filtered.length} {tr("results")} • {tr("showing")} “{tr(`tag_${tagKey}`)}”
-            {q ? ` • ${tr("searching_for")} “${q}”` : ""}
+            {sorted.length} {t("gallery.results")} • {t("gallery.showing")} “
+            {renderTagFilterLabel(tagKey)}”
+            {q ? ` • ${t("gallery.searching_for")} “${q}”` : ""}
+            {featuredOnly ? ` • ${t("gallery.featured_badge")}` : ""}
           </span>
           <span className="rounded bg-white/5 px-2 py-0.5 ring-1 ring-white/10">
-            {filtered.length ? `${from}–${to}` : "0–0"} {tr("of")} {filtered.length}
+            {sorted.length ? `${from}–${to}` : "0–0"} {t("gallery.of")}{" "}
+            {sorted.length}
           </span>
         </div>
       </section>
 
-      {/* Results */}
-      {pageItems.length === 0 ? (
+      {loadError && (
+        <section className="mt-6 rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+          {loadError}
+        </section>
+      )}
+
+      {loading ? (
+        <section className="mt-8 rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-8 text-center text-sm text-zinc-400">
+          {t("gallery.loading_maps")}
+        </section>
+      ) : pageItems.length === 0 ? (
         <section className="mt-8 rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-8 text-center">
-          <div className="text-lg font-medium">{tr("empty_title")}</div>
-          <p className="mt-1 text-sm text-zinc-400">{tr("empty_sub")}</p>
+          <div className="text-lg font-medium">{t("gallery.empty_title")}</div>
+          <p className="mt-1 text-sm text-zinc-400">{t("gallery.empty_sub")}</p>
           <div className="mt-4">
             <button
               onClick={() => {
                 setQ("");
                 setTagKey("All");
                 setSort("popular");
+                setFeaturedOnly(false);
               }}
               className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
             >
-              {tr("reset_filters")}
+              {t("gallery.reset_filters")}
             </button>
           </div>
         </section>
       ) : (
         <>
-          <section className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          <section className="gal-card-grid mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {pageItems.map((m) => (
-              <article key={m.id} className="gal-card opacity-0 translate-y-[18px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-5">
+              <article
+                key={m.id}
+                className="gal-card rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-5"
+              >
                 <div className="aspect-[16/9] w-full overflow-hidden rounded-xl ring-1 ring-white/5">
-                  <div className="h-full w-full bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent" />
+                  {m.previewImage ? (
+                    <img
+                      src={m.previewImage}
+                      alt={m.mapName}
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-full w-full bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent" />
+                  )}
                 </div>
 
-                <h3 className="mt-3 text-base font-semibold leading-snug">{m.title}</h3>
+                <h3 className="mt-3 text-base font-semibold leading-snug">
+                  {m.mapName}
+                </h3>
                 <div className="mt-1 text-xs text-zinc-400">
-                  {tr("by")} {m.author} • {tr("updated")} {new Date(m.updated).toLocaleDateString()}
+                  {t("gallery.by")} {m.authorName} • {t("gallery.updated")}{" "}
+                  {new Date(m.publishedAt ?? m.createdAt).toLocaleDateString()}
                 </div>
 
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  {m.tags.map((t) => (
-                    <TagPill key={t}>{renderTag(t)}</TagPill>
+                  <TagPill>{t(`gallery.category_${m.category}`)}</TagPill>
+                  {m.isFeatured && (
+                    <TagPill>{t("gallery.featured_badge")}</TagPill>
+                  )}
+                  {m.tags.map((tag) => (
+                    <TagPill key={tag}>{tag}</TagPill>
                   ))}
                 </div>
 
                 <div className="mt-3 flex items-center gap-4 text-xs text-zinc-400">
                   <span className="inline-flex items-center gap-1">
                     <EyeIcon className="h-4 w-4 text-emerald-300" />
-                    {fmt(m.views)}
+                    {fmt(m.viewCount)}
                   </span>
                   <span className="inline-flex items-center gap-1">
                     <HeartIcon className="h-4 w-4 text-emerald-300" />
-                    {fmt(m.likes)}
+                    {fmt(m.likeCount)}
                   </span>
                 </div>
 
-                <div className="mt-4 flex gap-3">
+                <div className="mt-4 flex flex-wrap gap-3">
                   <Link
-                    href={m.href}
+                    href={`/maps/${m.mapId}`}
                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
                   >
-                    {tr("view_map")}
+                    {t("gallery.view_map")}
                   </Link>
-                  <Link
-                    href={m.duplicateHref}
-                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-3 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70"
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicate(m.id, m.mapId)}
+                    disabled={duplicating === m.id}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-3 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <CopyIcon className="h-4 w-4" />
-                    {tr("duplicate")}
-                  </Link>
+                    {duplicating === m.id ? t("gallery.duplicating") : t("gallery.duplicate")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSelectByGalleryId(m.id)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-zinc-700/70 bg-zinc-900 px-3 py-2 text-sm font-medium text-zinc-200 hover:border-emerald-400/70"
+                  >
+                    {t("gallery.button_details")}
+                  </button>
                 </div>
               </article>
             ))}
           </section>
 
-          {/* Pagination */}
           <section className="mt-6 flex flex-col items-center justify-between gap-3 sm:flex-row">
             <div className="text-xs text-zinc-400">
-              {filtered.length ? `${from}–${to}` : "0–0"} {tr("of")} {filtered.length} • {tr("page")} {Math.min(page, totalPages)} / {totalPages}
+              {sorted.length ? `${from}–${to}` : "0–0"} {t("gallery.of")}{" "}
+              {sorted.length} • {t("gallery.page")} {Math.min(page, totalPages)} /{" "}
+              {totalPages}
             </div>
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
                 className={`rounded-xl px-3 py-2 text-sm ring-1 ${
-                  page <= 1 ? "cursor-not-allowed opacity-50 ring-white/10" : "ring-white/15 hover:bg-white/5"
+                  page <= 1
+                    ? "cursor-not-allowed opacity-50 ring-white/10"
+                    : "ring-white/15 hover:bg-white/5"
                 }`}
               >
-                {tr("prev")}
+                {t("gallery.prev")}
               </button>
 
               <div className="hidden items-center gap-1 sm:flex">
@@ -368,49 +497,129 @@ export default function GalleryClient({ maps }: { maps: MapItem[] }) {
                       key={n}
                       onClick={() => setPage(n)}
                       className={`h-9 w-9 rounded-lg text-sm ${
-                        page === n ? "bg-emerald-500 text-zinc-950" : "ring-1 ring-white/10 hover:bg-white/5"
+                        page === n
+                          ? "bg-emerald-500 text-zinc-950"
+                          : "ring-1 ring-white/10 hover:bg-white/5"
                       }`}
                     >
                       {n}
                     </button>
                   );
                 })}
-                {totalPages > 7 && <span className="px-2 text-sm text-zinc-400">…</span>}
+                {totalPages > 7 && (
+                  <span className="px-2 text-sm text-zinc-400">…</span>
+                )}
               </div>
 
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 className={`rounded-xl px-3 py-2 text-sm ring-1 ${
-                  page >= totalPages ? "cursor-not-allowed opacity-50 ring-white/10" : "ring-white/15 hover:bg-white/5"
+                  page >= totalPages
+                    ? "cursor-not-allowed opacity-50 ring-white/10"
+                    : "ring-white/15 hover:bg-white/5"
                 }`}
               >
-                {tr("next")}
+                {t("gallery.next")}
               </button>
             </div>
           </section>
         </>
       )}
 
-      {/* CTA */}
-      <section className="gal-cta mt-10 opacity-0 translate-y-[16px] overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent p-6 ring-1 ring-emerald-500/10">
+      <section className="mt-10 rounded-2xl border border-emerald-500/20 bg-zinc-900/70 p-6 ring-1 ring-emerald-500/10">
+        <div className="flex flex-col gap-6 lg:flex-row">
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold">{t("gallery.detail_title")}</h3>
+            {detailLoading && (
+              <p className="mt-2 text-sm text-zinc-400">{t("gallery.loading_detail")}</p>
+            )}
+            {detailError && (
+              <p className="mt-2 text-sm text-red-300">{detailError}</p>
+            )}
+            {!detailLoading && !detail && !detailError && (
+              <p className="mt-2 text-sm text-zinc-400">
+                {t("gallery.detail_empty")}
+              </p>
+            )}
+            {detail && !detailLoading && (
+              <div className="mt-3 space-y-2 text-sm text-zinc-200">
+                <div className="text-base font-medium">{detail.mapName}</div>
+                <div className="text-xs text-zinc-400">
+                  {t("gallery.detail_author")}: {detail.authorName} •{" "}
+                  {(detail.publishedAt || detail.createdAt) &&
+                    new Date(
+                      detail.publishedAt || detail.createdAt
+                    ).toLocaleDateString()}
+                </div>
+                <p className="mt-1 whitespace-pre-line text-sm text-zinc-200">
+                  {detail.description}
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  <TagPill>{t(`gallery.category_${detail.category}`)}</TagPill>
+                  {detail.isFeatured && (
+                    <TagPill>{t("gallery.featured_badge")}</TagPill>
+                  )}
+                  {detail.tags.map((tag) => (
+                    <TagPill key={tag}>{tag}</TagPill>
+                  ))}
+                </div>
+                <div className="mt-2 text-xs text-zinc-400">
+                  {t("gallery.detail_views")}: {fmt(detail.viewCount)} •{" "}
+                  {t("gallery.detail_likes")}: {fmt(detail.likeCount)}
+                </div>
+                <div className="mt-2 text-xs text-zinc-400 break-all">
+                  {t("gallery.detail_gallery_id")}: {detail.id}
+                  <br />
+                  {t("gallery.detail_map_id")}: {detail.mapId}
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="w-full max-w-sm rounded-2xl border border-zinc-700/60 bg-zinc-950/70 p-4 text-sm">
+            <div className="font-medium text-zinc-100">
+              {t("gallery.search_by_map_id_title")}
+            </div>
+            <p className="mt-1 text-xs text-zinc-400">
+              {t("gallery.search_by_map_id_desc")}
+            </p>
+            <div className="mt-3 space-y-2">
+              <input
+                value={mapIdQuery}
+                onChange={(e) => setMapIdQuery(e.target.value)}
+                placeholder={t("gallery.search_by_map_id_placeholder")}
+                className="w-full rounded-xl border border-zinc-700/70 bg-zinc-900/70 px-3 py-2 text-xs text-zinc-100 placeholder-zinc-500 outline-none focus:border-emerald-400/70"
+              />
+              <button
+                type="button"
+                onClick={handleSearchByMapId}
+                className="w-full rounded-xl bg-emerald-500 px-3 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
+              >
+                {t("gallery.search_by_map_id_button")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="gal-cta mt-10 overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/15 via-emerald-400/10 to-transparent p-6 ring-1 ring-emerald-500/10">
         <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
           <div>
-            <h3 className="text-xl font-semibold">{tr("cta_title")}</h3>
-            <p className="mt-1 text-zinc-300">{tr("cta_sub")}</p>
+            <h3 className="text-xl font-semibold">{t("gallery.cta_title")}</h3>
+            <p className="mt-1 text-zinc-300">{t("gallery.cta_sub")}</p>
           </div>
           <div className="flex gap-3">
             <Link
               href="/resources/map-gallery/submit"
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400"
             >
-              {tr("cta_submit")} <ArrowRightIcon className="h-4 w-4" />
+              {t("gallery.cta_submit")} <ArrowRightIcon className="h-4 w-4" />
             </Link>
             <Link
               href="/resources/blog"
               className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-4 py-2 text-sm font-medium text-emerald-300 transition hover:border-emerald-400/70"
             >
-              {tr("cta_blog")}
+              {t("gallery.cta_blog")}
             </Link>
           </div>
         </div>

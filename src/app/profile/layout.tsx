@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPlans, type Plan, getMyMembership } from "@/lib/api-membership";
-import { getMyOrganizations, type MyOrganizationDto } from "@/lib/api-organizations";
+import { getMyOrganizations, type MyOrganizationDto, getMyInvitations } from "@/lib/api-organizations";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { NotificationProvider, useNotifications } from "@/contexts/NotificationContext";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 export type MyMembership = {
   planId: number;
@@ -73,27 +74,26 @@ function ThemeToggle() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  
+  const current = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = current === "dark";
+  const themeClasses = getThemeClasses(isDark);
+
   if (!mounted) {
     return (
-      <div className="inline-flex h-8 w-[100px] items-center justify-center rounded-md border border-zinc-300 bg-white shadow-sm dark:border-white/10 dark:bg-zinc-800/80" />
+      <div className={`inline-flex h-8 w-[100px] items-center justify-center rounded-md border shadow-sm ${themeClasses.button}`} />
     );
   }
 
-  const current = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
-  const isDark = current === "dark";
-
   const base =
     "inline-flex items-center gap-2 h-8 px-3 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60";
-
-  const lightCls = "bg-white text-zinc-900 border border-zinc-300 hover:bg-zinc-50 shadow-sm";
-  const darkCls = "bg-zinc-800/80 text-zinc-50 border border-white/10 hover:bg-zinc-700/80 shadow-sm";
 
   return (
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
       aria-label={t("profilelayout.theme_toggle_aria")}
       title={isDark ? t("profilelayout.switch_to_light") : t("profilelayout.switch_to_dark")}
-      className={`${base} ${isDark ? darkCls : lightCls}`}
+      className={`${base} ${themeClasses.button}`}
     >
       {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
       <span>{isDark ? t("profilelayout.theme_dark") : t("profilelayout.theme_light")}</span>
@@ -107,6 +107,8 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
   const { isLoggedIn } = useAuthStatus();
   const { resolvedTheme, theme } = useTheme();
   const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
   const { unreadCount: unread } = useNotifications();
 
   const [mounted, setMounted] = useState(false);
@@ -114,7 +116,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
 
   const mainClass = !mounted
     ? "min-h-screen text-zinc-900 bg-gradient-to-b from-emerald-100 via-white to-emerald-50"
-    : currentTheme === "dark"
+    : isDark
       ? "min-h-screen text-zinc-100 bg-gradient-to-b from-[#0b0f0e] via-emerald-900/10 to-[#0b0f0e]"
       : "min-h-screen text-zinc-900 bg-gradient-to-b from-emerald-100 via-white to-emerald-50";
 
@@ -129,6 +131,8 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
   const [planStatus, setPlanStatus] = useState<string | null>(null);
   const [orgs, setOrgs] = useState<MyOrganizationDto[] | null>(null);
   const [orgsErr, setOrgsErr] = useState<string | null>(null);
+  const [invitationCount, setInvitationCount] = useState<number>(0);
+  const [orgPlanLabels, setOrgPlanLabels] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let alive = true;
@@ -153,10 +157,29 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
       }
     };
 
+    const loadInvitations = async () => {
+      if (!isLoggedIn) {
+        setInvitationCount(0);
+        return;
+      }
+      try {
+        const res = await getMyInvitations();
+        if (!alive) return;
+        const pending = (res.invitations ?? []).filter(
+          (i) => !i.isAccepted && !(i as { isRejected?: boolean }).isRejected
+        );
+        setInvitationCount(pending.length);
+      } catch {
+        if (!alive) return;
+        setInvitationCount(0);
+      }
+    };
+
     const loadOrgs = async (plansData?: Plan[] | null) => {
       if (!isLoggedIn) {
         setOrgs(null);
         setOrgsErr(null);
+        setOrgPlanLabels({});
         return;
       }
       try {
@@ -177,42 +200,58 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
         setOrgs(items);
         setOrgsErr(null);
 
-        if (items.length > 0) {
+        // Load plan labels for all organizations
+        const planLabelsMap: Record<string, string> = {};
+        for (const org of items) {
           try {
-            const membership = (await getMyMembership(items[0].orgId)) as MyMembership;
+            const membership = (await getMyMembership(org.orgId)) as MyMembership;
             if (!alive) return;
             if (membership && plansData) {
               const found = plansData.find((p) => (p as unknown as { planId: number }).planId === membership.planId);
               if (found) {
                 const name = (found as unknown as { planName?: string; name?: string }).planName ?? (found as any).name;
-                setPlanLabel(name ?? t("profilelayout.plan_free"));
-                setPlanStatus(membership.status ?? "active");
+                planLabelsMap[org.orgId] = name ?? "";
+              } else {
+                planLabelsMap[org.orgId] = "";
               }
+            } else {
+              planLabelsMap[org.orgId] = "";
             }
           } catch {
-            const free = plansData?.find((p: any) => p.priceMonthly === 0) ?? null;
-            const name = (free as any)?.planName ?? (free as any)?.name;
-            setPlanLabel(name ?? t("profilelayout.plan_free"));
-            setPlanStatus("active");
+            planLabelsMap[org.orgId] = "";
           }
+        }
+
+        if (!alive) return;
+        setOrgPlanLabels(planLabelsMap);
+
+        // Set the first organization's plan as the current plan
+        if (items.length > 0 && planLabelsMap[items[0].orgId]) {
+          setPlanLabel(planLabelsMap[items[0].orgId]);
+          setPlanStatus("active");
         }
       } catch {
         if (!alive) return;
         setOrgsErr(t("profilelayout.orgs_load_error"));
         setOrgs([]);
+        setOrgPlanLabels({});
       }
     };
 
     loadPlans().then((ps) => loadOrgs(ps));
+    loadInvitations();
 
     const onAuthChanged = () => {
       loadPlans().then((ps) => loadOrgs(ps));
+      loadInvitations();
     };
     const onOrgsChanged = () => loadOrgs(plansRef.current);
+    const onInvitationsChanged = () => loadInvitations();
 
     if (typeof window !== "undefined") {
       window.addEventListener("auth-changed", onAuthChanged);
       window.addEventListener("orgs-changed", onOrgsChanged as EventListener);
+      window.addEventListener("invitations-changed", onInvitationsChanged);
     }
 
     return () => {
@@ -220,6 +259,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
       if (typeof window !== "undefined") {
         window.removeEventListener("auth-changed", onAuthChanged);
         window.removeEventListener("orgs-changed", onOrgsChanged as EventListener);
+        window.removeEventListener("invitations-changed", onInvitationsChanged);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -285,6 +325,10 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                         <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
                           {unread > 99 ? "99+" : unread}
                         </Badge>
+                      ) : n.href === "/profile/invite" && invitationCount > 0 ? (
+                        <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
+                          {invitationCount > 99 ? "99+" : invitationCount}
+                        </Badge>
                       ) : undefined
                     }
                   />
@@ -292,7 +336,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
               </div>
 
               <div className="px-1 mt-5">
-                <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">{t("profilelayout.orgs_title")}</div>
+                <div className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}>{t("profilelayout.orgs_title")}</div>
 
                 <NavItem
                   href="/register/organization"
@@ -313,20 +357,29 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                 )}
 
                 {orgs && !orgsErr && orgs.length === 0 && (
-                  <div className="px-3 py-2 text-xs rounded-md border bg-muted/30 text-muted-foreground">
+                  <div className={`px-3 py-2 text-xs rounded-md border ${themeClasses.tableBorder} ${themeClasses.textMuted}`}>
                     {t("profilelayout.no_orgs")}
                   </div>
                 )}
 
-                {(orgs ?? []).slice(0, 5).map((o) => (
-                  <NavItem
-                    key={o.orgId}
-                    href={`/profile/organizations/${o.orgId}`}
-                    label={o.orgName}
-                    icon={Building2}
-                    active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
-                  />
-                ))}
+                {(orgs ?? []).slice(0, 5).map((o) => {
+                  const planLabel = orgPlanLabels[o.orgId];
+                  const isActive = pathname.startsWith(`/profile/organizations/${o.orgId}`)
+                  return (
+                    <NavItem
+                      key={o.orgId}
+                      href={`/profile/organizations/${o.orgId}`}
+                      label={o.orgName}
+                      icon={Building2}
+                      active={isActive}
+                      right={
+                        <Badge variant="secondary" className="text-[11px] font-semibold">
+                          <span className={`text-sm font-semibold ${isDark ? "text-emerald-300" : isActive ? "text-emerald-500" : "text-emerald-600"}`}>{planLabel}</span>
+                        </Badge>
+                      }
+                    />
+                  );
+                })}
 
                 {(orgs ?? []).length > 5 && (
                   <NavItem
@@ -344,13 +397,14 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
             </ScrollArea>
 
             <Separator className="my-2" />
+            
             <div className="space-y-3">
-              <div className="rounded-xl border p-3">
+              {/* <div className={`rounded-xl border p-3 ${themeClasses.tableBorder}`}>
                 <div className="flex items-center justify-between">
-                  <span className="text-[12px] text-muted-foreground">{t("profilelayout.current_plan")}</span>
+                  <span className={`text-[12px] ${themeClasses.textMuted}`}>{t("profilelayout.current_plan")}</span>
                   {planLabel ? (
                     <div className="flex itemscenter gap-2">
-                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">{planLabel}</span>
+                      <span className={`text-sm font-semibold ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>{planLabel}</span>
                       {planStatus === "active" && (
                         <Badge variant="secondary" className="text-[11px] font-semibold">
                           {t("profilelayout.active_status")}
@@ -358,12 +412,12 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                       )}
                     </div>
                   ) : (
-                    <span className="text-[12px] text-muted-foreground">—</span>
+                    <span className={`text-[12px] ${themeClasses.textMuted}`}>—</span>
                   )}
                 </div>
-              </div>
+              </div> */}
 
-              <Link href="/profile/select-plan">
+              <Link href="/profile/settings/plans">
                 <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white">{t("profilelayout.select_plan")}</Button>
               </Link>
 
@@ -411,6 +465,10 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                                 <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
                                   {unread > 99 ? "99+" : unread}
                                 </Badge>
+                              ) : n.href === "/profile/invite" && invitationCount > 0 ? (
+                                <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
+                                  {invitationCount > 99 ? "99+" : invitationCount}
+                                </Badge>
                               ) : undefined
                             }
                           />
@@ -418,7 +476,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                       </div>
 
                       <div className="px-1 mt-5">
-                        <div className="text-[11px] uppercase tracking-widest text-muted-foreground mb-2">{t("profilelayout.orgs_title")}</div>
+                        <div className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}>{t("profilelayout.orgs_title")}</div>
 
                         <NavItem
                           href="/register/organization"
@@ -427,15 +485,19 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                           active={pathname === "/register/organization"}
                         />
 
-                        {(orgs ?? []).slice(0, 5).map((o) => (
-                          <NavItem
-                            key={o.orgId}
-                            href={`/profile/organizations/${o.orgId}`}
-                            label={o.orgName}
-                            icon={Building2}
-                            active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
-                          />
-                        ))}
+                        {(orgs ?? []).slice(0, 5).map((o) => {
+                          const planLabel = orgPlanLabels[o.orgId];
+                          // const displayLabel = planLabel ? `${o.orgName} - ${planLabel}` : o.orgName;
+                          return (
+                            <NavItem
+                              key={o.orgId}
+                              href={`/profile/organizations/${o.orgId}`}
+                              label={o.orgName}
+                              icon={Building2}
+                              active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
+                            />
+                          );
+                        })}
 
                         <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} />
                         <div className="h-3" />

@@ -28,7 +28,10 @@
   }
 }
 
-html, body { height: 100%; }
+html,
+body {
+  height: 100%;
+}
 
 body {
   background: var(--background);
@@ -40,6 +43,7 @@ body {
     transform: translateX(100%);
     opacity: 0;
   }
+
   to {
     transform: translateX(0);
     opacity: 1;
@@ -55,4 +59,53 @@ body {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
+}
+
+.location-title-tooltip {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.95) 100%) !important;
+  border: 2px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 8px !important;
+  padding: 6px 12px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(8px) !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+}
+
+.location-title-tooltip::before {
+  border-top-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.leaflet-container .marker-emoji {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+
+  transform: scale(var(--marker-scale, 1));
+  transform-origin: center center;
+}
+
+.leaflet-container .marker-emoji-lg {
+  font-size: 32px;
+}
+
+/* Custom measurement tooltip styles */
+.measurement-tooltip {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 6px !important;
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+  z-index: 9999 !important;
+}
+
+.measurement-tooltip::before {
+  display: none !important; /* Hide default arrow */
 }

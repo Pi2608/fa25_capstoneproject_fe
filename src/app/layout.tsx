@@ -1,14 +1,14 @@
 import type { Metadata, Viewport } from "next";
 import "@/styles/globals.css";
 import { Manrope } from "next/font/google";
-import { cookies } from "next/headers";
-import { LeafletStylesClient } from "@/components/map-editor";
 import { ThemeProvider } from "@/components/common";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ToastContainer from "@/components/ui/ToastContainer";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import type { Lang } from "@/i18n/messages";
+import { LoadingProvider } from "@/contexts/LoadingContext";
+import { LeafletStylesBoundary } from "@/components/layout/LeafletStylesBoundary";
 
 const manrope = Manrope({
   subsets: ["latin", "vietnamese"],
@@ -30,25 +30,21 @@ export const viewport: Viewport = {
   ],
 };
 
-async function getInitialLang(): Promise<Lang> {
-  const store = await cookies(); 
-  const raw = store.get("lang")?.value;
-  return raw === "en" || raw === "vi" ? (raw as Lang) : "vi";
-}
-
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const lang = await getInitialLang(); 
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const initialLang: Lang = "vi";
 
   return (
-    <html lang={lang} className={manrope.variable} suppressHydrationWarning>
+    <html lang={initialLang} className={manrope.variable} suppressHydrationWarning>
       <body className="min-h-screen font-sans antialiased transition-colors bg-white text-gray-900 dark:bg-black dark:text-gray-100">
         <ThemeProvider>
           <AuthProvider>
             <ToastProvider>
-              <I18nProvider initialLang={lang}>
-                <LeafletStylesClient />
-                {children}
-                <ToastContainer />
+              <I18nProvider initialLang={initialLang}>
+                <LoadingProvider>
+                  <LeafletStylesBoundary />
+                  {children}
+                  <ToastContainer />
+                </LoadingProvider>
               </I18nProvider>
             </ToastProvider>
           </AuthProvider>

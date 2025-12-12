@@ -2,9 +2,22 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect, createContext, useContext } from "react";
 import { clearAllAuthData } from "@/utils/authUtils";
-import s from "./admin.module.css";
+import { getMe, type Me } from "@/lib/api-auth";
+import Loading from "@/app/loading";
+import { AlertTriangleIcon } from "lucide-react";
+import NotificationDropdown from "@/components/admin/NotificationDropdown";
+
+const ThemeContext = createContext<{
+  isDark: boolean;
+  toggleTheme: () => void;
+}>({
+  isDark: true,
+  toggleTheme: () => { },
+});
+
+export const useTheme = () => useContext(ThemeContext);
 
 const NAV = [
   { href: "/dashboard", label: "Tổng quan", icon: <DashIcon /> },
@@ -13,7 +26,10 @@ const NAV = [
   { href: "/organizations", label: "Tổ chức", icon: <OrgIcon /> },
   { href: "/subscription-plans", label: "Gói đăng ký", icon: <PlanIcon /> },
   { href: "/support-tickets", label: "Phiếu hỗ trợ", icon: <TicketIcon /> },
-  // { href: "/exports", label: "Xuất dữ liệu", icon: <FileIcon /> },
+  { href: "/community-admin", label: "Cộng đồng", icon: <FileIcon /> },
+  { href: "/map-gallery-admin", label: "Map gallery", icon: <MapIcon /> },
+  { href: "/map-reports", label: "Báo cáo vi phạm map", icon: <AlertTriangleIcon /> },
+  { href: "/exports", label: "Xuất dữ liệu", icon: <FileIcon /> },
   // { href: "/billing", label: "Lịch sử thanh toán", icon: <CardIcon /> },
   // { href: "/template", label: "Mẫu bản đồ", icon: <MapIcon /> },
 ];
@@ -24,6 +40,62 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = rawPathname ?? "";
   const [open, setOpen] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
+  const [isDark, setIsDark] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("admin-theme");
+      if (stored === "dark") return true;
+      if (stored === "light") return false;
+      // fallback: follow system preference
+      return window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? false;
+    }
+    return false; // default light
+  });
+  const [isVerified, setIsVerified] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const checkAdminAccess = async () => {
+      try {
+        const token = typeof window !== "undefined"
+          ? (localStorage.getItem("token") || localStorage.getItem("accessToken"))
+          : null;
+
+        if (!token) {
+          router.replace("/login");
+          return;
+        }
+
+        const user = await getMe(true);
+
+        const adminRoles = ["Admin", "admin", "Administrator", "administrator"];
+        const hasAdminRole = adminRoles.includes(user.role);
+
+        if (!hasAdminRole) {
+          router.replace("/not-found");
+          return;
+        }
+        setIsVerified(true);
+      } catch (error) {
+        console.error("Failed to check admin access:", error);
+        router.replace("/login");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAdminAccess();
+  }, [router]);
+
+  const toggleTheme = () => {
+    const newTheme = !isDark;
+    setIsDark(newTheme);
+    localStorage.setItem("admin-theme", newTheme ? "dark" : "light");
+    // Dispatch custom event to notify LoadingContext
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("admin-theme-change"));
+    }
+  };
+
 
   const onSignOut = async () => {
     if (signingOut) return;
@@ -44,7 +116,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             },
             credentials: "include",
           });
-        } catch {}
+        } catch { }
       }
     } finally {
       clearAllAuthData();
@@ -52,73 +124,140 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     }
   };
 
+  if (loading) {
+    return (
+      <Loading />
+    );
+  }
+
+  if (!isVerified) {
+    return null;
+  }
+
   return (
-    <div className={`${s.shell} ${s.light}`}>
-      <aside className={`${s.sidebar} ${open ? s.sideOpen : s.sideClosed}`}>
-        <div className={s.brandRow}>
-          <span className={s.brandDot} />
-          <span className={s.brand}>IMOS</span>
+    <div className={`flex h-screen transition-colors ${isDark
+      ? "bg-zinc-950 text-zinc-100"
+      : "bg-gray-50 text-gray-900"
+      }`}>
+      <aside className={`flex flex-col transition-all duration-300 ${open ? "w-64" : "w-20"
+        } ${isDark
+          ? "bg-zinc-900 border-r border-zinc-800"
+          : "bg-white border-r border-gray-200"
+        }`}>
+        <div className={`flex items-center gap-2 px-4 py-4 border-b ${isDark ? "border-zinc-800" : "border-gray-200"
+          }`}>
+          <span className="w-2 h-2 rounded-full bg-green-500" />
+          <span className={`font-bold text-lg whitespace-nowrap transition-opacity ${open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+            }`}>IMOS</span>
         </div>
 
-        <nav className={s.nav}>
+        <nav className="flex-1 overflow-y-auto py-2 px-2">
           {NAV.map(({ href, label, icon }) => {
             const active = pathname === href || pathname.startsWith(`${href}/`);
             return (
               <Link
                 key={href}
                 href={href}
-                className={`${s.navItem} ${active ? s.active : ""}`}
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg mb-1 transition-colors ${active
+                  ? isDark
+                    ? "bg-zinc-800 text-white"
+                    : "bg-gray-100 text-gray-900"
+                  : isDark
+                    ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+                    : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
                 aria-current={active ? "page" : undefined}
               >
-                <span className={s.ic}>{icon}</span>
-                <span className={s.navText}>{label}</span>
+                <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">{icon}</span>
+                <span className={`whitespace-nowrap transition-opacity ${open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+                  }`}>{label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className={s.sideFooter}>
-          <button className={s.ghostBtn} onClick={() => router.push("/settings")}>
-            <span className={s.ic}>
-              <SettingsIcon />
+        <div className={`border-t p-2 space-y-1 ${isDark ? "border-zinc-800" : "border-gray-200"
+          }`}>
+          <button
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors ${isDark
+              ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+              : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            onClick={toggleTheme}
+          >
+            <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+              {isDark ? <SunIcon /> : <MoonIcon />}
             </span>
-            <span>Cài đặt</span>
+            <span className={`whitespace-nowrap transition-opacity ${open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+              }`}>{isDark ? "Sáng" : "Tối"}</span>
           </button>
           <button
-            className={s.ghostBtn}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50 ${isDark
+              ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+              : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            onClick={() => router.push("/settings")}
+          >
+            <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
+              <SettingsIcon />
+            </span>
+            <span className={`whitespace-nowrap transition-opacity ${open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+              }`}>Cài đặt</span>
+          </button>
+          <button
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50 ${isDark
+              ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
+              : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
             onClick={onSignOut}
             disabled={signingOut}
             aria-busy={signingOut}
           >
-            <span className={s.ic}>
+            <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
               <SignOutIcon />
             </span>
-            <span>{signingOut ? "Đang đăng xuất…" : "Đăng xuất"}</span>
+            <span className={`whitespace-nowrap transition-opacity ${open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
+              }`}>{signingOut ? "Đang đăng xuất…" : "Đăng xuất"}</span>
           </button>
         </div>
       </aside>
 
-      <div className={s.main}>
-        <header className={s.header}>
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <header className={`h-14 border-b flex items-center gap-4 px-4 ${isDark
+          ? "bg-zinc-900 border-zinc-800"
+          : "bg-white border-gray-200"
+          }`}>
           <button
-            className={s.sideToggler}
+            className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${isDark
+              ? "hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+              : "hover:bg-gray-100 text-gray-600 hover:text-gray-900"
+              }`}
             onClick={() => setOpen((v) => !v)}
             aria-label="Thu gọn/mở rộng menu"
           >
             <BurgerIcon />
           </button>
-          <div className={s.searchWrap}>
-            <input className={s.search} placeholder="Tìm kiếm…" aria-label="Tìm kiếm" />
+          <div className="flex-1 max-w-md">
+            <input
+              className={`w-full h-9 px-3 rounded-lg border outline-none focus:ring-1 ${isDark
+                ? "border-zinc-800 bg-zinc-800/50 text-zinc-100 placeholder-zinc-500 focus:border-zinc-700 focus:ring-zinc-700"
+                : "border-gray-300 bg-white text-gray-900 placeholder-gray-400 focus:border-gray-400 focus:ring-gray-400"
+                }`}
+              placeholder="Tìm kiếm…"
+              aria-label="Tìm kiếm"
+            />
           </div>
-          <div className={s.headRight}>
-            <button className={s.iconBtn} aria-label="Thông báo">
-              <BellIcon />
-            </button>
-            <div className={s.avatar} />
+          <div className="flex items-center gap-2 ml-auto">
+            <NotificationDropdown isDark={isDark} />
           </div>
         </header>
 
-        <div className={s.content}>{children}</div>
+        <div className={`flex-1 overflow-y-auto p-5 ${isDark ? "bg-zinc-950" : "bg-gray-50"
+          }`}>
+          <ThemeContext.Provider value={{ isDark, toggleTheme }}>
+            {children}
+          </ThemeContext.Provider>
+        </div>
       </div>
     </div>
   );
@@ -238,6 +377,41 @@ function TicketIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
       <path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4V7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
       <path d="M12 7v10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+function PostIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" stroke="currentColor" strokeWidth="2" />
+      <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function ExportIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="7 10 12 15 17 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="12" y1="15" x2="12" y2="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

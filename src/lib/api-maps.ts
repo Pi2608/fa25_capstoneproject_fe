@@ -7,28 +7,56 @@ import { getJson, postJson, putJson, delJson, patchJson, apiFetch, getToken, Api
 
 // ===== TYPES =====
 export type ViewState = { center: [number, number]; zoom: number };
-export type BaseLayer = "OSM" | "Satellite" | "Dark";
-export type MapStatus = "Draft" | "Published" | "Archived";
+export type BaseLayer =
+  | "OSM"
+  | "Satellite"
+  | "Dark"
+  | "Positron"
+  | "DarkMatter"
+  | "Terrain"
+  | "Toner"
+  | "Watercolor"
+  | "Topo";
+export type MapStatus = "draft" | "published" | "archived";
 
 export type MapDto = {
   id: string;
   name: string;
   ownerId?: string;
+  ownerName?: string;
   description?: string;
-  previewImageUrl?: string | null;
+  isPublic: boolean;
+  previewImage?: string | null;
   createdAt: string;
   updatedAt?: string | null;
-  lastActivityAt?: string | null; // For recent maps - backend calculated activity time
-  status?: string; // Map status: draft, published, etc.
+  lastActivityAt?: string | null;
+  status: MapStatus;
+  isOwner: boolean;
+  isStoryMap: boolean;
   workspaceName?: string | null;
 };
 
+export type MapDetailDto = {
+  id: string;
+  name: string;
+  description?: string | null;
+  previewImage?: string | null;
+  defaultBounds?: any;
+  baseLayer?: string | null;
+  viewState?: any;
+  isPublic?: boolean;
+  status?: string | null;
+  isStoryMap?: boolean;
+  publishedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  layers?: any[];
+};
 
 export type DefaultBounds = {
   type: string;
   coordinates: number[];
 }
-
 
 export type LayerStyle = {
   color?: string;
@@ -56,7 +84,7 @@ export type LayerDTO = {
   filePath: string;
   layerData: FeatureCollection | Record<string, unknown>;
   layerStyle: LayerStyle | Record<string, unknown>;
-  isPublic: boolean;
+  isVisible: boolean;
   featureCount: number;
   dataSizeKB: number;
   dataBounds: string;
@@ -74,11 +102,14 @@ export interface MapDetail {
   baseLayer: BaseLayer;
   viewState?: ViewState;
   isPublic?: boolean;
-  status?: MapStatus;
+  status: MapStatus;
+  isStoryMap?: boolean;
   publishedAt?: string;
   createdAt?: string;
   updatedAt?: string;
   layers: LayerDTO[];
+  workspaceId?: string | null;
+  workspaceName?: string | null;
 }
 
 // ===== MAP CRUD =====
@@ -90,6 +121,7 @@ export interface CreateMapRequest {
   viewState?: string;
   baseLayer?: BaseLayer;
   workspaceId?: string | null;
+  isStoryMap?: boolean;
 }
 
 export interface CreateMapResponse {
@@ -141,8 +173,8 @@ export function createMapViewData(center: { lat: number; lng: number }, zoom: nu
 /**
  * Default map center (Vietnam)
  */
-export const DEFAULT_MAP_CENTER = { lat: 14.058324, lng: 108.277199 };
-export const DEFAULT_MAP_ZOOM = 13;
+export const DEFAULT_MAP_CENTER = { lat: 14.4879, lng: 110.8740 };
+export const DEFAULT_MAP_ZOOM = 6;
 
 export function createMap(req: CreateMapRequest) {
   const body = {
@@ -153,6 +185,7 @@ export function createMap(req: CreateMapRequest) {
     ViewState: req.viewState ?? null,
     BaseLayer: req.baseLayer ?? "OSM",
     WorkspaceId: req.workspaceId ?? null,
+    IsStoryMap: req.isStoryMap ?? false,
   };
 
   return postJson<typeof body, CreateMapResponse>("/maps", body);
@@ -166,6 +199,7 @@ export async function createDefaultMap(options?: {
   workspaceId?: string | null;
   center?: { lat: number; lng: number };
   zoom?: number;
+  isStoryMap?: boolean;
 }): Promise<CreateMapResponse> {
   const center = options?.center ?? DEFAULT_MAP_CENTER;
   const zoom = options?.zoom ?? DEFAULT_MAP_ZOOM;
@@ -179,6 +213,7 @@ export async function createDefaultMap(options?: {
     viewState,
     baseLayer: options?.baseLayer ?? "OSM",
     workspaceId: options?.workspaceId ?? null,
+    isStoryMap: options?.isStoryMap ?? false,
   });
 }
 
@@ -207,6 +242,10 @@ export function deleteMap(mapId: string) {
   return delJson<DeleteMapResponse>(`/maps/${mapId}`);
 }
 
+export function prepareForEmbed(mapId: string): Promise<{ success: boolean }> {
+  return postJson<{}, { success: boolean }>(`/maps/${mapId}/prepare-embed`, {});
+}
+
 export interface GetMyMapsResponse { maps: MapDto[] }
 
 export async function getMyMaps(): Promise<MapDto[]> {
@@ -233,6 +272,11 @@ export async function getOrganizationMaps(orgId: string): Promise<MapDto[]> {
 
 export async function getMapDetail(mapId: string): Promise<MapDetail> {
   const res = await getJson<MapDetail | MapDetail>(`/maps/${mapId}`);
+  return res as MapDetail;
+}
+
+export async function getMapDetailAsAdmin(mapId: string): Promise<MapDetail> {
+  const res = await getJson<MapDetail>(`/api/admin/maps/${mapId}`);
   return res as MapDetail;
 }
 
@@ -298,6 +342,11 @@ export interface MapTemplate {
   previewImageUrl?: string | null;
   layerCount?: number | null;
   featureCount?: number | null;
+  usageCount?: number | null;
+  isFeatured?: boolean;
+  totalLayers?: number;
+  totalFeatures?: number;
+  createdAt?: string;
 }
 
 export interface MapTemplateLayer {
@@ -310,6 +359,9 @@ export interface MapTemplateDetails extends MapTemplate {
   layers: MapTemplateLayer[];
   annotations?: unknown[];
   images?: string[];
+  previewImage?: string | null;
+  baseLayer?: string;
+  defaultBounds?: string;
 }
 
 export interface GetMapTemplatesResponse {
@@ -413,7 +465,11 @@ export async function toggleFavoriteTemplate(templateId: string, favorite: boole
 
 // ===== LAYERS =====
 export interface AddLayerToMapRequest {
-  layerId: string;
+  layerId?: string;
+  layerName?: string;
+  layerData?: string;
+  layerTypeId?: string;
+  layerStyle?: string;
   isVisible?: boolean;
   zIndex?: number;
   customStyle?: string | null;
@@ -469,6 +525,7 @@ export async function uploadGeoJsonToMap(
 }
 
 export interface UpdateMapLayerRequest {
+  layerName?: string | null;
   isVisible?: boolean | null;
   zIndex?: number | null;
   customStyle?: string | null;
@@ -631,7 +688,8 @@ export function getMapFeatureById(mapId: string, featureId: string) {
   return getJson<MapFeatureResponse>(`/maps/${mapId}/features/${featureId}`);
 }
 
-// ===== PUBLISHING =====
+
+
 export interface PublishMapResponse {
   success: boolean;
   message?: string;
@@ -656,16 +714,72 @@ export function restoreMap(mapId: string) {
 // ===== EXPORTS =====
 export type ExportRequest = {
   mapId: string;
-  format: "pdf" | "png" | "geojson";
+  format: "pdf" | "png" | "geojson" | "svg";
+  membershipId?: string; // Optional
+  viewState?: string; // JSON string of { center: [lat, lng], zoom: number }
+  mapImageData?: string; // Base64 encoded image data from frontend capture
+  svgPathData?: string; // JSON string of extracted SVG path data from Leaflet layers
+  visibleLayerIds?: Record<string, boolean>; // Which layers should be visible
+  visibleFeatureIds?: Record<string, boolean>; // Which features should be visible
+  options?: {
+    width?: string;
+    height?: string;
+    dpi?: string;
+    includeLegend?: boolean;
+    includeScale?: boolean;
+    title?: string;
+    description?: string;
+  };
 };
 
 export type ExportResponse = {
-  url: string;
-  exportId: string;
+  exportId: number;
+  mapId: string;
+  mapName?: string;
+  userId: string;
+  userName?: string;
+  format: "pdf" | "png" | "geojson";
+  status: "Pending" | "Processing" | "PendingApproval" | "Approved" | "Rejected" | "Failed";
+  fileUrl?: string;
+  canDownload: boolean;
+  fileSize: number;
+  errorMessage?: string;
+  approvedBy?: string;
+  approvedByName?: string;
+  approvedAt?: string;
+  rejectionReason?: string;
+  createdAt: string;
+  completedAt?: string;
 };
 
 export function createExport(req: ExportRequest) {
   return postJson<ExportRequest, ExportResponse>("/exports", req);
+}
+
+export function getExportById(exportId: number) {
+  return getJson<ExportResponse>(`/exports/${exportId}`);
+}
+
+export function getMyExports() {
+  return getJson<{ exports: ExportResponse[]; total: number }>("/exports/my");
+}
+
+export function getOrganizationExports(organizationId: string) {
+  return getJson<{ exports: ExportResponse[]; total: number }>(`/exports/organization/${organizationId}`);
+}
+
+// Admin Export Functions
+export async function getPendingExports(): Promise<ExportResponse[]> {
+  const res = await getJson<{ exports: ExportResponse[] } | ExportResponse[]>("/api/admin/exports/pending-approval");
+  return Array.isArray(res) ? res : (res.exports ?? []);
+}
+
+export function approveExport(exportId: number) {
+  return postJson<void, ExportResponse>(`/api/admin/exports/${exportId}/approve`, undefined);
+}
+
+export function rejectExport(exportId: number, reason: string) {
+  return postJson<{ reason: string }, ExportResponse>(`/api/admin/exports/${exportId}/reject`, { reason });
 }
 
 // ===== MAP ANALYTICS =====
@@ -686,8 +800,8 @@ export async function getMapViews(mapId: string): Promise<number> {
       if (typeof res.total === "number") return res.total;
       if (typeof res.month === "number") return res.month;
     }
-  } catch {}
-  
+  } catch { }
+
   try {
     const res = await getJson<MapViewsResponse | number>(`/maps/${mapId}/stats`);
     if (typeof res === "number") return res;
@@ -697,8 +811,8 @@ export async function getMapViews(mapId: string): Promise<number> {
       if (typeof res.total === "number") return res.total;
       if (typeof res.month === "number") return res.month;
     }
-  } catch {}
-  
+  } catch { }
+
   try {
     const res = await getJson<MapViewsResponse | number>(`/analytics/maps/${mapId}/views`);
     if (typeof res === "number") return res;
@@ -708,8 +822,8 @@ export async function getMapViews(mapId: string): Promise<number> {
       if (typeof res.total === "number") return res.total;
       if (typeof res.month === "number") return res.month;
     }
-  } catch {}
-  
+  } catch { }
+
   try {
     const res = await getJson<MapViewsResponse | number>(`/analytics/map-views?mapId=${encodeURIComponent(mapId)}`);
     if (typeof res === "number") return res;
@@ -719,12 +833,105 @@ export async function getMapViews(mapId: string): Promise<number> {
       if (typeof res.total === "number") return res.total;
       if (typeof res.month === "number") return res.month;
     }
-  } catch {}
-  
+  } catch { }
+
   return 0;
 }
 
 export async function getMultipleMapViews(mapIds: string[]): Promise<number[]> {
   const results = await Promise.allSettled(mapIds.map(id => getMapViews(id)));
   return results.map(result => result.status === "fulfilled" ? result.value : 0);
+}
+
+// ================== MAP ZONE (Zone attached to map for non-StoryMap mode) ==================
+
+// Zone type (master data)
+export type Zone = {
+  zoneId: string;
+  externalId?: string;
+  zoneCode?: string;
+  name: string;
+  zoneType: string;
+  adminLevel?: number;
+  parentZoneId?: string;
+  geometry: string;
+  simplifiedGeometry?: string;
+  centroid?: string;
+  boundingBox?: string;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+// MapZone (Link Map → Zone with highlight config for non-StoryMap mode)
+export type MapZone = {
+  mapZoneId: string;
+  mapId: string;
+  zoneId: string;
+  zone?: Zone; // Populated
+  displayOrder: number;
+  isVisible: boolean;
+  zIndex: number;
+
+  // Highlight config
+  highlightBoundary: boolean;
+  boundaryColor?: string;
+  boundaryWidth?: number;
+  fillZone: boolean;
+  fillColor?: string;
+  fillOpacity?: number;
+  showLabel: boolean;
+  labelOverride?: string;
+  labelStyle?: string;
+
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type CreateMapZoneRequest = {
+  mapId?: string; // Will be enriched by endpoint
+  zoneId: string; // Select from Zone master data
+  displayOrder?: number;
+  isVisible?: boolean;
+  zIndex?: number;
+  highlightBoundary?: boolean;
+  boundaryColor?: string;
+  boundaryWidth?: number;
+  fillZone?: boolean;
+  fillColor?: string;
+  fillOpacity?: number;
+  showLabel?: boolean;
+  labelOverride?: string;
+  labelStyle?: string;
+};
+
+export type UpdateMapZoneRequest = Omit<CreateMapZoneRequest, 'mapId' | 'zoneId'>;
+
+/**
+ * Get all zones attached to a map (for non-StoryMap mode)
+ */
+export function getMapZones(mapId: string) {
+  return getJson<MapZone[]>(`/maps/${mapId}/zones`);
+}
+
+/**
+ * Create a new zone attachment for a map
+ */
+export function createMapZone(mapId: string, data: Omit<CreateMapZoneRequest, 'mapId'>) {
+  return postJson<CreateMapZoneRequest, MapZone>(`/maps/${mapId}/zones`, { ...data, mapId });
+}
+
+/**
+ * Update a map zone's display properties
+ */
+export function updateMapZone(mapId: string, mapZoneId: string, data: UpdateMapZoneRequest) {
+  return putJson<UpdateMapZoneRequest, MapZone>(`/maps/${mapId}/zones/${mapZoneId}`, data);
+}
+
+/**
+ * Delete a zone from a map
+ */
+export function deleteMapZone(mapId: string, mapZoneId: string) {
+  return delJson<boolean>(`/maps/${mapId}/zones/${mapZoneId}`);
 }

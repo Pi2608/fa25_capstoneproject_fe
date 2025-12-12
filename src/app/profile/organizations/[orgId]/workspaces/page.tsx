@@ -7,6 +7,7 @@ import { Workspace } from "@/types/workspace";
 import { formatDate } from "@/utils/formatUtils";
 import { getOrganizationById, OrganizationDetailDto } from "@/lib/api-organizations";
 import { createWorkspace, CreateWorkspaceRequest, deleteWorkspace, getWorkspacesByOrganization, updateWorkspace } from "@/lib/api-workspaces";
+import { TFunc } from "@/i18n/I18nProvider";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name";
@@ -18,6 +19,78 @@ function safeMessage(err: unknown): string {
     if (typeof m === "string") return m;
   }
   return "Yêu cầu thất bại";
+}
+
+type ApiErr = {
+  status?: number;
+  type?: string;
+  title?: string;
+  detail?: string;
+  message?: string;
+};
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null;
+}
+function pickStr(o: Record<string, unknown>, k: string): string | undefined {
+  const v = o[k];
+  return typeof v === "string" ? v : undefined;
+}
+function pickNum(o: Record<string, unknown>, k: string): number | undefined {
+  const v = o[k];
+  return typeof v === "number" ? v : undefined;
+}
+
+function parseApiError(err: unknown): ApiErr {
+  if (isRecord(err)) {
+    return {
+      status: pickNum(err, "status"),
+      type: pickStr(err, "type"),
+      title: pickStr(err, "title"),
+      detail: pickStr(err, "detail"),
+      message: pickStr(err, "message"),
+    };
+  }
+  if (typeof err === "string") {
+    try {
+      const parsed = JSON.parse(err);
+      if (isRecord(parsed)) {
+        return {
+          status: pickNum(parsed, "status"),
+          type: pickStr(parsed, "type"),
+          title: pickStr(parsed, "title"),
+          detail: pickStr(parsed, "detail"),
+          message: pickStr(parsed, "message"),
+        };
+      }
+    } catch {
+      return { message: err };
+    }
+  }
+  if (err instanceof Error) return { message: err.message };
+  return {};
+}
+
+function userMessage(
+  err: unknown,
+  t: TFunc
+): string {
+  const e = parseApiError(err);
+  const code = String(e.type || e.title || "").toLowerCase();
+  const text = String(e.detail || e.message || "").toLowerCase();
+  const status = e.status ?? 0;
+
+  if (status === 400) {
+    if( text.includes("active") && text.includes("workspaces"))
+      {
+        return t("org_detail.manage_err_has_active_workspaces");
+      }
+    return t("org_detail.manage_delete_failed")
+  }
+
+  if (e.detail && !/stack|trace|exception/i.test(e.detail)) return e.detail;
+  if (e.message && !/stack|trace|exception/i.test(e.message)) return e.message;
+  return t("org_detail.err_generic");
 }
 
 export default function WorkspacesPage() {
@@ -257,13 +330,8 @@ export default function WorkspacesPage() {
                   <div className="truncate font-semibold">{workspace.workspaceName || "Untitled"}</div>
                   <div className="text-xs text-zinc-400 truncate">
                     {workspace.description ||
-                      (workspace.isPersonal ? workspace.personalLabel ?? "Không thuộc tổ chức" : "No description")}
+                      "No description"}
                   </div>
-                  {workspace.isPersonal && (
-                    <div className="mt-1 text-[11px] text-emerald-300">
-                      {workspace.orgName} · {workspace.personalLabel ?? "Không thuộc tổ chức"}
-                    </div>
-                  )}
                   <div className="text-xs text-zinc-500">
                     {workspace.createdAt ? formatDate(workspace.createdAt) : "—"}
                   </div>
@@ -335,7 +403,7 @@ export default function WorkspacesPage() {
                   </td>
                   <td className="px-3 py-2 text-zinc-400">
                     {workspace.description ||
-                      (workspace.isPersonal ? workspace.personalLabel ?? "Không thuộc tổ chức" : "—")}
+                      "—"}
                   </td>
                   <td className="px-3 py-2 text-zinc-400">
                     {workspace.createdAt ? formatDate(workspace.createdAt) : "—"}

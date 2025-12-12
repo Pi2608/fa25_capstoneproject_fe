@@ -3,17 +3,13 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Resources — IMOS",
-  description: "Customers, webinars, docs, help center, and more.",
+  description: "Customers, , help center, and more.",
 };
 
 const ITEMS = [
   { title: "Customers", desc: "How 500+ teams build GIS with IMOS.", href: "/resources/customers" },
-  { title: "Webinars", desc: "Live sessions and on-demand recordings.", href: "/resources/webinars" },
   { title: "Help Center", desc: "Common questions answered with clear steps.", href: "/resources/help-center" },
-  { title: "Developer Docs", desc: "APIs, SDKs, and integration guides.", href: "/resources/developer-docs" },
   { title: "Map Gallery", desc: "Curated interactive maps from our community.", href: "/resources/map-gallery" },
-  { title: "Blog", desc: "Product updates, tutorials, and stories.", href: "/resources/blog" },
-  { title: "QGIS Plugin", desc: "Sync projects to the cloud from QGIS.", href: "/resources/qgis-plugin" },
 ];
 
 export default function ResourcesPage() {

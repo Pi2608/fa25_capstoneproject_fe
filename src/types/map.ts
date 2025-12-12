@@ -16,6 +16,20 @@ export type LeafletIcon = L.Icon;
 export type Layer = L.Layer;
 
 // Extended Leaflet types for Polymaps (PM)
+export interface PMDrawOptions {
+  freehand?: boolean;
+  snappable?: boolean;
+  snapDistance?: number;
+  tooltips?: boolean;
+  cursorMarker?: boolean;
+  finishOn?: string | null;
+  allowSelfIntersection?: boolean;
+  templineStyle?: LayerStyle;
+  hintlineStyle?: LayerStyle;
+  markerStyle?: Record<string, unknown>;
+  pathOptions?: LayerStyle;
+}
+
 export type MapWithPM = LMap & {
   pm: {
     addControls: (opts: {
@@ -34,8 +48,10 @@ export type MapWithPM = LMap & {
       rotateMode?: boolean;
     }) => void;
     enableDraw: (
-      shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text"
+      shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text",
+      options?: PMDrawOptions
     ) => void;
+    disableDraw: () => void;
     toggleGlobalEditMode: () => void;
     toggleGlobalRemovalMode: () => void;
     toggleGlobalDragMode: () => void;

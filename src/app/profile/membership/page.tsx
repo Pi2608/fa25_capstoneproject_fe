@@ -16,7 +16,6 @@ function safeMessage(err: unknown) {
 
 export default function MembershipPage() {
   const { t } = useI18n();
-  const tr = (k: string) => t("membership", k);
 
   const [plans, setPlans] = useState<Plan[]>([]);
   const [currentPlan, setCurrentPlan] = useState<Plan | null>(null);
@@ -64,12 +63,12 @@ export default function MembershipPage() {
     if (!s) return null;
     const k = s.toLowerCase();
     const map: Record<string, string> = {
-      active: tr("status_active"),
-      trialing: tr("status_trialing"),
-      past_due: tr("status_past_due"),
-      canceled: tr("status_canceled"),
-      expired: tr("status_expired"),
-      inactive: tr("status_inactive"),
+      active: t("membership.status_active"),
+      trialing: t("membership.status_trialing"),
+      past_due: t("membership.status_past_due"),
+      canceled: t("membership.status_canceled"),
+      expired: t("membership.status_expired"),
+      inactive: t("membership.status_inactive"),
     };
     return map[k] ?? s;
   };
@@ -77,8 +76,8 @@ export default function MembershipPage() {
   return (
     <main className="text-zinc-100">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">{tr("title")}</h1>
-        <p className="text-zinc-400 mt-1">{tr("subtitle")}</p>
+        <h1 className="text-2xl font-semibold">{t("membership.title")}</h1>
+        <p className="text-zinc-400 mt-1">{t("membership.subtitle")}</p>
       </div>
 
       {err && (
@@ -90,7 +89,7 @@ export default function MembershipPage() {
       <div className="grid gap-6 sm:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-5 backdrop-blur-sm">
           <div className="flex items-center justify-between">
-            <div className="text-lg font-semibold">{tr("current_plan_title")}</div>
+            <div className="text-lg font-semibold">{t("membership.current_plan_title")}</div>
             {!loading && currentPlan && (
               <span className="rounded-md bg-emerald-500/15 text-emerald-300 border border-emerald-400/30 px-2 py-0.5 text-xs font-semibold">
                 {statusLabel(status)}
@@ -100,7 +99,7 @@ export default function MembershipPage() {
 
           <div className="mt-3">
             {loading ? (
-              <div className="text-sm text-zinc-400">{tr("loading")}</div>
+              <div className="text-sm text-zinc-400">{t("membership.loading")}</div>
             ) : currentPlan ? (
               <>
                 <div className="text-xl font-semibold">{currentPlan.planName}</div>
@@ -111,30 +110,30 @@ export default function MembershipPage() {
                       ? "$0.00"
                       : `$${currentPlan.priceMonthly!.toFixed(2)}`}
                   </span>
-                  <span className="text-sm md:text-base text-zinc-400">{tr("per_month")}</span>
+                  <span className="text-sm md:text-base text-zinc-400">{t("membership.per_month")}</span>
                 </div>
               </>
             ) : (
-              <div className="text-sm text-zinc-400">{tr("no_plan")}</div>
+              <div className="text-sm text-zinc-400">{t("membership.no_plan")}</div>
             )}
           </div>
 
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-5 backdrop-blur-sm">
-          <div className="text-lg font-semibold">{tr("benefits_title")}</div>
+          <div className="text-lg font-semibold">{t("membership.benefits_title")}</div>
           <ul className="mt-2 space-y-2 text-sm text-zinc-300">
-            <li>• {tr("benefit_1")}</li>
-            <li>• {tr("benefit_2")}</li>
-            <li>• {tr("benefit_3")}</li>
-            <li>• {tr("benefit_4")}</li>
+            <li>• {t("membership.benefit_1")}</li>
+            <li>• {t("membership.benefit_2")}</li>
+            <li>• {t("membership.benefit_3")}</li>
+            <li>• {t("membership.benefit_4")}</li>
           </ul>
           <div className="mt-4">
             <Link
               href="/profile/select-plan"
               className="inline-flex items-center rounded-xl border border-emerald-400/40 px-4 py-2 text-sm font-medium text-emerald-300 hover:text-emerald-200 transition"
             >
-              {tr("cta_view_plans")}
+              {t("membership.cta_view_plans")}
             </Link>
           </div>
         </div>

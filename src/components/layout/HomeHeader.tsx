@@ -116,6 +116,11 @@ export default function HomeHeader() {
   const router = useRouter();
   const { isLoggedIn, clear } = useAuthStatus();
   const { t } = useI18n();
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   const onLogout = () => {
     clear();
@@ -126,19 +131,15 @@ export default function HomeHeader() {
   const SERVICES: MenuItem[] = [
     { label: t("header", "svc_builder"), desc: t("header", "svc_builder_desc"), href: "/service/map-builder" },
     { label: t("header", "svc_layers"), desc: t("header", "svc_layers_desc"), href: "/service/data-layers" },
-    { label: t("header", "svc_cloud"), desc: t("header", "svc_cloud_desc"), href: "/service/cloud-sources" },
     // { label: t("header", "svc_dash"), desc: t("header", "svc_dash_desc"), href: "/service/dashboards" },
     { label: t("header", "svc_export"), desc: t("header", "svc_export_desc"), href: "/service/export-embed" },
   ];
 
   const RESOURCES: MenuItem[] = [
     { label: t("header", "res_customers"), desc: t("header", "res_customers_desc"), href: "/resources/customers" },
-    { label: t("header", "res_webinars"), desc: t("header", "res_webinars_desc"), href: "/resources/webinars" },
     { label: t("header", "res_help"), desc: t("header", "res_help_desc"), href: "/resources/help-center" },
-    { label: t("header", "res_devdocs"), desc: t("header", "res_devdocs_desc"), href: "/resources/dev-docs" },
     { label: t("header", "res_gallery"), desc: t("header", "res_gallery_desc"), href: "/resources/map-gallery" },
     { label: t("header", "res_blog"), desc: t("header", "res_blog_desc"), href: "/resources/blog" },
-    { label: t("header", "res_qgis"), desc: t("header", "res_qgis_desc"), href: "/resources/qgis-plugin" },
   ];
 
   return (
@@ -177,36 +178,53 @@ export default function HomeHeader() {
         </nav>
 
         <div className="hidden md:flex items-center gap-3">
-          {!isLoggedIn ? (
+          {!isHydrated ? (
             <>
-              <Link
-                href="/login"
-                className="rounded-lg px-3 py-2 font-semibold text-gray-700 hover:text-emerald-600 dark:text-gray-200 dark:hover:text-emerald-400 transition"
-              >
-                {t("header", "login")}
-              </Link>
-              <Link
-                href="/register"
-                className="rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white shadow hover:bg-emerald-400 transition"
-              >
-                {t("header", "getStarted")}
-              </Link>
+              <div className="h-10 min-w-[70px] rounded-lg dark:border-gray-600 flex items-center justify-center gap-1">
+                <div className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-gray-500 animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+              <div className="h-10 min-w-[100px] rounded-lg bg-emerald-500/60 dark:bg-emerald-500/40 shadow flex items-center justify-center gap-1">
+                <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '0ms' }} />
+                <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '150ms' }} />
+                <div className="h-1.5 w-1.5 rounded-full bg-white animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
             </>
           ) : (
-            <>
-              <Link
-                href="/profile/information"
-                className="rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white shadow hover:bg-emerald-400 transition"
-              >
-                {t("header", "profile")}
-              </Link>
-              <button
-                onClick={onLogout}
-                className="rounded-lg px-3 py-2 font-semibold text-gray-700 hover:text-red-500 dark:text-gray-200 dark:hover:text-red-400 transition"
-              >
-                {t("header", "logout")}
-              </button>
-            </>
+            <div className="flex items-center gap-3 animate-in fade-in duration-500">
+              {!isLoggedIn ? (
+                <>
+                  <Link
+                    href="/login"
+                    className="min-w-[70px] text-center rounded-lg px-3 py-2 font-semibold text-gray-700 hover:text-emerald-600 dark:text-gray-200 dark:hover:text-emerald-400 transition"
+                  >
+                    {t("header", "login")}
+                  </Link>
+                  <Link
+                    href="/register"
+                    className="min-w-[100px] text-center rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white shadow hover:bg-emerald-400 transition"
+                  >
+                    {t("header", "getStarted")}
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <Link
+                    href="/profile/information"
+                    className="min-w-[70px] text-center rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white shadow hover:bg-emerald-400 transition"
+                  >
+                    {t("header", "profile")}
+                  </Link>
+                  <button
+                    onClick={onLogout}
+                    className="min-w-[70px] text-center rounded-lg px-3 py-2 font-semibold text-gray-700 hover:text-red-500 dark:text-gray-200 dark:hover:text-red-400 transition"
+                  >
+                    {t("header", "logout")}
+                  </button>
+                </>
+              )}
+            </div>
           )}
         </div>
       </div>

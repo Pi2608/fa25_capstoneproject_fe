@@ -1,6 +1,15 @@
-import { useState, useEffect, useCallback } from "react";
-import { Segment, TimelineTransition } from "@/lib/api-storymap";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Segment, TimelineTransition, RouteAnimation, getRouteAnimationsBySegment, FrontendTransitionType } from "@/lib/api-storymap";
 import { getTimelineTransitions } from "@/lib/api-storymap";
+import {
+  renderSegmentZones,
+  // renderSegmentLocations, // Now handled by usePoiMarkers globally
+  renderSegmentLayers,
+  applyCameraState,
+  autoFitBounds,
+  applyLayerCrossFade,
+  type RenderSegmentOptions,
+} from "@/utils/segmentRenderer";
 
 type UseSegmentPlaybackProps = {
   mapId: string;
@@ -10,6 +19,7 @@ type UseSegmentPlaybackProps = {
   setCurrentSegmentLayers: (layers: any[]) => void;
   setActiveSegmentId: (id: string | null) => void;
   onSegmentSelect?: (segment: Segment) => void;
+  onLocationClick?: (location: any, event?: any) => void;
 };
 
 export function useSegmentPlayback({
@@ -20,19 +30,23 @@ export function useSegmentPlayback({
   setCurrentSegmentLayers,
   setActiveSegmentId,
   onSegmentSelect,
+  onLocationClick,
 }: UseSegmentPlaybackProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPlayIndex, setCurrentPlayIndex] = useState(0);
   const [transitions, setTransitions] = useState<TimelineTransition[]>([]);
   const [waitingForUserAction, setWaitingForUserAction] = useState(false);
   const [currentTransition, setCurrentTransition] = useState<TimelineTransition | null>(null);
+  const [routeAnimations, setRouteAnimations] = useState<RouteAnimation[]>([]);
+  const [segmentStartTime, setSegmentStartTime] = useState<number>(0);
+  const [isRouteAnimationOnly, setIsRouteAnimationOnly] = useState(false); // Flag to skip playback loop
+  const isSingleSegmentPlayRef = useRef(false); // Ref to track single segment play (doesn't trigger re-render)
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const data = await getTimelineTransitions(mapId);
-        console.log("🎬 Loaded timeline transitions:", data);
         if (!cancelled) setTransitions(data || []);
       } catch (e) {
         console.warn("Failed to load timeline transitions:", e);
@@ -43,10 +57,12 @@ export function useSegmentPlayback({
   }, [mapId]);
 
   type TransitionOptions = {
-    transitionType?: "Jump" | "Ease" | "Linear";
+    transitionType?: FrontendTransitionType;
     durationMs?: number;
     cameraAnimationType?: "Jump" | "Ease" | "Fly";
     cameraAnimationDurationMs?: number;
+    skipCameraState?: boolean; // Skip applying camera state
+    disableTwoPhaseFly?: boolean; // Disable two-phase fly animation for smoother transitions
   };
 
   const findTransition = useCallback((fromId?: string | null, toId?: string | null) => {
@@ -54,7 +70,61 @@ export function useSegmentPlayback({
     return transitions.find(t => t.fromSegmentId === fromId && t.toSegmentId === toId);
   }, [transitions]);
 
+  // Load route animations for current segment (always load, not just when playing)
+  // This ensures route lines are visible even when not playing
+  useEffect(() => {
+    if (segments.length === 0 || currentPlayIndex >= segments.length) {
+      setRouteAnimations([]);
+      setSegmentStartTime(0);
+      return;
+    }
+
+    const currentSegment = segments[currentPlayIndex];
+    if (!currentSegment?.segmentId) {
+      setRouteAnimations([]);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const animations = await getRouteAnimationsBySegment(mapId, currentSegment.segmentId);
+        if (!cancelled) {
+          // Sort routes by displayOrder for sequential playback
+          const sortedAnimations = (animations || []).sort((a, b) => {
+            // First sort by displayOrder
+            if (a.displayOrder !== b.displayOrder) {
+              return a.displayOrder - b.displayOrder;
+            }
+            // Then by startTimeMs if available
+            if (a.startTimeMs !== undefined && b.startTimeMs !== undefined) {
+              return a.startTimeMs - b.startTimeMs;
+            }
+            // Finally by creation time
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          });
+          setRouteAnimations(sortedAnimations);
+          // Reset start time when segment changes (only if playing)
+          if (isPlaying) {
+            setSegmentStartTime(Date.now());
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to load route animations:", e);
+        if (!cancelled) {
+          setRouteAnimations([]);
+          if (isPlaying) {
+            setSegmentStartTime(0);
+          }
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [mapId, currentPlayIndex, segments, isPlaying]);
+
   // ==================== VIEW SEGMENT ON MAP ====================
+  // Now using shared render functions from segmentRenderer to avoid code duplication
   const handleViewSegment = useCallback(async (segment: Segment, opts?: TransitionOptions) => {
     if (!currentMap) {
       console.warn("⚠️ No map instance available");
@@ -64,438 +134,134 @@ export function useSegmentPlayback({
     try {
       const L = (await import("leaflet")).default;
       const oldLayers = [...currentSegmentLayers];
-      
-      const newLayers: any[] = [];
-      const allBounds: any[] = [];
-      
 
-      // ==================== RENDER ZONES ====================
-      if (segment.zones && segment.zones.length > 0) {
-        for (const segmentZone of segment.zones) {
-          const zone = segmentZone.zone;
-          if (!zone) continue;
+      // Convert TransitionOptions to RenderSegmentOptions
+      const renderOptions: RenderSegmentOptions = {
+        transitionType: opts?.transitionType,
+        durationMs: opts?.durationMs,
+        cameraAnimationType: opts?.cameraAnimationType,
+        cameraAnimationDurationMs: opts?.cameraAnimationDurationMs,
+        skipCameraState: opts?.skipCameraState,
+        disableTwoPhaseFly: opts?.disableTwoPhaseFly,
+      };
 
-          if (!zone.geometry || zone.geometry.trim() === '') {
-            console.warn(`⚠️ Zone ${zone.zoneId} has no geometry`);
-            continue;
-          }
+      // Render zones using shared function
+      const zoneResult = await renderSegmentZones(segment, currentMap, L, renderOptions);
+      const newLayers = [...zoneResult.layers];
+      const allBounds = [...zoneResult.bounds];
 
-          try {
-            let geoJsonData;
-            try {
-              geoJsonData = JSON.parse(zone.geometry);
-            } catch (parseError) {
-              continue;
-            }
+      // Render layers and map features using shared function
+      const layerResult = await renderSegmentLayers(segment, currentMap, L, renderOptions);
+      newLayers.push(...layerResult.layers);
+      allBounds.push(...layerResult.bounds);
 
-            const geoJsonLayer = L.geoJSON(geoJsonData, {
-              style: () => {
-                const style: any = {};
-                
-                if (segmentZone.fillZone) {
-                  style.fillColor = segmentZone.fillColor || '#FFD700';
-                  style.fillOpacity = segmentZone.fillOpacity || 0.3;
-                } else {
-                  style.fillOpacity = 0;
-                }
+      // NOTE: Locations are now rendered globally by usePoiMarkers hook
+      // This prevents duplicate rendering of POIs
+      // renderSegmentLocations is only used in viewer mode (StoryMapViewer)
+      // const locationResult = await renderSegmentLocations(segment, currentMap, L, {
+      //   ...renderOptions,
+      //   onLocationClick,
+      // });
+      // newLayers.push(...locationResult.layers);
+      // allBounds.push(...locationResult.bounds);
 
-                if (segmentZone.highlightBoundary) {
-                  style.color = segmentZone.boundaryColor || '#FFD700';
-                  style.weight = segmentZone.boundaryWidth || 2;
-                } else {
-                  style.weight = 0;
-                }
-
-                return style;
-              },
-            });
-
-            geoJsonLayer.addTo(currentMap);
-            if (opts?.transitionType && opts.transitionType !== 'Jump') {
-              try {
-                geoJsonLayer.setStyle({ opacity: 0, fillOpacity: 0 });
-              } catch {}
-            }
-            newLayers.push(geoJsonLayer);
-
-            const layerBounds = geoJsonLayer.getBounds();
-            if (layerBounds.isValid()) {
-              allBounds.push(layerBounds);
-            }
-
-            // Add label if enabled
-            if (segmentZone.showLabel) {
-              try {
-                let labelPosition;
-                
-                if (zone.centroid) {
-                  const centroid = JSON.parse(zone.centroid);
-                  labelPosition = [centroid.coordinates[1], centroid.coordinates[0]];
-                } else {
-                  const center = layerBounds.getCenter();
-                  labelPosition = [center.lat, center.lng];
-                }
-
-                const labelMarker = L.marker(labelPosition as [number, number], {
-                  icon: L.divIcon({
-                    className: 'zone-label',
-                    html: `<div style="
-                      background: rgba(0, 0, 0, 0.7);
-                      color: white;
-                      padding: 4px 8px;
-                      border-radius: 4px;
-                      font-size: 14px;
-                      font-weight: 500;
-                      white-space: nowrap;
-                      border: 2px solid rgba(255, 255, 255, 0.8);
-                    ">${segmentZone.labelOverride || zone.name}</div>`,
-                    iconSize: undefined,
-                  }),
-                });
-                labelMarker.addTo(currentMap);
-                if (opts?.transitionType && opts.transitionType !== 'Jump') {
-                  try { (labelMarker as any).setOpacity?.(0); } catch {}
-                }
-                newLayers.push(labelMarker);
-              } catch (labelError) {
-                console.error(`Failed to add label for zone ${zone.zoneId}:`, labelError);
-              }
-            }
-          } catch (error) {
-            console.error(`❌ Failed to render zone ${zone.zoneId}:`, error);
-          }
-        }
-      }
-
-      // ==================== RENDER LOCATIONS ====================
-      if (segment.locations && segment.locations.length > 0) {
-        for (const location of segment.locations) {
-          try {
-            if (location.isVisible === false) {
-              continue;
-            }
-
-            if (!location.markerGeometry) {
-              console.warn(`⚠️ Location ${location.poiId || location.locationId} has no geometry`);
-              continue;
-            }
-
-            let geoJsonData;
-            try {
-              geoJsonData = JSON.parse(location.markerGeometry);
-            } catch (parseError) {
-              console.error(`❌ Failed to parse geometry for location ${location.poiId || location.locationId}:`, parseError);
-              continue;
-            }
-
-            const coords = geoJsonData.coordinates;
-            const latLng: [number, number] = [coords[1], coords[0]];
-
-            // Create marker icon based on config
-            const iconSize = location.iconSize || 32;
-            const iconColor = location.iconColor || '#FF0000';
-            
-            // Determine icon content: IconUrl (image), IconType (emoji), or default
-            let iconHtml = '';
-            if (location.iconUrl) {
-              // Use custom image
-              iconHtml = `<img src="${location.iconUrl}" style="
-                width: ${iconSize}px;
-                height: ${iconSize}px;
-                object-fit: contain;
-                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-              " />`;
-            } else {
-              // Use emoji or default
-              const iconContent = location.iconType || '📍';
-              iconHtml = `<div style="
-                font-size: ${iconSize}px;
-                text-align: center;
-                filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-                color: ${iconColor};
-                line-height: 1;
-              ">${iconContent}</div>`;
-            }
-
-            const marker = L.marker(latLng, {
-              icon: L.divIcon({
-                className: 'location-marker',
-                html: iconHtml,
-                iconSize: [iconSize, iconSize],
-                iconAnchor: [iconSize / 2, iconSize],
-              }),
-              zIndexOffset: location.zIndex || 100,
-            });
-
-            // Add tooltip if enabled - support HTML content
-            if (location.showTooltip && location.tooltipContent) {
-              marker.bindTooltip(location.tooltipContent, {
-                permanent: false,
-                direction: 'top',
-                className: 'location-tooltip',
-                opacity: 0.95,
-              });
-            }
-
-            // Add popup if enabled - rich HTML content with media, audio, external link
-            if (location.openPopupOnClick && location.popupContent) {
-              // Build media gallery
-              let mediaHtml = '';
-              if (location.mediaUrls) {
-                const mediaUrls = location.mediaUrls.split('\n').filter((url: string) => url.trim());
-                if (mediaUrls.length > 0) {
-                  mediaHtml = '<div style="margin: 12px 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px;">';
-                  mediaUrls.forEach((url: string) => {
-                    const trimmedUrl = url.trim();
-                    // Check if image or video
-                    if (trimmedUrl.match(/\.(jpg|jpeg|png|gif|webp|svg)$/i)) {
-                      mediaHtml += `<img src="${trimmedUrl}" style="width: 100%; height: 80px; object-fit: cover; border-radius: 4px; cursor: pointer;" onclick="window.open('${trimmedUrl}', '_blank')" />`;
-                    } else if (trimmedUrl.match(/\.(mp4|webm|ogg)$/i)) {
-                      mediaHtml += `<video controls style="width: 100%; height: 80px; object-fit: cover; border-radius: 4px;"><source src="${trimmedUrl}" /></video>`;
-                    }
-                  });
-                  mediaHtml += '</div>';
-                }
-              }
-
-              // Build audio player
-              let audioHtml = '';
-              if (location.playAudioOnClick && location.audioUrl) {
-                audioHtml = `
-                  <div style="margin: 12px 0;">
-                    <audio controls style="width: 100%; height: 32px;">
-                      <source src="${location.audioUrl}" />
-                      Your browser does not support the audio element.
-                    </audio>
-                  </div>
-                `;
-              }
-
-              // Build external link button
-              let linkHtml = '';
-              if (location.externalUrl) {
-                linkHtml = `
-                  <div style="margin: 12px 0;">
-                    <a href="${location.externalUrl}" target="_blank" rel="noopener noreferrer" 
-                       style="display: inline-block; padding: 8px 16px; background: #3b82f6; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500;">
-                      🔗 Open External Link
-                    </a>
-                  </div>
-                `;
-              }
-
-              const popupHtml = `
-                <div style="min-width: 250px; max-width: 400px;">
-                  <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600; color: #1f2937;">
-                    ${location.title}
-                  </h3>
-                  ${location.subtitle ? `<p style="margin: 0 0 12px 0; font-size: 13px; color: #6b7280; font-style: italic;">${location.subtitle}</p>` : ''}
-                  <div style="margin: 12px 0; font-size: 14px; line-height: 1.6; color: #374151;">
-                    ${location.popupContent}
-                  </div>
-                  ${mediaHtml}
-                  ${audioHtml}
-                  ${linkHtml}
-                </div>
-              `;
-              
-              marker.bindPopup(popupHtml, {
-                maxWidth: 400,
-                className: 'location-popup-custom',
-              });
-            }
-
-            // Add entry animation if configured
-            const entryEffect = location.entryEffect || 'fade';
-            const entryDelayMs = location.entryDelayMs || 0;
-            const entryDurationMs = location.entryDurationMs || 400;
-            
-            marker.addTo(currentMap);
-            
-            // Apply entry animation (only if not using segment transition)
-            if (!opts?.transitionType && entryEffect !== 'none') {
-              const markerElement = marker.getElement();
-              if (markerElement) {
-                // Initial state
-                markerElement.style.transition = 'none';
-                markerElement.style.opacity = '0';
-                
-                if (entryEffect === 'fade') {
-                  markerElement.style.opacity = '0';
-                } else if (entryEffect === 'scale') {
-                  markerElement.style.transform = 'scale(0)';
-                  markerElement.style.opacity = '0';
-                } else if (entryEffect === 'slide-up') {
-                  markerElement.style.transform = 'translateY(20px)';
-                  markerElement.style.opacity = '0';
-                } else if (entryEffect === 'bounce') {
-                  markerElement.style.transform = 'scale(0.3)';
-                  markerElement.style.opacity = '0';
-                }
-                
-                // Animate after delay
-                setTimeout(() => {
-                  if (!markerElement) return;
-                  markerElement.style.transition = `all ${entryDurationMs}ms ease-out`;
-                  markerElement.style.opacity = '1';
-                  markerElement.style.transform = 'scale(1) translateY(0)';
-                }, entryDelayMs);
-              }
-            } else if (opts?.transitionType && opts.transitionType !== 'Jump') {
-              // Use segment transition fade
-              try { marker.setOpacity?.(0); } catch {}
-            }
-            
-            newLayers.push(marker);
-            
-            allBounds.push(L.latLngBounds([latLng, latLng]));
-          } catch (error) {
-            console.error(`❌ Failed to render location ${location.poiId || location.locationId}:`, error);
-          }
-        }
-
-        console.log(`✅ Rendered ${segment.locations.length} locations`);
-      }
-
-      // ==================== CAMERA STATE ====================
-      if (segment.cameraState) {
-        let parsedCamera;
-        if (typeof segment.cameraState === 'string') {
-          try {
-            parsedCamera = JSON.parse(segment.cameraState);
-          } catch (e) {
-            console.error("❌ Failed to parse camera state:", e);
-            return;
-          }
-        } else {
-          parsedCamera = segment.cameraState;
-        }
-        
-        if (!parsedCamera || !parsedCamera.center || !Array.isArray(parsedCamera.center) || parsedCamera.center.length < 2) {
-          console.error("❌ Invalid camera state structure:", parsedCamera);
-          return;
-        }
-        
-        const currentZoom = currentMap.getZoom();
-        const targetZoom = parsedCamera.zoom || 10;
-        const targetCenter = parsedCamera.center;
-
-        const camType = opts?.cameraAnimationType || 'Fly';
-        const camDurationSec = (opts?.cameraAnimationDurationMs ?? 1500) / 1000;
-
-        console.log(`📹 Camera animation: type=${camType}, duration=${camDurationSec}s, zoom ${currentZoom}→${targetZoom}`);
-
-        if (camType === 'Jump') {
-          // Immediate jump without animation
-          console.log("⚡ Jump: immediate setView");
-          currentMap.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: false });
-        } else if (camType === 'Ease') {
-          // Smooth pan and zoom separately for an eased feel
-          console.log("🌊 Ease: panTo then setZoom");
-          try {
-            currentMap.panTo([targetCenter[1], targetCenter[0]], { animate: true, duration: camDurationSec * 0.6 });
-            setTimeout(() => {
-              try {
-                currentMap.setZoom(targetZoom, { animate: true });
-              } catch {}
-            }, camDurationSec * 600);
-          } catch {
-            currentMap.setView([targetCenter[1], targetCenter[0]], targetZoom, { animate: true });
-          }
-        } else {
-          // Fly (default)
-          // Only use two-phase if NO transition options (manual view) AND significant zoom change
-          const needsTwoPhase = !opts && Math.abs(currentZoom - targetZoom) > 1 && oldLayers.length > 0;
-          console.log(`✈️ Fly: ${needsTwoPhase ? 'two-phase (zoom out then in)' : 'direct flyTo'}`);
-          if (needsTwoPhase) {
-            const midZoom = Math.min(currentZoom, targetZoom) - 2;
-            currentMap.flyTo([targetCenter[1], targetCenter[0]], midZoom, { duration: Math.max(0.2, camDurationSec * 0.4), animate: true });
-            setTimeout(() => {
-              currentMap.flyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: Math.max(0.2, camDurationSec * 0.6), animate: true });
-            }, Math.max(200, camDurationSec * 400));
-          } else {
-            currentMap.flyTo([targetCenter[1], targetCenter[0]], targetZoom, { duration: camDurationSec, animate: true });
-          }
-        }
+      // Apply camera state or auto-fit bounds using shared functions
+      // FIXED: Always apply camera state when segment has one, even if route animations were playing
+      // This ensures proper transition to next segment's camera state after route animations complete
+      if (segment.cameraState && !opts?.skipCameraState) {
+        // Add a small delay to ensure any route animations have released camera control
+        // This prevents route animation zoom from persisting after animations complete
+        await new Promise(resolve => setTimeout(resolve, 100));
+        applyCameraState(segment, currentMap, {
+          ...renderOptions,
+          oldLayersCount: oldLayers.length,
+          // Force camera state application even if map is already at a zoom level
+          cameraAnimationType: renderOptions.cameraAnimationType || 'Fly',
+          cameraAnimationDurationMs: renderOptions.cameraAnimationDurationMs || 1500,
+        });
       } else if (allBounds.length > 0) {
-        // Auto-fit bounds if no camera state
-        try {
-          const combinedBounds = allBounds[0];
-          for (let i = 1; i < allBounds.length; i++) {
-            combinedBounds.extend(allBounds[i]);
-          }
-          const camType = opts?.cameraAnimationType || 'Fly';
-          const camDurationSec = (opts?.cameraAnimationDurationMs ?? 1500) / 1000;
-          const animate = camType !== 'Jump';
-          currentMap.fitBounds(combinedBounds, {
-            padding: [80, 80],
-            animate,
-            duration: animate ? camDurationSec : undefined,
-            maxZoom: 15,
-          });
-          console.log(`📦 Auto-fitted bounds to show ${allBounds.length} elements (no camera state)`);
-        } catch (error) {
-          console.error("❌ Failed to fit bounds:", error);
-        }
+        autoFitBounds(allBounds, currentMap, renderOptions);
       } else {
         console.warn("⚠️ Empty segment: no camera state and no zones/locations");
       }
 
-      // ==================== LAYER CROSS-FADE ====================
-      const doFade = opts?.transitionType && opts.transitionType !== 'Jump';
-      const totalMs = opts?.durationMs ?? 800;
-      console.log(`🎭 Layer transition: type=${opts?.transitionType || 'default'}, fade=${doFade}, duration=${totalMs}ms, old=${oldLayers.length}, new=${newLayers.length}`);
-      
-      if (!doFade) {
-        // Clear old immediately and keep new as-is
-        console.log("⚡ Jump transition: removing old layers immediately");
-        oldLayers.forEach(layer => {
-          try { currentMap.removeLayer(layer); } catch {}
-        });
-        if (newLayers.length > 0) setCurrentSegmentLayers(newLayers);
-      } else {
-        console.log(`🌈 Cross-fade transition: ${opts?.transitionType} over ${totalMs}ms`);
-        const start = performance.now();
-        const easing = (t: number) => {
-          if (opts?.transitionType === 'Linear') return t;
-          // EaseInOutQuad
-          return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-        };
-
-        const setOpacitySafe = (layer: any, value: number) => {
-          try { layer.setOpacity?.(value); } catch {}
-          try { layer.setStyle?.({ opacity: value, fillOpacity: value }); } catch {}
-        };
-
-        const step = () => {
-          const now = performance.now();
-          const tRaw = Math.min(1, (now - start) / Math.max(1, totalMs));
-          const t = Math.max(0, Math.min(1, easing(tRaw)));
-          oldLayers.forEach(l => setOpacitySafe(l, 1 - t));
-          newLayers.forEach(l => setOpacitySafe(l, t));
-          if (tRaw < 1) {
-            requestAnimationFrame(step);
-          } else {
-            // Cleanup old layers
-            oldLayers.forEach(layer => {
-              try { currentMap.removeLayer(layer); } catch {}
-            });
-            if (newLayers.length > 0) setCurrentSegmentLayers(newLayers);
-          }
-        };
-        // Ensure initial state
-        oldLayers.forEach(l => setOpacitySafe(l, 1));
-        newLayers.forEach(l => setOpacitySafe(l, 0));
-        requestAnimationFrame(step);
-      }
+      // Apply layer cross-fade transition using shared function
+      applyLayerCrossFade(
+        oldLayers,
+        newLayers,
+        currentMap,
+        renderOptions,
+        (finalLayers) => {
+          setCurrentSegmentLayers(finalLayers);
+        }
+      );
     } catch (error) {
       console.error("❌ Failed to view segment on map:", error);
     }
-  }, [currentMap, currentSegmentLayers, setCurrentSegmentLayers]);
+  }, [currentMap, currentSegmentLayers, setCurrentSegmentLayers, onLocationClick]);
+
+  // Track last segments data hash to detect changes
+  const lastSegmentsDataRef = useRef<string>('');
+  const lastPlayIndexRef = useRef<number>(-1);
+
+  // Re-render current segment when segments data changes (e.g., after create/delete/update)
+  // BUT NOT when segment index changes (that's handled by auto-play effect)
+  useEffect(() => {
+    // Only re-render if we have a current segment and map is ready, and not playing
+    if (!currentMap || segments.length === 0 || currentPlayIndex >= segments.length || isPlaying) {
+      // Update lastPlayIndexRef even when not re-rendering
+      if (currentPlayIndex !== lastPlayIndexRef.current) {
+        lastPlayIndexRef.current = currentPlayIndex;
+        // Reset segments data hash when index changes (to allow camera state on new segment)
+        lastSegmentsDataRef.current = '';
+      }
+      return;
+    }
+
+    const currentSegment = segments[currentPlayIndex];
+    if (!currentSegment) {
+      return;
+    }
+
+    // Check if index changed - if so, don't skip camera state (let auto-play handle it)
+    const indexChanged = currentPlayIndex !== lastPlayIndexRef.current;
+    if (indexChanged) {
+      lastPlayIndexRef.current = currentPlayIndex;
+      // Reset segments data hash when index changes
+      lastSegmentsDataRef.current = '';
+      // Don't re-render here - let auto-play effect handle segment change with camera state
+      return;
+    }
+
+    // Create a hash of current segment data to detect changes
+    const segmentsDataHash = JSON.stringify({
+      segmentId: currentSegment.segmentId,
+      zonesCount: currentSegment.zones?.length || 0,
+      layersCount: currentSegment.layers?.length || 0,
+      locationsCount: currentSegment.locations?.length || 0,
+      routeAnimationsCount: routeAnimations.length || 0,
+    });
+
+    // Only re-render if data actually changed (and index didn't change)
+    if (segmentsDataHash !== lastSegmentsDataRef.current) {
+      lastSegmentsDataRef.current = segmentsDataHash;
+
+      // Re-render current segment with updated data (skip camera state to avoid jumping)
+      handleViewSegment(currentSegment, {
+        skipCameraState: true, // Don't change camera, just update layers
+        transitionType: 'Ease',
+        durationMs: 300, // Quick update
+      });
+    }
+  }, [segments, currentMap, currentPlayIndex, isPlaying, handleViewSegment, routeAnimations]); // Re-render when segments change
 
   // ==================== AUTO-PLAY EFFECT ====================
   useEffect(() => {
+    // Skip playback loop if only playing route animation or single segment
+    if (isRouteAnimationOnly || isSingleSegmentPlayRef.current) return;
+
     if (!isPlaying || segments.length === 0) return;
+    if (!currentMap) return;
 
     let timeoutId: NodeJS.Timeout;
 
@@ -509,47 +275,58 @@ export function useSegmentPlayback({
       const segment = segments[currentPlayIndex];
       const prevSegment = currentPlayIndex > 0 ? segments[currentPlayIndex - 1] : undefined;
       const t = findTransition(prevSegment?.segmentId ?? null, segment.segmentId);
-      
-      console.log(`🔄 Segment ${currentPlayIndex}: ${prevSegment?.segmentId || 'START'} → ${segment.segmentId}`);
-      console.log(`📌 Found transition:`, t);
-      
-      // Normalize case from backend (linear/ease/jump → Linear/Ease/Jump)
-      const normalizeTransitionType = (str: string): "Jump" | "Ease" | "Linear" => {
+
+      // Normalize case from backend (linear/ease/easein/easeout/easeinout → Linear/Ease/EaseIn/EaseOut/EaseInOut)
+      const normalizeTransitionType = (str: string): FrontendTransitionType => {
         const lower = str.toLowerCase();
         if (lower === 'jump') return 'Jump';
         if (lower === 'ease') return 'Ease';
-        return 'Linear';
+        if (lower === 'linear') return 'Linear';
+        if (lower === 'easein') return 'EaseIn';
+        if (lower === 'easeout') return 'EaseOut';
+        if (lower === 'easeinout') return 'EaseInOut';
+        return 'Ease'; // default fallback
       };
-      
+
       const normalizeCameraType = (str: string): "Jump" | "Ease" | "Fly" => {
         const lower = str.toLowerCase();
         if (lower === 'jump') return 'Jump';
         if (lower === 'ease') return 'Ease';
         return 'Fly';
       };
-      
+
       const options: TransitionOptions | undefined = t ? {
         transitionType: normalizeTransitionType(t.transitionType),
         durationMs: t.durationMs,
         cameraAnimationType: t.animateCamera ? normalizeCameraType(t.cameraAnimationType) : 'Jump',
         cameraAnimationDurationMs: t.animateCamera ? t.cameraAnimationDurationMs : undefined,
       } : undefined;
-      
-      console.log(`⚙️ Applying transition options:`, options);
-      
+
+      if (!currentMap) {
+        console.warn("⚠️ Map not ready yet, retrying segment playback...");
+        timeoutId = setTimeout(playNextSegment, 200);
+        return;
+      }
+
       setActiveSegmentId(segment.segmentId);
-      await handleViewSegment(segment, options);
+
+      // FIXED: Always apply camera state when advancing to a new segment
+      // This ensures camera state is applied even after route animations complete
+      await handleViewSegment(segment, {
+        ...options,
+        skipCameraState: false, // Force camera state application
+      });
+
       onSegmentSelect?.(segment);
-      
+
       // Check if this transition requires user action
       if (t && t.requireUserAction) {
-        console.log(`⏸️ Waiting for user action: "${t.triggerButtonText}"`);
         setCurrentTransition(t);
         setWaitingForUserAction(true);
         setIsPlaying(false); // Pause playback
         return; // Don't schedule next segment
       }
-      
+
       const duration = segment.durationMs || 5000;
       timeoutId = setTimeout(() => {
         setCurrentPlayIndex(prev => prev + 1);
@@ -557,33 +334,99 @@ export function useSegmentPlayback({
     };
 
     playNextSegment();
-    
+
     return () => {
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, currentPlayIndex, segments.length]);
+  }, [isPlaying, currentPlayIndex, segments.length, currentMap]);
 
   // ==================== PLAYBACK CONTROLS ====================
-  const handlePlayPreview = () => {
+  const handlePlayPreview = (startIndex?: number) => {
     if (segments.length === 0) return;
-    setCurrentPlayIndex(0);
+
+    // Reset single segment play flag when starting full timeline playback
+    isSingleSegmentPlayRef.current = false;
+    setIsRouteAnimationOnly(false);
+
+    if (
+      typeof startIndex !== "number" &&
+      !isPlaying &&
+      currentPlayIndex > 0 &&
+      currentPlayIndex < segments.length
+    ) {
+      setIsPlaying(true);
+      setSegmentStartTime(Date.now());
+      return;
+    }
+
+    const nextIndex =
+      typeof startIndex === "number" &&
+        startIndex >= 0 &&
+        startIndex < segments.length
+        ? startIndex
+        : 0;
+
+    setCurrentPlayIndex(nextIndex);
     setIsPlaying(true);
+    setSegmentStartTime(Date.now());
   };
 
+  const handlePausePreview = useCallback(() => {
+    setIsPlaying(false);
+  }, []);
+
+  // Play route animation only (without camera state)
+  const handlePlayRouteAnimation = useCallback(async (segmentId?: string) => {
+    if (!currentMap) {
+      console.warn("⚠️ No map instance available");
+      return;
+    }
+
+    const targetSegmentId = segmentId || segments[currentPlayIndex]?.segmentId;
+    if (!targetSegmentId) {
+      console.warn("⚠️ No segment selected");
+      return;
+    }
+
+    try {
+      // Load route animations for the segment
+      const animations = await getRouteAnimationsBySegment(mapId, targetSegmentId);
+      if (animations && animations.length > 0) {
+        setRouteAnimations(animations);
+        setSegmentStartTime(Date.now());
+        setIsRouteAnimationOnly(true); // Set flag to skip playback loop
+        setIsPlaying(true);
+      } else {
+        console.warn("⚠️ No route animations found for this segment");
+      }
+    } catch (e) {
+      console.error("Failed to play route animation:", e);
+    }
+  }, [currentMap, mapId, segments, currentPlayIndex]);
+
   const handleStopPreview = () => {
+    const wasRouteAnimationOnly = isRouteAnimationOnly;
     setIsPlaying(false);
     setCurrentPlayIndex(0);
     setWaitingForUserAction(false);
     setCurrentTransition(null);
+    setRouteAnimations([]);
+    setSegmentStartTime(0);
+    setIsRouteAnimationOnly(false); // Reset flag
+    isSingleSegmentPlayRef.current = false; // Reset ref
+
+    // Dispatch event to notify UI components
+    if (typeof window !== 'undefined' && wasRouteAnimationOnly) {
+      window.dispatchEvent(new CustomEvent('routeAnimationStopped'));
+    }
   };
 
   const handleClearMap = () => {
     if (!currentMap) return;
-    
-    console.log(`🧹 Clearing ${currentSegmentLayers.length} layers from map...`);
+
     currentSegmentLayers.forEach(layer => {
       try {
         currentMap.removeLayer(layer);
@@ -591,27 +434,97 @@ export function useSegmentPlayback({
         console.warn("Failed to remove layer:", e);
       }
     });
-    
+
     setCurrentSegmentLayers([]);
     setActiveSegmentId(null);
-    console.log("✅ Map cleared");
   };
 
   const handleContinueAfterUserAction = () => {
-    console.log("▶️ User clicked continue, resuming playback");
     setWaitingForUserAction(false);
     setCurrentTransition(null);
     setCurrentPlayIndex(prev => prev + 1); // Move to next segment
     setIsPlaying(true); // Resume playback
   };
 
+  // Play a single segment's animations without transitions
+  const handlePlaySingleSegment = useCallback(async (segmentId: string) => {
+    if (!currentMap) {
+      console.warn("⚠️ No map instance available");
+      return;
+    }
+
+    // Find the segment by ID
+    const segmentIndex = segments.findIndex(s => s.segmentId === segmentId);
+    if (segmentIndex === -1) {
+      console.warn("⚠️ Segment not found:", segmentId);
+      return;
+    }
+
+    const segment = segments[segmentIndex];
+
+    // IMPORTANT: Set flags FIRST to prevent auto-play effect from running
+    isSingleSegmentPlayRef.current = true;
+    setIsRouteAnimationOnly(true);
+
+    // Set the segment as active
+    setActiveSegmentId(segmentId);
+    setCurrentPlayIndex(segmentIndex);
+
+    // Render the segment on map WITHOUT camera state and transitions
+    await handleViewSegment(segment, {
+      skipCameraState: true,
+      transitionType: 'Jump',
+      durationMs: 0,
+    });
+
+    // Load and play route animations
+    try {
+      const animations = await getRouteAnimationsBySegment(mapId, segmentId);
+      if (animations && animations.length > 0) {
+        setRouteAnimations(animations);
+        setSegmentStartTime(Date.now());
+        // Flags already set above
+        setIsPlaying(true);
+
+        // Automatically stop after segment duration
+        const duration = segment.durationMs || 5000;
+        setTimeout(() => {
+          handleStopPreview();
+          isSingleSegmentPlayRef.current = false;
+        }, duration);
+      } else {
+        // No route animations, just show the segment for its duration
+        setSegmentStartTime(Date.now());
+        // Flags already set above
+        setIsPlaying(true);
+
+        const duration = segment.durationMs || 5000;
+        setTimeout(() => {
+          setIsPlaying(false);
+          setSegmentStartTime(0);
+          setIsRouteAnimationOnly(false);
+          isSingleSegmentPlayRef.current = false;
+        }, duration);
+      }
+    } catch (e) {
+      console.error("Failed to play single segment:", e);
+      setIsRouteAnimationOnly(false);
+      isSingleSegmentPlayRef.current = false;
+    }
+  }, [currentMap, segments, mapId, handleViewSegment, handleStopPreview, setActiveSegmentId]);
+
   return {
     isPlaying,
     currentPlayIndex,
     waitingForUserAction,
     currentTransition,
+    routeAnimations,
+    segmentStartTime,
     handleViewSegment,
     handlePlayPreview,
+    handlePausePreview,
+    handlePlayRouteAnimation,
+    handlePlaySingleSegment,
     handleStopPreview,
     handleClearMap,
     handleContinueAfterUserAction,

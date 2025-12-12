@@ -30,50 +30,19 @@ export function createWorkspace(req: CreateWorkspaceRequest) {
 export type CreateProjectRequest = CreateWorkspaceRequest;
 export const createProject = createWorkspace;
 
-const PERSONAL_WORKSPACE_NAME = "Personal Workspace";
-const PERSONAL_WORKSPACE_NOTE = "Không thuộc tổ chức";
-
-function normalizeWorkspace(raw: Workspace): Workspace {
-  const orgId = raw.orgId ?? null;
-  const isPersonal = !orgId;
-  const trimmedOrgName = typeof raw.orgName === "string" ? raw.orgName.trim() : "";
-  const finalOrgName = isPersonal ? trimmedOrgName || PERSONAL_WORKSPACE_NAME : trimmedOrgName || raw.orgName;
-  const trimmedWorkspaceName = typeof raw.workspaceName === "string" ? raw.workspaceName.trim() : "";
-  const finalWorkspaceName = isPersonal ? trimmedWorkspaceName || PERSONAL_WORKSPACE_NAME : trimmedWorkspaceName || raw.workspaceName;
-  return {
-    ...raw,
-    orgId,
-    orgName: finalOrgName,
-    workspaceName: finalWorkspaceName,
-    isPersonal,
-    personalLabel: isPersonal ? PERSONAL_WORKSPACE_NOTE : raw.personalLabel,
-  };
-}
-
-type WorkspacesEnvelope = { workspaces: Workspace[] };
-type WorkspaceEnvelope = { workspace: Workspace };
-type MapsEnvelope = { maps: MapDto[] };
-
-function asWorkspaces(res: WorkspacesEnvelope | Workspace[]): Workspace[] {
-  return Array.isArray(res) ? res : res.workspaces ?? [];
-}
-
-function asWorkspace(res: WorkspaceEnvelope | Workspace): Workspace {
-  return (res as WorkspaceEnvelope).workspace ?? (res as Workspace);
-}
-
-function asMaps(res: MapsEnvelope | MapDto[]): MapDto[] {
-  return Array.isArray(res) ? res : res.maps ?? [];
+export async function getAllWorkspaces(): Promise<Workspace[]> {
+  const res = await getJson<any>("/workspaces");
+  return Array.isArray(res) ? res : res?.workspaces ?? [];
 }
 
 export async function getWorkspacesByOrganization(orgId: string): Promise<Workspace[]> {
-  const res = await getJson<WorkspacesEnvelope | Workspace[]>(`/workspaces/organization/${orgId}`);
-  return asWorkspaces(res).map(normalizeWorkspace);
+  const res = await getJson<any>(`/workspaces/organization/${orgId}`);
+  return Array.isArray(res) ? res : res?.workspaces ?? [];
 }
 
 export async function getMyWorkspaces(): Promise<Workspace[]> {
-  const res = await getJson<WorkspacesEnvelope | Workspace[]>("/workspaces/my");
-  return asWorkspaces(res).map(normalizeWorkspace);
+  const res = await getJson<any>("/workspaces/my");
+  return Array.isArray(res) ? res : res?.workspaces ?? [];
 }
 
 export const getMyProjects = getMyWorkspaces;
@@ -87,17 +56,20 @@ export function addMapToWorkspace(workspaceId: string, req: AddMapToWorkspaceReq
 }
 
 export async function getWorkspaceById(workspaceId: string): Promise<Workspace> {
-  const res = await getJson<WorkspaceEnvelope | Workspace>(`/workspaces/${workspaceId}`);
-  return normalizeWorkspace(asWorkspace(res));
+  const res = await getJson<any>(`/workspaces/${workspaceId}`);
+  return res?.workspace ?? res;
 }
 
-export async function updateWorkspace(workspaceId: string, req: { workspaceName: string; description?: string }) {
+export async function updateWorkspace(
+  workspaceId: string,
+  req: { workspaceName: string; description?: string }
+) {
   const body = {
     WorkspaceName: req.workspaceName,
     Description: req.description ?? null,
   };
-  const res = await putJson<typeof body, WorkspaceEnvelope | Workspace>(`/workspaces/${workspaceId}`, body);
-  return normalizeWorkspace(asWorkspace(res));
+  const res = await putJson<typeof body, any>(`/workspaces/${workspaceId}`, body);
+  return res?.workspace ?? res;
 }
 
 export function deleteWorkspace(workspaceId: string) {
@@ -105,9 +77,39 @@ export function deleteWorkspace(workspaceId: string) {
 }
 
 export async function getWorkspaceMaps(workspaceId: string): Promise<MapDto[]> {
-  const res = await getJson<MapsEnvelope | MapDto[]>(`/workspaces/${workspaceId}/maps`);
-  return asMaps(res);
+  const res = await getJson<{
+    maps: {
+      mapId: string;
+      mapName: string;
+      description?: string | null;
+      previewImage?: string | null;
+      isPublic?: boolean;
+      isActive?: boolean;
+      isStoryMap?: boolean;
+      createdAt?: string | null;
+      updatedAt?: string | null;
+    }[];
+  }>(`/workspaces/${workspaceId}/maps`);
+
+  const raw = Array.isArray(res) ? res : res?.maps ?? [];
+
+  return raw.map((m) => ({
+    id: m.mapId,
+    name: m.mapName,
+    description: m.description ?? "",
+    previewImage: m.previewImage ?? null,
+    isPublic: m.isPublic ?? false,
+    isActive: m.isActive ?? true,
+    createdAt: m.createdAt ?? undefined,
+    updatedAt: m.updatedAt ?? undefined,
+    isStoryMap:
+      (m as any).isStoryMap ??
+      (m as any).is_storymap ??
+      (m as any).IsStoryMap ??
+      false,
+  }));
 }
+
 
 export function removeMapFromWorkspace(workspaceId: string, mapId: string) {
   return delJson(`/workspaces/${workspaceId}/maps/${mapId}`);

@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import * as signalR from "@microsoft/signalr";
-import { createNotificationConnection, startConnection, stopConnection } from "@/lib/signalr";
+import { 
+  createNotificationConnection, 
+  startNotificationConnection as startConnection, 
+  stopNotificationConnection as stopConnection 
+} from "@/lib/hubs/notifications";
 import { NotificationItem } from "@/lib/api-user";
 import { getToken } from "@/lib/api-core";
 

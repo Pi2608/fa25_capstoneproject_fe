@@ -8,6 +8,8 @@ import {
   type UpdateUserPersonalInfoResponse,
 } from "@/lib/api-user";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 function initialsFrom(name?: string, email?: string) {
   const n = (name ?? "").trim();
@@ -22,7 +24,10 @@ function initialsFrom(name?: string, email?: string) {
 
 export default function ThongTinCaNhanPage() {
   const { t } = useI18n();
-  const tr = (k: string) => t("profile", k);
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const [me, setMe] = useState<Me | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,7 +89,7 @@ export default function ThongTinCaNhanPage() {
     const safeFullName = (fullName ?? "").trim();
     const safePhone = (phone ?? "").trim();
     if (safePhone && !/^\+?\d{8,15}$/.test(safePhone)) {
-      setError(tr("phone_invalid"));
+      setError(t("profile.phone_invalid"));
       return;
     }
     if (!dirty) {
@@ -107,10 +112,10 @@ export default function ThongTinCaNhanPage() {
       );
       setFullName(res.fullName ?? "");
       setPhone(res.phone ?? "");
-      setOk(tr("banner_success"));
+      setOk(t("profile.banner_success"));
       setEditing(false);
     } catch (e: unknown) {
-      let message = tr("banner_error_generic");
+      let message = t("profile.banner_error_generic");
       if (e instanceof Error) message = e.message;
       else if (typeof e === "object" && e && "message" in e) {
         const msg = (e as { message?: unknown }).message;
@@ -133,16 +138,16 @@ export default function ThongTinCaNhanPage() {
 
   return (
     <div className="w-full">
-      <div className="rounded-xl border border-zinc-200/70 bg-white/80 shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-900/60">
-        <div className="flex items-center justify-between gap-4 px-6 py-5 rounded-t-xl bg-gradient-to-r from-emerald-50 to-transparent dark:from-emerald-500/10">
+      <div className={`rounded-xl border shadow-sm backdrop-blur ${themeClasses.panel}`}>
+        <div className={`flex items-center justify-between gap-4 px-6 py-5 rounded-t-xl ${isDark ? "bg-gradient-to-r from-emerald-500/10 to-transparent" : "bg-gradient-to-r from-emerald-50 to-transparent"}`}>
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-500/10 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-500/20 dark:text-emerald-300">
+            <div className={`grid h-10 w-10 place-items-center rounded-lg bg-emerald-500/10 text-sm font-semibold ring-1 ring-emerald-500/20 ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>
               {initialsFrom(me?.fullName, me?.email)}
             </div>
             <div>
-              <h1 className="text-lg font-semibold">{tr("header_title")}</h1>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                {tr("header_sub")}
+              <h1 className={`text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("profile.header_title")}</h1>
+              <p className={`text-xs ${themeClasses.textMuted}`}>
+                {t("profile.header_sub")}
               </p>
             </div>
           </div>
@@ -153,87 +158,87 @@ export default function ThongTinCaNhanPage() {
               onClick={() => setEditing(true)}
               disabled={loading}
             >
-              {tr("btn_edit")}
+              {t("profile.btn_edit")}
             </button>
           ) : (
             <div className="flex gap-2">
               <button
-                className="rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+                className={`rounded-md px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 ${isDark ? "bg-zinc-800 hover:bg-zinc-700" : "bg-gray-600 hover:bg-gray-700"}`}
                 onClick={handleCancel}
                 disabled={saving}
               >
-                {tr("btn_cancel")}
+                {t("profile.btn_cancel")}
               </button>
               <button
                 className="rounded-md bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-50"
                 onClick={handleSave}
                 disabled={saving || !dirty}
               >
-                {saving ? tr("btn_saving") : tr("btn_save")}
+                {saving ? t("profile.btn_saving") : t("profile.btn_save")}
               </button>
             </div>
           )}
         </div>
 
         {error && (
-          <div className="mx-6 mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          <div className={`mx-6 mt-4 rounded-md border px-3 py-2 text-xs ${isDark ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
             {error}
           </div>
         )}
         {ok && (
-          <div className="mx-6 mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+          <div className={`mx-6 mt-4 rounded-md border px-3 py-2 text-xs ${isDark ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
             {ok}
           </div>
         )}
 
         <div className="px-6 py-6">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-lg border border-zinc-200/70 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/5">
-              <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                {tr("field_fullname")}
+            <div className={`rounded-lg border p-4 ${isDark ? "border-white/10 bg-white/5" : "border-zinc-200/70 bg-zinc-50"}`}>
+              <div className={`mb-1 text-[11px] uppercase tracking-wide ${themeClasses.textMuted}`}>
+                {t("profile.field_fullname")}
               </div>
               {!editing ? (
-                <div className="text-sm font-medium">
-                  {loading ? <div className="h-5 w-36 animate-pulse rounded bg-zinc-200 dark:bg-white/10" /> : me?.fullName ?? "-"}
+                <div className={`text-sm font-medium ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
+                  {loading ? <div className={`h-5 w-36 animate-pulse rounded ${isDark ? "bg-white/10" : "bg-zinc-200"}`} /> : me?.fullName ?? "-"}
                 </div>
               ) : (
                 <input
-                  className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-white/10 dark:bg-transparent"
+                  className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 ${themeClasses.input}`}
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder={tr("placeholder_fullname")}
+                  placeholder={t("profile.placeholder_fullname")}
                 />
               )}
             </div>
 
-            <div className="rounded-lg border border-zinc-200/70 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/5">
-              <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                {tr("field_email")}
+            <div className={`rounded-lg border p-4 ${isDark ? "border-white/10 bg-white/5" : "border-zinc-200/70 bg-zinc-50"}`}>
+              <div className={`mb-1 text-[11px] uppercase tracking-wide ${themeClasses.textMuted}`}>
+                {t("profile.field_email")}
               </div>
-              <div className="text-sm font-medium">
-                {loading ? <div className="h-5 w-56 animate-pulse rounded bg-zinc-200 dark:bg-white/10" /> : me?.email ?? "-"}
+              <div className={`text-sm font-medium ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
+                {loading ? <div className={`h-5 w-56 animate-pulse rounded ${isDark ? "bg-white/10" : "bg-zinc-200"}`} /> : me?.email ?? "-"}
               </div>
-              <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{tr("read_only")}</div>
+              <div className={`mt-1 text-xs ${themeClasses.textMuted}`}>{t("profile.read_only")}</div>
             </div>
 
-            <div className="lg:col-span-2 rounded-lg border border-zinc-200/70 bg-zinc-50 p-4 dark:border-white/10 dark:bg-white/5">
-              <div className="mb-1 text-[11px] uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                {tr("field_phone")}
+            <div className={`lg:col-span-2 rounded-lg border p-4 ${isDark ? "border-white/10 bg-white/5" : "border-zinc-200/70 bg-zinc-50"}`}>
+              <div className={`mb-1 text-[11px] uppercase tracking-wide ${themeClasses.textMuted}`}>
+                {t("profile.field_phone")}
               </div>
               {!editing ? (
-                <div className="text-sm font-medium">
-                  {loading ? <div className="h-5 w-28 animate-pulse rounded bg-zinc-200 dark:bg-white/10" /> : me?.phone ?? "-"}
+                <div className={`text-sm font-medium ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
+                  {loading ? <div className={`h-5 w-28 animate-pulse rounded ${isDark ? "bg-white/10" : "bg-zinc-200"}`} /> : me?.phone ?? "-"}
                 </div>
               ) : (
                 <div className="flex items-end gap-3">
                   <input
-                    className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 dark:border-white/10 dark:bg-transparent"
+                    className={`w-full rounded-md border px-3 py-2 text-sm outline-none focus:border-emerald-300 focus:ring-2 focus:ring-emerald-100 ${themeClasses.input}`}
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
-                    placeholder={tr("placeholder_phone")}
+                    placeholder={t("profile.placeholder_phone")}
                     inputMode="tel"
                   />
-                  <div className="hidden text-xs text-zinc-500 md:block">{tr("helper_phone")}</div>
+                  <div className={`hidden text-xs md:block ${themeClasses.textMuted}`}>{t("profile.helper_phone")}</div>
                 </div>
               )}
             </div>
@@ -243,24 +248,24 @@ export default function ThongTinCaNhanPage() {
 
       {editing && (
         <div className="pointer-events-none fixed bottom-5 left-[300px] right-5 z-10">
-          <div className="pointer-events-auto flex items-center justify-between gap-3 rounded-md border border-zinc-200 bg-white/95 px-3 py-2 shadow-sm backdrop-blur dark:border-white/10 dark:bg-zinc-900/80">
-            <div className="text-xs text-zinc-600 dark:text-zinc-300">
-              {dirty ? tr("unsaved") : tr("no_changes")}
+          <div className={`pointer-events-auto flex items-center justify-between gap-3 rounded-md border px-3 py-2 shadow-sm backdrop-blur ${isDark ? "border-white/10 bg-zinc-900/80" : "border-zinc-200 bg-white/95"}`}>
+            <div className={`text-xs ${isDark ? "text-zinc-300" : "text-zinc-600"}`}>
+              {dirty ? t("profile.unsaved") : t("profile.no_changes")}
             </div>
             <div className="flex gap-2">
               <button
-                className="rounded-md bg-zinc-800 px-3 py-1.5 text-xs font-medium text-white hover:bg-zinc-700 disabled:opacity-50"
+                className={`rounded-md px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 ${isDark ? "bg-zinc-800 hover:bg-zinc-700" : "bg-gray-600 hover:bg-gray-700"}`}
                 onClick={handleCancel}
                 disabled={saving}
               >
-                {tr("btn_cancel")}
+                {t("profile.btn_cancel")}
               </button>
               <button
                 className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
                 onClick={handleSave}
                 disabled={saving || !dirty}
               >
-                {saving ? tr("btn_saving") : tr("btn_save_changes")}
+                {saving ? t("profile.btn_saving") : t("profile.btn_save_changes")}
               </button>
             </div>
           </div>

@@ -14,6 +14,4 @@ export type Workspace = {
   mapCount?: number;
   createdBy?: string;
   creatorName?: string;
-  isPersonal?: boolean;
-  personalLabel?: string;
 };

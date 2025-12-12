@@ -5,9 +5,10 @@ import { messages, type Lang, type Namespaces, type KeysOf } from './messages';
 
 type Vars = Record<string, string | number>;
 
-type TFunc =
-  | (<N extends Namespaces>(ns: N, key: KeysOf<N>, vars?: Vars) => string)
-  | ((path: `${Namespaces}.${string}`, vars?: Vars) => string);
+export type TFunc = {
+  <N extends Namespaces>(ns: N, key: KeysOf<N>, vars?: Vars): string;
+  (path: `${Namespaces}.${string}`, vars?: Vars): string;
+};
 
 type Ctx = {
   lang: Lang;

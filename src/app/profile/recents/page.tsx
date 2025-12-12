@@ -1,19 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { convertPresetToNewFormat } from "@/utils/mapApiHelpers";
-import { 
-  createMap, 
-  createMapFromTemplate, 
+import {
+  createMap,
+  createMapFromTemplate,
   createDefaultMap,
-  deleteMap, 
-  getMyRecentMaps, 
-  MapDto, 
-  updateMap, 
-  UpdateMapRequest 
+  deleteMap,
+  getMyRecentMaps,
+  getMapDetail,
+  MapDto,
+  updateMap,
+  UpdateMapRequest,
+  getMapTemplates,
+  getMapTemplateWithDetails,
+  getMapTemplateLayerData,
+  uploadGeoJsonToMap,
+  MapTemplate,
+  MapTemplateDetails,
 } from "@/lib/api-maps";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type ViewMode = "grid" | "list";
 
@@ -93,7 +103,7 @@ const SAMPLES: Sample[] = [
   },
   {
     key: "getting-started",
-    title: "Getting started with Felt",
+    title: "Getting started with IMOS",
     author: "Yen Nhi Dang",
     lastViewed: "Last viewed 3 months ago",
     blurb: "Onboarding sample with basic point and area layers.",
@@ -107,7 +117,7 @@ const SAMPLES: Sample[] = [
   },
 ];
 
-function Thumb({ src, fallbackKey }: { src?: string | null; fallbackKey: string }) {
+function Thumb({ src, fallbackKey, isDark }: { src?: string | null; fallbackKey: string; isDark: boolean }) {
   const palette: Record<string, string> = {
     "reservoir-precip": "from-cyan-700 to-emerald-700",
     "sandy-inundation": "from-amber-600 to-rose-600",
@@ -117,15 +127,15 @@ function Thumb({ src, fallbackKey }: { src?: string | null; fallbackKey: string 
   };
   if (src) {
     return (
-      <div className="h-32 w-full rounded-lg border border-white/10 overflow-hidden bg-zinc-900/40">
+      <div className={`h-32 w-full rounded-lg border overflow-hidden ${isDark ? "border-white/10 bg-zinc-900/40" : "border-gray-200 bg-gray-100"}`}>
         <img src={src} alt="preview" className="h-full w-full object-cover" loading="lazy" />
       </div>
     );
   }
   const bg = palette[fallbackKey] ?? "from-zinc-700 to-zinc-800";
   return (
-    <div className={`h-32 w-full rounded-lg border border-white/10 bg-gradient-to-br ${bg} grid place-items-center`}>
-      <div className="h-16 w-16 rounded-full bg-white/10 backdrop-blur-sm" />
+    <div className={`h-32 w-full rounded-lg border bg-gradient-to-br ${bg} grid place-items-center ${isDark ? "border-white/10" : "border-gray-200"}`}>
+      <div className={`h-16 w-16 rounded-full backdrop-blur-sm ${isDark ? "bg-white/10" : "bg-white/20"}`} />
     </div>
   );
 }
@@ -141,6 +151,12 @@ type EditState = {
   error?: string | null;
 };
 
+type PublishedMap = MapDto & {
+  publishedAt?: string | null;
+  workspaceId?: string | null;
+  orgId?: string | null;
+};
+
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const r = new FileReader();
@@ -152,10 +168,33 @@ function fileToDataUrl(file: File): Promise<string> {
 
 export default function RecentsPage() {
   const router = useRouter();
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
+  const { t } = useI18n();
 
-  const [maps, setMaps] = useState<MapDto[]>([]);
+  const [maps, setMaps] = useState<PublishedMap[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+
+  // Templates state
+  const [templates, setTemplates] = useState<MapTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templatesErr, setTemplatesErr] = useState<string | null>(null);
+
+  // Template detail modal state
+  const [templateDetail, setTemplateDetail] = useState<{
+    open: boolean;
+    template: MapTemplateDetails | null;
+    loading: boolean;
+    error: string | null;
+  }>({
+    open: false,
+    template: null,
+    loading: false,
+    error: null,
+  });
 
   const [viewOpen, setViewOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -176,11 +215,16 @@ export default function RecentsPage() {
 
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{
+    open: boolean;
+    map: PublishedMap | null;
+  }>({
+    open: false,
+    map: null,
+  });
 
-  // Đóng menu khi click ra ngoài/ESC
   useEffect(() => {
     function onDown(e: MouseEvent) {
-      // Nếu click vào bất kỳ element không phải menu hiện tại => đóng
       const target = e.target as HTMLElement | null;
       if (!target) return;
       const container = target.closest("[data-menu-container]");
@@ -203,8 +247,29 @@ export default function RecentsPage() {
     setLoading(true);
     setErr(null);
     try {
-      const res = await getMyRecentMaps(20);
-      setMaps(res);
+      const base = await getMyRecentMaps(20);
+
+      // Map directly from API response without needing to fetch details
+      const recentMaps = base.map((m: any) => ({
+        id: m.id ?? m.mapId ?? "",
+        name: m.name ?? m.mapName ?? "Untitled Map",
+        description: m.description ?? "",
+        isPublic: m.isPublic ?? false,
+        previewImage: m.previewImage ?? m.previewImageUrl ?? null,
+        createdAt: m.createdAt ?? m.lastActivityAt ?? null,
+        updatedAt: m.updatedAt ?? null,
+        lastActivityAt: m.lastActivityAt ?? m.createdAt ?? null,
+        ownerId: m.ownerId ?? null,
+        ownerName: m.ownerName ?? null,
+        isOwner: m.isOwner ?? true,
+        workspaceName: m.workspaceName ?? null,
+        publishedAt: m.publishedAt ?? (m.status === "Published" || m.status === "published" ? m.createdAt : null),
+        workspaceId: m.workspaceId ?? m.workspace_id ?? null,
+        orgId: m.organizationId ?? m.orgId ?? m.org_id ?? null,
+        status: m.status ?? "Draft",
+      })) as PublishedMap[];
+
+      setMaps(recentMaps);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load your maps.");
     } finally {
@@ -216,13 +281,134 @@ export default function RecentsPage() {
     void loadMyMaps();
   }, [loadMyMaps]);
 
+  // Load templates
+  const loadTemplates = useCallback(async () => {
+    setTemplatesLoading(true);
+    setTemplatesErr(null);
+    try {
+      const data = await getMapTemplates();
+      setTemplates(data);
+    } catch (e) {
+      setTemplatesErr(e instanceof Error ? e.message : t("recents", "templateLoadError"));
+    } finally {
+      setTemplatesLoading(false);
+    }
+  }, [t]);
+
+  useEffect(() => {
+    void loadTemplates();
+  }, [loadTemplates]);
+
+  // Open template detail modal
+  const openTemplateDetail = async (template: MapTemplate) => {
+    setTemplateDetail({
+      open: true,
+      template: null,
+      loading: true,
+      error: null,
+    });
+
+    try {
+      const details = await getMapTemplateWithDetails(template.templateId);
+      setTemplateDetail({
+        open: true,
+        template: details,
+        loading: false,
+        error: null,
+      });
+    } catch (e) {
+      setTemplateDetail((prev) => ({
+        ...prev,
+        loading: false,
+        error: e instanceof Error ? e.message : t("recents", "templateDetailLoadError"),
+      }));
+    }
+  };
+
+  const closeTemplateDetail = () => {
+    setTemplateDetail({
+      open: false,
+      template: null,
+      loading: false,
+      error: null,
+    });
+  };
+
+  // Create map from template
+  const createMapFromTemplateHandler = async (template: MapTemplate | MapTemplateDetails) => {
+    setActionErr(null);
+    setBusyKey(template.templateId);
+    try {
+      // Step 1: Create map from template (creates map with metadata only)
+      const r = await createMapFromTemplate({
+        templateId: template.templateId,
+        customName: template.templateName || t("recents", "newMapFromTemplateDefault"),
+        customDescription: template.description,
+        workspaceId: null,
+      });
+
+      const newMapId = r.mapId;
+
+      // Step 2: Load template details to get layers
+      const templateDetails = await getMapTemplateWithDetails(template.templateId);
+
+      // Step 3: Load and upload each layer's data to the new map
+      if (templateDetails.layers && templateDetails.layers.length > 0) {
+        for (const layer of templateDetails.layers) {
+          try {
+            // Get layer data (GeoJSON)
+            const layerDataResponse = await getMapTemplateLayerData(
+              template.templateId,
+              layer.layerId || (layer as any).mapLayerId
+            );
+
+            if (layerDataResponse.layerData) {
+              // layerData is a JSON string, parse it to get the GeoJSON object
+              const geoJsonData = typeof layerDataResponse.layerData === 'string'
+                ? JSON.parse(layerDataResponse.layerData)
+                : layerDataResponse.layerData;
+
+              // Convert to Blob and create File object
+              const geoJsonString = typeof geoJsonData === 'string'
+                ? geoJsonData
+                : JSON.stringify(geoJsonData);
+
+              const geoJsonBlob = new Blob([geoJsonString], {
+                type: "application/json",
+              });
+              const geoJsonFile = new File(
+                [geoJsonBlob],
+                `${layer.layerName || "layer"}.geojson`,
+                { type: "application/json" }
+              );
+
+              // Upload to new map
+              await uploadGeoJsonToMap(newMapId, geoJsonFile, layer.layerName);
+            }
+          } catch (layerError) {
+            console.error(`Failed to load/upload layer ${layer.layerName}:`, layerError);
+            // Continue with other layers even if one fails
+          }
+        }
+      }
+
+      // Step 4: Navigate to the new map
+      router.push(`/maps/${newMapId}`);
+    } catch (error) {
+      console.error("Error creating map from template:", error);
+      setActionErr(t("recents", "errorTemplateCreate"));
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
   const clickNewMap = useCallback(async () => {
     const created = await createDefaultMap({
       name: "Untitled Map",
       workspaceId: null,
     });
 
-    router.push(`/maps/${created.mapId}?created=1&name=${encodeURIComponent("Untitled Map")}`);
+    router.push(`/maps/${created.mapId}`);
   }, [router]);
 
   const createFromSample = async (s: Sample) => {
@@ -256,14 +442,14 @@ export default function RecentsPage() {
     }
   };
 
-  const openEdit = (m: MapDto) => {
+  const openEdit = (m: PublishedMap) => {
     setMenuOpenId(null);
     setEdit({
       open: true,
       map: m,
       name: m.name ?? "",
       description: m.description ?? "",
-      previewLocal: m.previewImageUrl ?? null,
+      previewLocal: (m as any).previewImage ?? null,
       previewFile: null,
       saving: false,
       error: null,
@@ -292,16 +478,16 @@ export default function RecentsPage() {
         description: edit.description ?? "",
         previewImageUrl: edit.previewLocal ?? null,
       };
-      await updateMap(edit.map.id, body);
+      await updateMap((edit.map as any).id, body);
       setMaps((ms) =>
         ms.map((m) =>
-          m.id === edit.map!.id
-            ? {
+          m.id === (edit.map as any).id
+            ? ({
               ...m,
-              name: body.name ?? m.name,
-              description: body.description ?? m.description,
-              previewImageUrl: body.previewImageUrl ?? m.previewImageUrl,
-            }
+              name: body.name ?? "",
+              description: body.description ?? "",
+              previewImage: body.previewImageUrl ?? "",
+            } as PublishedMap)
             : m
         )
       );
@@ -315,49 +501,80 @@ export default function RecentsPage() {
     }
   };
 
-  const handleDeleteMap = async (mapId: string) => {
+  const handleDeleteMap = async (map: PublishedMap) => {
     setMenuOpenId(null);
-    const ok = confirm("Delete this map?");
-    if (!ok) return;
-    setDeletingId(mapId);
+    setDeletingId(map.id);
     try {
-      await deleteMap(mapId);
-      setMaps((ms) => ms.filter((m) => m.id !== mapId));
+      await deleteMap(map.id);
+      setMaps((ms) => ms.filter((m) => m.id !== map.id));
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Failed to delete map.");
+      alert(
+        e instanceof Error
+          ? e.message
+          : "Không thể xóa bản đồ. Vui lòng thử lại sau."
+      );
     } finally {
       setDeletingId(null);
+      setConfirmDelete({ open: false, map: null });
     }
   };
 
-  if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">Loading…</div>;
-  if (err) return <div className="max-w-3xl px-4 text-red-400">{err}</div>;
+  const openDeleteConfirm = (map: PublishedMap) => {
+    setMenuOpenId(null);
+    setConfirmDelete({ open: true, map });
+  };
+
+  const closeDeleteConfirm = () => {
+    if (deletingId) return;
+    setConfirmDelete({ open: false, map: null });
+  };
+
+  const handleOpenCreateSession = useCallback(
+    (map: PublishedMap) => {
+      if (!map.workspaceId || !map.orgId) {
+        alert(t("recents", "mapNotInWorkspace"));
+        return;
+      }
+      const search = new URLSearchParams({
+        workspaceId: map.workspaceId,
+        mapId: map.id,
+      });
+      router.push(`/profile/organizations/${map.orgId}/sessions/create?${search.toString()}`);
+    },
+    [router, t]
+  );
+
+  if (loading) return <div className={`min-h-[60vh] animate-pulse px-4 ${themeClasses.textMuted}`}>{t("recents", "loading")}</div>;
+  if (err) return <div className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"}`}>{err}</div>;
 
   return (
     <div className="min-w-0 relative px-4">
       <div className="flex items-center justify-between gap-3 mb-6">
-        <h1 className="text-2xl sm:text-3xl font-semibold">Recents</h1>
+        <h1 className={`text-2xl sm:text-3xl font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("recents", "title")}</h1>
         <div className="flex items-center gap-2 relative">
           <div className="relative">
             <button
               onClick={() => setViewOpen((v) => !v)}
-              className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+              className={`px-3 py-2 rounded-lg border text-sm ${themeClasses.button}`}
             >
-              View ▾
+              {t("recents", "menuView")} ▾
             </button>
             {viewOpen && (
               <div
-                className="absolute right-0 mt-2 w-48 rounded-lg border border-white/10 bg-zinc-900/95 shadow-xl p-2"
+                className={`absolute right-0 mt-2 w-48 rounded-xl border shadow-xl p-2 backdrop-blur-md ${themeClasses.panel}`}
                 onMouseLeave={() => setViewOpen(false)}
               >
-                <div className="px-2 py-1 text-xs uppercase tracking-wide text-zinc-400">Show items as</div>
+                <div className={`px-2 py-1 text-xs uppercase tracking-wide ${themeClasses.textMuted}`}>
+                  {t("recents", "menuShowAs")}
+                </div>
                 {(["grid", "list"] as ViewMode[]).map((m) => (
                   <button
                     key={m}
-                    className={`w-full text-left px-3 py-1.5 text-sm rounded hover:bg-white/5 ${viewMode === m ? "text-emerald-300" : "text-zinc-200"}`}
+                    className={`w-full text-left px-3 py-1.5 text-sm rounded-md hover:bg-white/5 ${viewMode === m ? (isDark ? "text-emerald-300" : "text-emerald-600") : (isDark ? "text-zinc-200" : "text-gray-700")
+                      }`}
                     onClick={() => setViewMode(m)}
                   >
-                    {m === "grid" ? "Grid" : "List"}
+                    {m === "grid" ? t("recents", "menuGrid") : t("recents", "menuList")}
                   </button>
                 ))}
               </div>
@@ -365,24 +582,24 @@ export default function RecentsPage() {
           </div>
           <button
             onClick={clickNewMap}
-            className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
+            className="px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400"
           >
-            New map
+            {t("recents", "actionNewMap")}
           </button>
         </div>
       </div>
 
       <section className="mb-8">
-        <h2 className="mb-3 text-lg font-semibold">Your maps</h2>
+        <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("recents", "sectionYourMaps")}</h2>
 
         {maps.length === 0 && (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-6 text-center">
-            <p className="text-zinc-400 mb-4">You have no maps yet.</p>
+          <div className={`rounded-xl border p-6 text-center ${themeClasses.panel}`}>
+            <p className={`mb-4 ${themeClasses.textMuted}`}>{t("recents", "emptyText")}</p>
             <button
               onClick={clickNewMap}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-400"
             >
-              Create a map
+              {t("recents", "emptyButton")}
             </button>
           </div>
         )}
@@ -392,15 +609,17 @@ export default function RecentsPage() {
             {maps.map((m) => (
               <li
                 key={m.id}
-                className="group relative rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4"
+                className={`group relative rounded-3xl border transition-all duration-200 p-4 ${m.publishedAt || (m as any).status === "Published"
+                  ? (isDark ? "border-emerald-500/40 bg-gradient-to-b from-emerald-950/40 to-zinc-950/40 hover:border-emerald-400 hover:shadow-[0_0_0_1px_rgba(16,185,129,0.5)]" : "border-emerald-500/60 bg-gradient-to-b from-emerald-50/40 to-white hover:border-emerald-400")
+                  : (isDark ? "border-white/10 bg-zinc-900/40 hover:border-white/20" : "border-gray-200 bg-white hover:border-gray-300")
+                  }`}
                 title={m.name}
               >
-                {/* Nút ⋯ cố định góc phải */}
-                <div className="absolute right-2 top-2 z-10" data-menu-container>
+                <div className="absolute top-5 right-6 z-10" data-menu-container>
                   <button
                     aria-label="More actions"
                     title="More actions"
-                    className="h-8 w-8 grid place-items-center rounded-md hover:bg-white/10 border border-white/10 text-lg leading-none"
+                    className={`h-6 w-6 flex items-center justify-center text-lg leading-none ${isDark ? "text-zinc-100 hover:text-emerald-300" : "text-gray-700 hover:text-emerald-600"}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setMenuOpenId((id) => (id === m.id ? null : m.id));
@@ -410,55 +629,74 @@ export default function RecentsPage() {
                   </button>
                   {menuOpenId === m.id && (
                     <div
-                      className="absolute right-0 mt-2 w-44 rounded-md border border-white/10 bg-zinc-900/95 shadow-lg"
+                      className={`absolute right-0 mt-2 w-44 rounded-xl border shadow-xl backdrop-blur-md ${themeClasses.panel}`}
                       onMouseLeave={() => setMenuOpenId(null)}
                     >
                       <button
-                        className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-60"
+                        className={`w-full text-left px-3 py-2 text-sm ${isDark ? "text-red-400 hover:bg-red-500/10 hover:text-red-300" : "text-red-600 hover:bg-red-50 hover:text-red-700"} disabled:opacity-60`}
                         disabled={deletingId === m.id}
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleDeleteMap(m.id);
+                          openDeleteConfirm(m);
                         }}
                       >
-                        {deletingId === m.id ? "Deleting..." : "Delete map"}
+                        {deletingId === m.id ? "Đang xóa..." : "Xóa bản đồ"}
                       </button>
                     </div>
                   )}
                 </div>
 
-                {/* Header trái: Edit details */}
-                <div className="flex items-start justify-between -mt-1 mb-2 pr-10">
-                  <div className="flex items-center gap-2">
-                    <button
-                      className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
-                      onClick={() => openEdit(m)}
-                    >
-                      Edit details
-                    </button>
+                {(m.publishedAt || (m as any).status === "published") ? (
+                  <div className={`mb-4 h-28 w-full rounded-2xl border flex items-center justify-center text-sm font-medium ${isDark
+                      ? "border-emerald-500/40 bg-[radial-gradient(circle_at_0_0,#22c55e33,transparent_55%),radial-gradient(circle_at_100%_0,#22c55e22,transparent_55%)] bg-emerald-950/40 text-emerald-300"
+                      : "border-emerald-500/60 bg-emerald-50/40 text-emerald-700"
+                    }`}>
+                    {t("recents", "statusPublished")}
+                  </div>
+                ) : m.status === "archived" ? (
+                  <div className={`mb-4 h-28 w-full rounded-2xl border flex items-center justify-center text-sm font-medium ${isDark
+                      ? "border-slate-500/40 bg-[radial-gradient(circle_at_0_0,#64748b33,transparent_55%),radial-gradient(circle_at_100%_0,#64748b22,transparent_55%)] bg-slate-950/40 text-slate-300"
+                      : "border-slate-500/60 bg-slate-50/40 text-slate-700"
+                    }`}>
+                    {t("recents", "statusArchived")}
+                  </div>
+                ) : (
+                  <div className={`mb-4 h-28 w-full rounded-2xl border flex items-center justify-center text-sm font-medium ${isDark
+                      ? "border-blue-500/40 bg-[radial-gradient(circle_at_0_0,#3b82f633,transparent_55%),radial-gradient(circle_at_100%_0,#3b82f622,transparent_55%)] bg-blue-950/40 text-blue-300"
+                      : "border-blue-500/60 bg-blue-50/40 text-blue-700"
+                    }`}>
+                    {t("recents", "statusDraft")}
+                  </div>
+                )}
+
+                <div className="min-w-0 mb-3">
+                  <div className={`truncate font-semibold ${isDark ? "text-zinc-50" : "text-gray-900"}`}>
+                    {m.name || "Untitled"}
+                  </div>
+                  <div className={`text-xs ${themeClasses.textMuted}`}>
+                    {m.publishedAt
+                      ? t("recents", "publishedDate", { date: new Date(m.publishedAt).toLocaleDateString() })
+                      : m.createdAt
+                        ? t("recents", "createdDate", { date: new Date(m.createdAt).toLocaleDateString() })
+                        : "—"}
                   </div>
                 </div>
 
-                <div
-                  className="h-32 w-full mb-3 cursor-pointer"
-                  onClick={() => router.push(`/maps/${m.id}`)}
-                >
-                  <Thumb src={m.previewImageUrl ?? undefined} fallbackKey={m.id} />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <div className="truncate font-semibold">{m.name || "Untitled"}</div>
-                    <div className="text-xs text-zinc-400">
-                      {m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}
-                    </div>
-                  </div>
+                <div className="flex flex-col gap-2 mt-auto">
                   <button
-                    className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                    className={`w-full px-3 py-2 rounded-xl border text-sm ${themeClasses.button}`}
                     onClick={() => router.push(`/maps/${m.id}`)}
                   >
-                    Open
+                    {t("recents", "openMap")}
                   </button>
+                  {m.workspaceId && m.orgId && (
+                    <button
+                      className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400"
+                      onClick={() => handleOpenCreateSession(m)}
+                    >
+                      {t("recents", "createSession")}
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
@@ -466,40 +704,44 @@ export default function RecentsPage() {
         )}
 
         {maps.length > 0 && viewMode === "list" && (
-          <div className="rounded-xl border border-white/10 overflow-hidden">
+          <div className={`rounded-xl border overflow-hidden ${themeClasses.panel}`}>
             <table className="w-full text-sm">
-              <thead className="bg-white/5 text-zinc-300">
+              <thead className={`${isDark ? "bg-white/5" : "bg-gray-50"} ${themeClasses.tableHeader}`}>
                 <tr>
-                  <th className="text-left px-3 py-2">Name</th>
-                  <th className="text-left px-3 py-2">Created</th>
+                  <th className="text-left px-3 py-2">{t("recents", "tableName")}</th>
+                  <th className="text-left px-3 py-2">{t("recents", "tableCreated")}</th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
-              <tbody className="divide-y divide-white/10">
+              <tbody className={`divide-y ${themeClasses.tableBorder}`}>
                 {maps.map((m) => (
-                  <tr key={m.id} className="hover:bg-white/5">
-                    <td className="px-3 py-2">
+                  <tr key={m.id} className={isDark ? "hover:bg-white/5" : "hover:bg-gray-50"}>
+                    <td className={`px-3 py-2 ${themeClasses.tableCell}`}>
                       <button
-                        className="text-emerald-300 hover:underline"
+                        className={`hover:underline ${isDark ? "text-emerald-300" : "text-emerald-600"}`}
                         onClick={() => router.push(`/maps/${m.id}`)}
                       >
                         {m.name || "Untitled"}
                       </button>
                     </td>
-                    <td className="px-3 py-2 text-zinc-400">
-                      {m.createdAt ? new Date(m.createdAt).toLocaleString() : "—"}
+                    <td className={`px-3 py-2 ${themeClasses.textMuted}`}>
+                      {m.publishedAt
+                        ? new Date(m.publishedAt).toLocaleString()
+                        : m.createdAt
+                          ? new Date(m.createdAt).toLocaleString()
+                          : "—"}
                     </td>
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex items-center gap-1 relative" data-menu-container>
                         <button
-                          className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                          className={`text-xs px-2 py-1 rounded border ${themeClasses.button}`}
                           onClick={() => openEdit(m)}
                         >
-                          Edit details
+                          {t("recents", "btnEditDetails")}
                         </button>
                         <button
-                          className="text-xl leading-none px-2 py-1 rounded hover:bg-white/5"
-                          title="More actions"
+                          className={`text-xl leading-none px-2 py-1 rounded ${isDark ? "hover:bg-white/5" : "hover:bg-gray-100"} ${isDark ? "text-zinc-200" : "text-gray-700"}`}
+                          title={t("recents", "menuMoreActions")}
                           onClick={(e) => {
                             e.stopPropagation();
                             setMenuOpenId((id) => (id === m.id ? null : m.id));
@@ -509,24 +751,33 @@ export default function RecentsPage() {
                         </button>
                         {menuOpenId === m.id && (
                           <div
-                            className="absolute right-0 mt-1 w-40 rounded-md border border-white/10 bg-zinc-900/95 shadow-lg z-10"
+                            className={`absolute right-0 mt-1 w-40 rounded-xl border shadow-lg z-10 backdrop-blur-md ${themeClasses.panel}`}
                             onMouseLeave={() => setMenuOpenId(null)}
                           >
                             <button
-                              className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-60"
+                              className={`w-full text-left px-3 py-2 text-sm disabled:opacity-60 ${isDark ? "text-red-400 hover:bg-red-500/10 hover:text-red-300" : "text-red-600 hover:bg-red-50 hover:text-red-700"}`}
                               disabled={deletingId === m.id}
-                              onClick={() => handleDeleteMap(m.id)}
+                              onClick={() => openDeleteConfirm(m)}
                             >
-                              {deletingId === m.id ? "Deleting..." : "Delete map"}
+                              {deletingId === m.id ? t("recents", "menuDeleting") : t("recents", "menuDelete")}
                             </button>
                           </div>
                         )}
+
                         <button
-                          className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                          className={`text-xs px-2 py-1 rounded border ${themeClasses.button}`}
                           onClick={() => router.push(`/maps/${m.id}`)}
                         >
-                          Open
+                          {t("recents", "openMap")}
                         </button>
+                        {m.workspaceId && m.orgId && (
+                          <button
+                            className="text-xs px-2 py-1 rounded bg-emerald-500 text-white hover:bg-emerald-400"
+                            onClick={() => handleOpenCreateSession(m)}
+                          >
+                            {t("recents", "createSession")}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -538,29 +789,29 @@ export default function RecentsPage() {
       </section>
 
       <section className="mb-10">
-        <h2 className="mb-3 text-lg font-semibold">Examples</h2>
+        <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("recents", "sectionExamples")}</h2>
         {actionErr && (
-          <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-200">
+          <div className={`mb-3 rounded-lg border px-3 py-2 ${isDark ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
             {actionErr}
           </div>
         )}
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {SAMPLES.map((s) => (
-            <li key={s.key} className="rounded-xl border border-white/10 bg-zinc-900/60 p-4">
-              <Thumb fallbackKey={s.key} />
+            <li key={s.key} className={`rounded-xl border p-4 ${themeClasses.panel}`}>
+              <Thumb fallbackKey={s.key} isDark={isDark} />
               <div className="mt-3">
-                <div className="font-semibold truncate">{s.title}</div>
-                <div className="text-xs text-zinc-400">{s.author}</div>
+                <div className={`font-semibold truncate ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{s.title}</div>
+                <div className={`text-xs ${themeClasses.textMuted}`}>{s.author}</div>
               </div>
-              <p className="mt-2 text-sm text-zinc-300 line-clamp-2">{s.blurb}</p>
-              <div className="mt-2 text-xs text-zinc-400">{s.lastViewed}</div>
+              <p className={`mt-2 text-sm line-clamp-2 ${isDark ? "text-zinc-300" : "text-gray-700"}`}>{s.blurb}</p>
+              <div className={`mt-2 text-xs ${themeClasses.textMuted}`}>{s.lastViewed}</div>
               <div className="mt-3">
                 <button
                   onClick={() => createFromSample(s)}
                   disabled={busyKey === s.key}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
+                  className="px-3 py-1.5 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
                 >
-                  {busyKey === s.key ? "Creating…" : "Use this template"}
+                  {busyKey === s.key ? t("recents", "samplesCreating") : t("recents", "samplesUseTemplate")}
                 </button>
               </div>
             </li>
@@ -568,25 +819,266 @@ export default function RecentsPage() {
         </ul>
       </section>
 
+      {/* Templates Section */}
+      <section className="mb-10">
+        <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
+          {t("recents", "sectionTemplates")}
+        </h2>
+
+        {templatesLoading && (
+          <div className={`text-center py-8 ${themeClasses.textMuted}`}>
+            {t("recents", "loading")}
+          </div>
+        )}
+
+        {templatesErr && (
+          <div className={`mb-3 rounded-lg border px-3 py-2 ${isDark ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
+            {templatesErr}
+          </div>
+        )}
+
+        {!templatesLoading && !templatesErr && templates.length === 0 && (
+          <div className={`rounded-xl border p-6 text-center ${themeClasses.panel}`}>
+            <p className={themeClasses.textMuted}>{t("recents", "templateNoTemplates")}</p>
+          </div>
+        )}
+
+        {!templatesLoading && !templatesErr && templates.length > 0 && (
+          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {templates.map((template) => (
+              <li key={template.templateId} className={`rounded-xl border p-4 ${themeClasses.panel}`}>
+                {/* Preview Image */}
+                <div className={`h-32 w-full rounded-lg border overflow-hidden mb-3 ${isDark ? "border-white/10 bg-zinc-900/40" : "border-gray-200 bg-gray-100"}`}>
+                  {template.previewImageUrl ? (
+                    <img
+                      src={template.previewImageUrl}
+                      alt={template.templateName}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="h-full w-full grid place-items-center">
+                      <div className={`h-16 w-16 rounded-full backdrop-blur-sm ${isDark ? "bg-white/10" : "bg-gray-300/20"}`} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Template Info */}
+                <div className="min-w-0 mb-3">
+                  <div className={`truncate font-semibold ${isDark ? "text-zinc-50" : "text-gray-900"}`}>
+                    {template.templateName || "Untitled Template"}
+                  </div>
+                  {template.description && (
+                    <p className={`text-sm mt-1 line-clamp-2 ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
+                      {template.description}
+                    </p>
+                  )}
+                  <div className={`text-xs mt-2 space-y-1 ${themeClasses.textMuted}`}>
+                    {template.category && (
+                      <div>{t("recents", "templateCategory", { category: template.category })}</div>
+                    )}
+                    {template.layerCount !== null && template.layerCount !== undefined && (
+                      <div>{t("recents", "templateLayers", { count: template.layerCount })}</div>
+                    )}
+                    {template.featureCount !== null && template.featureCount !== undefined && (
+                      <div>{t("recents", "templateFeatures", { count: template.featureCount })}</div>
+                    )}
+                    {template.usageCount !== null && template.usageCount !== undefined && (
+                      <div>{t("recents", "templateUsageCount", { count: template.usageCount })}</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col gap-2 mt-auto">
+                  <button
+                    className={`w-full px-3 py-2 rounded-xl border text-sm ${themeClasses.button}`}
+                    onClick={() => openTemplateDetail(template)}
+                  >
+                    {t("recents", "templateViewDetails")}
+                  </button>
+                  <button
+                    className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
+                    onClick={() => createMapFromTemplateHandler(template)}
+                    disabled={busyKey === template.templateId}
+                  >
+                    {busyKey === template.templateId ? t("recents", "creatingFromTemplate") : t("recents", "templateUseTemplate")}
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* Template Detail Modal */}
+      {templateDetail.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className={`w-full max-w-2xl rounded-2xl border shadow-2xl p-5 max-h-[80vh] overflow-y-auto ${themeClasses.panel}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+                {t("recents", "templateModalTitle")}
+              </h3>
+              <button
+                className={`${isDark ? "text-zinc-300 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
+                onClick={closeTemplateDetail}
+              >
+                ✕
+              </button>
+            </div>
+
+            {templateDetail.loading && (
+              <div className={`text-center py-8 ${themeClasses.textMuted}`}>
+                {t("recents", "loading")}
+              </div>
+            )}
+
+            {templateDetail.error && (
+              <div className={`mb-3 rounded-lg border px-3 py-2 ${isDark ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
+                {templateDetail.error}
+              </div>
+            )}
+
+            {templateDetail.template && (
+              <div>
+                {/* Template Preview */}
+                {templateDetail.template.previewImage && (
+                  <div className="mb-4">
+                    <img
+                      src={templateDetail.template.previewImage}
+                      alt={templateDetail.template.templateName}
+                      className="w-full rounded-lg"
+                    />
+                  </div>
+                )}
+
+                {/* Template Details */}
+                <div className="mb-4">
+                  <h4 className={`text-xl font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
+                    {templateDetail.template.templateName}
+                  </h4>
+                  {templateDetail.template.description && (
+                    <p className={`text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
+                      {templateDetail.template.description}
+                    </p>
+                  )}
+                </div>
+
+                {/* Layers */}
+                <div className="mb-4">
+                  <h5 className={`text-sm font-semibold mb-2 ${isDark ? "text-zinc-200" : "text-gray-800"}`}>
+                    {t("recents", "templateLayers", { count: templateDetail.template.layers?.length || 0 })}
+                  </h5>
+                  {templateDetail.template.layers && templateDetail.template.layers.length > 0 ? (
+                    <div className={`rounded-lg border overflow-hidden ${themeClasses.panel}`}>
+                      <table className="w-full text-sm">
+                        <thead className={`${isDark ? "bg-white/5" : "bg-gray-50"}`}>
+                          <tr>
+                            <th className={`text-left px-3 py-2 ${themeClasses.textMuted}`}>
+                              {t("recents", "templateModalLayerName")}
+                            </th>
+                            <th className={`text-left px-3 py-2 ${themeClasses.textMuted}`}>
+                              {t("recents", "templateModalFeatureCount")}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className={`divide-y ${themeClasses.tableBorder}`}>
+                          {templateDetail.template.layers.map((layer: any) => (
+                            <tr key={layer.layerId || layer.mapLayerId}>
+                              <td className={`px-3 py-2 ${isDark ? "text-zinc-200" : "text-gray-800"}`}>
+                                {layer.layerName}
+                              </td>
+                              <td className={`px-3 py-2 ${themeClasses.textMuted}`}>
+                                {layer.featureCount || 0}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className={themeClasses.textMuted}>
+                      {t("recents", "templateModalNoLayers")}
+                    </p>
+                  )}
+                </div>
+
+                {/* Use Template Button */}
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    className={`px-4 py-2 rounded-lg border text-sm ${themeClasses.button}`}
+                    onClick={closeTemplateDetail}
+                  >
+                    {t("recents", "templateModalClose")}
+                  </button>
+                  <button
+                    className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
+                    onClick={() => {
+                      closeTemplateDetail();
+                      createMapFromTemplateHandler(templateDetail.template!);
+                    }}
+                    disabled={busyKey === templateDetail.template.templateId}
+                  >
+                    {busyKey === templateDetail.template.templateId ? t("recents", "creatingFromTemplate") : t("recents", "templateUseTemplate")}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {confirmDelete.open && confirmDelete.map && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className={`w-full max-w-sm rounded-2xl border shadow-2xl p-5 ${themeClasses.panel}`}>
+            <h3 className={`text-lg font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>{t("recents", "deleteConfirmTitle")}</h3>
+            <p className={`text-sm mb-4 ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
+              {t("recents", "deleteConfirmMessage", {
+                name: confirmDelete.map.name?.trim() || t("recents", "deleteConfirmName")
+              })}
+            </p>
+
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={closeDeleteConfirm}
+                disabled={!!deletingId}
+                className={`px-3 py-1.5 rounded-lg border text-sm disabled:opacity-60 ${isDark ? "border-zinc-600 bg-zinc-800 text-zinc-200 hover:bg-zinc-700" : "border-gray-300 bg-gray-200 text-gray-700 hover:bg-gray-300"}`}
+              >
+                {t("recents", "deleteCancel")}
+              </button>
+              <button
+                onClick={() => confirmDelete.map && handleDeleteMap(confirmDelete.map)}
+                disabled={deletingId === confirmDelete.map.id}
+                className="px-3 py-1.5 rounded-lg bg-red-500 text-sm font-semibold text-white hover:bg-red-400 disabled:opacity-60"
+              >
+                {deletingId === confirmDelete.map.id ? t("recents", "deleting") : t("recents", "deleteConfirm")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {edit.open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4">
-          <div className="w-full max-w-lg rounded-xl border border-white/10 bg-zinc-900 p-4">
+          <div className={`w-full max-w-lg rounded-xl border p-4 ${themeClasses.panel}`}>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-lg font-semibold">Edit map details</h3>
-              <button className="text-zinc-300 hover:text-white" onClick={closeEdit}>✕</button>
+              <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>{t("recents", "modalTitle")}</h3>
+              <button className={`${isDark ? "text-zinc-300 hover:text-white" : "text-gray-600 hover:text-gray-900"}`} onClick={closeEdit}>
+                ✕
+              </button>
             </div>
 
             {edit.error && (
-              <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-red-200">
+              <div className={`mb-3 rounded-lg border px-3 py-2 ${isDark ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
                 {edit.error}
               </div>
             )}
 
             <div className="space-y-3">
               <label className="block">
-                <span className="text-sm text-zinc-300">Map name</span>
+                <span className={`text-sm ${themeClasses.textMuted}`}>{t("recents", "modalMapName")}</span>
                 <input
-                  className="mt-1 w-full rounded-md border border-white/10 bg-zinc-800 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  className={`mt-1 w-full rounded-md border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/50 ${themeClasses.input}`}
                   value={edit.name}
                   onChange={(e) => setEdit((s) => ({ ...s, name: e.target.value }))}
                   maxLength={150}
@@ -594,9 +1086,9 @@ export default function RecentsPage() {
               </label>
 
               <label className="block">
-                <span className="text-sm text-zinc-300">Description</span>
+                <span className={`text-sm ${themeClasses.textMuted}`}>{t("recents", "modalDescription")}</span>
                 <textarea
-                  className="mt-1 w-full rounded-md border border-white/10 bg-zinc-800 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/50"
+                  className={`mt-1 w-full rounded-md border px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-500/50 ${themeClasses.input}`}
                   rows={3}
                   value={edit.description}
                   onChange={(e) => setEdit((s) => ({ ...s, description: e.target.value }))}
@@ -605,19 +1097,21 @@ export default function RecentsPage() {
               </label>
 
               <div>
-                <div className="text-sm text-zinc-300 mb-1">Preview image</div>
+                <div className={`text-sm mb-1 ${themeClasses.textMuted}`}>{t("recents", "modalPreviewImage")}</div>
                 <div className="flex items-start gap-3">
-                  <div className="h-24 w-40 rounded-md border border-white/10 overflow-hidden bg-zinc-800">
+                  <div className={`h-24 w-40 rounded-md border overflow-hidden ${isDark ? "bg-zinc-800 border-white/10" : "bg-gray-100 border-gray-200"}`}>
                     {edit.previewLocal ? (
                       <img src={edit.previewLocal} alt="preview" className="h-full w-full object-cover" />
                     ) : (
-                      <div className="h-full w-full grid place-items-center text-xs text-zinc-500">No preview</div>
+                      <div className={`h-full w-full grid place-items-center text-xs ${themeClasses.textMuted}`}>
+                        {t("recents", "modalNoPreview")}
+                      </div>
                     )}
                   </div>
                   <div className="flex flex-col gap-2">
                     <label className="inline-block">
-                      <span className="px-3 py-1.5 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 cursor-pointer text-sm">
-                        Choose file
+                      <span className={`px-3 py-1.5 rounded-md border cursor-pointer text-sm ${themeClasses.button}`}>
+                        {t("recents", "modalChooseFile")}
                       </span>
                       <input
                         type="file"
@@ -626,8 +1120,7 @@ export default function RecentsPage() {
                         onChange={async (e) => {
                           const f = e.target.files?.[0] ?? null;
                           if (f) {
-                            const dataUrl = await fileToDataUrl(f);
-                            setEdit((s) => ({ ...s, previewFile: f, previewLocal: dataUrl }));
+                            await handleImagePick(f);
                           } else {
                             setEdit((s) => ({ ...s, previewFile: null, previewLocal: null }));
                           }
@@ -635,31 +1128,31 @@ export default function RecentsPage() {
                       />
                     </label>
                     <button
-                      className="text-xs text-zinc-400 hover:text-zinc-200 text-left"
+                      className={`text-xs text-left ${themeClasses.textMuted} hover:${isDark ? "text-zinc-200" : "text-gray-900"}`}
                       onClick={() => setEdit((s) => ({ ...s, previewLocal: null, previewFile: null }))}
                     >
-                      Remove image
+                      {t("recents", "modalRemoveImage")}
                     </button>
                   </div>
                 </div>
-                <p className="mt-1 text-xs text-zinc-400">PNG/JPG, khuyến nghị ≤ 2MB.</p>
+                <p className={`mt-1 text-xs ${themeClasses.textMuted}`}>{t("recents", "modalNote")}</p>
               </div>
             </div>
 
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
-                className="px-3 py-1.5 rounded-md border border-white/10 bg-white/5 hover:bg-white/10"
+                className={`px-3 py-1.5 rounded-md border ${themeClasses.button}`}
                 onClick={closeEdit}
                 disabled={edit.saving}
               >
-                Cancel
+                {t("recents", "modalCancel")}
               </button>
               <button
-                className="px-3 py-1.5 rounded-md bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400 disabled:opacity-70"
+                className="px-3 py-1.5 rounded-md bg-emerald-500 text-white font-semibold hover:bg-emerald-400 disabled:opacity-70"
                 onClick={saveEdit}
                 disabled={edit.saving}
               >
-                {edit.saving ? "Saving…" : "Save changes"}
+                {edit.saving ? t("recents", "modalSaving") : t("recents", "modalSave")}
               </button>
             </div>
           </div>

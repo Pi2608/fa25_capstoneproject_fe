@@ -5,6 +5,8 @@ import { useLayoutEffect } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { useGsapHomeScroll } from "@/components/common/useGsapHomeScroll";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -15,6 +17,7 @@ function CheckIcon(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
 function ArrowRightIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
@@ -29,6 +32,7 @@ type MiniCase = { titleKey: string; summaryKey: string; href: string; pointsKeys
 export default function CustomersClient() {
   const { t } = useI18n();
   const tr = (k: string) => t("customers", k);
+  const reduce = useReducedMotion();
 
   const LOGOS: string[] = [
     "EduGIS Lab",
@@ -61,33 +65,34 @@ export default function CustomersClient() {
     },
   ];
 
+  useGsapHomeScroll({
+    reduce,
+    heroSelectors: {
+      eyebrow: ".c-hero-eyebrow",
+      title: ".c-hero-title",
+      subtitle: ".c-hero-sub",
+      cta: ".c-hero-cta",
+    },
+  });
+
   useLayoutEffect(() => {
-    const reduce =
+    const prefersReduced =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const baseIn = { ease: "power2.out", duration: reduce ? 0 : 0.7 } as const;
+    const baseIn = { ease: "power2.out", duration: prefersReduced || reduce ? 0 : 0.7 } as const;
 
     const ctx = gsap.context(() => {
-      gsap.set([".c-hero-eyebrow", ".c-hero-title", ".c-hero-sub", ".c-hero-cta"], {
-        autoAlpha: 0,
-        y: 18,
-      });
-      gsap
-        .timeline()
-        .to(".c-hero-eyebrow", { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.6, ease: "power2.out" })
-        .to(".c-hero-title", { autoAlpha: 1, y: 0, duration: reduce ? 0 : 0.8, ease: "power2.out" }, "<0.06")
-        .to(".c-hero-sub", { autoAlpha: 1, y: 0, ...baseIn }, "<0.06")
-        .to(".c-hero-cta", { autoAlpha: 1, y: 0, ...baseIn }, "<0.06");
-
       ScrollTrigger.batch(".c-logo", {
         start: "top 90%",
-        onEnter: (els) => gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.06, ...baseIn }),
+        onEnter: (els) =>
+          gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.06, ...baseIn }),
         onLeaveBack: (els) => gsap.set(els, { autoAlpha: 0, y: 10 }),
       });
 
       ScrollTrigger.batch(".c-stat", {
         start: "top 88%",
-        onEnter: (els) => gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.08, ...baseIn }),
+        onEnter: (els) =>
+          gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.08, ...baseIn }),
         onLeaveBack: (els) => gsap.set(els, { autoAlpha: 0, y: 12 }),
       });
 
@@ -106,7 +111,8 @@ export default function CustomersClient() {
 
       ScrollTrigger.batch(".c-card", {
         start: "top 86%",
-        onEnter: (els) => gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.08, ...baseIn }),
+        onEnter: (els) =>
+          gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.08, ...baseIn }),
         onLeaveBack: (els) => gsap.set(els, { autoAlpha: 0, y: 14 }),
       });
 
@@ -118,7 +124,8 @@ export default function CustomersClient() {
       });
       ScrollTrigger.batch(".c-why-item", {
         start: "top 88%",
-        onEnter: (els) => gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.07, ...baseIn }),
+        onEnter: (els) =>
+          gsap.to(els, { autoAlpha: 1, y: 0, stagger: 0.07, ...baseIn }),
         onLeaveBack: (els) => gsap.set(els, { autoAlpha: 0, y: 10 }),
       });
 
@@ -138,7 +145,7 @@ export default function CustomersClient() {
     });
 
     return () => ctx.revert();
-  }, []);
+  }, [reduce]);
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-12 text-zinc-100">
@@ -245,7 +252,10 @@ export default function CustomersClient() {
 
       <section className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2">
         {MINI_CASES.map((c) => (
-          <article key={c.titleKey} className="c-card opacity-0 translate-y-[14px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6">
+          <article
+            key={c.titleKey}
+            className="c-card opacity-0 translate-y-[14px] rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-6"
+          >
             <h3 className="text-xl font-semibold leading-snug">{tr(c.titleKey)}</h3>
             <p className="mt-2 text-zinc-300">{tr(c.summaryKey)}</p>
             <ul className="mt-4 space-y-2">
@@ -272,7 +282,10 @@ export default function CustomersClient() {
         </h2>
         <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {[tr("why_f1_h"), tr("why_f2_h"), tr("why_f3_h"), tr("why_f4_h")].map((h, i) => (
-            <div key={h} className="c-why-item opacity-0 translate-y-[10px] rounded-xl border border-zinc-700/60 bg-zinc-900/50 p-5">
+            <div
+              key={h}
+              className="c-why-item opacity-0 translate-y-[10px] rounded-xl border border-zinc-700/60 bg-zinc-900/50 p-5"
+            >
               <div className="flex items-center gap-2 text-emerald-300">
                 <CheckIcon className="h-5 w-5" />
                 <span className="text-sm font-semibold">{h}</span>

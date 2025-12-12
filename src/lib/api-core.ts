@@ -190,3 +190,7 @@ export function delJson<TRes>(path: string, init?: RequestInit): Promise<TRes> {
 export function patchJson<TReq, TRes>(path: string, body: TReq, init?: RequestInit): Promise<TRes> {
   return apiFetch<TRes>(path, { ...init, method: "PATCH", body: JSON.stringify(body) });
 }
+
+export function postFormData<TRes>(path: string, formData: FormData, init?: RequestInit): Promise<TRes> {
+  return apiFetch<TRes>(path, { ...init, method: "POST", body: formData });
+}

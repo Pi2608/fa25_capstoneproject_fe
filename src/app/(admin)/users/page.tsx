@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import s from "../admin.module.css";
 import {
   adminGetUsers,
   adminGetUserById,
   adminUpdateUserStatus,
   adminDeleteUser,
 } from "@/lib/admin-api";
+import { useTheme } from "../layout";
 
 type Role = "Admin" | "RegisteredUser" | "Member" | "User" | string;
 type BackendStatus =
@@ -55,8 +55,15 @@ function useDebounce<T>(value: T, delay = 350) {
 
 function timeAgoVi(iso?: string | null) {
   if (!iso) return "–";
+  if (iso === "0001-01-01T00:00:00" || iso.startsWith("0001-01-01")) {
+    return "Chưa đăng nhập";
+  }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "–";
+  if (d.getTime() < 0) {
+    return "Chưa đăng nhập";
+  }
+  
   const diff = new Date().getTime() - d.getTime();
   const m = Math.floor(diff / 60000);
   if (m < 1) return "vừa xong";
@@ -68,6 +75,7 @@ function timeAgoVi(iso?: string | null) {
 }
 
 export default function AccountsPage() {
+  const { isDark } = useTheme();
   const [rows, setRows] = useState<User[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -283,13 +291,17 @@ export default function AccountsPage() {
   const nextPage = () => setPage((p) => Math.min(totalPages, p + 1));
 
   return (
-    <div className={s.stack}>
-      <section className={s.panel}>
-        <div className={s.panelHead}>
-          <h3>Quản lý tài khoản</h3>
-          <div className={s.filters}>
+    <div className="grid gap-5">
+      <section className={`${isDark ? "bg-zinc-900/98 border-zinc-800" : "bg-white border-gray-200"} border rounded-xl p-4 shadow-sm grid gap-3`}>
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="m-0 text-base font-extrabold">Quản lý tài khoản</h3>
+          <div className="flex gap-2 flex-wrap">
             <input
-              className={s.input}
+              className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 min-w-[160px] ${
+                isDark
+                  ? "border-zinc-800 bg-zinc-800/96 text-zinc-100 focus:border-zinc-700 focus:ring-zinc-700"
+                  : "border-gray-300 bg-white text-gray-900 focus:border-gray-400 focus:ring-gray-400"
+              }`}
               placeholder="Tìm theo tên hoặc email…"
               value={q}
               onChange={(e) => {
@@ -299,7 +311,11 @@ export default function AccountsPage() {
               aria-label="Tìm kiếm người dùng"
             />
             <select
-              className={s.select}
+              className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 ${
+                isDark
+                  ? "border-zinc-800 bg-zinc-800/96 text-zinc-100 focus:border-zinc-700 focus:ring-zinc-700"
+                  : "border-gray-300 bg-white text-gray-900 focus:border-gray-400 focus:ring-gray-400"
+              }`}
               value={roleFilter}
               onChange={(e) => {
                 setPage(1);
@@ -313,7 +329,11 @@ export default function AccountsPage() {
               <option value="User">User</option>
             </select>
             <select
-              className={s.select}
+              className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 ${
+                isDark
+                  ? "border-zinc-800 bg-zinc-800/96 text-zinc-100 focus:border-zinc-700 focus:ring-zinc-700"
+                  : "border-gray-300 bg-white text-gray-900 focus:border-gray-400 focus:ring-gray-400"
+              }`}
               value={statusFilter}
               onChange={(e) =>
                 setStatusFilter(
@@ -336,65 +356,108 @@ export default function AccountsPage() {
           </div>
         </div>
 
-        <div className={s.tableWrap}>
+        <div className={`overflow-auto border rounded-lg mt-2 ${
+          isDark ? "border-zinc-800" : "border-gray-200"
+        }`}>
           {err ? (
-            <div className={s.errorBox}>{err}</div>
+            <div className="p-4 text-center text-red-500 font-semibold text-sm">{err}</div>
           ) : (
-            <table className={s.table}>
+            <table className="w-full border-collapse text-sm">
               <thead>
                 <tr>
-                  <th>Họ tên</th>
-                  <th>Email</th>
-                  <th>Vai trò</th>
-                  <th>Trạng thái</th>
-                  <th>Hoạt động gần nhất</th>
-                  <th></th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}>Họ tên</th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}>Email</th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}>Vai trò</th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}>Trạng thái</th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}>Hoạt động gần nhất</th>
+                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}></th>
                 </tr>
               </thead>
               <tbody>
                 {loading && filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ padding: 16 }}>
+                    <td colSpan={6} className={`p-4 text-center ${
+                      isDark ? "text-zinc-400" : "text-gray-500"
+                    }`}>
                       Đang tải…
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} style={{ padding: 16 }}>
+                    <td colSpan={6} className={`p-4 text-center ${
+                      isDark ? "text-zinc-400" : "text-gray-500"
+                    }`}>
                       Không tìm thấy tài nguyên.
                     </td>
                   </tr>
                 ) : (
                   filtered.map((u) => (
                     <tr key={u.userId}>
-                      <td>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>
                         {u.userName ||
                           [u.firstName, u.lastName]
                             .filter(Boolean)
                             .join(" ")}
                       </td>
-                      <td>{u.email}</td>
-                      <td>{u.role}</td>
-                      <td>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>{u.email}</td>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>{u.role}</td>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>
                         {u.status === "Suspended" ? (
-                          <span className={s.badgeWarn}>Đã khóa</span>
+                          <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18">Đã khóa</span>
                         ) : (
-                          <span className={s.badgeSuccess}>
+                          <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16">
                             {viStatus(u.status)}
                           </span>
                         )}
                       </td>
-                      <td>{timeAgoVi(u.lastLoginAt || u.createdAt)}</td>
-                      <td className={s.rowActions}>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>{timeAgoVi(u.lastLoginAt || u.createdAt)}</td>
+                      <td className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}>
+                        <div className="flex items-center gap-1.5 whitespace-nowrap text-sm font-medium">
                         <button
-                          className={s.rowActionBtn}
+                            className="text-[#166534] hover:underline cursor-pointer bg-transparent border-0 p-0"
                           onClick={() => openView(u.userId)}
                         >
                           Xem
                         </button>
-                        <span className={s.rowActionSep}>|</span>
+                          <span className="text-zinc-400">|</span>
                         <button
-                          className={s.rowActionBtn}
+                            className="text-[#166534] hover:underline cursor-pointer bg-transparent border-0 p-0 disabled:opacity-50"
                           onClick={() => openEditStatusModal(u)}
                           disabled={loading}
                         >
@@ -402,14 +465,15 @@ export default function AccountsPage() {
                             ? "Mở khóa"
                             : "Khóa"}
                         </button>
-                        <span className={s.rowActionSep}>|</span>
+                          <span className="text-zinc-400">|</span>
                         <button
-                          className={s.rowActionBtnDanger}
+                            className="text-red-600 hover:underline cursor-pointer bg-transparent border-0 p-0 disabled:opacity-50"
                           onClick={() => askDelete(u.userId)}
                           disabled={loading}
                         >
                           Xóa
                         </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -419,20 +483,28 @@ export default function AccountsPage() {
           )}
         </div>
 
-        <div className={s.pager}>
+        <div className="flex items-center justify-center gap-3 pt-3">
           <button
-            className={s.pageBtn}
+            className={`px-3 py-1.5 rounded-lg border text-sm transition-colors disabled:opacity-50 ${
+              isDark
+                ? "border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700"
+                : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+            }`}
             onClick={prevPage}
             disabled={page <= 1 || loading}
           >
             Trước
           </button>
-          <span>
+          <span className="text-sm">
             Trang <b>{page}</b>
             {totalPages > 1 ? ` / ${totalPages}` : ""}
           </span>
           <button
-            className={s.pageBtn}
+            className={`px-3 py-1.5 rounded-lg border text-sm transition-colors disabled:opacity-50 ${
+              isDark
+                ? "border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700"
+                : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+            }`}
             onClick={nextPage}
             disabled={page >= totalPages || loading}
           >
@@ -442,18 +514,18 @@ export default function AccountsPage() {
       </section>
 
       {viewUserId !== null && (
-        <div className={s.modalOverlay}>
-          <div className={s.modalCardPro} style={{ maxWidth: 420 }}>
-            <div className={s.modalHeadPro}>
-              <div className={s.modalHeadLeft}>
-                <div className={s.iconCircle}>
-                  <span className={s.iconDotOk}>✓</span>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full mx-4">
+            <div className="p-6 border-b border-zinc-200">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-green-500/16 border border-green-500/25 flex-shrink-0">
+                  <span className="text-green-600 font-semibold">✓</span>
                 </div>
-                <div className={s.titleBlock}>
-                  <div className={s.modalTitlePro}>
+                <div className="min-w-0 flex-1">
+                  <div className="m-0 text-lg font-semibold leading-tight">
                     Thông tin người dùng
                   </div>
-                  <div className={s.modalSubtitlePro}>
+                  <div className="text-zinc-500 text-sm mt-1">
                     {viewLoading
                       ? "Đang tải chi tiết…"
                       : viewUser?.email || "—"}
@@ -462,20 +534,13 @@ export default function AccountsPage() {
               </div>
             </div>
 
-            <div className={s.modalBodyPro}>
+            <div className="p-6">
               {viewLoading ? (
-                <div style={{ fontSize: 13, color: "#6b6b6b" }}>
+                <div className="text-sm text-zinc-500">
                   Đang tải…
                 </div>
               ) : viewUser ? (
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 12,
-                    fontSize: 13,
-                    lineHeight: 1.45,
-                  }}
-                >
+                <div className="grid gap-3 text-sm leading-relaxed">
                   <div>
                     <b>Tên hiển thị: </b>
                     {viewUser.userName ||
@@ -512,28 +577,22 @@ export default function AccountsPage() {
                   </div>
                 </div>
               ) : (
-                <div
-                  style={{
-                    fontSize: 13,
-                    color: "#ef4444",
-                    fontWeight: 500,
-                  }}
-                >
+                <div className="text-sm text-red-500 font-medium">
                   Không tải được thông tin người dùng.
                 </div>
               )}
             </div>
 
-            <div className={s.modalFootPro}>
+            <div className="p-6 border-t border-zinc-200 flex justify-end gap-3">
               <button
-                className={s.btnGhost}
+                className="px-4 py-2 rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 transition-colors disabled:opacity-50"
                 onClick={closeView}
                 disabled={viewLoading}
               >
                 Đóng
               </button>
               <button
-                className={s.btnSolid}
+                className="px-4 py-2 rounded-lg bg-gradient-to-br from-green-600 to-green-700 text-white shadow-sm disabled:opacity-50"
                 disabled={viewLoading || !viewUser || loading}
                 onClick={() => {
                   closeView();
@@ -547,22 +606,26 @@ export default function AccountsPage() {
       )}
 
       {draftUserId !== null && (
-        <div className={s.modalOverlay}>
-          <div className={s.modalCardPro}>
-            <div className={s.modalHeadPro}>
-              <div className={s.modalHeadLeft}>
-                <div className={s.iconCircle}>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4">
+            <div className="p-6 border-b border-zinc-200">
+              <div className="flex items-start gap-3">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center border flex-shrink-0 ${
+                  draftNextStatus === "Suspended"
+                    ? "bg-red-500/18 border-red-500/40"
+                    : "bg-green-500/16 border-green-500/25"
+                }`}>
                   {draftNextStatus === "Suspended" ? (
-                    <span className={s.iconDotWarn}>!</span>
+                    <span className="text-red-600 font-semibold">!</span>
                   ) : (
-                    <span className={s.iconDotOk}>✓</span>
+                    <span className="text-green-600 font-semibold">✓</span>
                   )}
                 </div>
-                <div className={s.titleBlock}>
-                  <div className={s.modalTitlePro}>
+                <div className="min-w-0 flex-1">
+                  <div className="m-0 text-lg font-semibold leading-tight">
                     Cập nhật trạng thái tài khoản
                   </div>
-                  <div className={s.modalSubtitlePro}>
+                  <div className="text-zinc-500 text-sm mt-1">
                     Thay đổi quyền truy cập của người dùng{" "}
                     <b>{draftUserName || "Người dùng"}</b>. Hệ thống sẽ lưu lại
                     lý do bạn đưa ra.
@@ -571,15 +634,15 @@ export default function AccountsPage() {
               </div>
             </div>
 
-            <div className={s.modalBodyPro}>
-              <div className={s.fieldGroup}>
-                <label className={s.fieldLabel}>
+            <div className="p-6 space-y-5">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-700">
                   Trạng thái mới
-                  <span className={s.requiredMark}>*</span>
+                  <span className="text-red-500 ml-1">*</span>
                 </label>
-                <div className={s.fieldControl}>
+                <div>
                   <select
-                    className={s.selectField}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 bg-white text-zinc-900 outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 disabled:opacity-50"
                     value={draftNextStatus}
                     disabled={submitting}
                     onChange={(e) =>
@@ -592,41 +655,41 @@ export default function AccountsPage() {
                     <option value="Suspended">Đã khóa</option>
                   </select>
                 </div>
-                <div className={s.fieldHint}>
+                <div className="text-zinc-500 text-xs">
                   "Đã khóa" sẽ chặn người dùng đăng nhập và sử dụng hệ thống.
                 </div>
               </div>
 
-              <div className={s.fieldGroup}>
-                <label className={s.fieldLabel}>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-700">
                   Lý do thay đổi
-                  <span className={s.requiredMark}>*</span>
+                  <span className="text-red-500 ml-1">*</span>
                 </label>
-                <div className={s.fieldControl}>
+                <div>
                   <textarea
-                    className={s.textareaField}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-300 bg-white text-zinc-900 outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 resize-y min-h-[92px] disabled:opacity-50"
                     placeholder="VD: Tài khoản có hoạt động bất thường, tạm khóa để kiểm tra."
                     value={draftReason}
                     disabled={submitting}
                     onChange={(e) => setDraftReason(e.target.value)}
                   />
                 </div>
-                <div className={s.fieldHint}>
+                <div className="text-zinc-500 text-xs">
                   Lý do này sẽ được lưu trong lịch sử hoạt động quản trị.
                 </div>
               </div>
             </div>
 
-            <div className={s.modalFootPro}>
+            <div className="p-6 border-t border-zinc-200 flex justify-end gap-3">
               <button
-                className={s.btnGhost}
+                className="px-4 py-2 rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 transition-colors disabled:opacity-50"
                 disabled={submitting}
                 onClick={closeEditStatusModal}
               >
                 Hủy
               </button>
               <button
-                className={s.btnSolid}
+                className="px-4 py-2 rounded-lg bg-gradient-to-br from-green-600 to-green-700 text-white shadow-sm disabled:opacity-50"
                 disabled={submitting}
                 onClick={submitUpdateStatus}
               >
@@ -638,18 +701,18 @@ export default function AccountsPage() {
       )}
 
       {pendingDeleteId !== null && (
-        <div className={s.modalOverlay}>
-          <div className={s.modalCardDanger}>
-            <div className={s.modalHeadDanger}>
-              <div className={s.modalHeadLeft}>
-                <div className={s.iconCircleDanger}>
-                  <span className={s.iconDotDanger}>!</span>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl border border-red-500/20 max-w-lg w-full mx-4">
+            <div className="p-6 border-b border-zinc-200">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-500/18 border border-red-500/40 flex-shrink-0">
+                  <span className="text-red-600 font-semibold">!</span>
                 </div>
-                <div className={s.titleBlock}>
-                  <div className={s.modalTitleProDanger}>
+                <div className="min-w-0 flex-1">
+                  <div className="m-0 text-lg font-semibold leading-tight text-red-600">
                     Xóa tài khoản
                   </div>
-                  <div className={s.modalSubtitleProDanger}>
+                  <div className="text-zinc-500 text-sm mt-1">
                     Hành động này không thể hoàn tác. Tài khoản sẽ bị
                     xóa vĩnh viễn khỏi hệ thống.
                   </div>
@@ -657,38 +720,23 @@ export default function AccountsPage() {
               </div>
             </div>
 
-            <div className={s.modalBodyDanger}>
+            <div className="p-6 border-b border-zinc-200">
               {deleteErr && (
-                <div
-                  className={s.dangerBox}
-                  style={{ marginBottom: 12 }}
-                >
+                <div className="p-3 mb-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
                   {deleteErr}
                 </div>
               )}
-              <p
-                style={{
-                  marginBottom: 6,
-                  fontSize: 13,
-                  lineHeight: 1.5,
-                }}
-              >
+              <p className="mb-2 text-sm leading-relaxed">
                 Bạn có chắc muốn xóa người dùng này không?
               </p>
-              <p
-                style={{
-                  color: "#6b6b6b",
-                  fontSize: 13,
-                  lineHeight: 1.5,
-                }}
-              >
+              <p className="text-zinc-500 text-sm leading-relaxed">
                 Người dùng sẽ không thể đăng nhập lại.
               </p>
             </div>
 
-            <div className={s.modalFootDanger}>
+            <div className="p-6 flex justify-end gap-3">
               <button
-                className={s.btnGhost}
+                className="px-4 py-2 rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 transition-colors disabled:opacity-50"
                 onClick={cancelDelete}
                 disabled={deleting}
               >
@@ -696,7 +744,7 @@ export default function AccountsPage() {
               </button>
 
               <button
-                className={s.btnDangerOutline}
+                className="px-4 py-2 rounded-lg border border-red-500/40 bg-white text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 shadow-sm"
                 onClick={doDelete}
                 disabled={deleting}
               >

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { JSX, useEffect, useMemo, useState } from "react";
 import {
   getMyOrganizations,
   type MyOrganizationDto,
@@ -8,6 +8,8 @@ import {
   type OrganizationBillingDto,
 } from "@/lib/api-organizations";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 function cn(...a: Array<string | false | null | undefined>) {
   return a.filter(Boolean).join(" ");
@@ -121,6 +123,10 @@ const ArrowsIcon = () => (
 
 export default function BillingPage() {
   const { t } = useI18n();
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const [orgs, setOrgs] = useState<MyOrganizationDto[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>("");
@@ -187,12 +193,9 @@ export default function BillingPage() {
 
       <Panel className="p-6 -mt-1">
         <div className="mb-4 flex items-center gap-3">
-          <span className="text-sm text-zinc-600 dark:text-zinc-400">{t("billing.orgLabel")}</span>
+          <span className={`text-sm ${themeClasses.textMuted}`}>{t("billing.orgLabel")}</span>
           <select
-            className="w-52 rounded-2xl border px-3 py-2 text-sm shadow-sm
-                         border-emerald-200 bg-white text-zinc-900
-                         focus:outline-none focus:ring-2 focus:ring-emerald-400
-                         dark:border-white/10 dark:bg-zinc-900 dark:text-zinc-100"
+            className={`w-52 rounded-2xl border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 ${themeClasses.select}`}
             value={selectedOrgId}
             onChange={(e) => setSelectedOrgId(e.target.value)}
           >
@@ -246,9 +249,9 @@ export default function BillingPage() {
               </div>
 
               {billing.recentTransactions && billing.recentTransactions.length > 0 ? (
-                <div className="overflow-hidden rounded-2xl border border-emerald-100 dark:border-white/10">
+                <div className={`overflow-hidden rounded-2xl border ${themeClasses.tableBorder}`}>
                   <table className="w-full text-sm">
-                    <thead className="bg-emerald-50/70 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+                    <thead className={themeClasses.tableHeader}>
                       <tr>
                         <th className="px-5 py-3 text-left font-semibold">{t("billing.recent_table_id")}</th>
                         <th className="px-5 py-3 text-left font-semibold">{t("billing.recent_table_date")}</th>
@@ -259,23 +262,24 @@ export default function BillingPage() {
                         <th className="px-5 py-3 text-left font-semibold">{t("billing.recent_table_status")}</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-emerald-100 dark:divide-white/5">
+                    <tbody className={`divide-y ${themeClasses.tableBorder}`}>
                       {billing.recentTransactions.map((tRow, i) => (
                         <tr
                           key={tRow.transactionId}
                           className={cn(
-                            i % 2 ? "bg-emerald-50/40 dark:bg-zinc-900/40" : "bg-white/80 dark:bg-zinc-900/60",
-                            "hover:bg-emerald-50/80 dark:hover:bg-zinc-900"
+                            `border-b ${themeClasses.tableCell}`,
+                            i % 2 ? (isDark ? "bg-zinc-900/40" : "bg-gray-50/40") : "",
+                            isDark ? "hover:bg-zinc-900" : "hover:bg-gray-50"
                           )}
                         >
-                          <td className="px-5 py-3 font-mono text-[13px] text-zinc-900 dark:text-zinc-200">
+                          <td className={`px-5 py-3 font-mono text-[13px] ${isDark ? "text-zinc-200" : "text-gray-900"}`}>
                             {tRow.transactionId}
                           </td>
-                          <td className="px-5 py-3 text-zinc-700 dark:text-zinc-300">
+                          <td className={`px-5 py-3 ${themeClasses.textMuted}`}>
                             {formatDate(tRow.transactionDate)}
                           </td>
-                          <td className="px-5 py-3 text-zinc-700 dark:text-zinc-300">{tRow.description}</td>
-                          <td className="px-5 py-3 text-right text-zinc-900 dark:text-zinc-100">
+                          <td className={`px-5 py-3 ${themeClasses.textMuted}`}>{tRow.description}</td>
+                          <td className={`px-5 py-3 text-right ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
                             {formatCurrency(tRow.amount, tRow.currency)}
                           </td>
                           <td className="px-5 py-3">
@@ -287,7 +291,7 @@ export default function BillingPage() {
                   </table>
                 </div>
               ) : (
-                <div className="text-sm text-zinc-600 dark:text-zinc-400">{t("billing.recent_empty")}</div>
+                <div className={`text-sm ${themeClasses.textMuted}`}>{t("billing.recent_empty")}</div>
               )}
             </Surface>
 
@@ -300,9 +304,9 @@ export default function BillingPage() {
               </div>
 
               {billing.invoices && billing.invoices.length > 0 ? (
-                <div className="overflow-hidden rounded-2xl border border-emerald-100 dark:border-white/10">
+                <div className={`overflow-hidden rounded-2xl border ${themeClasses.tableBorder}`}>
                   <table className="w-full text-sm">
-                    <thead className="bg-emerald-50/70 text-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
+                    <thead className={themeClasses.tableHeader}>
                       <tr>
                         <th className="px-5 py-3 text-left font-semibold">{t("billing.invoices_table_id")}</th>
                         <th className="px-5 py-3 text-left font-semibold">
@@ -313,21 +317,22 @@ export default function BillingPage() {
                         <th className="px-5 py-3 text-left font-semibold">{t("billing.invoices_table_status")}</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-emerald-100 dark:divide-white/5">
+                    <tbody className={`divide-y ${themeClasses.tableBorder}`}>
                       {billing.invoices.map((inv, i) => (
                         <tr
                           key={inv.invoiceId}
                           className={cn(
-                            i % 2 ? "bg-emerald-50/40 dark:bg-zinc-900/40" : "bg-white/80 dark:bg-zinc-900/60",
-                            "hover:bg-emerald-50/80 dark:hover:bg-zinc-900"
+                            `border-b ${themeClasses.tableCell}`,
+                            i % 2 ? (isDark ? "bg-zinc-900/40" : "bg-gray-50/40") : "",
+                            isDark ? "hover:bg-zinc-900" : "hover:bg-gray-50"
                           )}
                         >
-                          <td className="px-5 py-3 font-mono text-[13px] text-zinc-900 dark:text-zinc-200">
+                          <td className={`px-5 py-3 font-mono text-[13px] ${isDark ? "text-zinc-200" : "text-gray-900"}`}>
                             {inv.invoiceId}
                           </td>
-                          <td className="px-5 py-3 text-zinc-700 dark:text-zinc-300">{formatDate(inv.issueDate)}</td>
-                          <td className="px-5 py-3 text-zinc-700 dark:text-zinc-300">{formatDate(inv.dueDate)}</td>
-                          <td className="px-5 py-3 text-right text-zinc-900 dark:text-zinc-100">
+                          <td className={`px-5 py-3 ${themeClasses.textMuted}`}>{formatDate(inv.issueDate)}</td>
+                          <td className={`px-5 py-3 ${themeClasses.textMuted}`}>{formatDate(inv.dueDate)}</td>
+                          <td className={`px-5 py-3 text-right ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
                             {formatCurrency(inv.amount, inv.currency)}
                           </td>
                           <td className="px-5 py-3">
@@ -339,7 +344,7 @@ export default function BillingPage() {
                   </table>
                 </div>
               ) : (
-                <div className="text-sm text-zinc-600 dark:text-zinc-400">{t("billing.invoices_empty")}</div>
+                <div className={`text-sm ${themeClasses.textMuted}`}>{t("billing.invoices_empty")}</div>
               )}
             </Surface>
           </>

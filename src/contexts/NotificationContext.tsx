@@ -2,7 +2,11 @@
 
 import { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback, useMemo } from "react";
 import * as signalR from "@microsoft/signalr";
-import { createNotificationConnection, startConnection, stopConnection } from "@/lib/signalr";
+import { 
+  createNotificationConnection, 
+  startNotificationConnection as startConnection, 
+  stopNotificationConnection as stopConnection 
+} from "@/lib/hubs/notifications";
 import { NotificationItem } from "@/lib/api-user";
 import { useAuth } from "@/contexts/AuthContext";
 import { getUnreadNotificationCount } from "@/lib/api-user";
