@@ -54,7 +54,10 @@ export default function RouteAnimation({
   const animationFrameRef = useRef<number | null>(null);
   const startTimeRef = useRef<number | null>(null);
   const [progress, setProgress] = useState(0);
-  
+
+  // CRITICAL FIX: Track if animation has completed to prevent restart
+  const hasCompletedRef = useRef<boolean>(false);
+
   // Camera follow optimization: smooth gimbal lock on icon
   const lastCameraUpdateRef = useRef<number>(0);
   const cameraUpdateThrottleMs = 16; // Update camera every ~16ms (60fps for smooth following)
@@ -69,6 +72,11 @@ export default function RouteAnimation({
       });
     }
   }, []);
+
+  // Reset completion flag when route changes (new animation)
+  useEffect(() => {
+    hasCompletedRef.current = false;
+  }, [routePath, fromLocation, toLocation]);
 
   // Create icon based on type
   const createIcon = (): any => {
@@ -498,16 +506,17 @@ export default function RouteAnimation({
       return;
     }
 
-    // Original logic - apply camera state
+    // Original logic - apply camera state in PARALLEL with route animation
     if (isPlaying && segmentCameraState && map && !segmentCameraAppliedRef.current) {
       // Apply segment camera state once when animation starts
-      // Wait for camera animation to complete before starting route animation
+      // CRITICAL FIX: Don't block route animation - run camera in parallel
       segmentCameraAppliedRef.current = true;
-      cameraAnimationCompleteRef.current = false;
-      
+      cameraAnimationCompleteRef.current = true; // Mark as complete immediately to not block route
+
       // Set flag to prevent camera follow during initial zoom
       isMapAnimatingRef.current = true;
-      
+
+      // Run camera animation in parallel (non-blocking)
       (async () => {
         try {
           // segmentCameraState.center is [lng, lat] from segment (GeoJSON format)
@@ -516,27 +525,20 @@ export default function RouteAnimation({
           const targetCenter: [number, number] = [lat, lng]; // Convert to [lat, lng] for Leaflet
           const targetZoom = segmentCameraState.zoom; // Exact zoom from segment (e.g., 12)
 
-          // Apply EXACT segment camera state - center and zoom from segment
-          // This is mandatory before route animation starts, regardless of followCamera
+          // Apply segment camera state in parallel with route animation
           map.setView(targetCenter, targetZoom, {
             animate: true,
             duration: 0.8, // Slightly longer for smooth transition
             easeLinearity: 0.25,
           });
-          
-          // Wait for camera animation to complete (duration + small buffer)
-          await new Promise((resolve) => setTimeout(resolve, 900));
-          
-          const finalCenter = map.getCenter();
-          const finalZoom = map.getZoom();
 
-          cameraAnimationCompleteRef.current = true;
+          // Wait for camera animation to complete before allowing camera follow
+          await new Promise((resolve) => setTimeout(resolve, 900));
+
           // Allow camera follow after initial zoom completes (only if followCamera is enabled)
           isMapAnimatingRef.current = false;
         } catch (e) {
           console.warn('Failed to apply segment camera state:', e);
-          // If camera animation fails, still allow route animation to proceed
-          cameraAnimationCompleteRef.current = true;
           isMapAnimatingRef.current = false;
         }
       })();
@@ -555,7 +557,7 @@ export default function RouteAnimation({
     if (routePath.length === 0 || !L) {
       return;
     }
-    
+
     // Wait for marker to be initialized
     if (!markerRef.current) {
       // Marker will be initialized by the other useEffect, just return here
@@ -576,29 +578,18 @@ export default function RouteAnimation({
       }
       setProgress(0);
       startTimeRef.current = null;
+      hasCompletedRef.current = false; // Reset completion flag
       return;
     }
-    
-    // Wait for camera animation to complete before starting route animation
-    if (segmentCameraState && !cameraAnimationCompleteRef.current) {
-      // Check periodically if camera animation is complete, then start route animation
-      const checkCameraComplete = setInterval(() => {
-        if (cameraAnimationCompleteRef.current) {
-          clearInterval(checkCameraComplete);
-          // Camera animation complete, now start route animation
-          // The animation will start in the next render cycle
-        }
-      }, 100);
-      
-      return () => {
-        clearInterval(checkCameraComplete);
-      };
-    }
-    
-    // Only start route animation if camera animation is complete (or no camera state)
-    if (segmentCameraState && !cameraAnimationCompleteRef.current) {
+
+    // CRITICAL FIX: Prevent animation restart if already completed
+    if (hasCompletedRef.current) {
       return;
     }
+
+    // CRITICAL FIX: Start route animation IMMEDIATELY, don't wait for camera
+    // Camera animation will run in PARALLEL with route animation
+    // This fixes the 5-second delay issue where routes were blocked by camera animations
 
     const animate = (currentTime: number) => {
       if (!startTimeRef.current) {
@@ -708,6 +699,8 @@ export default function RouteAnimation({
       if (progress < 1) {
         animationFrameRef.current = requestAnimationFrame(animate);
       } else {
+        // CRITICAL FIX: Mark animation as completed to prevent restart
+        hasCompletedRef.current = true;
         if (onComplete) onComplete();
         startTimeRef.current = null;
       }

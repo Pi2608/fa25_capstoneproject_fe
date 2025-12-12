@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { Segment, TimelineTransition } from "@/lib/api-storymap";
 import { TimelineRuler } from "./timeline/TimelineRuler";
 import { TimelineTrack } from "./timeline/TimelineTrack";
+import { calculateTotalTimelineDuration } from "@/utils/segmentTiming";
 
 interface TimelineWorkspaceProps {
   segments: Segment[];
@@ -49,9 +50,9 @@ export function TimelineWorkspace({
 
   const workspaceRef = useRef<HTMLDivElement>(null);
 
-  // Calculate total duration
-  const totalDuration =
-    segments.reduce((sum, seg) => sum + seg.durationMs, 0) / 1000;
+  // FIXED: Calculate total duration including route animations
+  // Use calculateTotalTimelineDuration helper to account for routes that extend beyond segment duration
+  const totalDuration = calculateTotalTimelineDuration(segments) / 1000; // Convert to seconds
 
   // Resize handler
   const handleResizeStart = useCallback(

@@ -1353,6 +1353,9 @@ export const messages = {
             payment_success: "Thanh toán thành công! Gói của bạn đã được kích hoạt.",
             payment_failed: "Thanh toán thất bại. Vui lòng thử lại.",
             payment_cancelled: "Bạn đã hủy thanh toán.",
+            payment_success_title: "Thanh toán thành công",
+            payment_failed_title: "Thanh toán thất bại",
+            close: "Đóng",
 
             // Thông tin gói hiện tại
             current_plan_label: "Gói hiện tại",
@@ -3665,6 +3668,9 @@ export const messages = {
             payment_success: "Payment successful! Your plan has been activated.",
             payment_failed: "Payment failed. Please try again.",
             payment_cancelled: "You cancelled the payment.",
+            payment_success_title: "Payment Successful",
+            payment_failed_title: "Payment Failed",
+            close: "Close",
 
             // Current plan section
             current_plan_label: "Current plan",
