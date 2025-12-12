@@ -257,10 +257,6 @@ export default function StoryMapViewPage() {
 
     const rawStatus = pick(event as any, "status", "Status");
     const status = normalizeSessionStatus(rawStatus);
-
-
-    console.log("[View] JoinedSession status:", event.status, "->", status);
-
     if (status === "IN_PROGRESS") {
       setViewState("viewing");
     } else if (status === "COMPLETED" || status === "CANCELLED") {
@@ -273,8 +269,6 @@ export default function StoryMapViewPage() {
   const handleSessionStatusChanged = useCallback((event: SessionStatusChangedEvent) => {
     const rawStatus = pick(event as any, "status", "Status");
     const status = normalizeSessionStatus(rawStatus);
-
-    console.log("[View] SessionStatusChanged:", event.status, "->", status);
 
     if (status === "IN_PROGRESS") {
       setViewState("viewing");
@@ -419,7 +413,6 @@ export default function StoryMapViewPage() {
   }, []);
 
   const handleMapLayerSync = useCallback((event: MapLayerSyncEvent) => {
-    console.log("[View] Received MapLayerSync:", event);
     const k = pick(event as any, "layerKey", "LayerKey");
     if (!k) return;
 
@@ -430,7 +423,7 @@ export default function StoryMapViewPage() {
 
   const { connection, isConnected } = useSessionHub({
     sessionId: sessionId,
-    enabled: !!sessionId && !!participantId,
+    enabled: !!sessionId,
     handlers: {
       onJoinedSession: handleJoinedSession,
       onSessionStatusChanged: handleSessionStatusChanged,

@@ -42,6 +42,31 @@ export function useSessionHub(
   const connectionRef = useRef<signalR.HubConnection | null>(null);
   const handlersRef = useRef<SessionEventHandlers>(handlers);
 
+  const stableHandlersRef = useRef<SessionEventHandlers>({
+    onJoinedSession: (event) => handlersRef.current.onJoinedSession?.(event),
+    onSessionStatusChanged: (event) =>
+      handlersRef.current.onSessionStatusChanged?.(event),
+    onParticipantJoined: (event) =>
+      handlersRef.current.onParticipantJoined?.(event),
+    onParticipantLeft: (event) => handlersRef.current.onParticipantLeft?.(event),
+    onQuestionActivated: (event) =>
+      handlersRef.current.onQuestionActivated?.(event),
+    onQuestionTimeExtended: (event) =>
+      handlersRef.current.onQuestionTimeExtended?.(event),
+    onQuestionSkipped: (event) => handlersRef.current.onQuestionSkipped?.(event),
+    onResponseReceived: (event) => handlersRef.current.onResponseReceived?.(event),
+    onLeaderboardUpdated: (event) =>
+      handlersRef.current.onLeaderboardUpdated?.(event),
+    onTeacherFocusChanged: (event) =>
+      handlersRef.current.onTeacherFocusChanged?.(event),
+    onSessionEnded: (event) => handlersRef.current.onSessionEnded?.(event),
+    onSegmentSync: (event) => handlersRef.current.onSegmentSync?.(event),
+    onMapLayerSync: (event) => handlersRef.current.onMapLayerSync?.(event),
+    onQuestionBroadcast: (event) => handlersRef.current.onQuestionBroadcast?.(event),
+    onQuestionResults: (event) => handlersRef.current.onQuestionResults?.(event),
+    onError: (event) => handlersRef.current.onError?.(event),
+  });
+
   // Update handlers ref when they change
   useEffect(() => {
     handlersRef.current = handlers;
@@ -80,7 +105,7 @@ export function useSessionHub(
         // Register event handlers
         registerSessionEventHandlers(
           connectionRef.current,
-          handlersRef.current
+          stableHandlersRef.current
         );
 
         // Handle state changes

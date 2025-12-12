@@ -20,6 +20,9 @@ type StoryMapViewerProps = {
   controlsEnabled?: boolean;
   onLocationClick?: (location: Location) => void;
   onPlayingChange?: (isPlaying: boolean) => void; // Callback when play/pause state changes
+  pinAnswerMode?: boolean;
+  pinAnswerLocation?: { latitude: number; longitude: number } | null;
+  onPinAnswerLocation?: (lat: number, lng: number) => void;
 };
 
 // FIX: Định nghĩa hằng số cho timing
@@ -39,6 +42,9 @@ export default function StoryMapViewer({
   controlsEnabled = true,
   onLocationClick,
   onPlayingChange,
+  pinAnswerMode = false,
+  pinAnswerLocation: _pinAnswerLocation = null,
+  onPinAnswerLocation,
 }: StoryMapViewerProps) {
   const mapEl = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapWithPM | null>(null);
@@ -78,6 +84,25 @@ export default function StoryMapViewer({
 
   const [playbackTime, setPlaybackTime] = useState(0);
   const totalDuration = segments.reduce((sum, seg) => sum + (seg.durationMs || 0), 0) / 1000;
+
+  // Enable pin-on-map selection when requested.
+  useEffect(() => {
+    if (!mapInstance) return;
+    if (!pinAnswerMode || !onPinAnswerLocation) return;
+
+    const handler = (e: any) => {
+      const lat = e?.latlng?.lat;
+      const lng = e?.latlng?.lng;
+      if (typeof lat === "number" && typeof lng === "number") {
+        onPinAnswerLocation(lat, lng);
+      }
+    };
+
+    mapInstance.on("click", handler);
+    return () => {
+      mapInstance.off("click", handler);
+    };
+  }, [mapInstance, pinAnswerMode, onPinAnswerLocation]);
 
   const formatTime = useCallback((seconds: number): string => {
     const safeSeconds = Math.max(0, seconds);

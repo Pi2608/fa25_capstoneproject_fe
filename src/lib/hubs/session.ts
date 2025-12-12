@@ -304,12 +304,18 @@ export interface SessionEventHandlers {
   onMapLayerSync?: (event: MapLayerSyncEvent) => void;
   onQuestionBroadcast?: (event: QuestionBroadcastEvent) => void;
   onQuestionResults?: (event: QuestionResultsEvent) => void;
+  onError?: (event: unknown) => void;
 }
 
 export function registerSessionEventHandlers(
   connection: signalR.HubConnection,
   handlers: SessionEventHandlers
 ): void {
+  // Always register a no-op for server "error" method to avoid warnings in production logs.
+  connection.on("error", (event: unknown) => {
+    handlers.onError?.(event);
+  });
+
   // Handle JoinedSession event - sent when client joins a session
   if (handlers.onJoinedSession) {
     connection.on("JoinedSession", handlers.onJoinedSession);
@@ -390,6 +396,7 @@ export function registerSessionEventHandlers(
 export function unregisterSessionEventHandlers(
   connection: signalR.HubConnection
 ): void {
+  connection.off("error");
   connection.off("JoinedSession");
   connection.off("SessionStatusChanged");
   connection.off("ParticipantJoined");
