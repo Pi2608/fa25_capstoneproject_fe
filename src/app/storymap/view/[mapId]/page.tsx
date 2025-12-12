@@ -51,6 +51,19 @@ import { toast } from "react-toastify";
 
 type ViewState = "waiting" | "viewing" | "question" | "results" | "ended";
 
+function normalizeSessionStatus(raw: unknown): string {
+  const s = String(raw ?? "").trim();
+  if (!s) return "";
+
+  const upper = s.replace(/\s+/g, "").replace(/[-_]/g, "").toUpperCase();
+
+  if (upper === "INPROGRESS") return "IN_PROGRESS";
+  if (upper === "NOTSTARTED") return "WAITING";
+  if (upper === "ENDED" || upper === "FINISHED") return "COMPLETED";
+
+  return upper;
+}
+
 export default function StoryMapViewPage() {
   const params = useParams<{ mapId: string }>();
   const searchParams = useSearchParams();
@@ -135,7 +148,8 @@ export default function StoryMapViewPage() {
         if (cancelled) return;
         setSession(sessionData);
 
-        const status = (sessionData.status as string || "").toUpperCase();
+        const status = normalizeSessionStatus((sessionData as any).status);
+
         console.log("[View] Session status from API:", sessionData.status, "->", status);
 
         if (status === "COMPLETED" || status === "CANCELLED") {
@@ -226,7 +240,8 @@ export default function StoryMapViewPage() {
     setCurrentIndex(-1);
     setIsTeacherPlaying(false);
 
-    const status = (event.status as string || "").toUpperCase();
+    const status = normalizeSessionStatus((event as any).status);
+
     console.log("[View] JoinedSession status:", event.status, "->", status);
 
     if (status === "IN_PROGRESS") {
@@ -239,7 +254,8 @@ export default function StoryMapViewPage() {
   }, []);
 
   const handleSessionStatusChanged = useCallback((event: SessionStatusChangedEvent) => {
-    const status = (event.status as string || "").toUpperCase();
+    const status = normalizeSessionStatus((event as any).status);
+
     console.log("[View] SessionStatusChanged:", event.status, "->", status);
 
     if (status === "IN_PROGRESS") {
@@ -694,8 +710,9 @@ export default function StoryMapViewPage() {
     !!currentQuestion &&
     String((currentQuestion as any).questionType || "").toUpperCase() === "PIN_ON_MAP" &&
     !hasSubmitted;
+  const isMapReady = !!mapDetail && segments.length > 0;
 
-  if (viewState === "waiting") {
+  if (viewState === "waiting" && !isMapReady) {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-sky-100 via-emerald-50 to-amber-50">
         <div className="text-center max-w-md px-6">
@@ -1317,7 +1334,7 @@ export default function StoryMapViewPage() {
           </div>
         </div>
       )}
-      
+
       {viewState === "question" && currentQuestion && (
         <div className="absolute inset-0 z-[9999] flex items-center justify-center pointer-events-none">
           <div className="bg-zinc-900/95 backdrop-blur-sm border-2 border-emerald-500/50 rounded-2xl p-6 shadow-2xl max-w-lg mx-4 pointer-events-auto">
