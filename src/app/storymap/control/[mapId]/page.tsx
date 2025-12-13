@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getSegments, type Segment } from "@/lib/api-storymap";
@@ -30,6 +30,7 @@ import {
   getGroupsBySession,
   getGroupById,
   deleteGroup,
+  getGroupSubmissions,
 } from "@/lib/api-groupCollaboration";
 import type { HubConnection } from "@microsoft/signalr";
 import {
@@ -39,13 +40,14 @@ import {
   joinGroupCollaborationSession,
   registerGroupCollaborationEventHandlers,
   unregisterGroupCollaborationEventHandlers,
-  createGroupViaSignalR,
-  gradeSubmissionViaSignalR,
-  sendMessageViaSignalR,
+  createGroup,
+  gradeSubmission,
+  sendMessage,
   type GroupDto,
   type GroupSubmissionDto,
-  type GroupGradedSubmissionDto,
+  type GroupSubmissionGradedDto,
 } from "@/lib/hubs/groupCollaboration";
+
 
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
 import { useLoading } from "@/contexts/LoadingContext";
@@ -57,6 +59,7 @@ import {
   type SegmentSyncRequest,
 } from "@/lib/hubs/session";
 import type { BaseKey } from "@/types/common";
+import { getToken } from "@/lib/api-core";
 
 type QuestionBankMeta = {
   id?: string;
@@ -77,7 +80,6 @@ type SessionQuestionBankInfo = {
   totalQuestions: number;
 };
 
-// Kiểu dữ liệu cho member của group (theo response API /groups/{groupId})
 type GroupMember = {
   groupMemberId: string;
   sessionParticipantId: string;
@@ -85,6 +87,38 @@ type GroupMember = {
   isLeader: boolean;
   joinedAt: string;
 };
+
+function normalizeGroup(raw: any): GroupDto {
+  const groupId = raw?.groupId ?? raw?.id ?? raw?.GroupId ?? raw?.Id ?? "";
+  const sessionId = raw?.sessionId ?? raw?.SessionId ?? "";
+
+  const members: any[] = Array.isArray(raw?.members)
+    ? raw.members
+    : Array.isArray(raw?.groupMembers)
+      ? raw.groupMembers
+      : [];
+
+  return {
+    groupId,
+    sessionId,
+
+    name: raw?.groupName ?? raw?.name ?? raw?.GroupName ?? raw?.Name ?? "",
+
+    color: raw?.color ?? raw?.Color ?? null,
+
+    currentMembersCount:
+      typeof raw?.currentMembersCount === "number"
+        ? raw.currentMembersCount
+        : members.length,
+
+    maxMembers:
+      typeof raw?.maxMembers === "number"
+        ? raw.maxMembers
+        : raw?.MaxMembers ?? null,
+
+    members,
+  } as GroupDto;
+}
 
 export default function StoryMapControlPage() {
   const params = useParams<{ mapId: string }>();
@@ -106,6 +140,18 @@ export default function StoryMapControlPage() {
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
 
   const [participants, setParticipants] = useState<LeaderboardEntryDto[]>([]);
+  const participantNameById = useMemo(() => {
+    const map = new Map<string, string>();
+
+    for (const p of participants as any[]) {
+      const id = p.sessionParticipantId ?? p.participantId ?? p.id;
+      const name = p.displayName ?? p.name ?? p.fullName;
+      if (id && name) map.set(String(id), String(name));
+    }
+
+    return map;
+  }, [participants]);
+
   const [loadingParticipants, setLoadingParticipants] = useState(false);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
 
@@ -126,6 +172,14 @@ export default function StoryMapControlPage() {
     []
   );
 
+  const [openPickGroup, setOpenPickGroup] = useState(false);
+  const [pickGroupId, setPickGroupId] = useState<string>("");
+
+  const [loadingGroupSubmissions, setLoadingGroupSubmissions] = useState(false);
+  const [showGroupSubmissions, setShowGroupSubmissions] = useState(false);
+  const [groupSubmissionsError, setGroupSubmissionsError] = useState<string | null>(null);
+  const [submissionsGroupId, setSubmissionsGroupId] = useState<string | null>(null);
+
   const [sessionQuestionBanks, setSessionQuestionBanks] = useState<
     SessionQuestionBankInfo[]
   >([]);
@@ -144,6 +198,10 @@ export default function StoryMapControlPage() {
     (sum, bank) => sum + (bank.totalQuestions ?? 0),
     0
   );
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [draftGroupName, setDraftGroupName] = useState("");
+  const [draftGroupColor, setDraftGroupColor] = useState("#22c55e"); // mặc định xanh
+  const [creatingGroup, setCreatingGroup] = useState(false);
 
   const [showShareModal, setShowShareModal] = useState(false);
   const shareOverlayGuardRef = useRef(false);
@@ -215,6 +273,15 @@ export default function StoryMapControlPage() {
     handlers: {
       onParticipantJoined: () => {
         handleLoadParticipants();
+        if (connection && session?.sessionId && segments.length > 0) {
+          const segIndex = currentIndex >= 0 ? currentIndex : 0;
+          const seg = segments[segIndex] || segments[0];
+
+          sendSegmentSync(segIndex, seg.segmentId, seg.name || `Segment ${segIndex + 1}`, isTeacherPlaying);
+
+          // sync luôn base layer
+          sendMapLayerSyncViaSignalR(connection, session.sessionId, selectedLayer);
+        }
       },
       onParticipantLeft: () => {
         handleLoadParticipants();
@@ -226,11 +293,19 @@ export default function StoryMapControlPage() {
     },
   });
 
+  const openCreateGroupModal = () => {
+    setDraftGroupName(`Nhóm ${groups.length + 1}`);
+    setDraftGroupColor("#22c55e");
+    setShowCreateGroupModal(true);
+  };
+
   // ================== SignalR connection for group collaboration ==================
   useEffect(() => {
     if (!session?.sessionId) return;
 
-    const conn = createGroupCollaborationConnection();
+    const token = getToken();
+    const conn = createGroupCollaborationConnection(token);
+
     if (!conn) {
       console.error("[GroupCollab] Cannot create connection");
       return;
@@ -238,8 +313,9 @@ export default function StoryMapControlPage() {
 
     registerGroupCollaborationEventHandlers(conn, {
       onGroupCreated: (group) => {
-        setGroups((prev) => [...prev, group]);
+        setGroups((prev) => [...prev, normalizeGroup(group)]);
       },
+
       onWorkSubmitted: (submission) => {
         setGroupSubmissions((prev) => [...prev, submission]);
       },
@@ -508,7 +584,10 @@ export default function StoryMapControlPage() {
         const data = await getGroupsBySession(session.sessionId);
         if (cancelled) return;
 
-        const list = Array.isArray(data) ? data : [];
+        const rawList = Array.isArray(data) ? data : [];
+        const list = rawList.map(normalizeGroup);
+        setGroups(list);
+
         setGroups(list);
 
         const assigned = new Set<string>();
@@ -556,15 +635,60 @@ export default function StoryMapControlPage() {
 
     try {
       const detail: any = await getGroupById(groupId);
-      const members: GroupMember[] = Array.isArray(detail?.members)
-        ? detail.members
-        : [];
-      setSelectedGroupMembers(members);
+      const members: GroupMember[] = Array.isArray(detail?.members) ? detail.members : [];
+
+      const membersWithNames = (members as any[]).map((m, idx) => {
+        const pid = m.sessionParticipantId ?? m.participantId ?? m.id;
+        const resolvedName =
+          m.participantName ||
+          (pid ? participantNameById.get(String(pid)) : undefined);
+
+        return {
+          ...m,
+          participantName: resolvedName || m.participantName || `Thành viên ${idx + 1}`,
+        };
+      });
+
+      setSelectedGroupMembers(membersWithNames as any);
+
     } catch (e) {
       console.error("[GroupCollab] Load group detail failed:", e);
       setSelectedGroupMembers([]);
     } finally {
       setLoadingGroupMembers(false);
+    }
+  };
+
+  const handleLoadGroupSubmissions = async () => {
+    setShowGroupSubmissions(true);
+    setGroupSubmissionsError(null);
+
+    if (!selectedGroupId) {
+      setGroupSubmissions([]);
+      setSubmissionsGroupId(null);
+      setGroupSubmissionsError("Hãy chọn 1 nhóm ở mục Hoạt động nhóm trước.");
+      return;
+    }
+
+    setLoadingGroupSubmissions(true);
+    setSubmissionsGroupId(selectedGroupId);
+
+    try {
+      const res: any = await getGroupSubmissions(selectedGroupId);
+
+      const list =
+        Array.isArray(res) ? res :
+          Array.isArray(res?.items) ? res.items :
+            Array.isArray(res?.data) ? res.data :
+              [];
+
+      setGroupSubmissions(list);
+    } catch (e) {
+      console.error("[GroupCollab] Load group submissions failed:", e);
+      setGroupSubmissions([]);
+      setGroupSubmissionsError("Không tải được bài nộp nhóm.");
+    } finally {
+      setLoadingGroupSubmissions(false);
     }
   };
 
@@ -933,44 +1057,30 @@ export default function StoryMapControlPage() {
     }
   };
 
-  const handleCreateGroup = async (name: string) => {
+  const handleCreateGroup = async (name: string, color?: string) => {
     if (!groupCollabConnection || !session?.sessionId) return;
 
-    // Lấy các học sinh đang được chọn nhưng chưa thuộc nhóm nào
     const memberParticipantIds = selectedParticipantIds.filter(
       (id) => !assignedParticipantIds.includes(id)
     );
 
     if (memberParticipantIds.length === 0) {
-      console.error(
-        "[GroupCollab] Chưa chọn học sinh nào để tạo nhóm"
-      );
       window.alert("Hãy chọn ít nhất 1 học sinh trong danh sách tham gia để tạo nhóm.");
       return;
     }
 
-    // Nếu backend yêu cầu tối thiểu 2 hoặc 4 người, bạn chỉnh số ở đây
-    // if (memberParticipantIds.length < 2) {
-    //   window.alert("Mỗi nhóm cần ít nhất 2 học sinh.");
-    //   return;
-    // }
+    await createGroup(groupCollabConnection, {
+      sessionId: session.sessionId,
+      groupName: name,
+      color: color || null,
+      memberParticipantIds,
+      leaderParticipantId: memberParticipantIds[0],
+    });
 
-    try {
-      await createGroupViaSignalR(groupCollabConnection, {
-        sessionId: session.sessionId,
-        groupName: name,
-        color: undefined,
-        memberParticipantIds,
-        leaderParticipantId: memberParticipantIds[0],
-      });
-
-      setAssignedParticipantIds((prev) => [...prev, ...memberParticipantIds]);
-
-      setSelectedParticipantIds([]);
-    } catch (error) {
-      console.error("[GroupCollab] Tạo nhóm thất bại", error);
-    }
+    setAssignedParticipantIds((prev) => [...prev, ...memberParticipantIds]);
+    setSelectedParticipantIds([]);
   };
+
 
   const handleGradeSubmission = async (
     submissionId: string,
@@ -979,16 +1089,17 @@ export default function StoryMapControlPage() {
   ) => {
     if (!groupCollabConnection) return;
 
-    await gradeSubmissionViaSignalR(groupCollabConnection, {
+    await gradeSubmission(groupCollabConnection, {
       submissionId,
       score,
       feedback,
     });
+
   };
 
   const handleSendMessageToGroup = async (groupId: string, message: string) => {
     if (!groupCollabConnection) return;
-    await sendMessageViaSignalR(groupCollabConnection, groupId, message);
+    await sendMessage(groupCollabConnection, groupId, message);
   };
 
   // ================== Render states ==================
@@ -1218,6 +1329,24 @@ export default function StoryMapControlPage() {
                     </button>
                   </div>
 
+                  {(session.status === "Ended" || session.status === "Completed") && (
+                    <div className="mt-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] text-emerald-200">
+                          Session đã kết thúc — xem tổng kết.
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/session/results/${session.sessionId}`)}
+                          className="shrink-0 inline-flex items-center rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] text-white hover:bg-emerald-500 border border-emerald-500/60"
+                        >
+                          Tổng kết session
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* LAYER SYNC DROPDOWN */}
                   <div className="flex items-center justify-between pt-2 border-t border-zinc-800 mt-2">
                     <p className="text-[11px] text-zinc-400">
@@ -1395,15 +1524,14 @@ export default function StoryMapControlPage() {
                         <button
                           type="button"
                           disabled={!groupCollabConnection}
-                          onClick={() =>
-                            handleCreateGroup(`Nhóm ${groups.length + 1}`)
-                          }
+                          onClick={openCreateGroupModal}
                           className="text-[11px] rounded-lg px-2.5 py-1 
-             bg-emerald-600 text-zinc-100 hover:bg-emerald-500
-             disabled:bg-zinc-700 disabled:text-zinc-400 disabled:cursor-not-allowed"
+    bg-emerald-600 text-zinc-100 hover:bg-emerald-500
+    disabled:bg-zinc-700 disabled:text-zinc-400 disabled:cursor-not-allowed"
                         >
                           {groupCollabConnection ? "+ Tạo nhóm" : "Đang kết nối..."}
                         </button>
+
                       </div>
 
                       <div className="max-h-40 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 space-y-1.5">
@@ -1559,6 +1687,7 @@ export default function StoryMapControlPage() {
                               {bank.bankName}
                             </span>
                           ))}
+
                         </div>
                       </>
                     ) : (
@@ -1566,6 +1695,7 @@ export default function StoryMapControlPage() {
                         Chưa gắn bộ câu hỏi cho session này.
                       </p>
                     )}
+
                   </div>
 
                   {totalQuestionsOfAllBanks > 0 && (
@@ -1915,6 +2045,64 @@ export default function StoryMapControlPage() {
                 )}
               </section>
             </div>
+            {/* ===================== BÀI NỘP NHÓM (card riêng) ===================== */}
+            <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[12px] font-semibold text-zinc-200">Bài nộp nhóm</p>
+                  <p className="text-[11px] text-zinc-500">
+                    {selectedGroupId ? `Nhóm: ${selectedGroupId}` : "Chưa chọn nhóm (bấm nhóm ở panel trái)."}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLoadGroupSubmissions}
+                  disabled={loadingGroupSubmissions}
+                  className="inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-950/60 px-2.5 py-1.5 text-[11px] text-zinc-200 hover:bg-zinc-900/70 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Tải bài nộp
+                </button>
+              </div>
+
+              <div className="mt-2">
+                {loadingGroupSubmissions ? (
+                  <p className="text-[11px] text-zinc-500">Đang tải bài nộp...</p>
+                ) : groupSubmissionsError ? (
+                  <p className="text-[11px] text-red-400">{groupSubmissionsError}</p>
+                ) : groupSubmissions.length === 0 ? (
+                  <p className="text-[11px] text-zinc-500">Chưa có bài nộp.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {groupSubmissions.map((s: any, idx: number) => {
+                      const submittedAt =
+                        s?.submittedAt ?? s?.SubmittedAt ?? s?.createdAt ?? s?.CreatedAt ?? "";
+                      const content = s?.content ?? s?.Content ?? null;
+                      const preview =
+                        content == null
+                          ? ""
+                          : (typeof content === "string" ? content : JSON.stringify(content));
+
+                      return (
+                        <div key={s?.id ?? s?.Id ?? idx} className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-semibold text-zinc-200">Bài #{idx + 1}</p>
+                            <p className="text-[10px] text-zinc-500">{submittedAt}</p>
+                          </div>
+
+                          {preview && (
+                            <p className="mt-1 text-[11px] text-zinc-400">
+                              {preview.length > 200 ? preview.slice(0, 200) + "..." : preview}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -2065,6 +2253,102 @@ export default function StoryMapControlPage() {
           </div>,
           document.body
         )}
+      {showCreateGroupModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
+            <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl">
+              <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+                <p className="text-sm font-semibold">Tạo nhóm mới</p>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateGroupModal(false)}
+                  className="text-zinc-400 hover:text-zinc-200"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="px-4 py-4 space-y-4">
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Tên nhóm</label>
+                  <input
+                    value={draftGroupName}
+                    onChange={(e) => setDraftGroupName(e.target.value)}
+                    maxLength={50}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                    placeholder="Ví dụ: Nhóm 1"
+                  />
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    Tối đa 50 ký tự
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-2">Màu nhóm</label>
+
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={draftGroupColor}
+                      onChange={(e) => setDraftGroupColor(e.target.value)}
+                      className="h-10 w-12 rounded-md border border-zinc-800 bg-transparent p-1"
+                      title="Chọn màu"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        "#22c55e", "#3b82f6", "#a855f7", "#f97316",
+                        "#ef4444", "#eab308", "#14b8a6", "#f43f5e",
+                      ].map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setDraftGroupColor(c)}
+                          className={
+                            "h-7 w-7 rounded-full border " +
+                            (draftGroupColor === c ? "border-white" : "border-zinc-800")
+                          }
+                          style={{ backgroundColor: c }}
+                          title={c}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-4 py-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateGroupModal(false)}
+                  className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={creatingGroup || !draftGroupName.trim() || !groupCollabConnection}
+                  onClick={async () => {
+                    const name = draftGroupName.trim();
+                    if (!name) return;
+
+                    try {
+                      setCreatingGroup(true);
+                      await handleCreateGroup(name, draftGroupColor);
+                      setShowCreateGroupModal(false);
+                    } finally {
+                      setCreatingGroup(false);
+                    }
+                  }}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-400 disabled:cursor-not-allowed"
+                >
+                  {creatingGroup ? "Đang tạo..." : "Tạo nhóm"}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
     </div>
   );
 }
