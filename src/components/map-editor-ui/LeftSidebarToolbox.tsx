@@ -416,6 +416,8 @@ export function LeftSidebarToolbox({
       setWaitingForLocation(false);
       setEditingLocation(null);
       setInlineFormMode("list");
+      // CRITICAL FIX: Clear editing state to show updated location
+      window.dispatchEvent(new Event("cancelLocationEdit"));
     } catch (error) {
       console.error("Failed to save location:", error);
       alert("Không thể lưu location. Vui lòng thử lại.");
@@ -787,6 +789,8 @@ export function LeftSidebarToolbox({
                     setWaitingForMapLocation(false);
                     setMapLocationCoordinates(null);
                     setMapEditingLocation(null);
+                    // CRITICAL FIX: Clear editing state to show updated location
+                    window.dispatchEvent(new Event("cancelLocationEdit"));
                   } catch (error) {
                     console.error("Failed to save location:", error);
                   }
@@ -796,19 +800,28 @@ export function LeftSidebarToolbox({
                   setWaitingForMapLocation(false);
                   setMapLocationCoordinates(null);
                   setMapEditingLocation(null);
+                  // CRITICAL FIX: Dispatch event to show location marker again
+                  window.dispatchEvent(new Event("cancelLocationEdit"));
+                }}
+                onRepickLocation={() => {
+                  setMapLocationCoordinates(null);
+                  setWaitingForMapLocation(true);
+                }}
+                onCancelRepick={() => {
+                  if (mapEditingLocation?.markerGeometry) {
+                    try {
+                      const geo = JSON.parse(mapEditingLocation.markerGeometry);
+                      if (geo.type === "Point" && Array.isArray(geo.coordinates)) {
+                        setMapLocationCoordinates([geo.coordinates[0], geo.coordinates[1]]);
+                      }
+                    } catch (e) {
+                      console.error("Failed to parse coordinates:", e);
+                    }
+                  }
+                  setWaitingForMapLocation(false);
                 }}
                 initialCoordinates={mapLocationCoordinates}
                 initialLocation={mapEditingLocation as any}
-                onRepickLocation={() => {
-                  setWaitingForMapLocation(true);
-                  setMapLocationCoordinates(null);
-                  setMapEditingLocation(null);
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('showMapInstruction', {
-                      detail: { message: 'Click on the map to place the location marker' }
-                    }));
-                  }
-                }}
               />
             )}
 
@@ -828,21 +841,28 @@ export function LeftSidebarToolbox({
                   setPickedCoordinates(null);
                   setEditingLocation(null);
                   setInlineFormMode("list");
+                  // CRITICAL FIX: Dispatch event to show location marker again
+                  window.dispatchEvent(new Event("cancelLocationEdit"));
+                }}
+                onRepickLocation={() => {
+                  setPickedCoordinates(null);
+                  setWaitingForLocation(true);
+                }}
+                onCancelRepick={() => {
+                  if (editingLocation?.markerGeometry) {
+                    try {
+                      const geo = JSON.parse(editingLocation.markerGeometry);
+                      if (geo.type === "Point" && Array.isArray(geo.coordinates)) {
+                        setPickedCoordinates([geo.coordinates[0], geo.coordinates[1]]);
+                      }
+                    } catch (e) {
+                      console.error("Failed to parse coordinates:", e);
+                    }
+                  }
+                  setWaitingForLocation(false);
                 }}
                 initialCoordinates={pickedCoordinates}
                 initialLocation={editingLocation}
-                onRepickLocation={() => {
-                  if (currentMap) {
-                    setWaitingForLocation(true);
-                    setPickedCoordinates(null);
-                    // Show instruction message
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(new CustomEvent('showMapInstruction', {
-                        detail: { message: 'Click on the map to place the location marker' }
-                      }));
-                    }
-                  }
-                }}
               />
             )}
 
