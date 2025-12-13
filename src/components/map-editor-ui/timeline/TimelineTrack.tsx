@@ -692,7 +692,7 @@ function LocationTrackItems({ segment, mapId, currentMap }: { segment: Segment; 
                   </div>
                 </DraggableItem>
               )}
-              
+
               {/* No drag handle if no valid ID */}
               {!locationId && (
                 <div className="px-2 py-2 bg-zinc-600/20 border-r border-zinc-500/30 flex items-center justify-center opacity-50 cursor-not-allowed">
