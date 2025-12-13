@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatDateTime, formatNumber } from "@/utils/formatUtils";
 import { getMyOrganizations, type GetMyOrganizationsResDto } from "@/lib/api-organizations";
 import { getMyOrgMembership } from "@/lib/api-membership";
-import { getOrganizationMaps, getMapViews, getMapById, type MapDto } from "@/lib/api-maps";
-import { getUserUsage, checkUserQuota, type UserUsageResponse, type CheckQuotaRequest } from "@/lib/api-user";
+import { getOrganizationUsage, getOrganizationMapsUsage, getPlanLimits, checkUserQuota, type OrganizationUsageResponse, type OrganizationMapsUsageResponse, type PlanLimitsResponse, type CheckQuotaRequest } from "@/lib/api-user";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useTheme } from "next-themes";
 import { getThemeClasses } from "@/utils/theme-utils";
@@ -15,6 +14,16 @@ type UsageLimits = {
   membersMax?: number | null;
   editorsMax?: number | null;
   mapsMax?: number | null;
+  storageMax?: number | null;
+  organizationMax?: number | null;
+  locationMax?: number | null;
+  mapQuota?: number | null;
+  exportQuota?: number | null;
+  maxLayer?: number | null;
+  tokenMonthly?: number | null;
+  mediaFileMax?: number | null;
+  videoFileMax?: number | null;
+  audioFileMax?: number | null;
 };
 
 type DatasetRow = {
@@ -44,12 +53,6 @@ type MapRow = {
   views: number;
 };
 
-const PLAN_LIMITS: Record<string, UsageLimits> = {
-  free: { viewsMonthly: 5000, membersMax: 25, editorsMax: 3, mapsMax: 10 },
-  pro: { viewsMonthly: 50000, membersMax: 100, editorsMax: 20, mapsMax: 100 },
-  business: { viewsMonthly: 250000, membersMax: 250, editorsMax: 50, mapsMax: 500 },
-  enterprise: { viewsMonthly: null, membersMax: null, editorsMax: null, mapsMax: null },
-};
 
 const EMPTY_FAKE: FakeUsage = {
   processingUsedMb: 0,
@@ -68,7 +71,7 @@ function capText(v?: number | null, unit?: string) {
   const t = formatNumber(v);
   return unit ? `${t} ${unit}` : t;
 }
-function percent(used: number, max?: number | null) {
+function percent(used: number, max: number | null | undefined) {
   if (max == null || max <= 0) return 0;
   return Math.min(100, Math.round((used / max) * 100));
 }
@@ -95,8 +98,10 @@ export default function UsagePage() {
   const [orgs, setOrgs] = useState<GetMyOrganizationsResDto["organizations"]>([]);
   const [maps, setMaps] = useState<MapRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [limits, setLimits] = useState<UsageLimits>(PLAN_LIMITS.free);
-  const [userUsage, setUserUsage] = useState<UserUsageResponse | null>(null);
+  const [limits, setLimits] = useState<UsageLimits>({});
+  const [planLimits, setPlanLimits] = useState<PlanLimitsResponse | null>(null);
+  const [orgUsage, setOrgUsage] = useState<OrganizationUsageResponse | null>(null);
+  const [mapsUsage, setMapsUsage] = useState<OrganizationMapsUsageResponse | null>(null);
   const [usageBars, setUsageBars] = useState<FakeUsage>(EMPTY_FAKE);
 
   useEffect(() => {
@@ -126,79 +131,140 @@ export default function UsagePage() {
   useEffect(() => {
     if (!orgId) return;
     setLoading(true);
-    Promise.allSettled([getMyOrgMembership(orgId), getOrganizationMaps(orgId), getUserUsage(orgId)])
-      .then(async ([membershipRes, mapsRes, usageRes]) => {
+    Promise.allSettled([getMyOrgMembership(orgId), getOrganizationMapsUsage(orgId), getOrganizationUsage(orgId)])
+      .then(async ([membershipRes, mapsUsageRes, orgUsageRes]) => {
         let planName = "free";
+        let planId: number | null = null;
+        let planLimits: UsageLimits = {
+          viewsMonthly: undefined,
+          mapsMax: undefined,
+          membersMax: undefined,
+          storageMax: undefined
+        };
+
         if (membershipRes.status === "fulfilled") {
           const nm = normalize(membershipRes.value?.membership?.planName);
           if (nm) planName = nm;
+          planId = membershipRes.value?.membership?.planId ?? null;
         }
-        const base =
-          PLAN_LIMITS[planName] ??
-          Object.entries(PLAN_LIMITS).find(([k]) => planName.includes(k))?.[1] ??
-          PLAN_LIMITS.free;
-        setLimits(base);
 
-        const list: MapDto[] = mapsRes.status === "fulfilled" ? (mapsRes.value ?? []) : [];
-        const rows: MapRow[] = await Promise.all(
-          list.map(async (m) => {
-            const [views, detail] = await Promise.allSettled([getMapViews(m.id), getMapById(m.id)]);
-            const v = views.status === "fulfilled" ? views.value : 0;
-            let createdBy: string | null = null;
-            if (detail.status === "fulfilled" && detail.value && typeof detail.value === "object") {
-              const obj = detail.value as Record<string, unknown>;
-              const ownerName = typeof obj.ownerName === "string" ? obj.ownerName : null;
-              const ownerEmail = typeof obj.ownerEmail === "string" ? obj.ownerEmail : null;
-              const ownerId = typeof obj.ownerId === "string" ? obj.ownerId : null;
-              createdBy = ownerName ?? ownerEmail ?? ownerId ?? null;
-            } else if ("ownerId" in m && typeof m.ownerId === "string") {
-              createdBy = m.ownerId;
-            }
-            return { id: m.id, name: m.name, createdBy, views: v };
-          })
-        );
-        rows.sort((a, b) => b.views - a.views);
-        setMaps(rows);
+        let fetchedPlanLimits: PlanLimitsResponse | null = null;
+        if (planId !== null) {
+          try {
+            const planLimitsRes = await getPlanLimits(planId);
+            fetchedPlanLimits = planLimitsRes;
+            planLimits = {
+              viewsMonthly: planLimitsRes.viewsMonthly ?? undefined,
+              mapsMax: planLimitsRes.mapsMax ?? undefined,
+              membersMax: planLimitsRes.membersMax ?? undefined,
+              organizationMax: planLimitsRes.organizationMax ?? undefined,
+              locationMax: planLimitsRes.locationMax ?? undefined,
+              mapQuota: planLimitsRes.mapQuota ?? undefined,
+              exportQuota: planLimitsRes.exportQuota ?? undefined,
+              maxLayer: planLimitsRes.maxLayer ?? undefined,
+              tokenMonthly: planLimitsRes.tokenMonthly ?? undefined,
+              mediaFileMax: planLimitsRes.mediaFileMax ?? undefined,
+              videoFileMax: planLimitsRes.videoFileMax ?? undefined,
+              audioFileMax: planLimitsRes.audioFileMax ?? undefined,
+            };
+          } catch (error) {
+            console.warn("Failed to fetch plan limits, using defaults:", error);
+          }
+        }
+        setPlanLimits(fetchedPlanLimits);
 
-        if (usageRes.status === "fulfilled") {
-          setUserUsage(usageRes.value);
-          const storageUsedBytes = Number(usageRes.value.storageUsedBytes ?? 0);
-          const rawLimit = usageRes.value.storageLimitBytes;
-          const storageLimitBytes =
-            typeof rawLimit === "number" ? rawLimit : rawLimit == null ? null : Number(rawLimit);
+        if (orgUsageRes.status === "fulfilled" && orgUsageRes.value) {
+          const orgUsage = orgUsageRes.value;
+          const mapsQuota = orgUsage.quotas.find(q => q.resourceType.toLowerCase().includes('maps'));
+          const usersQuota = orgUsage.quotas.find(q => 
+            q.resourceType.toLowerCase().includes('users') || 
+            q.resourceType.toLowerCase().includes('members')
+          );
+          const MAX_INT = 2147483647;
+          planLimits = {
+            ...planLimits,
+            mapsMax: planLimits.mapsMax ?? (mapsQuota?.isUnlimited ? null : (mapsQuota?.limit && mapsQuota.limit >= MAX_INT ? null : mapsQuota?.limit) ?? undefined),
+            membersMax: planLimits.membersMax ?? (usersQuota?.isUnlimited ? null : (usersQuota?.limit && usersQuota.limit >= MAX_INT ? null : usersQuota?.limit) ?? undefined),
+          };
+        }
+
+        setLimits(planLimits);
+
+        if (mapsUsageRes.status === "fulfilled") {
+          setMapsUsage(mapsUsageRes.value);
+        }
+
+        const mapsData: MapRow[] = mapsUsageRes.status === "fulfilled" && mapsUsageRes.value?.maps
+          ? mapsUsageRes.value.maps.map(m => ({
+              id: m.id,
+              name: m.name,
+              createdBy: m.ownerName,
+              views: m.views
+            }))
+          : [];
+        mapsData.sort((a, b) => b.views - a.views);
+        setMaps(mapsData);
+
+        if (orgUsageRes.status === "fulfilled") {
+          setOrgUsage(orgUsageRes.value);
+          const storageQuota = orgUsageRes.value.quotas.find(q =>
+            q.resourceType.toLowerCase().includes('storage') ||
+            q.resourceType.toLowerCase().includes('bytes')
+          );
+          const storageUsedBytes = storageQuota ? storageQuota.currentUsage : 0;
+
           const hostingUsedMb = bytesToMB(storageUsedBytes);
-          const hostingCapMb = storageLimitBytes == null ? null : bytesToMB(storageLimitBytes);
+          const hostingCapMb = planLimits.storageMax;
           setUsageBars({
             processingUsedMb: 0,
             processingCapMb: 0,
             hostingUsedMb,
-            hostingCapMb,
+            hostingCapMb: hostingCapMb || null,
             processingRows: [],
             hostingRows: [],
           });
         } else {
-          setUserUsage(null);
+          setOrgUsage(null);
+          setMapsUsage(null);
           setUsageBars(EMPTY_FAKE);
         }
       })
       .finally(() => setLoading(false));
   }, [orgId]);
 
-  const totalViews = useMemo(() => maps.reduce((s, m) => s + (m.views || 0), 0), [maps]);
+  const totalViews = useMemo(() => {
+    if (mapsUsage?.totalViews !== undefined) {
+      return mapsUsage.totalViews;
+    }
+    return maps.reduce((s, m) => s + (m.views || 0), 0);
+  }, [maps, mapsUsage]);
   const resetDateText = useMemo(() => `${t("usage.resetOn")} ${fmtDate(firstOfNextMonth())}`, [t]);
   const viewsMax = limits.viewsMonthly;
 
-  const mapsLimitFromUsage =
-    userUsage?.mapsLimit == null ? null : typeof userUsage.mapsLimit === "number" ? userUsage.mapsLimit : Number(userUsage.mapsLimit);
-  const mapsUsedFromUsage = typeof userUsage?.mapsUsed === "number" ? userUsage.mapsUsed : maps.length;
+  const getQuotaValue = (resourceType: string, isLimit: boolean = true) => {
+    if (!orgUsage) return isLimit ? null : 0;
+    const quota = orgUsage.quotas.find(q => q.resourceType.toLowerCase().includes(resourceType.toLowerCase()));
+    if (!quota) return isLimit ? null : 0;
+    if (isLimit) {
+      const MAX_INT = 2147483647;
+      if (quota.isUnlimited || (quota.limit && quota.limit >= MAX_INT)) {
+        return null;
+      }
+      return quota.limit;
+    } else {
+      return quota.currentUsage;
+    }
+  };
 
-  const layersLimitFromUsage =
-    userUsage?.layersLimit == null ? null : typeof userUsage.layersLimit === "number" ? userUsage.layersLimit : Number(userUsage.layersLimit);
-  const layersUsedFromUsage = typeof userUsage?.layersUsed === "number" ? userUsage.layersUsed : 0;
+  const mapsLimitFromUsage = limits.mapsMax ?? getQuotaValue('maps', true);
+  const mapsUsedFromUsage = getQuotaValue('maps', false) || maps.length;
 
-  const membersLimitFromUsage =
-    userUsage?.membersLimit == null ? null : typeof userUsage.membersLimit === "number" ? userUsage.membersLimit : Number(userUsage.membersLimit);
-  const membersUsedFromUsage = typeof userUsage?.membersUsed === "number" ? userUsage.membersUsed : 0;
+  const layersLimitFromUsage = limits.maxLayer ?? getQuotaValue('custom_layers', true) ?? getQuotaValue('layers', true);
+  const layersUsedFromUsage = getQuotaValue('custom_layers', false) ?? getQuotaValue('layers', false) ?? 0;
+
+  const membersLimitFromUsage = limits.membersMax ?? getQuotaValue('users', true);
+  // Prioritize totalMembers as it represents the actual total members in the organization
+  const membersUsedFromUsage = orgUsage?.totalMembers ?? getQuotaValue('users', false) ?? 0;
 
   async function onCheckQuotaClick() {
     if (!orgId) return;
@@ -232,6 +298,7 @@ export default function UsagePage() {
             const v = e.target.value || null;
             setOrgId(v);
             if (v) localStorage.setItem("cmosm:selectedOrgId", v);
+            window.dispatchEvent(new CustomEvent("organizationChanged"));
           }}
         >
           {orgs.map((o) => (
@@ -248,6 +315,26 @@ export default function UsagePage() {
 
       {orgId && (
         <>
+          {orgUsage && (
+            <section className={`rounded-xl border p-4 ${themeClasses.panel}`}>
+              <h2 className={`text-base font-medium mb-3 ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("usage.organization_info")}</h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.organization_name")}</div>
+                  <div className={`text-sm font-medium ${isDark ? "text-zinc-200" : "text-gray-900"}`}>{orgUsage.organizationName}</div>
+                </div>
+                <div>
+                  <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.current_plan")}</div>
+                  <div className={`text-sm font-medium ${isDark ? "text-zinc-200" : "text-gray-900"}`}>{orgUsage.planName}</div>
+                </div>
+                <div>
+                  <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.total_members")}</div>
+                  <div className={`text-sm font-medium ${isDark ? "text-zinc-200" : "text-gray-900"}`}>{orgUsage.totalMembers}</div>
+                </div>
+              </div>
+            </section>
+          )}
+
           <section className={`rounded-xl border p-4 ${themeClasses.panel}`}>
             <div className="flex items-center justify-between">
               <h2 className={`text-base font-medium ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("usage.limits_overview")}</h2>
@@ -262,30 +349,30 @@ export default function UsagePage() {
               <div className={`rounded-lg border p-3 ${themeClasses.tableBorder}`}>
                 <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.metrics_maps")}</div>
                 <div className={`mt-1 h-1 w-full overflow-hidden rounded-full ${isDark ? "bg-zinc-800" : "bg-gray-200"}`}>
-                  <div className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`} style={{ width: `${percent(mapsUsedFromUsage, mapsLimitFromUsage)}%` }} />
+                  <div className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`} style={{ width: `${percent(mapsUsedFromUsage, limits.mapsMax)}%` }} />
                 </div>
                 <div className={`mt-1 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
-                  {formatNumber(mapsUsedFromUsage)} / {capText(mapsLimitFromUsage)}
+                  {formatNumber(mapsUsedFromUsage)} / {capText(limits.mapsMax)}
                 </div>
               </div>
 
               <div className={`rounded-lg border p-3 ${themeClasses.tableBorder}`}>
                 <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.metrics_layers")}</div>
                 <div className={`mt-1 h-1 w-full overflow-hidden rounded-full ${isDark ? "bg-zinc-800" : "bg-gray-200"}`}>
-                  <div className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`} style={{ width: `${percent(layersUsedFromUsage, layersLimitFromUsage)}%` }} />
+                  <div className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`} style={{ width: `${percent(layersUsedFromUsage, layersLimitFromUsage ?? 0)}%` }} />
                 </div>
                 <div className={`mt-1 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
-                  {formatNumber(layersUsedFromUsage)} / {capText(layersLimitFromUsage)}
+                  {formatNumber(layersUsedFromUsage)} / {capText(layersLimitFromUsage ?? 0)}
                 </div>
               </div>
 
               <div className={`rounded-lg border p-3 ${themeClasses.tableBorder}`}>
                 <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.metrics_members")}</div>
                 <div className={`mt-1 h-1 w-full overflow-hidden rounded-full ${isDark ? "bg-zinc-800" : "bg-gray-200"}`}>
-                  <div className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`} style={{ width: `${percent(membersUsedFromUsage, membersLimitFromUsage)}%` }} />
+                  <div className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`} style={{ width: `${percent(membersUsedFromUsage, limits.membersMax)}%` }} />
                 </div>
                 <div className={`mt-1 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
-                  {formatNumber(membersUsedFromUsage)} / {capText(membersLimitFromUsage)}
+                  {formatNumber(membersUsedFromUsage)} / {capText(limits.membersMax)}
                 </div>
               </div>
 
@@ -294,15 +381,17 @@ export default function UsagePage() {
                 <div className={`mt-1 h-1 w-full overflow-hidden rounded-full ${isDark ? "bg-zinc-800" : "bg-gray-200"}`}>
                   <div
                     className={`h-full ${isDark ? "bg-zinc-500" : "bg-gray-500"}`}
-                    style={{ width: `${percent(usageBars.hostingUsedMb, usageBars.hostingCapMb == null ? 0 : usageBars.hostingCapMb)}%` }}
+                    style={{ width: `${percent(usageBars.hostingUsedMb, limits.storageMax)}%` }}
                   />
                 </div>
                 <div className={`mt-1 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
-                  {capText(usageBars.hostingUsedMb, "MB")} / {capText(usageBars.hostingCapMb, "MB")}
+                  {capText(usageBars.hostingUsedMb, "MB")} / {capText(limits.storageMax, "MB")}
                 </div>
-                {userUsage?.period && <div className={`mt-1 text-xs ${themeClasses.textMuted}`}>{t("usage.period")}: {userUsage.period}</div>}
-                {userUsage?.lastReset && (
-                  <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.lastReset")}: {formatDateTime(userUsage.lastReset)}</div>
+                {orgUsage?.lastResetDate && (
+                  <div className={`mt-1 text-xs ${themeClasses.textMuted}`}>{t("usage.lastReset")}: {formatDateTime(orgUsage.lastResetDate)}</div>
+                )}
+                {orgUsage?.nextResetDate && (
+                  <div className={`text-xs ${themeClasses.textMuted}`}>{t("usage.nextReset")}: {formatDateTime(orgUsage.nextResetDate)}</div>
                 )}
               </div>
             </div>
@@ -404,13 +493,13 @@ export default function UsagePage() {
               </div>
               <p className={`mt-1 text-xs ${themeClasses.textMuted}`}>{t("usage.views_hint")}</p>
             </div>
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="mt-2 overflow-x-auto pb-4">
+              <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className={themeClasses.tableHeader}>
-                    <th className="py-2 pl-4 pr-4 font-normal">{t("usage.table_map")}</th>
-                    <th className="py-2 pr-4 font-normal">{t("usage.table_createdBy")}</th>
-                    <th className="py-2 pr-4 font-normal">{t("usage.table_views")}</th>
+                    <th className="py-2 pl-4 pr-4 font-normal text-left">{t("usage.table_map")}</th>
+                    <th className="py-2 pr-4 font-normal text-left">{t("usage.table_createdBy")}</th>
+                    <th className="py-2 pr-4 font-normal text-right">{t("usage.table_views")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -437,7 +526,7 @@ export default function UsagePage() {
                           </a>
                         </td>
                         <td className={`py-2 pr-4 ${themeClasses.textMuted}`}>{m.createdBy ?? "—"}</td>
-                        <td className={`py-2 pr-4 ${isDark ? "text-zinc-200" : "text-gray-900"}`}>{formatNumber(m.views ?? 0)}</td>
+                        <td className={`py-2 pr-4 text-right ${isDark ? "text-zinc-200" : "text-gray-900"}`}>{formatNumber(m.views ?? 0)}</td>
                       </tr>
                     ))}
                 </tbody>

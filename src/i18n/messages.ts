@@ -779,7 +779,6 @@ export const messages = {
             tabs_usage: "Sử dụng",
             tabs_plans: "Gói",
             tabs_billing: "Thanh toán",
-            tabs_developers: "Nhà phát triển",
             tabs_workspace: "Workspace",
         },
         support: {
@@ -1519,13 +1518,17 @@ export const messages = {
             plan_free: "Miễn phí"
         },
         usage: {
+            organization_info: "Thông tin tổ chức",
+            current_plan: "Gói hiện tại",
+            total_members: "Tổng thành viên",
+            organization_name: "Tên tổ chức",
             title: "Sử dụng",
             organization: "Tổ chức",
             noOrgSelected: "Chưa chọn tổ chức.",
             resetOn: "Làm mới vào",
             period: "Chu kỳ",
             lastReset: "Làm mới lần cuối",
-
+            nextReset: "Làm mới lần tiếp theo",
             limits_overview: "Tổng quan hạn mức",
             limits_checkQuotaPlusOne: "Kiểm tra hạn mức (Bản đồ +1)",
 
@@ -3047,12 +3050,17 @@ export const messages = {
             level_advanced: "Advanced",
         },
         usage: {
+            organization_info: "Organization info",
+            current_plan: "Current plan",
+            total_members: "Total members",
+            organization_name: "Organization name",
             title: "Usage",
             organization: "Organization",
             noOrgSelected: "No organization selected.",
             resetOn: "Resets on",
             period: "Period",
             lastReset: "Last reset",
+            nextReset: "Next reset",
 
             limits_overview: "Quota overview",
             limits_checkQuotaPlusOne: "Check quota (Maps +1)",
@@ -4068,7 +4076,6 @@ export const messages = {
             tabs_usage: "Usage",
             tabs_plans: "Plans",
             tabs_billing: "Billing",
-            tabs_developers: "Developer",
             tabs_workspace: "Workspace",
         },
         membership: {
