@@ -9,6 +9,8 @@ export interface GroupDto {
   groupId?: string;
   sessionId: string;
   name: string;
+  groupName?: string;
+  color?: string | null;
   maxMembers?: number | null;
   currentMembers?: number | null;
   currentMembersCount?: number | null;
