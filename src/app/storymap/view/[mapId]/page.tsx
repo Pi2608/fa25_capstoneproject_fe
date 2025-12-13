@@ -129,10 +129,10 @@ export default function StoryMapViewPage() {
   const [groupWorkContent, setGroupWorkContent] = useState("");
   const [groupChatInput, setGroupChatInput] = useState("");
   const [groupSubmitting, setGroupSubmitting] = useState(false);
-const viewStateRef = useRef<ViewState>("waiting");
-useEffect(() => {
-  viewStateRef.current = viewState;
-}, [viewState]);
+  const viewStateRef = useRef<ViewState>("waiting");
+  useEffect(() => {
+    viewStateRef.current = viewState;
+  }, [viewState]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -243,7 +243,20 @@ useEffect(() => {
           );
         });
 
-        setSessionGroups(myGroup ? [myGroup] : []);
+        const normalizedMyGroup = myGroup
+          ? {
+            ...myGroup,
+            name:
+              myGroup.groupName ??
+              myGroup.name ??
+              myGroup.groupTitle ??
+              myGroup.title ??
+              "",
+          }
+          : null;
+
+        setSessionGroups(normalizedMyGroup ? [normalizedMyGroup] : []);
+
       } catch (e) {
         console.error("[GroupCollab][View] Load groups failed:", e);
       }
@@ -424,32 +437,32 @@ useEffect(() => {
 
   }, []);
 
-const sessionHubHandlers = useMemo(
-  () => ({
-    onJoinedSession: handleJoinedSession,
-    onSessionStatusChanged: handleSessionStatusChanged,
-    onSegmentSync: handleSegmentSync,
-    onQuestionBroadcast: handleQuestionBroadcast,
-    onQuestionResults: handleQuestionResults,
-    onSessionEnded: handleSessionEnded,
-    onMapLayerSync: handleMapLayerSync,
-  }),
-  [
-    handleJoinedSession,
-    handleSessionStatusChanged,
-    handleSegmentSync,
-    handleQuestionBroadcast,
-    handleQuestionResults,
-    handleSessionEnded,
-    handleMapLayerSync,
-  ]
-);
+  const sessionHubHandlers = useMemo(
+    () => ({
+      onJoinedSession: handleJoinedSession,
+      onSessionStatusChanged: handleSessionStatusChanged,
+      onSegmentSync: handleSegmentSync,
+      onQuestionBroadcast: handleQuestionBroadcast,
+      onQuestionResults: handleQuestionResults,
+      onSessionEnded: handleSessionEnded,
+      onMapLayerSync: handleMapLayerSync,
+    }),
+    [
+      handleJoinedSession,
+      handleSessionStatusChanged,
+      handleSegmentSync,
+      handleQuestionBroadcast,
+      handleQuestionResults,
+      handleSessionEnded,
+      handleMapLayerSync,
+    ]
+  );
 
-const { connection, isConnected } = useSessionHub({
-  sessionId,
-  enabled: !!sessionId && !!participantId, 
-  handlers: sessionHubHandlers,
-});
+  const { connection, isConnected } = useSessionHub({
+    sessionId,
+    enabled: !!sessionId && !!participantId,
+    handlers: sessionHubHandlers,
+  });
 
   useEffect(() => {
     if (!sessionId || !participantId) return;
@@ -468,32 +481,32 @@ const { connection, isConnected } = useSessionHub({
 
     registerGroupCollaborationEventHandlers(conn, {
       onGroupCreated: (group: GroupDto) => {
-  const anyGroup = group as any;
-  const normalized: GroupDto = {
-    ...anyGroup,
-    id: anyGroup.id ?? anyGroup.groupId,
-    groupId: anyGroup.groupId ?? anyGroup.id,
-    currentMembersCount:
-      anyGroup.currentMembersCount ??
-      anyGroup.currentMembers ??
-      anyGroup.memberCount ??
-      null,
-  };
+        const anyGroup = group as any;
+        const normalized: GroupDto = {
+          ...anyGroup,
+          id: anyGroup.id ?? anyGroup.groupId,
+          groupId: anyGroup.groupId ?? anyGroup.id,
+          currentMembersCount:
+            anyGroup.currentMembersCount ??
+            anyGroup.currentMembers ??
+            anyGroup.memberCount ??
+            null,
+        };
 
-  const members: any[] = Array.isArray(anyGroup.members)
-    ? anyGroup.members
-    : Array.isArray(anyGroup.groupMembers)
-      ? anyGroup.groupMembers
-      : [];
+        const members: any[] = Array.isArray(anyGroup.members)
+          ? anyGroup.members
+          : Array.isArray(anyGroup.groupMembers)
+            ? anyGroup.groupMembers
+            : [];
 
-  const isMine = members.some(
-    (m: any) => (m.sessionParticipantId ?? m.participantId ?? m.id) === participantId
-  );
+        const isMine = members.some(
+          (m: any) => (m.sessionParticipantId ?? m.participantId ?? m.id) === participantId
+        );
 
-  if (!isMine) return;
+        if (!isMine) return;
 
-  setSessionGroups([normalized]); 
-},
+        setSessionGroups([normalized]);
+      },
 
       onMessageReceived: (msg: GroupChatMessage) => {
         setGroupMessages((prev) => [...prev, msg]);
@@ -1261,16 +1274,22 @@ const { connection, isConnected } = useSessionHub({
                     key={groupId ?? g.id ?? idx}
                     type="button"
                     onClick={() => handleJoinGroup(groupId)}
-                    className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-[12px] border ${
-  currentGroupId === groupId
-    ? "border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold"
-    : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
-}`}
+                    className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-[12px] border ${currentGroupId === groupId
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold"
+                      : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
+                      }`}
 
                   >
-                    <span className="truncate">
-                      {g.name || `Nhóm ${idx + 1}`}
-                    </span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: g.color ?? "#71717a" }}
+                        title={g.color ?? ""}
+                      />
+                      <span className="truncate">
+                        {g.groupName ?? g.name ?? `Nhóm ${idx + 1}`}
+                      </span>
+                    </div>
 
                     {typeof currentCount === "number" &&
                       typeof maxMembers === "number" && (

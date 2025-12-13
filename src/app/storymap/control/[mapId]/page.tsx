@@ -120,6 +120,22 @@ function normalizeGroup(raw: any): GroupDto {
   } as GroupDto;
 }
 
+function normalizeHexColor(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s)) return s;
+  return null;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export default function StoryMapControlPage() {
   const params = useParams<{ mapId: string }>();
   const router = useRouter();
@@ -1542,45 +1558,64 @@ export default function StoryMapControlPage() {
                         ) : (
                           groups.map((g, idx) => {
                             const isSelected = g.groupId === selectedGroupId;
+
+                            const groupColor = normalizeHexColor((g as any).color);
+                            const bg = groupColor
+                              ? hexToRgba(groupColor, isSelected ? 0.18 : 0.10)
+                              : undefined;
+
                             return (
                               <div
                                 key={g.groupId ?? idx}
                                 onClick={() => handleSelectGroup(g.groupId)}
                                 className={
-                                  "w-full flex items-center justify-between text-[11px] py-1 px-2 rounded-md border mb-[2px] last:mb-0 cursor-pointer " +
-                                  (isSelected
-                                    ? "bg-emerald-500/15 border-emerald-400/70 text-emerald-100"
-                                    : "bg-transparent border-zinc-800 text-zinc-200 hover:bg-zinc-900/70")
+                                  "w-full flex items-center justify-between text-[11px] py-1.5 px-2 rounded-md border mb-[2px] last:mb-0 cursor-pointer " +
+                                  "border-zinc-800 hover:bg-zinc-900/70 " +
+                                  "border-l-4 " +
+                                  (isSelected ? "text-zinc-50" : "text-zinc-200")
                                 }
+                                style={{
+                                  backgroundColor: bg,
+                                  borderLeftColor: groupColor ?? undefined,
+                                  boxShadow: isSelected && groupColor ? `0 0 0 1px ${hexToRgba(groupColor, 0.55)}` : undefined,
+                                }}
                               >
-                                <div>
-                                  <p className="font-semibold">
-                                    {g.name || `Nhóm ${idx + 1}`}
-                                  </p>
-                                  {typeof g.currentMembersCount === "number" &&
-                                    typeof g.maxMembers === "number" && (
-                                      <p className="text-zinc-400">
-                                        {g.currentMembersCount}/{g.maxMembers} thành viên
-                                      </p>
-                                    )}
+                                <div className="flex items-start gap-2">
+                                  <span
+                                    className="mt-[3px] h-2.5 w-2.5 rounded-full border border-zinc-800"
+                                    style={{ backgroundColor: groupColor ?? "#3f3f46" }}
+                                    title={groupColor ?? undefined}
+                                  />
+                                  <div>
+                                    <p className="font-semibold">
+                                      {g.name || `Nhóm ${idx + 1}`}
+                                    </p>
+
+                                    {typeof g.currentMembersCount === "number" &&
+                                      typeof g.maxMembers === "number" && (
+                                        <p className={isSelected ? "text-zinc-200" : "text-zinc-400"}>
+                                          {g.currentMembersCount}/{g.maxMembers} thành viên
+                                        </p>
+                                      )}
+                                  </div>
                                 </div>
 
-                                {/* Nút Xóa nhóm */}
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleDeleteGroup(g.groupId);
                                   }}
-                                  className="ml-2 inline-flex items-center justify-center rounded-full 
-                     border border-rose-500/70 bg-rose-600/10 text-rose-200 
-                     hover:bg-rose-600/20 px-2 py-[2px] text-[10px]"
+                                  className="ml-2 inline-flex items-center justify-center rounded-full
+          border border-rose-500/70 bg-rose-600/10 text-rose-200
+          hover:bg-rose-600/20 px-2 py-[2px] text-[10px]"
                                 >
                                   Xóa
                                 </button>
                               </div>
                             );
                           })
+
                         )}
 
                       </div>
