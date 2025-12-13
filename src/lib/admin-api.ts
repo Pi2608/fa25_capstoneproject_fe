@@ -1,4 +1,5 @@
 import { getJson, postJson, putJson, delJson, apiFetch } from "./api-core";
+import type { ExportResponse } from "./api-maps";
 
 /* ==================== COMMON ==================== */
 
@@ -372,6 +373,51 @@ export async function adminGetAnalytics(): Promise<AdminAnalytics> {
     active_organizations: Number(payload.active_organizations ?? 0),
     total_revenue: Number(payload.total_revenue ?? 0),
     total_transactions: Number(payload.total_transactions ?? 0),
+  };
+}
+
+/* ==================== EXPORTS ==================== */
+
+export interface GetAllExportsParams extends PageParams {
+  status?: number | null; // 0=Pending, 1=Processing, 2=PendingApproval, 3=Approved, 4=Rejected, 5=Failed
+}
+
+export interface ExportListResponse {
+  exports: ExportResponse[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export async function adminGetAllExports(
+  params: GetAllExportsParams = {}
+): Promise<ExportListResponse> {
+  const sp = new URLSearchParams();
+  
+  // Add pagination params
+  if (params.page !== undefined && params.page !== null) {
+    sp.append("page", String(params.page));
+  }
+  if (params.pageSize !== undefined && params.pageSize !== null) {
+    sp.append("pageSize", String(params.pageSize));
+  }
+  
+  // Add status filter if provided
+  if (params.status !== undefined && params.status !== null) {
+    sp.append("status", String(params.status));
+  }
+  
+  const query = sp.toString() ? `?${sp.toString()}` : "";
+  
+  const res = await getJson<ExportListResponse>(`${ADMIN_BASE}/exports${query}`);
+  
+  return {
+    exports: Array.isArray(res.exports) ? res.exports : [],
+    total: Number(res.total ?? 0),
+    page: Number(res.page ?? 1),
+    pageSize: Number(res.pageSize ?? 20),
+    totalPages: Number(res.totalPages ?? 1),
   };
 }
 

@@ -27,6 +27,7 @@ import {
 import { useQuestionBanksData } from "@/hooks/useQuestionBanksData";
 import { useBankForm } from "@/hooks/useBankForm";
 import { useRowMenu } from "@/hooks/useRowMenu";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 function BankFormDialog({
   isOpen,
@@ -571,11 +572,24 @@ export default function QuestionBanksPage() {
           </div>
 
           {displayBanks.length === 0 ? (
-            <div className={`px-4 py-6 text-sm ${themeClasses.textMuted}`}>
-              {activeTab === "my"
-                ? t("org_question_banks", "empty_my")
-                : t("org_question_banks", "empty_public")}
-            </div>
+            <EmptyState
+              illustration="questions"
+              title={activeTab === "my" ? "No Question Banks Yet" : "No Public Question Banks"}
+              description={
+                activeTab === "my"
+                  ? "Create your first question bank to start building quizzes and assessments for your students. You can organize questions by topic, difficulty, or course."
+                  : "No public question banks are available yet. Create a question bank and mark it as public to share with others."
+              }
+              action={
+                activeTab === "my"
+                  ? {
+                      label: "Create Question Bank",
+                      onClick: bankForm.openCreate,
+                      variant: "default" as const,
+                    }
+                  : undefined
+              }
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
