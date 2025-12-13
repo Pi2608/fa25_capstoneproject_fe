@@ -18,7 +18,6 @@ import {
   MyOrganizationDto,
 } from "@/lib/api-organizations";
 import { getMe, Me } from "@/lib/api-auth";
-import { EmptyState } from "@/components/ui/EmptyState";
 
 type MemberRow = {
   memberId: string;
@@ -859,10 +858,9 @@ export default function MembersPage() {
                   </tr>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      )}
+          </tbody>
+        </table>
+      </div>
 
       {transferTarget && (
         <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
