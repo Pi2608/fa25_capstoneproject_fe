@@ -82,8 +82,8 @@ export type CurrentMembershipDto = {
   orgName: string
   planId: number
   planName: string
-  startDate?: string | null
-  endDate?: string | null
+  billingCycleStartDate: string
+  billingCycleEndDate: string
   status: string
   autoRenew?: boolean
   lastResetDate?: string | null
@@ -194,7 +194,7 @@ export function createOrRenewMembership(payload: {
 
 
 // ===== PAYMENT =====
-export type PaymentGateway = "vnPay" | "payOS" | "stripe" | "payPal";
+export type PaymentGateway = "vnPay" | "payOS" | "payPal";
 export type PaymentPurpose = "membership" | "addon" | "upgrade";
 
 export interface SubscribeRequest {
@@ -236,6 +236,9 @@ export interface UpgradeResponse {
   status: string;
   message: string;
   proRatedAmount?: number;
+  unusedCredit: number;
+  proratedNewPlanCost: number;
+  daysRemaining: number;
   paymentGateway: PaymentGateway;
   qrCode?: string;
   orderCode?: string;
