@@ -191,13 +191,6 @@ export default function WorkspacePage() {
                 ))}
               </select>
             </div>
-            <button
-              onClick={onCreateWorkspace}
-              disabled={!canManage || !selectedOrgId}
-              className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 disabled:opacity-60"
-            >
-              {t("workspaces.btn_add_workspace")}
-            </button>
           </div>
         </div>
 
