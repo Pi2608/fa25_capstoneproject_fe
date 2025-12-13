@@ -779,10 +779,13 @@ export const messages = {
             tabs_usage: "Sử dụng",
             tabs_plans: "Gói",
             tabs_billing: "Thanh toán",
-            tabs_developers: "Nhà phát triển",
             tabs_workspace: "Workspace",
         },
         support: {
+            eyebrow: "Hỗ trợ & Trợ giúp",
+            headline: "Chúng tôi luôn sẵn sàng hỗ trợ",
+            subheadline:
+                "Dù bạn gặp vấn đề kỹ thuật hay cần trợ giúp về tài khoản, đội ngũ của chúng tôi luôn sẵn sàng giúp đỡ.",
             ticketListSubtitle: "Danh sách yêu cầu hỗ trợ",
             createCancel: "Hủy",
             badgeLabel: "Trung tâm trợ giúp",
@@ -1349,6 +1352,9 @@ export const messages = {
             payment_success: "Thanh toán thành công! Gói của bạn đã được kích hoạt.",
             payment_failed: "Thanh toán thất bại. Vui lòng thử lại.",
             payment_cancelled: "Bạn đã hủy thanh toán.",
+            payment_success_title: "Thanh toán thành công",
+            payment_failed_title: "Thanh toán thất bại",
+            close: "Đóng",
 
             // Thông tin gói hiện tại
             current_plan_label: "Gói hiện tại",
@@ -1512,13 +1518,17 @@ export const messages = {
             plan_free: "Miễn phí"
         },
         usage: {
+            organization_info: "Thông tin tổ chức",
+            current_plan: "Gói hiện tại",
+            total_members: "Tổng thành viên",
+            organization_name: "Tên tổ chức",
             title: "Sử dụng",
             organization: "Tổ chức",
             noOrgSelected: "Chưa chọn tổ chức.",
             resetOn: "Làm mới vào",
             period: "Chu kỳ",
             lastReset: "Làm mới lần cuối",
-
+            nextReset: "Làm mới lần tiếp theo",
             limits_overview: "Tổng quan hạn mức",
             limits_checkQuotaPlusOne: "Kiểm tra hạn mức (Bản đồ +1)",
 
@@ -3040,12 +3050,17 @@ export const messages = {
             level_advanced: "Advanced",
         },
         usage: {
+            organization_info: "Organization info",
+            current_plan: "Current plan",
+            total_members: "Total members",
+            organization_name: "Organization name",
             title: "Usage",
             organization: "Organization",
             noOrgSelected: "No organization selected.",
             resetOn: "Resets on",
             period: "Period",
             lastReset: "Last reset",
+            nextReset: "Next reset",
 
             limits_overview: "Quota overview",
             limits_checkQuotaPlusOne: "Check quota (Maps +1)",
@@ -3661,6 +3676,9 @@ export const messages = {
             payment_success: "Payment successful! Your plan has been activated.",
             payment_failed: "Payment failed. Please try again.",
             payment_cancelled: "You cancelled the payment.",
+            payment_success_title: "Payment Successful",
+            payment_failed_title: "Payment Failed",
+            close: "Close",
 
             // Current plan section
             current_plan_label: "Current plan",
@@ -3767,6 +3785,10 @@ export const messages = {
                 "Cannot delete map while it has active sessions. Please end or cancel all active sessions first.",
         },
         support: {
+            eyebrow: "Help & Support",
+            headline: "We're here to help",
+            subheadline:
+                "Browse our help center articles or submit a support ticket.",
             ticketListSubtitle: "Ticket list",
             createCancel: "Cancel",
             badgeLabel: "Help center",
@@ -4054,7 +4076,6 @@ export const messages = {
             tabs_usage: "Usage",
             tabs_plans: "Plans",
             tabs_billing: "Billing",
-            tabs_developers: "Developer",
             tabs_workspace: "Workspace",
         },
         membership: {

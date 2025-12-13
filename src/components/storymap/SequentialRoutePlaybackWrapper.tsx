@@ -76,21 +76,15 @@ function SequentialRoutePlaybackWrapper({
     }).filter((item): item is { anim: RouteAnimationType; routePath: [number, number][] } => item !== null);
   }, [routeAnimations]);
 
-  // Debug logging (throttled to avoid spam)
-  const lastLogTimeRef = useRef<number>(0);
-  
+  // Debug logging - track isPlaying changes
+  const lastIsPlayingRef = useRef<boolean>(false);
+
   useEffect(() => {
-    const now = Date.now();
-    if (now - lastLogTimeRef.current > 2000) { // Only log once per 2 seconds
-      console.log("[SequentialRoutePlaybackWrapper] Props:", {
-        routeAnimationsCount: routeAnimations.length,
-        isPlaying,
-        segmentStartTime,
-        mapExists: !!map,
-      });
-      lastLogTimeRef.current = now;
+    if (isPlaying !== lastIsPlayingRef.current) {
+      console.log(`🎮 [WRAPPER] isPlaying changed: ${lastIsPlayingRef.current} → ${isPlaying} | Routes: ${routeAnimations.length}`);
+      lastIsPlayingRef.current = isPlaying;
     }
-  }, [routeAnimations.length, isPlaying, segmentStartTime, map]);
+  }, [isPlaying, routeAnimations.length]);
 
   return (
     <>

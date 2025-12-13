@@ -52,6 +52,7 @@ export type Segment = {
   layers: SegmentLayer[]; // Backend already includes these
   locations: Location[]; // Backend already includes these (PoiDto)
   storyContent?: StoryContent | string | null;
+  routeAnimations?: any[]; // Optional: RouteAnimation[] - loaded on frontend, defined later in file
 };
 
 export type CreateSegmentRequest = {
