@@ -18,6 +18,7 @@ import {
     type PaymentConfirmationRequest,
     type CancelPaymentRequest,
 } from "@/lib/api-membership";
+import { UpgradeConfirmationModal } from "@/components/membership/UpgradeConfirmationModal";
 import {
     getMyOrganizations,
     type MyOrganizationDto,
@@ -25,7 +26,7 @@ import {
 import { useI18n } from "@/i18n/I18nProvider";
 
 type Banner = { type: "info" | "success" | "error"; text: string } | null;
-type PaymentMethod = "payOS" | "stripe";
+type PaymentMethod = "payOS";
 
 function thongBaoLoi(err: unknown, fallback: string): string {
     if (err instanceof Error) return err.message;
@@ -215,13 +216,18 @@ const PaymentMethodPopup: React.FC<PaymentMethodPopupProps> = ({
     if (!isOpen) return null;
 
     const handleMethodSelect = (method: PaymentMethod) => {
+        console.log("PaymentMethodPopup: Method selected:", method);
         setSelectedMethod(method);
     };
 
     const handleConfirm = () => {
+        console.log("PaymentMethodPopup: Continue clicked, selectedMethod:", selectedMethod);
         if (selectedMethod) {
+            console.log("PaymentMethodPopup: Calling onSelectMethod with:", selectedMethod);
             onSelectMethod(selectedMethod);
             onClose();
+        } else {
+            console.warn("PaymentMethodPopup: No method selected!");
         }
     };
 
@@ -247,26 +253,6 @@ const PaymentMethodPopup: React.FC<PaymentMethodPopupProps> = ({
             ),
             available: true,
             popular: true,
-        },
-        {
-            id: "stripe" as PaymentMethod,
-            name: "Stripe",
-            description: t("plans.stripe_description"),
-            icon: (
-                <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                >
-                    <path
-                        fill="currentColor"
-                        d="M21 6.616v10.769q0 .69-.462 1.153T19.385 19H4.615q-.69 0-1.152-.462T3 17.384V6.616q0-.691.463-1.153T4.615 5h14.77q.69 0 1.152.463T21 6.616M4 8.808h16V6.616q0-.231-.192-.424T19.385 6H4.615q-.23 0-.423.192T4 6.616zm0 2.384v6.193q0 .23.192.423t.423.192h14.77q.23 0 .423-.192t.192-.423v-6.193zM4 18V6z"
-                    />
-                </svg>
-            ),
-            available: true,
-            popular: false,
         },
     ];
 
@@ -310,11 +296,13 @@ const PaymentMethodPopup: React.FC<PaymentMethodPopupProps> = ({
                             width="16"
                             height="16"
                             viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
                         >
-                            <path
-                                fill="currentColor"
-                                d="M6 16h2v2c0 .55.45 1 1 1s1-.45 1-1v-3c0-.55-.45-1-1-1H6c-.55 0-1 .45-1 1s.45 1 1 1m2-8H6c-.55 0-1 .45-1 1s.45 1 1h3c.55 0 1-.45 1-1V6c0-.55-.45-1-1-1s-1 .45-1 1zm7 11c.55 0 1-.45 1-1v-2h2c.55 0 1-.45 1-1s-.45-1-1-1h-3c-.55 0-1 .45-1 1v3c0 .55.45 1 1 1m1-11V6c0-.55-.45-1-1-1s-1 .45-1 1v3c0 .55.45 1 1 1h3c.55 0 1-.45 1-1s-.45-1-1-1z"
-                            />
+                            <path d="M18 6L6 18M6 6l12 12" />
                         </svg>
                     </button>
                 </div>
@@ -481,6 +469,7 @@ export default function TrangGoiThanhVien() {
     const [dangXuLy, setDangXuLy] = useState(false);
     const [banner, setBanner] = useState<Banner>(null);
     const [showPaymentPopup, setShowPaymentPopup] = useState(false);
+    const [showUpgradeModal, setShowUpgradeModal] = useState(false);
     const [selectedPlanForPayment, setSelectedPlanForPayment] = useState<{
         planId: number;
         planName: string;
@@ -611,14 +600,21 @@ export default function TrangGoiThanhVien() {
         console.log({ finalStatus });
 
         if (finalStatus === "success") {
+            // Get the purpose from localStorage (saved when payment was initiated)
+            // Default to "membership" for backward compatibility
+            const savedPurpose = localStorage.getItem("pendingPaymentPurpose") || "membership";
+            console.log("Payment purpose from localStorage:", savedPurpose);
+            
             const req: PaymentConfirmationRequest = {
                 paymentGateway: "payOS",
                 paymentId: paymentId ?? "",
                 orderCode: orderCode ?? "",
-                purpose: "membership",
+                purpose: savedPurpose as "membership" | "upgrade",
                 transactionId,
                 status: "success",
             };
+            
+            console.log("Confirming payment with request:", req);
 
             confirmPayment(req)
                 .then(() => {
@@ -626,6 +622,11 @@ export default function TrangGoiThanhVien() {
                     setPaymentResultPopup(popupData);
                     // Save popup data to localStorage for re-renders
                     localStorage.setItem(popupDataKey, JSON.stringify(popupData));
+
+                    // Cleanup payment-related localStorage items
+                    localStorage.removeItem("pendingPaymentOrgId");
+                    localStorage.removeItem("pendingPaymentPlanId");
+                    localStorage.removeItem("pendingPaymentPurpose");
 
                     if (orgId) {
                         getMyMembership(orgId)
@@ -733,57 +734,131 @@ export default function TrangGoiThanhVien() {
         isUpgrade: boolean
     ) {
         setSelectedPlanForPayment({ planId, planName, price, isUpgrade });
-        setShowPaymentPopup(true);
+        // For upgrades, show confirmation modal first; for new subscriptions, show payment method popup directly
+        if (isUpgrade && membership) {
+            setShowUpgradeModal(true);
+        } else {
+            setShowPaymentPopup(true);
+        }
+    }
+
+    async function handleConfirmUpgrade() {
+        console.log("=== handleConfirmUpgrade START ===");
+        console.log("me:", me);
+        console.log("orgId:", orgId);
+        console.log("selectedPlanForPayment:", selectedPlanForPayment);
+        console.log("membership:", membership);
+        
+        if (!me || !orgId || !selectedPlanForPayment || !membership) {
+            console.error("Missing required data in handleConfirmUpgrade");
+            return;
+        }
+        
+        // Close upgrade modal and show payment method popup
+        // IMPORTANT: Don't clear selectedPlanForPayment here - we need it for the payment popup
+        console.log("Closing upgrade modal and opening payment popup");
+        setShowUpgradeModal(false);
+        // Use setTimeout to ensure modal closes before opening payment popup
+        setTimeout(() => {
+            setShowPaymentPopup(true);
+        }, 100);
+        console.log("=== handleConfirmUpgrade END ===");
     }
 
     async function handlePaymentMethodSelected(method: PaymentMethod) {
-        if (!me || !orgId || !selectedPlanForPayment) return;
+        console.log("=== handlePaymentMethodSelected START ===");
+        console.log("Method:", method);
+        console.log("Selected plan:", selectedPlanForPayment);
+        console.log("Membership:", membership);
+        console.log("User:", me);
+        console.log("OrgId:", orgId);
+
+        if (!me || !orgId || !selectedPlanForPayment) {
+            console.error("Missing required data:", { me: !!me, orgId: !!orgId, selectedPlanForPayment: !!selectedPlanForPayment });
+            return;
+        }
+
         setDangXuLy(true);
         setBanner(null);
         setShowPaymentPopup(false);
 
         try {
+            console.log("Making API call...");
             let res;
             if (selectedPlanForPayment.isUpgrade && membership) {
-                res = await upgradePlan({
+                const upgradeRequest = {
                     userId: me.userId,
                     orgId,
                     newPlanId: selectedPlanForPayment.planId,
                     paymentMethod: method,
                     autoRenew: true,
-                });
+                };
+                console.log("Upgrade request:", upgradeRequest);
+                res = await upgradePlan(upgradeRequest);
             } else {
-                res = await subscribeToPlan({
+                const subscribeRequest = {
                     userId: me.userId,
                     orgId,
                     planId: selectedPlanForPayment.planId,
                     paymentMethod: method,
                     autoRenew: true,
-                });
+                };
+                console.log("Subscribe request:", subscribeRequest);
+                res = await subscribeToPlan(subscribeRequest);
             }
 
-            if (res.paymentUrl) {
-                // Save orgId to localStorage to restore after payment redirect
+            // Debug logging
+            console.log("=== API RESPONSE ===");
+            console.log("Full response:", JSON.stringify(res, null, 2));
+            console.log("Payment URL:", res.paymentUrl);
+            console.log("Status:", res.status);
+            console.log("Message:", res.message);
+
+            // Check if we have a valid payment URL
+            if (res.paymentUrl && res.paymentUrl.trim() !== "") {
+                console.log("Redirecting to payment URL:", res.paymentUrl);
+                // Save orgId and purpose to localStorage to restore after payment redirect
                 localStorage.setItem("pendingPaymentOrgId", orgId);
                 localStorage.setItem("pendingPaymentPlanId", String(selectedPlanForPayment.planId));
+                // Store the purpose (membership or upgrade) so we can use it when confirming payment
+                const purpose = selectedPlanForPayment.isUpgrade ? "upgrade" : "membership";
+                localStorage.setItem("pendingPaymentPurpose", purpose);
+                console.log("Saved payment purpose:", purpose);
                 window.location.href = res.paymentUrl;
                 return;
             }
 
+            // If no payment URL but status is pending, there's an issue
+            if (res.status === "pending" && !res.paymentUrl) {
+                console.error("Payment gateway did not return a payment URL");
+                setBanner({
+                    type: "error",
+                    text: res.message || "Payment gateway did not return a payment URL. Please try again or contact support.",
+                });
+                return;
+            }
+
+            // Success case (shouldn't happen for upgrades, but handle it)
+            console.log("No payment URL, showing success message");
             setBanner({
                 type: "success",
-                text: selectedPlanForPayment.isUpgrade
+                text: res.message || (selectedPlanForPayment.isUpgrade
                     ? t("plans.upgrade_success")
-                    : t("plans.subscribe_success"),
+                    : t("plans.subscribe_success")),
             });
             const m = await getMyMembership(orgId);
             setMembership(m);
         } catch (e) {
+            console.error("=== PAYMENT ERROR ===");
+            console.error("Error object:", e);
+            console.error("Error message:", e instanceof Error ? e.message : String(e));
+            console.error("Error stack:", e instanceof Error ? e.stack : "No stack trace");
             setBanner({
                 type: "error",
                 text: thongBaoLoi(e, t("plans.error_generic")),
             });
         } finally {
+            console.log("=== handlePaymentMethodSelected END ===");
             setDangXuLy(false);
             setSelectedPlanForPayment(null);
         }
@@ -901,18 +976,16 @@ export default function TrangGoiThanhVien() {
                                                 {membership.status}
                                             </span>
                                         </div>
-                                        {membership.endDate && (
-                                            <div>
-                                                {t(
-                                                    "plans.end_date_label"
-                                                )}{" "}
-                                                <span className="font-medium">
-                                                    {formatDateVN(
-                                                        membership.endDate
-                                                    )}
-                                                </span>
-                                            </div>
-                                        )}
+                                        <div>
+                                            {t(
+                                                "plans.billing_cycle_end_label"
+                                            )}{" "}
+                                            <span className="font-medium">
+                                                {formatDateVN(
+                                                    membership.billingCycleEndDate
+                                                )}
+                                            </span>
+                                        </div>
                                         <div>
                                             {t(
                                                 "plans.auto_renew_label"
@@ -1154,6 +1227,31 @@ export default function TrangGoiThanhVien() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Upgrade Confirmation Modal */}
+            {selectedPlanForPayment?.isUpgrade && membership && membership.billingCycleStartDate && membership.billingCycleEndDate && (
+                <UpgradeConfirmationModal
+                    open={showUpgradeModal}
+                    onOpenChange={(open) => {
+                        setShowUpgradeModal(open);
+                        // Don't clear selectedPlanForPayment here - it will be cleared when payment popup closes
+                        // This allows the payment popup to access the selected plan data
+                    }}
+                    currentPlan={{
+                        id: membership.planId,
+                        name: membership.planName,
+                        price: danhSachPlan.find(p => p.planId === membership.planId)?.priceMonthly ?? 0,
+                    }}
+                    newPlan={{
+                        id: selectedPlanForPayment.planId,
+                        name: selectedPlanForPayment.planName,
+                        price: selectedPlanForPayment.price,
+                    }}
+                    billingCycleStartDate={new Date(membership.billingCycleStartDate)}
+                    billingCycleEndDate={new Date(membership.billingCycleEndDate)}
+                    onConfirmUpgrade={handleConfirmUpgrade}
+                />
             )}
 
             {/* Payment Method Popup */}

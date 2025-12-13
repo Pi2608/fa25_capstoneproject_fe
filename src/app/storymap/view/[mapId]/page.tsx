@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { getSegments, type Segment } from "@/lib/api-storymap";
 import { getMapDetail } from "@/lib/api-maps";
@@ -129,6 +129,10 @@ export default function StoryMapViewPage() {
   const [groupWorkContent, setGroupWorkContent] = useState("");
   const [groupChatInput, setGroupChatInput] = useState("");
   const [groupSubmitting, setGroupSubmitting] = useState(false);
+  const viewStateRef = useRef<ViewState>("waiting");
+  useEffect(() => {
+    viewStateRef.current = viewState;
+  }, [viewState]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -239,7 +243,20 @@ export default function StoryMapViewPage() {
           );
         });
 
-        setSessionGroups(myGroup ? [myGroup] : []);
+        const normalizedMyGroup = myGroup
+          ? {
+            ...myGroup,
+            name:
+              myGroup.groupName ??
+              myGroup.name ??
+              myGroup.groupTitle ??
+              myGroup.title ??
+              "",
+          }
+          : null;
+
+        setSessionGroups(normalizedMyGroup ? [normalizedMyGroup] : []);
+
       } catch (e) {
         console.error("[GroupCollab][View] Load groups failed:", e);
       }
@@ -347,11 +364,10 @@ export default function StoryMapViewPage() {
         setIsTeacherPlaying(shouldPlay);
       }
 
-      if (viewState === "waiting") {
+      if (viewStateRef.current === "waiting") {
         setViewState("viewing");
       }
     },
-    [viewState, mapId]
   );
 
   const handleQuestionBroadcast = useCallback((event: QuestionBroadcastEvent) => {
@@ -421,10 +437,8 @@ export default function StoryMapViewPage() {
 
   }, []);
 
-  const { connection, isConnected } = useSessionHub({
-    sessionId: sessionId,
-    enabled: !!sessionId,
-    handlers: {
+  const sessionHubHandlers = useMemo(
+    () => ({
       onJoinedSession: handleJoinedSession,
       onSessionStatusChanged: handleSessionStatusChanged,
       onSegmentSync: handleSegmentSync,
@@ -432,7 +446,22 @@ export default function StoryMapViewPage() {
       onQuestionResults: handleQuestionResults,
       onSessionEnded: handleSessionEnded,
       onMapLayerSync: handleMapLayerSync,
-    },
+    }),
+    [
+      handleJoinedSession,
+      handleSessionStatusChanged,
+      handleSegmentSync,
+      handleQuestionBroadcast,
+      handleQuestionResults,
+      handleSessionEnded,
+      handleMapLayerSync,
+    ]
+  );
+
+  const { connection, isConnected } = useSessionHub({
+    sessionId,
+    enabled: !!sessionId && !!participantId,
+    handlers: sessionHubHandlers,
   });
 
   useEffect(() => {
@@ -464,13 +493,21 @@ export default function StoryMapViewPage() {
             null,
         };
 
-        setSessionGroups((prev) => {
-          if (prev.some((g) => (g as any).groupId === (normalized as any).groupId)) {
-            return prev;
-          }
-          return [...prev, normalized];
-        });
+        const members: any[] = Array.isArray(anyGroup.members)
+          ? anyGroup.members
+          : Array.isArray(anyGroup.groupMembers)
+            ? anyGroup.groupMembers
+            : [];
+
+        const isMine = members.some(
+          (m: any) => (m.sessionParticipantId ?? m.participantId ?? m.id) === participantId
+        );
+
+        if (!isMine) return;
+
+        setSessionGroups([normalized]);
       },
+
       onMessageReceived: (msg: GroupChatMessage) => {
         setGroupMessages((prev) => [...prev, msg]);
       },
@@ -1161,7 +1198,7 @@ export default function StoryMapViewPage() {
             type="button"
             onClick={handleLeaveSession}
             disabled={isLeaving}
-            className="w-full inline-flex items-center justify-center rounded-lg px-3 py-2 text-[13px] font-semibold border border-rose-500/60 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full inline-flex items-center justify-center rounded-lg px-3 py-2 text-[13px] font-bold border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-400 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isLeaving ? "Đang rời..." : "Rời tiết học"}
           </button>
@@ -1238,13 +1275,21 @@ export default function StoryMapViewPage() {
                     type="button"
                     onClick={() => handleJoinGroup(groupId)}
                     className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-[12px] border ${currentGroupId === groupId
-                      ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-800 font-semibold"
                       : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
                       }`}
+
                   >
-                    <span className="truncate">
-                      {g.name || `Nhóm ${idx + 1}`}
-                    </span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: g.color ?? "#71717a" }}
+                        title={g.color ?? ""}
+                      />
+                      <span className="truncate">
+                        {g.groupName ?? g.name ?? `Nhóm ${idx + 1}`}
+                      </span>
+                    </div>
 
                     {typeof currentCount === "number" &&
                       typeof maxMembers === "number" && (

@@ -1,15 +1,19 @@
 import * as signalR from "@microsoft/signalr";
 import { getToken } from "../api-core";
-import { isTokenValid, createBaseConnection, API_BASE_URL } from "./base";
+import { API_BASE_URL } from "./base";
+
+// ===================== DTOs / Payloads =====================
 
 export interface GroupDto {
-  id?: string;                      
-  groupId?: string;                  
+  id?: string;
+  groupId?: string;
   sessionId: string;
   name: string;
+  groupName?: string;
+  color?: string | null;
   maxMembers?: number | null;
   currentMembers?: number | null;
-  currentMembersCount?: number | null; 
+  currentMembersCount?: number | null;
   [key: string]: unknown;
 }
 
@@ -17,13 +21,13 @@ export interface GroupSubmissionDto {
   id: string;
   groupId: string;
   sessionId: string;
-  submittedByUserId?: string | null;
+  submittedByParticipantId: string;
+  payloadJson?: string | null;
   submittedAt: string;
-  content?: unknown;
   [key: string]: unknown;
 }
 
-export interface GroupGradedSubmissionDto {
+export interface GroupSubmissionGradedDto {
   id: string;
   groupId: string;
   sessionId: string;
@@ -41,101 +45,182 @@ export interface GroupChatMessage {
   [key: string]: unknown;
 }
 
+// Backend NotifyTyping emits: { userName, isTyping }
 export interface GroupTypingEvent {
   userName: string;
   isTyping: boolean;
-}
-
-export interface CreateGroupRequestPayload {
-  sessionId: string;
-  groupName: string;
-  color?: string;
-  memberParticipantIds: string[];
-  leaderParticipantId?: string | null;
   [key: string]: unknown;
 }
 
-export interface SubmitGroupWorkRequestPayload {
-  groupId: string;
-  sessionId: string;
-  content: unknown;
-  [key: string]: unknown;
-}
+// Backend DrawingReceived / CursorMoved emit the raw object you send
+export type DrawingData = unknown;
+export type CursorData = unknown;
 
-export interface GradeSubmissionRequestPayload {
-  submissionId: string;
-  score: number;
-  feedback?: string;
-  [key: string]: unknown;
-}
-
-export interface GroupCollaborationEventHandlers {
+export interface GroupCollaborationHandlers {
   onGroupCreated?: (group: GroupDto) => void;
   onWorkSubmitted?: (submission: GroupSubmissionDto) => void;
+
+  // Backend sends "SubmissionConfirmed" with the SAME object as submission
   onSubmissionConfirmed?: (submission: GroupSubmissionDto) => void;
-  onSubmissionGraded?: (gradedSubmission: GroupGradedSubmissionDto) => void;
-  onDrawingReceived?: (drawingData: unknown) => void;
-  onCursorMoved?: (cursorData: unknown) => void;
+
+  onSubmissionGraded?: (payload: GroupSubmissionGradedDto) => void;
+  onDrawingReceived?: (drawingData: DrawingData) => void;
+  onCursorMoved?: (cursorData: CursorData) => void;
   onMessageReceived?: (message: GroupChatMessage) => void;
   onMemberTyping?: (event: GroupTypingEvent) => void;
   onError?: (error: unknown) => void;
 }
 
-export function createGroupCollaborationConnection(
-  tokenOverride?: string
-): signalR.HubConnection | null {
+// ===================== Requests =====================
+
+export interface CreateGroupRequest {
+  sessionId: string;
+  groupName: string;
+  color?: string | null;
+  memberParticipantIds?: string[];
+  leaderParticipantId?: string | null;
+  [key: string]: unknown;
+}
+
+export interface SubmitGroupWorkRequest {
+  groupId: string;
+  sessionId?: string;
+  submittedByParticipantId?: string;
+  payloadJson?: string | null;
+  [key: string]: unknown;
+}
+
+export interface GradeSubmissionRequest {
+  [key: string]: unknown;
+}
+
+// ===================== Auth helpers =====================
+
+function safeAtob(input: string): string {
+  try {
+    // Browser
+    if (typeof window !== "undefined" && typeof window.atob === "function") {
+      return window.atob(input);
+    }
+
+    const B: any = (globalThis as any).Buffer;
+    if (B) return B.from(input, "base64").toString("utf8");
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+export function isTokenValid(token: string): boolean {
+  if (!token || token.trim().length === 0) return false;
+
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return false;
+
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const json = safeAtob(b64);
+    if (!json) return true;
+
+    const payload = JSON.parse(json) as { exp?: number };
+    if (!payload.exp) return true;
+
+    const now = Math.floor(Date.now() / 1000);
+    return payload.exp > now;
+  } catch {
+    return false;
+  }
+}
+
+// ===================== Connection =====================
+
+function resolveHubUrl(): string | null {
   if (!API_BASE_URL) {
     console.error("[SignalR GroupCollaboration] Missing API_BASE_URL");
     return null;
   }
-
-  let authToken = (tokenOverride ?? getToken() ?? "").trim();
-
-  if (!authToken) {
-    console.error(
-      "[SignalR GroupCollaboration] Missing auth token. GroupCollaborationHub requires an access token."
-    );
-    return null;
-  }
-
-  if (!isTokenValid(authToken)) {
-    console.error(
-      "[SignalR GroupCollaboration] Auth token is invalid or expired. Please login again."
-    );
-    return null;
-  }
-
   const baseUrl = API_BASE_URL.replace(/\/$/, "");
-  const hubUrl = `${baseUrl}/hubs/groupCollaboration`;
+  return `${baseUrl}/hubs/groupCollaboration`;
+}
 
-  return createBaseConnection(hubUrl, {
-    token: authToken,
-    allowGuest: false,
-    onClose: (error) => {
-      console.error(
-        "[SignalR GroupCollaboration] Connection closed with error:",
-        error
-      );
-    },
-    onReconnecting: (error) => {
-      console.warn("[SignalR GroupCollaboration] Reconnecting.", error);
-    },
-    onReconnected: (connectionId) => {
-      console.info(
-        "[SignalR GroupCollaboration] Reconnected, connectionId=",
-        connectionId
-      );
-    },
-  });
+function buildConnection(token?: string): signalR.HubConnection | null {
+  const hubUrl = resolveHubUrl();
+  if (!hubUrl) return null;
+
+  const conn = new signalR.HubConnectionBuilder()
+    .withUrl(
+      hubUrl,
+      token ? { accessTokenFactory: () => token } : undefined
+    )
+    .withAutomaticReconnect()
+    .configureLogging(signalR.LogLevel.Information)
+    .build();
+
+  return conn;
+}
+
+/**
+ * VIEW (participants): guest connection, NO token.
+ */
+export function createGroupCollaborationViewConnection(): signalR.HubConnection | null {
+  return buildConnection(undefined);
+}
+
+/**
+ * CONTROL (teacher): authenticated connection, MUST have token.
+ */
+export function createGroupCollaborationControlConnection(
+  tokenOverride?: string | null
+): signalR.HubConnection | null {
+  const token = (tokenOverride ?? getToken() ?? "").trim();
+
+  if (!token) {
+    console.error(
+      "[SignalR GroupCollaboration][Control] Missing auth token."
+    );
+    return null;
+  }
+
+  if (!isTokenValid(token)) {
+    console.error(
+      "[SignalR GroupCollaboration][Control] Auth token invalid/expired."
+    );
+    return null;
+  }
+
+  return buildConnection(token);
+}
+
+/**
+ * Backward-compatible:
+ * - Nếu truyền token => coi như CONTROL connection
+ * - Nếu không truyền token => coi như VIEW connection (guest)
+ */
+export function createGroupCollaborationConnection(
+  tokenOverride?: string | null
+): signalR.HubConnection | null {
+  const t = (tokenOverride ?? "").trim();
+  if (t) return createGroupCollaborationControlConnection(t);
+  return createGroupCollaborationViewConnection();
+}
+
+export async function stopGroupCollaborationConnection(
+  connection: signalR.HubConnection
+): Promise<void> {
+  try {
+    if (connection.state !== signalR.HubConnectionState.Disconnected) {
+      await connection.stop();
+    }
+  } catch (error) {
+    console.error("[SignalR GroupCollaboration] Failed to stop:", error);
+  }
 }
 
 export async function startGroupCollaborationConnection(
   connection: signalR.HubConnection
 ): Promise<boolean> {
   try {
-    if (connection.state === signalR.HubConnectionState.Connected) {
-      return true;
-    }
+    if (connection.state === signalR.HubConnectionState.Connected) return true;
 
     if (connection.state !== signalR.HubConnectionState.Disconnected) {
       console.warn(
@@ -148,42 +233,27 @@ export async function startGroupCollaborationConnection(
     await connection.start();
     return true;
   } catch (error) {
-    console.error(
-      "[SignalR GroupCollaboration] Failed to start connection:",
-      error
-    );
+    console.error("[SignalR GroupCollaboration] Failed to start:", error);
     return false;
   }
 }
 
-export async function stopGroupCollaborationConnection(
-  connection: signalR.HubConnection
-): Promise<void> {
-  try {
-    if (connection.state !== signalR.HubConnectionState.Disconnected) {
-      await connection.stop();
-    }
-  } catch (error) {
-    console.error(
-      "[SignalR GroupCollaboration] Failed to stop connection:",
-      error
-    );
-  }
+function isConnected(connection: signalR.HubConnection): boolean {
+  return connection.state === signalR.HubConnectionState.Connected;
 }
+
+// ===================== Session / Group join-leave =====================
 
 export async function joinGroupCollaborationSession(
   connection: signalR.HubConnection,
   sessionId: string
 ): Promise<void> {
   try {
-    if (connection.state === signalR.HubConnectionState.Connected) {
+    if (isConnected(connection)) {
       await connection.invoke("JoinSession", sessionId);
     }
   } catch (error) {
-    console.error(
-      "[SignalR GroupCollaboration] Failed to JoinSession:",
-      error
-    );
+    console.error("[SignalR GroupCollaboration] Failed JoinSession:", error);
   }
 }
 
@@ -192,14 +262,11 @@ export async function leaveGroupCollaborationSession(
   sessionId: string
 ): Promise<void> {
   try {
-    if (connection.state === signalR.HubConnectionState.Connected) {
+    if (isConnected(connection)) {
       await connection.invoke("LeaveSession", sessionId);
     }
   } catch (error) {
-    console.error(
-      "[SignalR GroupCollaboration] Failed to LeaveSession:",
-      error
-    );
+    console.error("[SignalR GroupCollaboration] Failed LeaveSession:", error);
   }
 }
 
@@ -208,14 +275,11 @@ export async function joinGroupCollaborationGroup(
   groupId: string
 ): Promise<void> {
   try {
-    if (connection.state === signalR.HubConnectionState.Connected) {
+    if (isConnected(connection)) {
       await connection.invoke("JoinGroup", groupId);
     }
   } catch (error) {
-    console.error(
-      "[SignalR GroupCollaboration] Failed to JoinGroup:",
-      error
-    );
+    console.error("[SignalR GroupCollaboration] Failed JoinGroup:", error);
   }
 }
 
@@ -224,112 +288,107 @@ export async function leaveGroupCollaborationGroup(
   groupId: string
 ): Promise<void> {
   try {
-    if (connection.state === signalR.HubConnectionState.Connected) {
+    if (isConnected(connection)) {
       await connection.invoke("LeaveGroup", groupId);
     }
   } catch (error) {
-    console.error(
-      "[SignalR GroupCollaboration] Failed to LeaveGroup:",
-      error
-    );
+    console.error("[SignalR GroupCollaboration] Failed LeaveGroup:", error);
   }
 }
 
-export async function createGroupViaSignalR(
+// ===================== Hub methods (match backend) =====================
+
+export async function createGroup(
   connection: signalR.HubConnection,
-  payload: CreateGroupRequestPayload
+  payload: CreateGroupRequest
 ): Promise<boolean> {
   try {
-    if (connection.state !== signalR.HubConnectionState.Connected) {
-      console.error(
-        "[SignalR GroupCollaboration] Connection not connected for CreateGroup"
+    if (!isConnected(connection)) {
+      console.warn(
+        "[SignalR GroupCollaboration] CreateGroup called but not connected."
       );
       return false;
     }
 
     await connection.invoke("CreateGroup", {
-      SessionId: payload.sessionId,
-      GroupName: payload.groupName,
-      Color: payload.color ?? null,
-      MemberParticipantIds: payload.memberParticipantIds ?? [],
-      LeaderParticipantId: payload.leaderParticipantId ?? null,
+      sessionId: payload.sessionId,
+      groupName: payload.groupName,
+      color: payload.color ?? null,
+      memberParticipantIds: payload.memberParticipantIds ?? [],
+      leaderParticipantId: payload.leaderParticipantId ?? null,
+      ...payload,
     });
 
     return true;
   } catch (error) {
-    console.error("[SignalR GroupCollaboration] Failed to CreateGroup:", error);
+    console.error("[SignalR GroupCollaboration] Failed CreateGroup:", error);
     return false;
   }
 }
 
-
-export async function submitGroupWorkViaSignalR(
+export async function submitGroupWork(
   connection: signalR.HubConnection,
-  payload: SubmitGroupWorkRequestPayload
+  payload: SubmitGroupWorkRequest
 ): Promise<boolean> {
   try {
-    if (connection.state !== signalR.HubConnectionState.Connected) {
+    if (!isConnected(connection)) {
+      console.warn(
+        "[SignalR GroupCollaboration] SubmitGroupWork called but not connected."
+      );
+      return false;
+    }
+
+    if (!payload?.groupId) {
       console.error(
-        "[SignalR GroupCollaboration] Connection not connected for SubmitGroupWork"
+        "[SignalR GroupCollaboration] SubmitGroupWork missing groupId."
       );
       return false;
     }
 
     await connection.invoke("SubmitGroupWork", {
-      GroupId: payload.groupId,
-      SessionId: payload.sessionId,
-      Content: payload.content,
       ...payload,
     });
 
     return true;
   } catch (error) {
-    console.error(
-      "[SignalR GroupCollaboration] Failed to SubmitGroupWork:",
-      error
-    );
+    console.error("[SignalR GroupCollaboration] Failed SubmitGroupWork:", error);
     return false;
   }
 }
 
-export async function gradeSubmissionViaSignalR(
+export async function gradeSubmission(
   connection: signalR.HubConnection,
-  payload: GradeSubmissionRequestPayload
+  payload: GradeSubmissionRequest
 ): Promise<boolean> {
   try {
-    if (connection.state !== signalR.HubConnectionState.Connected) {
-      console.error(
-        "[SignalR GroupCollaboration] Connection not connected for GradeSubmission"
+    if (!isConnected(connection)) {
+      console.warn(
+        "[SignalR GroupCollaboration] GradeSubmission called but not connected."
       );
       return false;
     }
 
     await connection.invoke("GradeSubmission", {
-      SubmissionId: payload.submissionId,
-      Score: payload.score,
-      Feedback: payload.feedback ?? null,
       ...payload,
     });
 
     return true;
   } catch (error) {
-    console.error(
-      "[SignalR GroupCollaboration] Failed to GradeSubmission:",
-      error
-    );
+    console.error("[SignalR GroupCollaboration] Failed GradeSubmission:", error);
     return false;
   }
 }
 
-export async function sendDrawingViaSignalR(
+// Backend: SendDrawing(Guid groupId, object drawingData)
+export async function sendDrawing(
   connection: signalR.HubConnection,
   groupId: string,
-  drawingData: unknown
+  drawingData: DrawingData
 ): Promise<boolean> {
   try {
-    if (connection.state !== signalR.HubConnectionState.Connected) {
-      console.error(
-        "[SignalR GroupCollaboration] Connection not connected for SendDrawing"
+    if (!isConnected(connection)) {
+      console.warn(
+        "[SignalR GroupCollaboration] SendDrawing called but not connected."
       );
       return false;
     }
@@ -337,23 +396,21 @@ export async function sendDrawingViaSignalR(
     await connection.invoke("SendDrawing", groupId, drawingData);
     return true;
   } catch (error) {
-    console.error(
-      "[SignalR GroupCollaboration] Failed to SendDrawing:",
-      error
-    );
+    console.error("[SignalR GroupCollaboration] Failed SendDrawing:", error);
     return false;
   }
 }
 
-export async function sendCursorPositionViaSignalR(
+// Backend: SendCursorPosition(Guid groupId, object cursorData)
+export async function sendCursorPosition(
   connection: signalR.HubConnection,
   groupId: string,
-  cursorData: unknown
+  cursorData: CursorData
 ): Promise<boolean> {
   try {
-    if (connection.state !== signalR.HubConnectionState.Connected) {
-      console.error(
-        "[SignalR GroupCollaboration] Connection not connected for SendCursorPosition"
+    if (!isConnected(connection)) {
+      console.warn(
+        "[SignalR GroupCollaboration] SendCursorPosition called but not connected."
       );
       return false;
     }
@@ -362,97 +419,141 @@ export async function sendCursorPositionViaSignalR(
     return true;
   } catch (error) {
     console.error(
-      "[SignalR GroupCollaboration] Failed to SendCursorPosition:",
+      "[SignalR GroupCollaboration] Failed SendCursorPosition:",
       error
     );
     return false;
   }
 }
 
-export async function sendMessageViaSignalR(
+// Backend: SendMessage(Guid groupId, string message)
+export async function sendMessage(
   connection: signalR.HubConnection,
   groupId: string,
   message: string
 ): Promise<boolean> {
   try {
-    if (connection.state !== signalR.HubConnectionState.Connected) {
-      console.error(
-        "[SignalR GroupCollaboration] Connection not connected for SendMessage"
+    if (!isConnected(connection)) {
+      console.warn(
+        "[SignalR GroupCollaboration] SendMessage called but not connected."
       );
+      return false;
+    }
+
+    if (!groupId) {
+      console.error("[SignalR GroupCollaboration] SendMessage missing groupId.");
       return false;
     }
 
     await connection.invoke("SendMessage", groupId, message);
     return true;
   } catch (error) {
-    console.error(
-      "[SignalR GroupCollaboration] Failed to SendMessage:",
-      error
-    );
+    console.error("[SignalR GroupCollaboration] Failed SendMessage:", error);
     return false;
   }
 }
 
-export async function notifyTypingViaSignalR(
+// Backend: NotifyTyping(Guid groupId, bool isTyping)
+export async function notifyTyping(
   connection: signalR.HubConnection,
   groupId: string,
   isTyping: boolean
 ): Promise<boolean> {
   try {
-    if (connection.state !== signalR.HubConnectionState.Connected) {
-      console.error(
-        "[SignalR GroupCollaboration] Connection not connected for NotifyTyping"
-      );
+    if (!isConnected(connection)) {
+      return false;
+    }
+
+    if (!groupId) {
+      console.error("[SignalR GroupCollaboration] NotifyTyping missing groupId.");
       return false;
     }
 
     await connection.invoke("NotifyTyping", groupId, isTyping);
     return true;
   } catch (error) {
-    console.error(
-      "[SignalR GroupCollaboration] Failed to NotifyTyping:",
-      error
-    );
+    console.error("[SignalR GroupCollaboration] Failed NotifyTyping:", error);
     return false;
   }
 }
 
+// ===================== Backward-compat wrappers (optional) =====================
+
+// Old name in your FE: submitWork -> map to SubmitGroupWork
+export async function submitWork(
+  connection: signalR.HubConnection,
+  payload: Record<string, unknown>
+): Promise<boolean> {
+  return submitGroupWork(connection, payload as SubmitGroupWorkRequest);
+}
+
+// Old name in your FE: moveCursor(payload) -> map to SendCursorPosition(groupId, cursorData)
+export async function moveCursor(
+  connection: signalR.HubConnection,
+  payload: { groupId?: string; [key: string]: unknown }
+): Promise<boolean> {
+  const groupId = payload?.groupId;
+  if (!groupId) {
+    console.error("[SignalR GroupCollaboration] moveCursor missing groupId.");
+    return false;
+  }
+  return sendCursorPosition(connection, groupId, payload);
+}
+
+// Old name in your FE: setTyping(isTyping) -> backend requires groupId.
+export async function setTyping(
+  connection: signalR.HubConnection,
+  isTyping: boolean,
+  groupId?: string
+): Promise<boolean> {
+  if (!groupId) {
+    console.error(
+      "[SignalR GroupCollaboration] setTyping now needs groupId. Use notifyTyping(connection, groupId, isTyping)."
+    );
+    return false;
+  }
+  return notifyTyping(connection, groupId, isTyping);
+}
+
+// Backend does NOT have ConfirmSubmission hub method.
+// Keep it to avoid build break if call-site still exists.
+export async function confirmSubmission(): Promise<boolean> {
+  console.error(
+    "[SignalR GroupCollaboration] confirmSubmission is not supported by backend hub."
+  );
+  return false;
+}
+
+// ===================== Event handlers =====================
+
 export function registerGroupCollaborationEventHandlers(
   connection: signalR.HubConnection,
-  handlers: GroupCollaborationEventHandlers
+  handlers: GroupCollaborationHandlers
 ): void {
   if (handlers.onGroupCreated) {
     connection.on("GroupCreated", handlers.onGroupCreated);
   }
-
   if (handlers.onWorkSubmitted) {
     connection.on("WorkSubmitted", handlers.onWorkSubmitted);
   }
-
   if (handlers.onSubmissionConfirmed) {
     connection.on("SubmissionConfirmed", handlers.onSubmissionConfirmed);
   }
-
   if (handlers.onSubmissionGraded) {
     connection.on("SubmissionGraded", handlers.onSubmissionGraded);
   }
-
   if (handlers.onDrawingReceived) {
     connection.on("DrawingReceived", handlers.onDrawingReceived);
   }
-
   if (handlers.onCursorMoved) {
     connection.on("CursorMoved", handlers.onCursorMoved);
   }
-
   if (handlers.onMessageReceived) {
     connection.on("MessageReceived", handlers.onMessageReceived);
   }
-
   if (handlers.onMemberTyping) {
     connection.on("MemberTyping", handlers.onMemberTyping);
   }
-
   if (handlers.onError) {
     connection.on("Error", handlers.onError);
   }

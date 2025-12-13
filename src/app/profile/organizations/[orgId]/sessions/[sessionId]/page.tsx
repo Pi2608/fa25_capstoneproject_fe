@@ -8,6 +8,7 @@ import {
   type SessionDto,
   type LeaderboardEntryDto,
 } from "@/lib/api-ques";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 type HeaderMode = "light" | "dark";
 
@@ -351,6 +352,24 @@ export default function OrgSessionDetailPage() {
               <p className="mt-3 text-xs text-red-500 dark:text-red-300">
                 {leaderboardError}
               </p>
+            )}
+
+            {!leaderboardLoading && leaderboard && leaderboard.length === 0 && (
+              <div className="mt-4">
+                <EmptyState
+                  illustration="winners"
+                  title="No Participants Yet"
+                  description="No students have joined this session yet. Share the session code with your students to get started."
+                  action={{
+                    label: "Copy Session Code",
+                    onClick: () => {
+                      if (session?.sessionCode) {
+                        navigator.clipboard.writeText(session.sessionCode);
+                      }
+                    },
+                  }}
+                />
+              </div>
             )}
 
             {leaderboard && leaderboard.length > 0 && (
