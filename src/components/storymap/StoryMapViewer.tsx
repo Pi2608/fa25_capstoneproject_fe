@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import "leaflet/dist/leaflet.css";
 import type { TileLayer } from "leaflet";
 import type { MapWithPM } from "@/types";
 import { useSegmentPlayback } from "@/hooks/useSegmentPlayback";
