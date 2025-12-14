@@ -958,6 +958,32 @@ export default function StoryMapControlPage() {
     }
   };
 
+  const broadcastQuestionAtIndex = async (index: number) => {
+    if (!session || !connection) return;
+    const q = questions[index];
+    if (!q) return;
+
+    setCurrentQuestionIndex(index);
+    setCurrentQuestionResults(null);
+    setShowStudentAnswers(false);
+
+    await broadcastQuestionViaSignalR(connection, session.sessionId, {
+      sessionQuestionId: q.sessionQuestionId ?? q.questionId,
+      questionId: q.questionId,
+      questionText: q.questionText,
+      questionType: q.questionType,
+      questionImageUrl: q.questionImageUrl ?? undefined,
+      options: q.options?.map((opt) => ({
+        id: opt.questionOptionId,
+        optionText: opt.optionText,
+        optionImageUrl: opt.optionImageUrl ?? undefined,
+        displayOrder: opt.displayOrder,
+      })),
+      points: q.points,
+      timeLimit: q.timeLimit ?? 30,
+    });
+  };
+
   const handleShowQuestionResults = async (question: QuestionDto) => {
     if (!session || questionControlLoading || !connection) return;
 
@@ -1003,21 +1029,28 @@ export default function StoryMapControlPage() {
   };
 
   const handleNextQuestion = async () => {
-    if (!session || questionControlLoading) return;
+    if (!session || questionControlLoading || !connection) return;
+    if (!questions.length) return;
 
     try {
       setQuestionControlLoading(true);
+
       await activateNextQuestion(session.sessionId);
 
       setCurrentQuestionResults(null);
       setShowStudentAnswers(false);
 
-      setCurrentQuestionIndex((prev) => {
-        if (!questions.length) return prev;
-        if (prev == null) return 0;
-        const next = Math.min(prev + 1, questions.length - 1);
-        return next;
-      });
+      const prevIndex = currentQuestionIndex ?? -1;
+      const nextIndex = Math.min(prevIndex + 1, questions.length - 1);
+      const nextQuestion = questions[nextIndex];
+
+      setQuestionControlLoading(false);
+
+      if (nextQuestion) {
+        await handleBroadcastQuestion(nextQuestion, nextIndex);
+      } else {
+        setCurrentQuestionIndex(nextIndex);
+      }
     } catch (e: any) {
       console.error("Next question failed:", e);
       setError(e?.message || "Không chuyển được sang câu tiếp theo");
@@ -1026,22 +1059,30 @@ export default function StoryMapControlPage() {
     }
   };
 
+
   const handleSkipQuestion = async () => {
-    if (!session || questionControlLoading) return;
+    if (!session || questionControlLoading || !connection) return;
+    if (!questions.length) return;
 
     try {
       setQuestionControlLoading(true);
+
       await skipCurrentQuestion(session.sessionId);
 
       setCurrentQuestionResults(null);
       setShowStudentAnswers(false);
 
-      setCurrentQuestionIndex((prev) => {
-        if (!questions.length) return prev;
-        if (prev == null) return 0;
-        const next = Math.min(prev + 1, questions.length - 1);
-        return next;
-      });
+      const prevIndex = currentQuestionIndex ?? -1;
+      const nextIndex = Math.min(prevIndex + 1, questions.length - 1);
+      const nextQuestion = questions[nextIndex];
+
+      setQuestionControlLoading(false);
+
+      if (nextQuestion) {
+        await handleBroadcastQuestion(nextQuestion, nextIndex);
+      } else {
+        setCurrentQuestionIndex(nextIndex);
+      }
     } catch (e: any) {
       console.error("Skip question failed:", e);
       setError(e?.message || "Không bỏ qua được câu hỏi");

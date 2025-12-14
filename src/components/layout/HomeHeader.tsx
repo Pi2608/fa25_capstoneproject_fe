@@ -145,8 +145,9 @@ export default function HomeHeader() {
   return (
     <header className="sticky top-0 z-40">
       <div
-        className="pointer-events-none absolute inset-x-0 h-20 -z-10 bg-[linear-gradient(to_bottom,rgba(255,255,255,0.85),transparent)] dark:bg-[linear-gradient(to_bottom,rgba(7,11,11,0.65),transparent)]"
         aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-24 -z-10
+             bg-gradient-to-b from-black/60 to-transparent"
       />
       <div className="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-2">
