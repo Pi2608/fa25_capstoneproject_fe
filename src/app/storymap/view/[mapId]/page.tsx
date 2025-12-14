@@ -36,8 +36,8 @@ import {
   joinGroupCollaborationSession,
   joinGroupCollaborationGroup,
   leaveGroupCollaborationGroup,
-  submitGroupWorkViaSignalR,
-  sendMessageViaSignalR,
+  submitGroupWork,
+  sendMessage,
   registerGroupCollaborationEventHandlers,
   unregisterGroupCollaborationEventHandlers,
   type GroupDto,
@@ -661,11 +661,13 @@ export default function StoryMapViewPage() {
     if (!groupConnection || !currentGroupId || !groupWorkContent.trim() || groupSubmitting) return;
     try {
       setGroupSubmitting(true);
-      await submitGroupWorkViaSignalR(groupConnection, {
+      await submitGroupWork(groupConnection, {
         sessionId,
         groupId: currentGroupId,
-        content: groupWorkContent.trim(),
+        submittedByParticipantId: participantId,
+        payloadJson: groupWorkContent.trim(),
       });
+
       setGroupWorkContent("");
       toast.success("Đã gửi bài nhóm!");
     } catch (e) {
@@ -680,11 +682,8 @@ export default function StoryMapViewPage() {
   const handleSendGroupMessage = async () => {
     if (!groupConnection || !currentGroupId || !groupChatInput.trim()) return;
     try {
-      await sendMessageViaSignalR(
-        groupConnection,
-        currentGroupId,
-        groupChatInput.trim()
-      );
+      await sendMessage(groupConnection, currentGroupId, groupChatInput.trim());
+
       setGroupChatInput("");
     } catch (e) {
       console.error("[GroupCollab][View] Send group message failed:", e);
