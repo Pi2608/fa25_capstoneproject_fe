@@ -544,8 +544,8 @@ export default function RecentsPage() {
     [router, t]
   );
 
-  if (loading) return <div className={`min-h-[60vh] animate-pulse px-4 ${themeClasses.textMuted}`}>{t("recents", "loading")}</div>;
-  if (err) return <div className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"}`}>{err}</div>;
+  if (loading) return <div suppressHydrationWarning className={`min-h-[60vh] animate-pulse px-4 ${themeClasses.textMuted}`}>{t("recents", "loading")}</div>;
+  if (err) return <div suppressHydrationWarning className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"}`}>{err}</div>;
 
   return (
     <div className="min-w-0 relative px-4">
