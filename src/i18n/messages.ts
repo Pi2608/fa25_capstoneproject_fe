@@ -1355,6 +1355,17 @@ export const messages = {
             copied: "Đã sao chép",
         },
         workspace_detail: {
+            delete_map_title: "Xoá bản đồ",
+            delete_map_desc: "Bạn có chắc chắn muốn xoá bản đồ “{name}”? Hành động này không thể hoàn tác.",
+            cancel: "Hủy",
+            deleting: "Đang xoá...",
+            delete_map_cta: "Xoá bản đồ",
+
+            toast_deleted: "Đã xoá bản đồ!",
+            toast_removed: "Đã gỡ bản đồ khỏi workspace!",
+
+            manage_delete_failed: "Không thể xoá",
+            err_generic: "Có lỗi xảy ra. Vui lòng thử lại.",
             storymap_section_title: "Bản đồ cho Storymap",
             storymap_menu_title: "Tùy chọn",
             storymap_menu_delete: "Xoá bản đồ",
@@ -4090,6 +4101,8 @@ export const messages = {
                 "Note: You may be redirected to a payment gateway to complete the transaction. After completion, your plan status will be updated automatically.",
         },
         workspace_detail: {
+            manage_delete_failed: "Failed to delete",
+            err_generic: "Something went wrong. Please try again.",
             storymap_section_title: "Storymap maps",
             storymap_menu_title: "Options",
             storymap_menu_delete: "Delete map",

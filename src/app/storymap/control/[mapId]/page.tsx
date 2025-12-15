@@ -706,9 +706,13 @@ export default function StoryMapControlPage() {
 
       const membersWithNames = (members as any[]).map((m, idx) => {
         const pid = m.sessionParticipantId ?? m.participantId ?? m.id;
+        const raw = typeof m.participantName === "string" ? m.participantName.trim() : "";
+        const isUnknown = raw.toLowerCase() === "unknown";
+
         const resolvedName =
-          m.participantName ||
-          (pid ? participantNameById.get(String(pid)) : undefined);
+          (!raw || isUnknown)
+            ? (pid ? participantNameById.get(String(pid)) : undefined)
+            : raw;
 
         return {
           ...m,

@@ -15,7 +15,7 @@ type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name" | "author";
 
 function safeMessage(err: unknown, fallback: string): string {
-  if (err instanceof Error) {};
+  if (err instanceof Error) { };
   if (err && typeof err === "object" && "message" in err) {
     const m = (err as { message?: unknown }).message;
     if (typeof m === "string") return m;
@@ -83,10 +83,9 @@ function userMessage(
   const status = e.status ?? 0;
 
   if (status === 400) {
-    if( text.includes("active") && text.includes("sessions"))
-      {
-        return t("workspace_detail.manage_err_has_active_sessions");
-      }
+    if (text.includes("active") && text.includes("sessions")) {
+      return t("workspace_detail.manage_err_has_active_sessions");
+    }
     return t("workspace_detail.manage_delete_failed")
   }
 
@@ -274,7 +273,9 @@ export default function WorkspaceDetailPage() {
   if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">{t("workspace_detail.loading")}</div>;
   if (err || !org || !workspace) return <div className="max-w-3xl px-4 text-red-400">{err ?? t("workspace_detail.not_found")}</div>;
 
-  const deleteMapLabel = deleteMapOpen.mapName || "bản đồ này";
+  const deleteMapLabel =
+    deleteMapOpen.mapName || t("workspace_detail.delete_map_fallback_name");
+
 
   return (
     <div className="min-w-0 relative px-4">
