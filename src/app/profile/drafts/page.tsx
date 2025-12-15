@@ -75,14 +75,14 @@ export default function DraftsPage() {
 
   if (loading) {
     return (
-      <div className={`min-h-[60vh] animate-pulse px-4 ${themeClasses.textMuted}`}>
+      <div suppressHydrationWarning className={`min-h-[60vh] animate-pulse px-4 ${themeClasses.textMuted}`}>
         {t("drafts.loading")}
       </div>
     );
   }
 
   if (err) {
-    return <div className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"}`}>{err}</div>;
+    return <div suppressHydrationWarning className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"}`}>{err}</div>;
   }
 
   return (

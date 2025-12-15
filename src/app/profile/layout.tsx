@@ -74,14 +74,15 @@ function ThemeToggle() {
   const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  
+
   const current = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
   const isDark = current === "dark";
   const themeClasses = getThemeClasses(isDark);
 
   if (!mounted) {
+    // Return static placeholder to prevent hydration mismatch
     return (
-      <div className={`inline-flex h-8 w-[100px] items-center justify-center rounded-md border shadow-sm ${themeClasses.button}`} />
+      <div className="inline-flex h-8 w-[100px] items-center justify-center rounded-md border shadow-sm bg-white dark:bg-zinc-800" />
     );
   }
 
@@ -336,7 +337,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
               </div>
 
               <div className="px-1 mt-5">
-                <div className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}>{t("profilelayout.orgs_title")}</div>
+                <div suppressHydrationWarning className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}>{t("profilelayout.orgs_title")}</div>
 
                 <NavItem
                   href="/register/organization"
@@ -476,7 +477,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                       </div>
 
                       <div className="px-1 mt-5">
-                        <div className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}>{t("profilelayout.orgs_title")}</div>
+                        <div suppressHydrationWarning className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}>{t("profilelayout.orgs_title")}</div>
 
                         <NavItem
                           href="/register/organization"

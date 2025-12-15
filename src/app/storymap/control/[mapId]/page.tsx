@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { getSegments, type Segment } from "@/lib/api-storymap";
@@ -30,6 +30,7 @@ import {
   getGroupsBySession,
   getGroupById,
   deleteGroup,
+  getGroupSubmissions,
 } from "@/lib/api-groupCollaboration";
 import type { HubConnection } from "@microsoft/signalr";
 import {
@@ -39,13 +40,14 @@ import {
   joinGroupCollaborationSession,
   registerGroupCollaborationEventHandlers,
   unregisterGroupCollaborationEventHandlers,
-  createGroupViaSignalR,
-  gradeSubmissionViaSignalR,
-  sendMessageViaSignalR,
+  createGroup,
+  gradeSubmission,
+  sendMessage,
   type GroupDto,
   type GroupSubmissionDto,
-  type GroupGradedSubmissionDto,
+  type GroupSubmissionGradedDto,
 } from "@/lib/hubs/groupCollaboration";
+
 
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
 import { useLoading } from "@/contexts/LoadingContext";
@@ -57,6 +59,7 @@ import {
   type SegmentSyncRequest,
 } from "@/lib/hubs/session";
 import type { BaseKey } from "@/types/common";
+import { getToken } from "@/lib/api-core";
 
 type QuestionBankMeta = {
   id?: string;
@@ -77,7 +80,6 @@ type SessionQuestionBankInfo = {
   totalQuestions: number;
 };
 
-// Kiểu dữ liệu cho member của group (theo response API /groups/{groupId})
 type GroupMember = {
   groupMemberId: string;
   sessionParticipantId: string;
@@ -85,6 +87,54 @@ type GroupMember = {
   isLeader: boolean;
   joinedAt: string;
 };
+
+function normalizeGroup(raw: any): GroupDto {
+  const groupId = raw?.groupId ?? raw?.id ?? raw?.GroupId ?? raw?.Id ?? "";
+  const sessionId = raw?.sessionId ?? raw?.SessionId ?? "";
+
+  const members: any[] = Array.isArray(raw?.members)
+    ? raw.members
+    : Array.isArray(raw?.groupMembers)
+      ? raw.groupMembers
+      : [];
+
+  return {
+    groupId,
+    sessionId,
+
+    name: raw?.groupName ?? raw?.name ?? raw?.GroupName ?? raw?.Name ?? "",
+
+    color: raw?.color ?? raw?.Color ?? null,
+
+    currentMembersCount:
+      typeof raw?.currentMembersCount === "number"
+        ? raw.currentMembersCount
+        : members.length,
+
+    maxMembers:
+      typeof raw?.maxMembers === "number"
+        ? raw.maxMembers
+        : raw?.MaxMembers ?? null,
+
+    members,
+  } as GroupDto;
+}
+
+function normalizeHexColor(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.trim();
+  if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(s)) return s;
+  return null;
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 export default function StoryMapControlPage() {
   const params = useParams<{ mapId: string }>();
@@ -106,6 +156,18 @@ export default function StoryMapControlPage() {
   const [loadingLeaderboard, setLoadingLeaderboard] = useState(false);
 
   const [participants, setParticipants] = useState<LeaderboardEntryDto[]>([]);
+  const participantNameById = useMemo(() => {
+    const map = new Map<string, string>();
+
+    for (const p of participants as any[]) {
+      const id = p.sessionParticipantId ?? p.participantId ?? p.id;
+      const name = p.displayName ?? p.name ?? p.fullName;
+      if (id && name) map.set(String(id), String(name));
+    }
+
+    return map;
+  }, [participants]);
+
   const [loadingParticipants, setLoadingParticipants] = useState(false);
   const [selectedParticipantIds, setSelectedParticipantIds] = useState<string[]>([]);
 
@@ -126,12 +188,25 @@ export default function StoryMapControlPage() {
     []
   );
 
+  const [openPickGroup, setOpenPickGroup] = useState(false);
+  const [pickGroupId, setPickGroupId] = useState<string>("");
+
+  const [loadingGroupSubmissions, setLoadingGroupSubmissions] = useState(false);
+  const [showGroupSubmissions, setShowGroupSubmissions] = useState(false);
+  const [groupSubmissionsError, setGroupSubmissionsError] = useState<string | null>(null);
+  const [submissionsGroupId, setSubmissionsGroupId] = useState<string | null>(null);
+
   const [sessionQuestionBanks, setSessionQuestionBanks] = useState<
     SessionQuestionBankInfo[]
   >([]);
 
   // ========== NEW: state hiển thị chi tiết nhóm ==========
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const selectedGroupName =
+    selectedGroupId
+      ? (groups.find((g: any) => (g.groupId ?? g.id) === selectedGroupId)?.name ?? selectedGroupId)
+      : null;
+
   const [selectedGroupMembers, setSelectedGroupMembers] = useState<GroupMember[]>(
     []
   );
@@ -144,9 +219,59 @@ export default function StoryMapControlPage() {
     (sum, bank) => sum + (bank.totalQuestions ?? 0),
     0
   );
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [draftGroupName, setDraftGroupName] = useState("");
+  const [draftGroupColor, setDraftGroupColor] = useState("#22c55e"); // mặc định xanh
+  const [creatingGroup, setCreatingGroup] = useState(false);
 
   const [showShareModal, setShowShareModal] = useState(false);
   const shareOverlayGuardRef = useRef(false);
+  const [isGradeOpen, setIsGradeOpen] = useState(false);
+  const [gradeTarget, setGradeTarget] = useState<any>(null);
+  const [gradeScore, setGradeScore] = useState<string>("");
+  const [gradeFeedback, setGradeFeedback] = useState<string>("");
+  const [grading, setGrading] = useState(false);
+
+  const openGradeModal = (submission: any) => {
+    setGradeTarget(submission);
+    setGradeScore(
+      submission?.score != null ? String(submission.score) : ""
+    );
+    setGradeFeedback(submission?.feedback ?? "");
+    setIsGradeOpen(true);
+  };
+
+  const closeGradeModal = () => {
+    setIsGradeOpen(false);
+    setGradeTarget(null);
+    setGradeScore("");
+    setGradeFeedback("");
+  };
+
+  const submitGrade = async () => {
+    if (!gradeTarget) return;
+
+    const submissionId = gradeTarget?.submissionId ?? gradeTarget?.SubmissionId ?? gradeTarget?.id ?? gradeTarget?.Id;
+    const scoreNum = Number(gradeScore);
+
+    if (!submissionId) {
+      alert("Thiếu submissionId");
+      return;
+    }
+    if (!Number.isFinite(scoreNum)) {
+      alert("Điểm không hợp lệ");
+      return;
+    }
+
+    setGrading(true);
+    try {
+      await handleGradeSubmission(submissionId, scoreNum, gradeFeedback?.trim() || undefined);
+      closeGradeModal();
+      await handleLoadGroupSubmissions();
+    } finally {
+      setGrading(false);
+    }
+  };
 
   // FIXED: Track last sent segment sync to avoid duplicates
   const lastSentSyncRef = useRef<{ index: number; isPlaying: boolean } | null>(
@@ -215,6 +340,15 @@ export default function StoryMapControlPage() {
     handlers: {
       onParticipantJoined: () => {
         handleLoadParticipants();
+        if (connection && session?.sessionId && segments.length > 0) {
+          const segIndex = currentIndex >= 0 ? currentIndex : 0;
+          const seg = segments[segIndex] || segments[0];
+
+          sendSegmentSync(segIndex, seg.segmentId, seg.name || `Segment ${segIndex + 1}`, isTeacherPlaying);
+
+          // sync luôn base layer
+          sendMapLayerSyncViaSignalR(connection, session.sessionId, selectedLayer);
+        }
       },
       onParticipantLeft: () => {
         handleLoadParticipants();
@@ -226,11 +360,19 @@ export default function StoryMapControlPage() {
     },
   });
 
+  const openCreateGroupModal = () => {
+    setDraftGroupName(`Nhóm ${groups.length + 1}`);
+    setDraftGroupColor("#22c55e");
+    setShowCreateGroupModal(true);
+  };
+
   // ================== SignalR connection for group collaboration ==================
   useEffect(() => {
     if (!session?.sessionId) return;
 
-    const conn = createGroupCollaborationConnection();
+    const token = getToken();
+    const conn = createGroupCollaborationConnection(token);
+
     if (!conn) {
       console.error("[GroupCollab] Cannot create connection");
       return;
@@ -238,8 +380,9 @@ export default function StoryMapControlPage() {
 
     registerGroupCollaborationEventHandlers(conn, {
       onGroupCreated: (group) => {
-        setGroups((prev) => [...prev, group]);
+        setGroups((prev) => [...prev, normalizeGroup(group)]);
       },
+
       onWorkSubmitted: (submission) => {
         setGroupSubmissions((prev) => [...prev, submission]);
       },
@@ -508,7 +651,10 @@ export default function StoryMapControlPage() {
         const data = await getGroupsBySession(session.sessionId);
         if (cancelled) return;
 
-        const list = Array.isArray(data) ? data : [];
+        const rawList = Array.isArray(data) ? data : [];
+        const list = rawList.map(normalizeGroup);
+        setGroups(list);
+
         setGroups(list);
 
         const assigned = new Set<string>();
@@ -556,15 +702,60 @@ export default function StoryMapControlPage() {
 
     try {
       const detail: any = await getGroupById(groupId);
-      const members: GroupMember[] = Array.isArray(detail?.members)
-        ? detail.members
-        : [];
-      setSelectedGroupMembers(members);
+      const members: GroupMember[] = Array.isArray(detail?.members) ? detail.members : [];
+
+      const membersWithNames = (members as any[]).map((m, idx) => {
+        const pid = m.sessionParticipantId ?? m.participantId ?? m.id;
+        const resolvedName =
+          m.participantName ||
+          (pid ? participantNameById.get(String(pid)) : undefined);
+
+        return {
+          ...m,
+          participantName: resolvedName || m.participantName || `Thành viên ${idx + 1}`,
+        };
+      });
+
+      setSelectedGroupMembers(membersWithNames as any);
+
     } catch (e) {
       console.error("[GroupCollab] Load group detail failed:", e);
       setSelectedGroupMembers([]);
     } finally {
       setLoadingGroupMembers(false);
+    }
+  };
+
+  const handleLoadGroupSubmissions = async () => {
+    setShowGroupSubmissions(true);
+    setGroupSubmissionsError(null);
+
+    if (!selectedGroupId) {
+      setGroupSubmissions([]);
+      setSubmissionsGroupId(null);
+      setGroupSubmissionsError("Hãy chọn 1 nhóm ở mục Hoạt động nhóm trước.");
+      return;
+    }
+
+    setLoadingGroupSubmissions(true);
+    setSubmissionsGroupId(selectedGroupId);
+
+    try {
+      const res: any = await getGroupSubmissions(selectedGroupId);
+
+      const list =
+        Array.isArray(res) ? res :
+          Array.isArray(res?.items) ? res.items :
+            Array.isArray(res?.data) ? res.data :
+              [];
+
+      setGroupSubmissions(list);
+    } catch (e) {
+      console.error("[GroupCollab] Load group submissions failed:", e);
+      setGroupSubmissions([]);
+      setGroupSubmissionsError("Không tải được bài nộp nhóm.");
+    } finally {
+      setLoadingGroupSubmissions(false);
     }
   };
 
@@ -818,6 +1009,32 @@ export default function StoryMapControlPage() {
     }
   };
 
+  const broadcastQuestionAtIndex = async (index: number) => {
+    if (!session || !connection) return;
+    const q = questions[index];
+    if (!q) return;
+
+    setCurrentQuestionIndex(index);
+    setCurrentQuestionResults(null);
+    setShowStudentAnswers(false);
+
+    await broadcastQuestionViaSignalR(connection, session.sessionId, {
+      sessionQuestionId: q.sessionQuestionId ?? q.questionId,
+      questionId: q.questionId,
+      questionText: q.questionText,
+      questionType: q.questionType,
+      questionImageUrl: q.questionImageUrl ?? undefined,
+      options: q.options?.map((opt) => ({
+        id: opt.questionOptionId,
+        optionText: opt.optionText,
+        optionImageUrl: opt.optionImageUrl ?? undefined,
+        displayOrder: opt.displayOrder,
+      })),
+      points: q.points,
+      timeLimit: q.timeLimit ?? 30,
+    });
+  };
+
   const handleShowQuestionResults = async (question: QuestionDto) => {
     if (!session || questionControlLoading || !connection) return;
 
@@ -863,21 +1080,28 @@ export default function StoryMapControlPage() {
   };
 
   const handleNextQuestion = async () => {
-    if (!session || questionControlLoading) return;
+    if (!session || questionControlLoading || !connection) return;
+    if (!questions.length) return;
 
     try {
       setQuestionControlLoading(true);
+
       await activateNextQuestion(session.sessionId);
 
       setCurrentQuestionResults(null);
       setShowStudentAnswers(false);
 
-      setCurrentQuestionIndex((prev) => {
-        if (!questions.length) return prev;
-        if (prev == null) return 0;
-        const next = Math.min(prev + 1, questions.length - 1);
-        return next;
-      });
+      const prevIndex = currentQuestionIndex ?? -1;
+      const nextIndex = Math.min(prevIndex + 1, questions.length - 1);
+      const nextQuestion = questions[nextIndex];
+
+      setQuestionControlLoading(false);
+
+      if (nextQuestion) {
+        await handleBroadcastQuestion(nextQuestion, nextIndex);
+      } else {
+        setCurrentQuestionIndex(nextIndex);
+      }
     } catch (e: any) {
       console.error("Next question failed:", e);
       setError(e?.message || "Không chuyển được sang câu tiếp theo");
@@ -886,22 +1110,30 @@ export default function StoryMapControlPage() {
     }
   };
 
+
   const handleSkipQuestion = async () => {
-    if (!session || questionControlLoading) return;
+    if (!session || questionControlLoading || !connection) return;
+    if (!questions.length) return;
 
     try {
       setQuestionControlLoading(true);
+
       await skipCurrentQuestion(session.sessionId);
 
       setCurrentQuestionResults(null);
       setShowStudentAnswers(false);
 
-      setCurrentQuestionIndex((prev) => {
-        if (!questions.length) return prev;
-        if (prev == null) return 0;
-        const next = Math.min(prev + 1, questions.length - 1);
-        return next;
-      });
+      const prevIndex = currentQuestionIndex ?? -1;
+      const nextIndex = Math.min(prevIndex + 1, questions.length - 1);
+      const nextQuestion = questions[nextIndex];
+
+      setQuestionControlLoading(false);
+
+      if (nextQuestion) {
+        await handleBroadcastQuestion(nextQuestion, nextIndex);
+      } else {
+        setCurrentQuestionIndex(nextIndex);
+      }
     } catch (e: any) {
       console.error("Skip question failed:", e);
       setError(e?.message || "Không bỏ qua được câu hỏi");
@@ -933,44 +1165,30 @@ export default function StoryMapControlPage() {
     }
   };
 
-  const handleCreateGroup = async (name: string) => {
+  const handleCreateGroup = async (name: string, color?: string) => {
     if (!groupCollabConnection || !session?.sessionId) return;
 
-    // Lấy các học sinh đang được chọn nhưng chưa thuộc nhóm nào
     const memberParticipantIds = selectedParticipantIds.filter(
       (id) => !assignedParticipantIds.includes(id)
     );
 
     if (memberParticipantIds.length === 0) {
-      console.error(
-        "[GroupCollab] Chưa chọn học sinh nào để tạo nhóm"
-      );
       window.alert("Hãy chọn ít nhất 1 học sinh trong danh sách tham gia để tạo nhóm.");
       return;
     }
 
-    // Nếu backend yêu cầu tối thiểu 2 hoặc 4 người, bạn chỉnh số ở đây
-    // if (memberParticipantIds.length < 2) {
-    //   window.alert("Mỗi nhóm cần ít nhất 2 học sinh.");
-    //   return;
-    // }
+    await createGroup(groupCollabConnection, {
+      sessionId: session.sessionId,
+      groupName: name,
+      color: color || null,
+      memberParticipantIds,
+      leaderParticipantId: memberParticipantIds[0],
+    });
 
-    try {
-      await createGroupViaSignalR(groupCollabConnection, {
-        sessionId: session.sessionId,
-        groupName: name,
-        color: undefined,
-        memberParticipantIds,
-        leaderParticipantId: memberParticipantIds[0],
-      });
-
-      setAssignedParticipantIds((prev) => [...prev, ...memberParticipantIds]);
-
-      setSelectedParticipantIds([]);
-    } catch (error) {
-      console.error("[GroupCollab] Tạo nhóm thất bại", error);
-    }
+    setAssignedParticipantIds((prev) => [...prev, ...memberParticipantIds]);
+    setSelectedParticipantIds([]);
   };
+
 
   const handleGradeSubmission = async (
     submissionId: string,
@@ -979,16 +1197,17 @@ export default function StoryMapControlPage() {
   ) => {
     if (!groupCollabConnection) return;
 
-    await gradeSubmissionViaSignalR(groupCollabConnection, {
+    await gradeSubmission(groupCollabConnection, {
       submissionId,
       score,
       feedback,
     });
+
   };
 
   const handleSendMessageToGroup = async (groupId: string, message: string) => {
     if (!groupCollabConnection) return;
-    await sendMessageViaSignalR(groupCollabConnection, groupId, message);
+    await sendMessage(groupCollabConnection, groupId, message);
   };
 
   // ================== Render states ==================
@@ -1218,6 +1437,24 @@ export default function StoryMapControlPage() {
                     </button>
                   </div>
 
+                  {(session.status === "Ended" || session.status === "Completed") && (
+                    <div className="mt-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] text-emerald-200">
+                          Session đã kết thúc — xem tổng kết.
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/session/results/${session.sessionId}`)}
+                          className="shrink-0 inline-flex items-center rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] text-white hover:bg-emerald-500 border border-emerald-500/60"
+                        >
+                          Tổng kết session
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* LAYER SYNC DROPDOWN */}
                   <div className="flex items-center justify-between pt-2 border-t border-zinc-800 mt-2">
                     <p className="text-[11px] text-zinc-400">
@@ -1395,15 +1632,14 @@ export default function StoryMapControlPage() {
                         <button
                           type="button"
                           disabled={!groupCollabConnection}
-                          onClick={() =>
-                            handleCreateGroup(`Nhóm ${groups.length + 1}`)
-                          }
+                          onClick={openCreateGroupModal}
                           className="text-[11px] rounded-lg px-2.5 py-1 
-             bg-emerald-600 text-zinc-100 hover:bg-emerald-500
-             disabled:bg-zinc-700 disabled:text-zinc-400 disabled:cursor-not-allowed"
+    bg-emerald-600 text-zinc-100 hover:bg-emerald-500
+    disabled:bg-zinc-700 disabled:text-zinc-400 disabled:cursor-not-allowed"
                         >
                           {groupCollabConnection ? "+ Tạo nhóm" : "Đang kết nối..."}
                         </button>
+
                       </div>
 
                       <div className="max-h-40 overflow-y-auto rounded-lg border border-zinc-800 bg-zinc-950/80 px-3 py-2 space-y-1.5">
@@ -1414,45 +1650,64 @@ export default function StoryMapControlPage() {
                         ) : (
                           groups.map((g, idx) => {
                             const isSelected = g.groupId === selectedGroupId;
+
+                            const groupColor = normalizeHexColor((g as any).color);
+                            const bg = groupColor
+                              ? hexToRgba(groupColor, isSelected ? 0.18 : 0.10)
+                              : undefined;
+
                             return (
                               <div
                                 key={g.groupId ?? idx}
                                 onClick={() => handleSelectGroup(g.groupId)}
                                 className={
-                                  "w-full flex items-center justify-between text-[11px] py-1 px-2 rounded-md border mb-[2px] last:mb-0 cursor-pointer " +
-                                  (isSelected
-                                    ? "bg-emerald-500/15 border-emerald-400/70 text-emerald-100"
-                                    : "bg-transparent border-zinc-800 text-zinc-200 hover:bg-zinc-900/70")
+                                  "w-full flex items-center justify-between text-[11px] py-1.5 px-2 rounded-md border mb-[2px] last:mb-0 cursor-pointer " +
+                                  "border-zinc-800 hover:bg-zinc-900/70 " +
+                                  "border-l-4 " +
+                                  (isSelected ? "text-zinc-50" : "text-zinc-200")
                                 }
+                                style={{
+                                  backgroundColor: bg,
+                                  borderLeftColor: groupColor ?? undefined,
+                                  boxShadow: isSelected && groupColor ? `0 0 0 1px ${hexToRgba(groupColor, 0.55)}` : undefined,
+                                }}
                               >
-                                <div>
-                                  <p className="font-semibold">
-                                    {g.name || `Nhóm ${idx + 1}`}
-                                  </p>
-                                  {typeof g.currentMembersCount === "number" &&
-                                    typeof g.maxMembers === "number" && (
-                                      <p className="text-zinc-400">
-                                        {g.currentMembersCount}/{g.maxMembers} thành viên
-                                      </p>
-                                    )}
+                                <div className="flex items-start gap-2">
+                                  <span
+                                    className="mt-[3px] h-2.5 w-2.5 rounded-full border border-zinc-800"
+                                    style={{ backgroundColor: groupColor ?? "#3f3f46" }}
+                                    title={groupColor ?? undefined}
+                                  />
+                                  <div>
+                                    <p className="font-semibold">
+                                      {g.name || `Nhóm ${idx + 1}`}
+                                    </p>
+
+                                    {typeof g.currentMembersCount === "number" &&
+                                      typeof g.maxMembers === "number" && (
+                                        <p className={isSelected ? "text-zinc-200" : "text-zinc-400"}>
+                                          {g.currentMembersCount}/{g.maxMembers} thành viên
+                                        </p>
+                                      )}
+                                  </div>
                                 </div>
 
-                                {/* Nút Xóa nhóm */}
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleDeleteGroup(g.groupId);
                                   }}
-                                  className="ml-2 inline-flex items-center justify-center rounded-full 
-                     border border-rose-500/70 bg-rose-600/10 text-rose-200 
-                     hover:bg-rose-600/20 px-2 py-[2px] text-[10px]"
+                                  className="ml-2 inline-flex items-center justify-center rounded-full
+          border border-rose-500/70 bg-rose-600/10 text-rose-200
+          hover:bg-rose-600/20 px-2 py-[2px] text-[10px]"
                                 >
                                   Xóa
                                 </button>
                               </div>
                             );
                           })
+
                         )}
 
                       </div>
@@ -1559,6 +1814,7 @@ export default function StoryMapControlPage() {
                               {bank.bankName}
                             </span>
                           ))}
+
                         </div>
                       </>
                     ) : (
@@ -1566,6 +1822,7 @@ export default function StoryMapControlPage() {
                         Chưa gắn bộ câu hỏi cho session này.
                       </p>
                     )}
+
                   </div>
 
                   {totalQuestionsOfAllBanks > 0 && (
@@ -1915,6 +2172,109 @@ export default function StoryMapControlPage() {
                 )}
               </section>
             </div>
+            {/* ===================== BÀI NỘP NHÓM (card riêng) ===================== */}
+            <div className="mt-3 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <p className="text-[12px] font-semibold text-zinc-200">Bài nộp nhóm</p>
+                  <p className="text-[11px] text-zinc-500">
+                    {selectedGroupId
+                      ? `Nhóm: ${selectedGroupName}`
+                      : "Chưa chọn nhóm (bấm nhóm ở panel trái)."}
+
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleLoadGroupSubmissions}
+                  disabled={loadingGroupSubmissions}
+                  className="inline-flex items-center rounded-lg border border-zinc-700 bg-zinc-950/60 px-2.5 py-1.5 text-[11px] text-zinc-200 hover:bg-zinc-900/70 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Tải bài nộp
+                </button>
+              </div>
+
+              <div className="mt-2">
+                {loadingGroupSubmissions ? (
+                  <p className="text-[11px] text-zinc-500">Đang tải bài nộp...</p>
+                ) : groupSubmissionsError ? (
+                  <p className="text-[11px] text-red-400">{groupSubmissionsError}</p>
+                ) : groupSubmissions.length === 0 ? (
+                  <p className="text-[11px] text-zinc-500">Chưa có bài nộp.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {groupSubmissions.map((s: any, idx: number) => {
+                      const submissionId = s?.submissionId ?? s?.SubmissionId ?? s?.id ?? s?.Id;
+                      const groupName = s?.groupName ?? s?.GroupName ?? "Nhóm (chưa có tên)";
+                      const title = s?.title ?? s?.Title ?? "";
+                      const submittedAt = s?.submittedAt ?? s?.SubmittedAt ?? "";
+                      const content = s?.content ?? s?.Content ?? "";
+                      const attachmentUrls = s?.attachmentUrls ?? s?.AttachmentUrls ?? [];
+
+                      return (
+                        <div
+                          key={submissionId ?? idx}
+                          className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-2"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold text-zinc-200 truncate">
+                                {groupName}
+                              </p>
+
+                              {title && (
+                                <p className="mt-0.5 text-[10px] text-zinc-400 truncate">
+                                  {title}
+                                </p>
+                              )}
+
+                              {content && (
+                                <p className="mt-1 text-[11px] text-zinc-400">
+                                  {String(content).length > 200 ? String(content).slice(0, 200) + "…" : String(content)}
+                                </p>
+                              )}
+
+                              {Array.isArray(attachmentUrls) && attachmentUrls.length > 0 && (
+                                <div className="mt-1 space-y-1">
+                                  {attachmentUrls.map((url: string, i: number) => (
+                                    <a
+                                      key={`${submissionId}-att-${i}`}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="block text-[11px] text-sky-300 hover:text-sky-200 underline truncate"
+                                      title={url}
+                                    >
+                                      Đính kèm {i + 1}
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* CỘT PHẢI: thời gian + nút Chấm điểm */}
+                            <div className="shrink-0 text-right">
+                              <p className="text-[10px] text-zinc-500">{submittedAt}</p>
+
+                              <button
+                                type="button"
+                                onClick={() => openGradeModal(s)}
+                                className="mt-1 inline-flex items-center rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-500/20"
+                              >
+                                Chấm điểm
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -2065,6 +2425,230 @@ export default function StoryMapControlPage() {
           </div>,
           document.body
         )}
+      {isGradeOpen && gradeTarget && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-xl rounded-2xl border border-zinc-700 bg-zinc-900/95 p-5 shadow-2xl ring-1 ring-white/10 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] font-semibold text-zinc-200">Chấm điểm bài nộp</p>
+              <button
+                type="button"
+                onClick={closeGradeModal}
+                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-[12px] text-zinc-200 hover:bg-zinc-800"
+              >
+                ✕
+              </button>
+            </div>
+
+            {(() => {
+              const s = gradeTarget;
+              const submissionId = s?.submissionId ?? s?.SubmissionId ?? s?.id ?? s?.Id;
+              const groupName = s?.groupName ?? s?.GroupName ?? "";
+              const groupId = s?.groupId ?? s?.GroupId ?? "";
+              const title = s?.title ?? s?.Title ?? "";
+              const content = s?.content ?? s?.Content ?? "";
+              const attachmentUrls = s?.attachmentUrls ?? s?.AttachmentUrls ?? [];
+              const submittedAt = s?.submittedAt ?? s?.SubmittedAt ?? "";
+              const gradedAt = s?.gradedAt ?? s?.GradedAt ?? "";
+              const score = s?.score ?? s?.Score ?? null;
+              const feedback = s?.feedback ?? s?.Feedback ?? null;
+
+              return (
+                <div className="mt-3 space-y-3 text-[12px] text-zinc-300">
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* <div><span className="text-zinc-500">submissionId:</span> {submissionId}</div> */}
+                    <div><span className="text-zinc-500">groupName:</span> {groupName}</div>
+                    {/* <div><span className="text-zinc-500">groupId:</span> {groupId}</div> */}
+                    <div><span className="text-zinc-500">submittedAt:</span> {submittedAt}</div>
+                    <div><span className="text-zinc-500">score:</span> {score ?? "null"}</div>
+                    <div><span className="text-zinc-500">gradedAt:</span> {gradedAt || "null"}</div>
+                  </div>
+
+                  {title && (
+                    <div>
+                      <div className="text-zinc-500">title:</div>
+                      <div className="rounded-lg border-zinc-700 bg-zinc-800/50">{title}</div>
+                    </div>
+                  )}
+
+                  {content && (
+                    <div>
+                      <div className="text-zinc-500">content:</div>
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-2 whitespace-pre-wrap">
+                        {String(content)}
+                      </div>
+                    </div>
+                  )}
+
+                  {Array.isArray(attachmentUrls) && attachmentUrls.length > 0 && (
+                    <div>
+                      <div className="text-zinc-500">attachmentUrls:</div>
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-2 space-y-1">
+                        {attachmentUrls.map((url: string, i: number) => (
+                          <a
+                            key={`att-${i}`}
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block text-sky-300 hover:text-sky-200 underline break-all"
+                          >
+                            {url}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <div className="text-zinc-500">feedback hiện tại:</div>
+                    <div className="rounded-lg border-zinc-700 bg-zinc-800/50">
+                      {feedback ?? "Chưa có"}
+                    </div>
+                  </div>
+
+                  {/* Form chấm điểm */}
+                  <div className="pt-2 border-t border-zinc-800 space-y-2">
+                    <div>
+                      <div className="text-zinc-500 mb-1">Điểm</div>
+                      <input
+                        type="number"
+                        value={gradeScore}
+                        onChange={(e) => setGradeScore(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-[12px] text-zinc-100
+           focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+
+                      />
+                    </div>
+
+                    <div>
+                      <div className="text-zinc-500 mb-1">Nhận xét</div>
+                      <textarea
+                        value={gradeFeedback}
+                        onChange={(e) => setGradeFeedback(e.target.value)}
+                        className="w-full h-24 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-[12px] text-zinc-100 resize-none"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={closeGradeModal}
+                        className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-[12px] text-zinc-200 hover:bg-zinc-800"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={submitGrade}
+                        disabled={grading}
+                        className="rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {grading ? "Đang lưu..." : "Lưu điểm"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {showCreateGroupModal &&
+        createPortal(
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
+            <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl">
+              <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+                <p className="text-sm font-semibold">Tạo nhóm mới</p>
+                <button
+                  type="button"
+                  onClick={() => setShowCreateGroupModal(false)}
+                  className="text-zinc-400 hover:text-zinc-200"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="px-4 py-4 space-y-4">
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-1">Tên nhóm</label>
+                  <input
+                    value={draftGroupName}
+                    onChange={(e) => setDraftGroupName(e.target.value)}
+                    maxLength={50}
+                    className="w-full rounded-lg border border-zinc-800 bg-zinc-900/60 px-3 py-2 text-sm outline-none focus:border-emerald-500"
+                    placeholder="Ví dụ: Nhóm 1"
+                  />
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    Tối đa 50 ký tự
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs text-zinc-400 mb-2">Màu nhóm</label>
+
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="color"
+                      value={draftGroupColor}
+                      onChange={(e) => setDraftGroupColor(e.target.value)}
+                      className="h-10 w-12 rounded-md border border-zinc-800 bg-transparent p-1"
+                      title="Chọn màu"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        "#22c55e", "#3b82f6", "#a855f7", "#f97316",
+                        "#ef4444", "#eab308", "#14b8a6", "#f43f5e",
+                      ].map((c) => (
+                        <button
+                          key={c}
+                          type="button"
+                          onClick={() => setDraftGroupColor(c)}
+                          className={
+                            "h-7 w-7 rounded-full border " +
+                            (draftGroupColor === c ? "border-white" : "border-zinc-800")
+                          }
+                          style={{ backgroundColor: c }}
+                          title={c}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="px-4 py-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateGroupModal(false)}
+                  className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="button"
+                  disabled={creatingGroup || !draftGroupName.trim() || !groupCollabConnection}
+                  onClick={async () => {
+                    const name = draftGroupName.trim();
+                    if (!name) return;
+
+                    try {
+                      setCreatingGroup(true);
+                      await handleCreateGroup(name, draftGroupColor);
+                      setShowCreateGroupModal(false);
+                    } finally {
+                      setCreatingGroup(false);
+                    }
+                  }}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-400 disabled:cursor-not-allowed"
+                >
+                  {creatingGroup ? "Đang tạo..." : "Tạo nhóm"}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+
     </div>
   );
 }

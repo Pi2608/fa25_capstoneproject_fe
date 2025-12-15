@@ -20,6 +20,7 @@ import { getMapDetail, type MapDetail, updateMap, type UpdateMapRequest, type Up
 import { createMapLocation, deleteLocation, getMapLocations } from "@/lib/api-location";
 
 import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator, MeasurementInfoBox } from "@/components/map-editor-ui";
+import { LocationInfoPanel } from "@/components/map-editor-ui/LocationInfoPanel";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
 import SequentialRoutePlaybackWrapper from "@/components/storymap/SequentialRoutePlaybackWrapper";
@@ -121,10 +122,10 @@ export default function EditMapPage() {
   // POI tooltip modal state
   const [poiTooltipModal, setPoiTooltipModal] = useState<{
     isOpen: boolean;
+    locationId?: string;
     title?: string;
+    subtitle?: string;
     content?: string;
-    x?: number;
-    y?: number;
     poi?: Location;
   }>({
     isOpen: false,
@@ -1096,7 +1097,7 @@ export default function EditMapPage() {
         setMapStatus(m.status ?? "draft");
       } catch (e) {
         if (!alive) return;
-        setErr(e instanceof Error ? e.message : "Không tải được bản đồ");
+        setErr(e instanceof Error ? e.message : t('mapEditor.loadMapFailed'));
       } finally {
         if (alive) setLoading(false);
       }
@@ -3181,7 +3182,7 @@ export default function EditMapPage() {
       await updateMap(detail.id, body);
       showToast("success", "Đã lưu thông tin bản đồ và vị trí hiển thị.");
     } catch (e) {
-      showToast("error", e instanceof Error ? e.message : "Lưu thất bại");
+      showToast("error", e instanceof Error ? e.message : t('mapEditor.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -3933,15 +3934,15 @@ export default function EditMapPage() {
                   onKeyDown={async (e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      const newName = editingMapName.trim() || "Untitled Map";
+                      const newName = editingMapName.trim() || t('mapEditor.untitledMap');
                       if (newName !== name) {
                         try {
                           setIsSaving(true);
                           await updateMap(detail?.id || '', { name: newName });
                           setName(newName);
-                          showToast("success", "Đã đổi tên bản đồ");
+                          showToast("success", t('mapEditor.mapRenamed'));
                         } catch (error) {
-                          showToast("error", "Không thể đổi tên bản đồ");
+                          showToast("error", t('mapEditor.renameMapFailed'));
                         } finally {
                           setIsSaving(false);
                         }
@@ -3954,15 +3955,15 @@ export default function EditMapPage() {
                     }
                   }}
                   onBlur={async () => {
-                    const newName = editingMapName.trim() || "Untitled Map";
+                    const newName = editingMapName.trim() || t('mapEditor.untitledMap');
                     if (newName !== name) {
                       try {
                         setIsSaving(true);
                         await updateMap(detail?.id || '', { name: newName });
                         setName(newName);
-                        showToast("success", "Đã đổi tên bản đồ");
+                        showToast("success", t('mapEditor.mapRenamed'));
                       } catch (error) {
-                        showToast("error", "Không thể đổi tên bản đồ");
+                        showToast("error", t('mapEditor.renameMapFailed'));
                       } finally {
                         setIsSaving(false);
                       }
@@ -3971,7 +3972,7 @@ export default function EditMapPage() {
                     setEditingMapName("");
                   }}
                   className="px-2.5 py-1.5 rounded-md bg-white text-black text-sm font-medium w-52 border-2 border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                  placeholder="Untitled Map"
+                  placeholder={t('mapEditor.untitledMap')}
                   autoFocus
                   disabled={isSaving}
                 />
@@ -3982,9 +3983,9 @@ export default function EditMapPage() {
                     setIsEditingMapName(true);
                   }}
                   className="px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm font-medium w-52 cursor-pointer transition-colors truncate"
-                  title="Double click để đổi tên"
+                  title={t('mapEditor.doubleClickRename')}
                 >
-                  {name || "Untitled Map"}
+                  {name || t('mapEditor.untitledMap')}
                 </span>
               )}
             </div>
@@ -4007,24 +4008,24 @@ export default function EditMapPage() {
                     const file = e.target.files?.[0];
                     if (file && mapId) {
                       try {
-                        showToast("info", "Đang tải file lên...");
+                        showToast("info", t('mapEditor.uploadingFile'));
 
                         // Backend tự động tạo layer mới, chỉ cần truyền mapId
                         const result = await uploadGeoJsonToMap(mapId, file);
 
-                        showToast("info", "Đang load dữ liệu...");
+                        showToast("info", t('mapEditor.loadingData'));
 
                         // Refresh toàn bộ map detail để lấy layer mới
                         const updatedDetail = await getMapDetail(mapId);
                         setDetail(updatedDetail);
 
-                        showToast("success", `Tải lên thành công! Đã thêm ${result.featuresAdded} đối tượng vào layer "${result.layerId}".`);
+                        showToast("success", t('mapEditor.uploadSuccess', { count: result.featuresAdded, layerId: result.layerId }));
 
                         // Clear the input
                         e.target.value = '';
                       } catch (error) {
                         console.error("Upload error:", error);
-                        showToast("error", error instanceof Error ? error.message : "Tải file thất bại");
+                        showToast("error", error instanceof Error ? error.message : t('mapEditor.uploadFailed'));
                         e.target.value = '';
                       }
                     }
@@ -4035,10 +4036,10 @@ export default function EditMapPage() {
                 <label
                   htmlFor="upload-layer"
                   className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white cursor-pointer transition-all flex items-center gap-2"
-                  title="Upload GeoJSON/KML/GPX file to add as layer"
+                  title={t('mapEditor.uploadTooltip')}
                 >
                   <UploadIcon className="w-4 h-4" />
-                  Upload
+                  {t('mapEditor.upload')}
                 </label>
 
                 <div className="h-5 w-px bg-zinc-600/50" />
@@ -4047,17 +4048,17 @@ export default function EditMapPage() {
                   className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
                   onClick={saveMap}
                   disabled={isSaving || !mapRef.current}
-                  title="Lưu thông tin bản đồ và vị trí hiển thị"
+                  title={t('mapEditor.saveTooltip')}
                 >
                   {isSaving ? (
                     <>
                       <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
-                      Saving...
+                      {t('mapEditor.saving')}
                     </>
                   ) : (
                     <>
                       <SaveIcon className="w-4 h-4" />
-                      Save
+                      {t('mapEditor.save')}
                     </>
                   )}
                 </button>
@@ -4075,17 +4076,17 @@ export default function EditMapPage() {
                     }
                   }}
                   disabled={isExporting || !mapRef.current}
-                  title="Xuất bản đồ"
+                  title={t('mapEditor.exportTooltip')}
                 >
                   {isExporting ? (
                     <>
                       <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
-                      Đang xuất...
+                      {t('mapEditor.exporting')}
                     </>
                   ) : (
                     <>
                       <DownloadIcon className="w-4 h-4" />
-                      Xuất
+                      {t('mapEditor.export')}
                     </>
                   )}
                 </button>
@@ -4106,7 +4107,7 @@ export default function EditMapPage() {
         className="absolute inset-0 transition-all duration-300"
         style={{
           left: mapStatus === "archived" ? "0" : (leftSidebarView ? "376px" : "56px"), // Hide sidebar when Archived
-          right: isPropertiesPanelOpen ? "360px" : "0",
+          right: (isPropertiesPanelOpen || poiTooltipModal.isOpen) ? "360px" : "0",
           // top: "60px",
           bottom: (!loading && detail?.isStoryMap !== false && mapStatus !== "archived") ? "200px" : "0", // Hide timeline when Archived
         }}
@@ -4674,6 +4675,18 @@ export default function EditMapPage() {
           mapZone={selectedZone.mapZone}
           zone={selectedZone.zone}
           onClose={() => setSelectedZone(null)}
+        />
+      )}
+
+      {/* Location Info Panel - right-side panel */}
+      {poiTooltipModal.isOpen && poiTooltipModal.locationId && (
+        <LocationInfoPanel
+          locationId={poiTooltipModal.locationId}
+          title={poiTooltipModal.title || ''}
+          subtitle={poiTooltipModal.subtitle}
+          content={poiTooltipModal.content}
+          isOpen={poiTooltipModal.isOpen}
+          onClose={() => setPoiTooltipModal({ isOpen: false })}
         />
       )}
     </main>

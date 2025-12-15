@@ -457,12 +457,7 @@ export interface ParticipantDto {
 
 function normalizeParticipant(raw: any): ParticipantDto {
   if (!raw) {
-    return {
-      id: "",
-      sessionId: "",
-      displayName: "",
-      score: 0,
-    };
+    return { id: "", sessionId: "", displayName: "", score: 0 };
   }
 
   const sessionId =
@@ -475,6 +470,8 @@ function normalizeParticipant(raw: any): ParticipantDto {
   return {
     id:
       raw.id ??
+      raw.sessionParticipantId ??     // ✅ swagger trả field này
+      raw.SessionParticipantId ??
       raw.participantId ??
       raw.ParticipantId ??
       raw.participantID ??
@@ -515,11 +512,9 @@ export async function joinSession(
       (typeof navigator !== "undefined" ? navigator.userAgent : "unknown"),
   };
 
-  const res = await postJson<typeof body, ParticipantDto>(
-    "/sessions/join",
-    body
-  );
-  return res;
+  const res = await postJson<typeof body, any>("/sessions/join", body);
+  return normalizeParticipant(res);
+
 }
 
 export async function leaveSession(participantId: string) {
