@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { OrganizationDetailDto, getOrganizationById } from "@/lib/api-organizations";
-import { QuestionBankDto, getMyQuestionBanks, getPublicQuestionBanks, getQuestionBank } from "@/lib/api-ques";
+import { QuestionBankDto, getMyQuestionBanksByOrg, getPublicQuestionBanksByOrg, getQuestionBank } from "@/lib/api-ques";
 import { getProjectsByOrganization } from "@/lib/api-workspaces";
 import { Workspace } from "@/types/workspace";
 import { BankExtra, normalizeTags, resolveBankId, safeMessage } from "./question-bank-common";
@@ -37,10 +37,11 @@ export function useQuestionBanksData(orgId: string) {
         try {
             setLoading(true);
             setErr(null);
+            // Use org-based API calls to filter question banks by organization
             const [orgRes, myRes, publicRes, wsRes] = await Promise.all([
                 getOrganizationById(orgId),
-                getMyQuestionBanks(),
-                getPublicQuestionBanks(),
+                getMyQuestionBanksByOrg(orgId),
+                getPublicQuestionBanksByOrg(orgId),
                 getProjectsByOrganization(orgId),
             ]);
             setOrg(orgRes.organization);

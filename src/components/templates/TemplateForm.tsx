@@ -2,12 +2,14 @@
 
 import { createMapTemplateFromGeoJson } from "@/lib/api-maps";
 import { useState } from "react";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface ApiError {
   message?: string;
 }
 
 export default function TemplateForm() {
+  const { t } = useI18n();
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("Sample Template");
   const [loading, setLoading] = useState(false);
@@ -15,7 +17,7 @@ export default function TemplateForm() {
 
   async function handleSubmit() {
     if (!file) {
-      setMsg("Chọn file .geojson trước");
+      setMsg(t("templates", "form_choose_file"));
       return;
     }
     setLoading(true);
@@ -34,8 +36,8 @@ export default function TemplateForm() {
       const msg =
         typeof err === "object" && err !== null && "message" in err
           ? (err as ApiError).message
-          : "Tạo template thất bại";
-      setMsg(msg ?? "Tạo template thất bại");
+          : t("templates", "form_error_create");
+      setMsg(msg ?? t("templates", "form_error_create"));
     } finally {
       setLoading(false);
     }
@@ -47,7 +49,7 @@ export default function TemplateForm() {
         className="px-3 py-2 rounded bg-white text-black"
         value={name}
         onChange={(e) => setName(e.target.value)}
-        placeholder="Tên template"
+        placeholder={t("templates", "form_placeholder_name")}
       />
       <input
         type="file"
@@ -59,7 +61,7 @@ export default function TemplateForm() {
         onClick={handleSubmit}
         className="rounded-lg px-3 py-2 bg-emerald-500 text-zinc-950 font-medium disabled:opacity-60"
       >
-        {loading ? "Đang tạo…" : "Tạo template từ GeoJSON"}
+        {loading ? t("templates", "form_button_creating") : t("templates", "form_button_create")}
       </button>
       {msg && <div className="text-sm">{msg}</div>}
     </div>
