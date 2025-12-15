@@ -1225,6 +1225,17 @@ export const messages = {
             copied: "Đã sao chép",
         },
         workspace_detail: {
+            delete_map_title: "Xoá bản đồ",
+            delete_map_desc: "Bạn có chắc chắn muốn xoá bản đồ “{name}”? Hành động này không thể hoàn tác.",
+            cancel: "Hủy",
+            deleting: "Đang xoá...",
+            delete_map_cta: "Xoá bản đồ",
+
+            toast_deleted: "Đã xoá bản đồ!",
+            toast_removed: "Đã gỡ bản đồ khỏi workspace!",
+
+            manage_delete_failed: "Không thể xoá",
+            err_generic: "Có lỗi xảy ra. Vui lòng thử lại.",
             storymap_section_title: "Bản đồ cho Storymap",
             storymap_menu_title: "Tùy chọn",
             storymap_menu_delete: "Xoá bản đồ",
@@ -1273,6 +1284,13 @@ export const messages = {
             delete_failed: "Không thể xoá bộ câu hỏi.",
             manage_err_has_active_sessions:
                 "Không thể xoá map vì còn active sessions. Hãy xoá hoặc hủy tất cả active sessions trước.",
+            delete_map_fallback_name: "bản đồ này",
+
+            create_map_dialog_title: "Chọn loại bản đồ",
+            create_map_type_normal_title: "Bản đồ thường",
+            create_map_type_normal_desc: "Tạo bản đồ để hiển thị và chia sẻ dữ liệu địa lý",
+            create_map_type_storymap_title: "Storymap",
+            create_map_type_storymap_desc: "Tạo storymap với timeline và segments để có thể tạo session học tập",
         },
         organization: {
             not_found_title: "Không tìm thấy tổ chức",
@@ -3749,6 +3767,8 @@ export const messages = {
                 "Note: You may be redirected to a payment gateway to complete the transaction. After completion, your plan status will be updated automatically.",
         },
         workspace_detail: {
+            manage_delete_failed: "Failed to delete",
+            err_generic: "Something went wrong. Please try again.",
             storymap_section_title: "Storymap maps",
             storymap_menu_title: "Options",
             storymap_menu_delete: "Delete map",
@@ -3805,6 +3825,13 @@ export const messages = {
 
             manage_err_has_active_sessions:
                 "Cannot delete map while it has active sessions. Please end or cancel all active sessions first.",
+            delete_map_fallback_name: "this map",
+
+            create_map_dialog_title: "Choose map type",
+            create_map_type_normal_title: "Normal map",
+            create_map_type_normal_desc: "Create a map to visualize and share geospatial data",
+            create_map_type_storymap_title: "Storymap",
+            create_map_type_storymap_desc: "Create a storymap with timeline and segments to build learning sessions",
         },
         support: {
             eyebrow: "Help & Support",

@@ -20,6 +20,47 @@ function JoinSessionContent() {
     name?: string;
     code: string;
   } | null>(null);
+  
+const getFriendlyError = (err: any) => {
+  const raw = err?.response?.data ?? err?.data ?? err?.message;
+
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return getFriendlyError({ response: { data: parsed } });
+    } catch {
+      const s = raw.toLowerCase();
+
+      if (s.includes("session.alreadyjoined") || s.includes("already joined")) {
+        return "Bạn đã tham gia session này rồi. Nếu bạn bị out do tắt tab, hãy mở lại tab cũ (hoặc dùng đúng trình duyệt đã join trước đó) để hệ thống tự vào lại.";
+      }
+
+      if (s.includes("session.full") || s.includes("maximum participants")) {
+        return "Session đã đủ số lượng người tham gia. Vui lòng thử lại sau hoặc liên hệ giảng viên.";
+      }
+
+      return raw;
+    }
+  }
+
+  if (raw && typeof raw === "object") {
+    const type = String((raw as any).type ?? "").toLowerCase();
+    const detail = String((raw as any).detail ?? (raw as any).message ?? (raw as any).title ?? "").trim();
+
+    if (type.includes("session.alreadyjoined") || detail.toLowerCase().includes("already joined")) {
+      return "Bạn đã tham gia session này rồi. Nếu bạn bị out do tắt tab, hãy mở lại tab cũ (hoặc dùng đúng trình duyệt đã join trước đó) để hệ thống tự vào lại.";
+    }
+
+    if (type.includes("session.full") || detail.toLowerCase().includes("maximum participants")) {
+      return "Session đã đủ số lượng người tham gia. Vui lòng thử lại sau hoặc liên hệ giảng viên.";
+    }
+
+    return detail || "Có lỗi xảy ra. Vui lòng thử lại.";
+  }
+
+  return "Không thể tham gia session. Vui lòng thử lại.";
+};
+
 
   // If code is in URL (from QR code), verify and skip to name entry
   useEffect(() => {
@@ -37,6 +78,21 @@ function JoinSessionContent() {
             return;
           }
 
+          if (typeof window !== "undefined") {
+            const cached = window.localStorage.getItem(`imos_join_${codeFromUrl}`);
+            if (cached) {
+              try {
+                const obj = JSON.parse(cached);
+                if (obj?.participantId && obj?.sessionId && obj?.mapId) {
+                  router.replace(
+                    `/storymap/view/${obj.mapId}?sessionId=${obj.sessionId}&participantId=${obj.participantId}`
+                  );
+                  return;
+                }
+              } catch { }
+            }
+          }
+
           setSessionInfo({
             name: session.sessionName || "",
             code: codeFromUrl,
@@ -44,9 +100,8 @@ function JoinSessionContent() {
           setIsLoading(false);
         } catch (err: any) {
           console.error("Failed to verify session:", err);
-          setError(
-            err?.message || "Invalid session code. Please check and try again."
-          );
+          setError(getFriendlyError(err));
+
           setStep("pin");
           setIsLoading(false);
         }
@@ -79,9 +134,8 @@ function JoinSessionContent() {
       setIsLoading(false);
     } catch (err: any) {
       console.error("Failed to verify session:", err);
-      setError(
-        err?.message || "Invalid session code. Please check and try again."
-      );
+      setError(getFriendlyError(err));
+
       setIsLoading(false);
     }
   };
@@ -137,6 +191,22 @@ function JoinSessionContent() {
         window.sessionStorage.setItem("imos_session_code", pin);
         window.sessionStorage.setItem("imos_participant_id", participantId);
         window.sessionStorage.setItem("imos_session_id", joinedSessionId);
+
+        window.localStorage.setItem("imos_student_name", displayName.trim());
+        window.localStorage.setItem("imos_session_code", pin);
+        window.localStorage.setItem("imos_participant_id", participantId);
+        window.localStorage.setItem("imos_session_id", joinedSessionId);
+
+        window.localStorage.setItem(
+          `imos_join_${pin}`,
+          JSON.stringify({
+            participantId,
+            sessionId: joinedSessionId,
+            sessionCode: pin,
+            displayName: displayName.trim(),
+            mapId: session.mapId,
+          })
+        );
       }
 
       router.push(
@@ -144,10 +214,35 @@ function JoinSessionContent() {
       );
 
     } catch (err: any) {
+      const data = err?.response?.data ?? err?.data;
+      const type = String(data?.type ?? "").toLowerCase();
+      const detail = String(data?.detail ?? data?.message ?? err?.message ?? "").toLowerCase();
+
+      const already =
+        type.includes("already") || detail.includes("already") || detail.includes("đã tham gia");
+
+      if (already && typeof window !== "undefined") {
+        const cached = window.localStorage.getItem(`imos_join_${pin}`);
+        if (cached) {
+          try {
+            const obj = JSON.parse(cached);
+            if (obj?.participantId && obj?.sessionId && obj?.mapId) {
+              router.replace(
+                `/storymap/view/${obj.mapId}?sessionId=${obj.sessionId}&participantId=${obj.participantId}`
+              );
+              return;
+            }
+          } catch { }
+        }
+      }
+
       console.error("Failed to join session:", err);
-      setError(err?.message || "Failed to join session. Please try again.");
+      const msg = getFriendlyError(err);
+      setError(msg);
+      toast.error(msg);
       setIsLoading(false);
     }
+
   };
 
   const handleBack = () => {

@@ -470,7 +470,7 @@ function normalizeParticipant(raw: any): ParticipantDto {
   return {
     id:
       raw.id ??
-      raw.sessionParticipantId ??     // ✅ swagger trả field này
+      raw.sessionParticipantId ??    
       raw.SessionParticipantId ??
       raw.participantId ??
       raw.ParticipantId ??
