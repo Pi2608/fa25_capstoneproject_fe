@@ -15,7 +15,7 @@ export type OrganizationReqDto = {
   address?: string;
 };
 
-export type OrganizationResDto = { 
+export type OrganizationResDto = {
   result?: string;
   orgId: string;
 };
@@ -64,7 +64,7 @@ export type GetInvitationsResDto = { invitations: InvitationDto[] };
 
 export type MemberDto = {
   memberId: string;
-  userId?: string; 
+  userId?: string;
   email: string;
   fullName: string;
   role: "Owner" | "Admin" | "Member" | "Viewer" | string;
@@ -189,64 +189,68 @@ export function cancelInvite(body: CancelInviteOrganizationReqDto) {
 export function transferOwnership(orgId: string, newOwnerId: string) {
   return postJson<TransferOwnershipReqDto, TransferOwnershipResDto>(
     `/organizations/${orgId}/ownership`,
-    { newOwnerId } 
+    { newOwnerId }
   );
 }
 // ===== ORGANIZATION ADMIN =====
+export type AggregatedQuota = {
+  resourceType: string;
+  currentUsage: number;
+  limit: number;
+  isExceeded: boolean;
+  remaining: number;
+  usagePercentage: number;
+};
+
 export type OrganizationUsageDto = {
   orgId: string;
-  orgName: string;
-  planName: string;
-  quotas: {
-    mapsMax?: number | null;
-    membersMax?: number | null;
-    editorsMax?: number | null;
-    storageMaxMB?: number | null;
-    viewsMonthly?: number | null;
-  };
-  currentUsage: {
-    mapsCount: number;
-    membersCount: number;
-    editorsCount: number;
-    storageUsedMB: number;
-    viewsThisMonth: number;
-  };
-  userSummaries?: Array<{
+  organizationName: string;
+  aggregatedQuotas: AggregatedQuota[];
+  userUsageSummaries?: Array<{
     userId: string;
     email: string;
     fullName: string;
     mapsCount: number;
     storageUsedMB: number;
   }>;
+  lastResetDate?: string;
+  nextResetDate?: string;
+  totalActiveUsers: number;
+  totalMapsCreated: number;
+  totalExportsThisMonth: number;
+};
+
+export type MembershipDto = {
+  membershipId: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  planId: number;
+  planName: string;
+  status: string;
+  billingCycleStartDate: string;
+  billingCycleEndDate: string;
+  autoRenew: boolean;
+  monthlyCost: number;
+  createdAt: string;
 };
 
 export type OrganizationSubscriptionDto = {
   orgId: string;
-  orgName: string;
-  activeMembership?: {
-    membershipId: string;
-    planName: string;
-    startDate: string;
-    endDate: string;
-    isActive: boolean;
-  };
-  pendingMembership?: {
-    membershipId: string;
-    planName: string;
-    startDate: string;
-  };
-  expiredMemberships?: Array<{
-    membershipId: string;
-    planName: string;
-    startDate: string;
-    endDate: string;
-  }>;
+  organizationName: string;
+  activeMemberships: MembershipDto[];
+  pendingMemberships: MembershipDto[];
+  expiredMemberships: MembershipDto[];
+  nextBillingDate?: string;
+  totalMonthlyCost: number;
+  primaryPlanName: string;
+  hasActiveSubscription: boolean;
 };
 
 export type OrganizationBillingDto = {
   orgId: string;
-  orgName: string;
-  recentTransactions?: Array<{
+  organizationName: string;
+  recentTransactions: Array<{
     transactionId: string;
     amount: number;
     currency: string;
@@ -254,7 +258,7 @@ export type OrganizationBillingDto = {
     description: string;
     status: string;
   }>;
-  invoices?: Array<{
+  recentInvoices: Array<{
     invoiceId: string;
     amount: number;
     currency: string;
@@ -262,12 +266,12 @@ export type OrganizationBillingDto = {
     dueDate: string;
     status: string;
   }>;
-  spendingSummary?: {
-    totalSpent: number;
-    currency: string;
-    periodStart: string;
-    periodEnd: string;
-  };
+  totalSpentThisMonth: number;
+  totalSpentLastMonth: number;
+  outstandingBalance: number;
+  paymentMethod?: string;
+  nextBillingDate?: string;
+  hasPaymentMethodOnFile: boolean;
 };
 
 export type CheckQuotaRequest = {

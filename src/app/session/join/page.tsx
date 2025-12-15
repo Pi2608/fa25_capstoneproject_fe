@@ -5,11 +5,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { PinInput } from "@/components/session/PinInput";
 import { joinSession, getSessionByCode } from "@/lib/api-ques";
 import { toast } from "react-toastify";
+import { useI18n } from "@/i18n/I18nProvider";
 
 function JoinSessionContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const codeFromUrl = searchParams?.get("code") || null;
+  const { t } = useI18n();
 
   const [step, setStep] = useState<"pin" | "name">(codeFromUrl ? "name" : "pin");
   const [pin, setPin] = useState(codeFromUrl || "");
@@ -72,7 +74,7 @@ const getFriendlyError = (err: any) => {
           const session = await getSessionByCode(codeFromUrl);
 
           if (session.status === "COMPLETED" || session.status === "CANCELLED") {
-            setError("This session has ended");
+            setError(t("session", "errorSessionEnded"));
             setStep("pin");
             setIsLoading(false);
             return;
@@ -107,7 +109,7 @@ const getFriendlyError = (err: any) => {
         }
       })();
     }
-  }, [codeFromUrl, step]);
+  }, [codeFromUrl, step, t]);
 
   const handlePinComplete = async (pinCode: string) => {
     setIsLoading(true);
@@ -119,7 +121,7 @@ const getFriendlyError = (err: any) => {
       const session = await getSessionByCode(pinCode);
 
       if (session.status === "COMPLETED" || session.status === "CANCELLED") {
-        setError("This session has ended");
+        setError(t("session", "errorSessionEnded"));
         setIsLoading(false);
         return;
       }
@@ -144,7 +146,7 @@ const getFriendlyError = (err: any) => {
     e.preventDefault();
 
     if (!displayName.trim()) {
-      setError("Please enter your name");
+      setError(t("session", "errorEnterName"));
       return;
     }
 
@@ -157,12 +159,12 @@ const getFriendlyError = (err: any) => {
         displayName: displayName.trim(),
       });
 
-      toast.success(`Welcome, ${participant.displayName}!`);
+      toast.success(`${t("session", "toastWelcome")} ${participant.displayName}!`);
 
       const session = await getSessionByCode(pin);
 
       if (!session.mapId) {
-        setError("Session does not have a map attached");
+        setError(t("session", "errorNoMap"));
         setIsLoading(false);
         return;
       }
@@ -180,12 +182,12 @@ const getFriendlyError = (err: any) => {
         "";
 
       if (!participantId || !joinedSessionId) {
-        setError("Không lấy được thông tin tham gia tiết học từ server.");
+        setError(t("session", "errorNoParticipantInfo"));
         setIsLoading(false);
         return;
       }
 
-      // Lưu vào sessionStorage cho trang view
+      // Save to sessionStorage for view page
       if (typeof window !== "undefined") {
         window.sessionStorage.setItem("imos_student_name", displayName.trim());
         window.sessionStorage.setItem("imos_session_code", pin);
@@ -257,12 +259,12 @@ const getFriendlyError = (err: any) => {
         {/* Logo/Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
-            Join Session
+            {t("session", "pageTitle")}
           </h1>
           <p className="text-zinc-600 dark:text-zinc-400 text-lg">
             {step === "pin"
-              ? "Enter the session code"
-              : "Enter your display name"}
+              ? t("session", "subtitlePin")
+              : t("session", "subtitleName")}
           </p>
         </div>
 
@@ -274,10 +276,10 @@ const getFriendlyError = (err: any) => {
               <div className="text-center">
                 <div className="text-6xl mb-4">🔢</div>
                 <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
-                  Enter Session Code
+                  {t("session", "pinTitle")}
                 </h2>
                 <p className="text-zinc-600 dark:text-zinc-400">
-                  Ask your teacher for the 6-digit code
+                  {t("session", "pinSubtitle")}
                 </p>
               </div>
 
@@ -293,7 +295,7 @@ const getFriendlyError = (err: any) => {
               {isLoading && (
                 <div className="text-center text-zinc-600 dark:text-zinc-400">
                   <div className="animate-spin inline-block w-6 h-6 border-4 border-emerald-500 border-t-transparent rounded-full"></div>
-                  <div className="mt-2">Verifying code...</div>
+                  <div className="mt-2">{t("session", "verifyingCode")}</div>
                 </div>
               )}
             </div>
@@ -303,11 +305,11 @@ const getFriendlyError = (err: any) => {
               <div className="text-center">
                 <div className="text-6xl mb-4">👤</div>
                 <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-2">
-                  What&apos;s your name?
+                  {t("session", "nameTitle")}
                 </h2>
                 {sessionInfo && (
                   <p className="text-zinc-600 dark:text-zinc-400">
-                    Joining: <span className="font-semibold">{sessionInfo.code}</span>
+                    {t("session", "joiningLabel")} <span className="font-semibold">{sessionInfo.code}</span>
                   </p>
                 )}
               </div>
@@ -317,14 +319,14 @@ const getFriendlyError = (err: any) => {
                   htmlFor="displayName"
                   className="block text-sm font-medium text-zinc-900 dark:text-zinc-100"
                 >
-                  Display Name
+                  {t("session", "displayNameLabel")}
                 </label>
                 <input
                   id="displayName"
                   type="text"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Enter your name"
+                  placeholder={t("session", "displayNamePlaceholder")}
                   maxLength={50}
                   disabled={isLoading}
                   className="
@@ -341,15 +343,9 @@ const getFriendlyError = (err: any) => {
                   autoFocus
                 />
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                  This name will be visible to everyone in the session
+                  {t("session", "displayNameHint")}
                 </p>
               </div>
-
-              {error && (
-                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-600 dark:text-red-400 text-sm">
-                  {error}
-                </div>
-              )}
 
               <div className="flex gap-3">
                 <button
@@ -366,7 +362,7 @@ const getFriendlyError = (err: any) => {
                     disabled:opacity-50 disabled:cursor-not-allowed
                   "
                 >
-                  Back
+                  {t("session", "btnBack")}
                 </button>
                 <button
                   type="submit"
@@ -385,11 +381,11 @@ const getFriendlyError = (err: any) => {
                   {isLoading ? (
                     <>
                       <div className="animate-spin w-5 h-5 border-3 border-white border-t-transparent rounded-full"></div>
-                      <span>Joining...</span>
+                      <span>{t("session", "btnJoining")}</span>
                     </>
                   ) : (
                     <>
-                      <span>Join Session</span>
+                      <span>{t("session", "btnJoin")}</span>
                       <span>→</span>
                     </>
                   )}
@@ -405,7 +401,7 @@ const getFriendlyError = (err: any) => {
             onClick={() => router.push("/")}
             className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 underline transition-colors"
           >
-            ← Back to Home
+            {t("session", "btnBackToHome")}
           </button>
         </div>
       </div>
@@ -424,4 +420,3 @@ export default function JoinSessionPage() {
     </Suspense>
   );
 }
-

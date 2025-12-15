@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useGsapHomeScroll } from "@/components/common/useGsapHomeScroll";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useToast } from "@/contexts/ToastContext";
+import { EmptyState } from "@/components/ui/EmptyState";
 import {
   getPublishedGalleryMaps,
   getPublishedGalleryMapById,
@@ -376,23 +377,20 @@ export default function GalleryClient() {
           {t("gallery.loading_maps")}
         </section>
       ) : pageItems.length === 0 ? (
-        <section className="mt-8 rounded-2xl border border-zinc-700/60 bg-zinc-900/60 p-8 text-center">
-          <div className="text-lg font-medium">{t("gallery.empty_title")}</div>
-          <p className="mt-1 text-sm text-zinc-400">{t("gallery.empty_sub")}</p>
-          <div className="mt-4">
-            <button
-              onClick={() => {
-                setQ("");
-                setTagKey("All");
-                setSort("popular");
-                setFeaturedOnly(false);
-              }}
-              className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
-            >
-              {t("gallery.reset_filters")}
-            </button>
-          </div>
-        </section>
+        <EmptyState
+          illustration="map"
+          title={t("gallery.empty_title")}
+          description={t("gallery.empty_sub")}
+          action={{
+            label: t("gallery.reset_filters"),
+            onClick: () => {
+              setQ("");
+              setTagKey("All");
+              setSort("popular");
+              setFeaturedOnly(false);
+            },
+          }}
+        />
       ) : (
         <>
           <section className="gal-card-grid mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">

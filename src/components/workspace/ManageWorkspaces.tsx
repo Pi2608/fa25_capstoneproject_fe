@@ -12,9 +12,14 @@ import {
 import type { Workspace } from "@/types/workspace";
 import { useI18n } from "@/i18n/I18nProvider";
 
-type Props = { orgId: string; canManage: boolean };
+type Props = {
+  orgId: string;
+  canManage: boolean;
+  onWorkspaceCreated?: () => void;
+  onWorkspaceDeleted?: () => void;
+};
 
-export default function ManageWorkspaces({ orgId, canManage }: Props) {
+export default function ManageWorkspaces({ orgId, canManage, onWorkspaceCreated, onWorkspaceDeleted }: Props) {
   const { t } = useI18n();
 
   const [open, setOpen] = useState(false);
@@ -60,6 +65,8 @@ export default function ManageWorkspaces({ orgId, canManage }: Props) {
       await createWorkspace(req);
       setCreateName("");
       await reload();
+      // Notify parent to refresh its workspace list
+      onWorkspaceCreated?.();
     } finally {
       setCreating(false);
     }
@@ -120,6 +127,8 @@ export default function ManageWorkspaces({ orgId, canManage }: Props) {
       await deleteWorkspace(deleteId);
       setDeleteId(null);
       await reload();
+      // Notify parent to refresh its workspace list
+      onWorkspaceDeleted?.();
     } catch {
       setErr(t("org_workspace.manage_delete_failed"));
     } finally {

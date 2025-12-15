@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useI18n } from "@/i18n/I18nProvider";
 import TemplateCard from "./TemplateCard";
 import { getMapTemplates, createMapFromTemplate, type MapTemplate } from "@/lib/api-maps";
 
@@ -22,6 +23,7 @@ export default function TemplatePickerDialog({
   mapName?: string;
   isPublic?: boolean;
 }) {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [list, setList] = useState<MapTemplate[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -37,8 +39,8 @@ export default function TemplatePickerDialog({
         const msg =
           typeof err === "object" && err !== null && "message" in err
             ? (err as ApiError).message
-            : "Không tải được danh sách template";
-        setErr(msg ?? "Không tải được danh sách template");
+            : t("templates", "picker_error_load");
+        setErr(msg ?? t("templates", "picker_error_load"));
       }
     })();
   }, [open]);
@@ -63,8 +65,8 @@ export default function TemplatePickerDialog({
         const msg =
           typeof err === "object" && err !== null && "message" in err
             ? (err as ApiError).message
-            : "Tạo map từ template thất bại";
-        setErr(msg ?? "Tạo map từ template thất bại");
+            : t("templates", "picker_error_create");
+        setErr(msg ?? t("templates", "picker_error_create"));
       } finally {
         setLoading(false);
       }
@@ -78,12 +80,12 @@ export default function TemplatePickerDialog({
     <div className="fixed inset-0 z-[4000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="w-full max-w-5xl bg-zinc-950 rounded-2xl ring-1 ring-white/10 p-4">
         <div className="flex items-center justify-between mb-3">
-          <div className="text-lg font-semibold">Chọn template</div>
+          <div className="text-lg font-semibold">{t("templates", "picker_title")}</div>
           <button
             onClick={onClose}
             className="text-sm px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700"
           >
-            Đóng
+            {t("templates", "picker_close_btn")}
           </button>
         </div>
 
@@ -91,7 +93,7 @@ export default function TemplatePickerDialog({
 
         {list.length === 0 ? (
           <div className="text-sm text-white/70">
-            Chưa có template nào. Bạn có thể tạo ở trang{" "}
+            {t("templates", "picker_empty_title")}. {t("templates", "picker_empty_desc")}{" "}
             <code className="px-1 py-0.5 bg-zinc-800 rounded">/templates/new</code>.
           </div>
         ) : (

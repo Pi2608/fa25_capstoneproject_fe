@@ -5,6 +5,7 @@ import { ArchiveIcon, RefreshCcwIcon, SendIcon, UndoIcon, ExternalLinkIcon, Chev
 import { useState, useEffect, useRef, JSX } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface PublishButtonProps {
   mapId: string;
@@ -14,6 +15,7 @@ interface PublishButtonProps {
 }
 
 export default function PublishButton({ mapId, status, onStatusChange, isStoryMap = true }: PublishButtonProps) {
+  const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPublishOptions, setShowPublishOptions] = useState(false);
@@ -75,7 +77,7 @@ export default function PublishButton({ mapId, status, onStatusChange, isStoryMa
       await publishMap(mapId);
       onStatusChange("published");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể publish map");
+      setError(e instanceof Error ? e.message : t("map_components", "publish_error"));
     } finally {
       setLoading(false);
     }
@@ -88,7 +90,7 @@ export default function PublishButton({ mapId, status, onStatusChange, isStoryMa
       await unpublishMap(mapId);
       onStatusChange("draft");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể unpublish map");
+      setError(e instanceof Error ? e.message : t("map_components", "unpublish_error"));
     } finally {
       setLoading(false);
     }
@@ -101,7 +103,7 @@ export default function PublishButton({ mapId, status, onStatusChange, isStoryMa
       await archiveMap(mapId);
       onStatusChange("archived");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể archive map");
+      setError(e instanceof Error ? e.message : t("map_components", "archive_error"));
     } finally {
       setLoading(false);
     }
@@ -114,7 +116,7 @@ export default function PublishButton({ mapId, status, onStatusChange, isStoryMa
       await restoreMap(mapId);
       onStatusChange("draft");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Không thể restore map");
+      setError(e instanceof Error ? e.message : t("map_components", "restore_error"));
     } finally {
       setLoading(false);
     }

@@ -123,10 +123,9 @@ function userMessage(
     return t("org_detail.err_not_found");
   }
   if (status === 400) {
-    if( text.includes("active") && text.includes("workspaces"))
-      {
-        return t("org_detail.err_has_active_workspaces");
-      }
+    if (text.includes("active") && text.includes("workspaces")) {
+      return t("org_detail.err_has_active_workspaces");
+    }
     return t("org_detail.err_bad_request");
   }
   if (status === 429) {
@@ -190,6 +189,7 @@ export default function OrgDetailPage() {
 
   const [shareOpen, setShareOpen] = useState(false);
   const [inviteInput, setInviteInput] = useState("");
+  const [inviteRole, setInviteRole] = useState<"Admin" | "Member" | "Viewer">("Member");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
 
@@ -442,7 +442,7 @@ export default function OrgDetailPage() {
         const body: InviteMemberOrganizationReqDto = {
           orgId,
           memberEmail: email,
-          memberType: "Member",
+          memberType: inviteRole,
         };
         await inviteMember(body);
       }
@@ -995,64 +995,6 @@ export default function OrgDetailPage() {
               {t("org_detail.settings")}
             </button>
           )}
-
-          <div className="relative z-50">
-            <button
-              onClick={() => setMoreOpen((v) => !v)}
-              className={`px-3 py-2 rounded-lg border text-sm ${themeClasses.button}`}
-              aria-haspopup="menu"
-              aria-expanded={moreOpen}
-              title={t("org_detail.more")}
-            >
-              ⋯
-            </button>
-            {moreOpen && (
-              <div
-                role="menu"
-                className={`absolute right-0 mt-2 w-60 rounded-lg border shadow-xl overflow-hidden ${themeClasses.panel}`}
-                onMouseLeave={() => setMoreOpen(false)}
-              >
-                <button
-                  onClick={copyWorkspaceUrl}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-white/5 ${isDark ? "text-zinc-200" : "text-gray-700"
-                    }`}
-                  role="menuitem"
-                >
-                  {t("org_detail.copy_ws_url")}
-                </button>
-                <button
-                  onClick={copyWorkspaceId}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-white/5 ${isDark ? "text-zinc-200" : "text-gray-700"
-                    }`}
-                  role="menuitem"
-                >
-                  {t("org_detail.copy_ws_id")}
-                </button>
-                <button
-                  onClick={handleWorkspaceAnalytics}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-white/5 ${isDark ? "text-zinc-200" : "text-gray-700"
-                    }`}
-                  role="menuitem"
-                >
-                  {t("org_detail.view_analytics")}
-                </button>
-
-                {isOwner && (
-                  <button
-                    onClick={() => {
-                      setMoreOpen(false);
-                      setDeleteOpen(true);
-                    }}
-                    className={`w-full text-left px-3 py-2 text-sm hover:bg-white/5 ${isDark ? "text-red-300" : "text-red-600"
-                      }`}
-                    role="menuitem"
-                  >
-                    {t("org_detail.delete_ws_ellipsis")}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
         </div>
       </div>
 
@@ -1065,7 +1007,12 @@ export default function OrgDetailPage() {
             {t("org_detail.section_ws")}
           </h2>
           <div className="flex items-center gap-2">
-            <ManageWorkspaces orgId={orgId} canManage={isAdminOrOwner} />
+            <ManageWorkspaces
+              orgId={orgId}
+              canManage={isAdminOrOwner}
+              onWorkspaceCreated={handleRefresh}
+              onWorkspaceDeleted={handleRefresh}
+            />
             {canAccessQuestionBanks && (
               <>
                 <button
@@ -1409,6 +1356,16 @@ export default function OrgDetailPage() {
                 }}
                 disabled={!isOwner}
               />
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as "Admin" | "Member" | "Viewer")}
+                className={`rounded-md border px-2 py-2 text-sm ${themeClasses.select}`}
+                disabled={!isOwner}
+              >
+                <option value="Admin">{t("org_detail.role_admin")}</option>
+                <option value="Member">{t("org_detail.role_member")}</option>
+                <option value="Viewer">{t("org_detail.role_viewer")}</option>
+              </select>
               <button
                 onClick={() => void onInvite()}
                 disabled={inviteBusy}
@@ -1423,126 +1380,6 @@ export default function OrgDetailPage() {
                   }`}
               >
                 {inviteMsg}
-              </div>
-            )}
-          </div>
-          <div
-            className={`divide-y text-sm max-h-56 overflow-auto rounded-md border ${themeClasses.tableBorder} ${themeClasses.panel}`}
-          >
-            {memberRows.map((m, index) => {
-              const key = (m.memberId ?? m.email ?? `member-${index}`) as string;
-              const roleLabel = (m.role ?? m.memberType ?? "") || "Member";
-              const expanded = expandedMemberId === key;
-
-              return (
-                <div key={key} className="px-2">
-                  <div className="flex items-center justify-between py-2">
-                    <div className="min-w-0">
-                      <div
-                        className={`font-medium truncate ${isDark ? "text-zinc-100" : "text-gray-900"
-                          }`}
-                      >
-                        {m.fullName || m.email || "—"}
-                      </div>
-                      <div
-                        className={`text-xs truncate ${themeClasses.textMuted}`}
-                      >
-                        {m.email ?? "—"}
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedMemberId(expanded ? null : key)
-                      }
-                      className={`ml-3 shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${themeClasses.button}`}
-                      title={t("org_detail.role_remove")}
-                    >
-                      {t(
-                        roleLabel === "Owner"
-                          ? "org_detail.role_owner"
-                          : roleLabel === "Admin"
-                            ? "org_detail.role_admin"
-                            : roleLabel === "Viewer"
-                              ? "org_detail.role_viewer"
-                              : "org_detail.role_member"
-                      )}{" "}
-                      <span aria-hidden>▾</span>
-                    </button>
-                  </div>
-
-                  {expanded && (
-                    <div
-                      className={`mb-2 rounded-md border p-2 ${isDark
-                        ? "bg-zinc-900/70 border-white/10"
-                        : "bg-gray-50 border-gray-200"
-                        }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <label
-                          className={`text-xs ${themeClasses.textMuted}`}
-                        >
-                          {t("org_detail.role")}
-                        </label>
-                        <select
-                          className={`flex-1 rounded-md border px-2 py-1 text-xs ${themeClasses.select}`}
-                          value={roleLabel}
-                          disabled={roleBusyId === m.memberId}
-                          onChange={(e) =>
-                            onChangeRole(
-                              m.memberId ?? null,
-                              roleLabel,
-                              e.target.value
-                            )
-                          }
-                        >
-                          {ROLE_OPTIONS.map((r) => (
-                            <option key={r} value={r}>
-                              {t(
-                                r === "Owner"
-                                  ? "org_detail.role_owner"
-                                  : r === "Admin"
-                                    ? "org_detail.role_admin"
-                                    : r === "Viewer"
-                                      ? "org_detail.role_viewer"
-                                      : "org_detail.role_member"
-                              )}
-                            </option>
-                          ))}
-                        </select>
-
-                        <button
-                          type="button"
-                          onClick={() =>
-                            askRemoveMember(
-                              m.memberId ?? null,
-                              m.fullName ||
-                              m.email ||
-                              t("org_detail.user")
-                            )
-                          }
-                          disabled={removeBusyId === m.memberId}
-                          className={`shrink-0 text-xs px-2 py-1 rounded border disabled:opacity-60 ${isDark
-                            ? "border-red-500/30 text-red-300 hover:bg-red-500/10"
-                            : "border-red-300 text-red-600 hover:bg-red-50"
-                            }`}
-                          title={t("org_detail.remove_member")}
-                        >
-                          {removeBusyId === m.memberId
-                            ? t("org_detail.removing")
-                            : t("org_detail.remove")}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {memberRows.length === 0 && (
-              <div className={`py-6 text-center ${themeClasses.textMuted}`}>
-                {t("org_detail.no_members")}
               </div>
             )}
           </div>

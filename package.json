@@ -15,7 +15,8 @@
     "electron-dev": "concurrently \"npm run dev\" \"wait-on http://localhost:3000 && electron .\"",
     "electron-pack": "npm run build && electron-builder",
     "preelectron-pack": "npm run build",
-    "dist": "npm run build && electron-builder --publish=never"
+    "dist": "npm run build && electron-builder --publish=never",
+    "dist:win": "npm run build && electron-builder --win --x64 --publish=never"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -76,27 +77,33 @@
   },
   "build": {
     "appId": "com.fa25.capstoneproject",
-    "productName": "Custom Map OSM",
+    "productName": "IMOS",
     "directories": {
       "output": "dist"
     },
     "files": [
-      "out/**/*",
+      ".next/standalone/**/*",
+      ".next/static/**/*",
       "electron/**/*",
-      "node_modules/**/*",
       "package.json"
+    ],
+    "extraFiles": [
+      {
+        "from": "public",
+        "to": "public"
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "icon": "public/favicon.ico"
+      "icon": "src/app/favicon.ico"
     },
     "win": {
       "target": "nsis",
-      "icon": "public/favicon.ico"
+      "icon": "src/app/favicon.ico"
     },
     "linux": {
       "target": "AppImage",
-      "icon": "public/favicon.ico"
+      "icon": "src/app/favicon.ico"
     },
     "nsis": {
       "oneClick": false,
