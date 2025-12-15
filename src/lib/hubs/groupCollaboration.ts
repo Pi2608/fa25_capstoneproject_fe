@@ -18,12 +18,22 @@ export interface GroupDto {
 }
 
 export interface GroupSubmissionDto {
-  id: string;
+  submissionId?: string;
   groupId: string;
-  sessionId: string;
-  submittedByParticipantId: string;
+  groupName?: string | null;
+  title?: string | null;
+  content?: unknown | null;
+  attachmentUrls?: string[] | null;
+  score?: number | null;
+  feedback?: string | null;
+  submittedAt?: string | null;
+  gradedAt?: string | null;
+
+  id?: string;
+  sessionId?: string;
+  submittedByParticipantId?: string;
   payloadJson?: string | null;
-  submittedAt: string;
+
   [key: string]: unknown;
 }
 
@@ -86,9 +96,16 @@ export interface SubmitGroupWorkRequest {
   groupId: string;
   sessionId?: string;
   submittedByParticipantId?: string;
+
+  title?: string | null;
+  content?: unknown | null;
+  attachmentUrls?: string[] | null;
+
   payloadJson?: string | null;
+
   [key: string]: unknown;
 }
+
 
 export interface GradeSubmissionRequest {
   [key: string]: unknown;
@@ -345,10 +362,24 @@ export async function submitGroupWork(
       return false;
     }
 
-    await connection.invoke("SubmitGroupWork", {
-      ...payload,
-    });
+    const body: any = { ...payload };
 
+    if (body.content == null && body.payloadJson != null) {
+      try {
+        body.content = JSON.parse(body.payloadJson);
+      } catch {
+        body.content = body.payloadJson;
+      }
+    }
+
+    if (body.attachmentUrls === undefined) body.attachmentUrls = null;
+    if (typeof body.title !== "string" || !body.title.trim()) {
+      body.title = "Bài nộp nhóm";
+    } else {
+      body.title = body.title.trim();
+    }
+
+    await connection.invoke("SubmitGroupWork", body);
     return true;
   } catch (error) {
     console.error("[SignalR GroupCollaboration] Failed SubmitGroupWork:", error);
@@ -490,7 +521,7 @@ export async function submitWork(
 // Old name in your FE: moveCursor(payload) -> map to SendCursorPosition(groupId, cursorData)
 export async function moveCursor(
   connection: signalR.HubConnection,
-  payload: { groupId?: string; [key: string]: unknown }
+  payload: { groupId?: string;[key: string]: unknown }
 ): Promise<boolean> {
   const groupId = payload?.groupId;
   if (!groupId) {

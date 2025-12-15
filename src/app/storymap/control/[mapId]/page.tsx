@@ -202,6 +202,11 @@ export default function StoryMapControlPage() {
 
   // ========== NEW: state hiển thị chi tiết nhóm ==========
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const selectedGroupName =
+    selectedGroupId
+      ? (groups.find((g: any) => (g.groupId ?? g.id) === selectedGroupId)?.name ?? selectedGroupId)
+      : null;
+
   const [selectedGroupMembers, setSelectedGroupMembers] = useState<GroupMember[]>(
     []
   );
@@ -221,6 +226,52 @@ export default function StoryMapControlPage() {
 
   const [showShareModal, setShowShareModal] = useState(false);
   const shareOverlayGuardRef = useRef(false);
+  const [isGradeOpen, setIsGradeOpen] = useState(false);
+  const [gradeTarget, setGradeTarget] = useState<any>(null);
+  const [gradeScore, setGradeScore] = useState<string>("");
+  const [gradeFeedback, setGradeFeedback] = useState<string>("");
+  const [grading, setGrading] = useState(false);
+
+  const openGradeModal = (submission: any) => {
+    setGradeTarget(submission);
+    setGradeScore(
+      submission?.score != null ? String(submission.score) : ""
+    );
+    setGradeFeedback(submission?.feedback ?? "");
+    setIsGradeOpen(true);
+  };
+
+  const closeGradeModal = () => {
+    setIsGradeOpen(false);
+    setGradeTarget(null);
+    setGradeScore("");
+    setGradeFeedback("");
+  };
+
+  const submitGrade = async () => {
+    if (!gradeTarget) return;
+
+    const submissionId = gradeTarget?.submissionId ?? gradeTarget?.SubmissionId ?? gradeTarget?.id ?? gradeTarget?.Id;
+    const scoreNum = Number(gradeScore);
+
+    if (!submissionId) {
+      alert("Thiếu submissionId");
+      return;
+    }
+    if (!Number.isFinite(scoreNum)) {
+      alert("Điểm không hợp lệ");
+      return;
+    }
+
+    setGrading(true);
+    try {
+      await handleGradeSubmission(submissionId, scoreNum, gradeFeedback?.trim() || undefined);
+      closeGradeModal();
+      await handleLoadGroupSubmissions();
+    } finally {
+      setGrading(false);
+    }
+  };
 
   // FIXED: Track last sent segment sync to avoid duplicates
   const lastSentSyncRef = useRef<{ index: number; isPlaying: boolean } | null>(
@@ -2127,7 +2178,10 @@ export default function StoryMapControlPage() {
                 <div>
                   <p className="text-[12px] font-semibold text-zinc-200">Bài nộp nhóm</p>
                   <p className="text-[11px] text-zinc-500">
-                    {selectedGroupId ? `Nhóm: ${selectedGroupId}` : "Chưa chọn nhóm (bấm nhóm ở panel trái)."}
+                    {selectedGroupId
+                      ? `Nhóm: ${selectedGroupName}`
+                      : "Chưa chọn nhóm (bấm nhóm ở panel trái)."}
+
                   </p>
                 </div>
 
@@ -2151,29 +2205,71 @@ export default function StoryMapControlPage() {
                 ) : (
                   <div className="space-y-2">
                     {groupSubmissions.map((s: any, idx: number) => {
-                      const submittedAt =
-                        s?.submittedAt ?? s?.SubmittedAt ?? s?.createdAt ?? s?.CreatedAt ?? "";
-                      const content = s?.content ?? s?.Content ?? null;
-                      const preview =
-                        content == null
-                          ? ""
-                          : (typeof content === "string" ? content : JSON.stringify(content));
+                      const submissionId = s?.submissionId ?? s?.SubmissionId ?? s?.id ?? s?.Id;
+                      const groupName = s?.groupName ?? s?.GroupName ?? "Nhóm (chưa có tên)";
+                      const title = s?.title ?? s?.Title ?? "";
+                      const submittedAt = s?.submittedAt ?? s?.SubmittedAt ?? "";
+                      const content = s?.content ?? s?.Content ?? "";
+                      const attachmentUrls = s?.attachmentUrls ?? s?.AttachmentUrls ?? [];
 
                       return (
-                        <div key={s?.id ?? s?.Id ?? idx} className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-2">
-                          <div className="flex items-center justify-between">
-                            <p className="text-[11px] font-semibold text-zinc-200">Bài #{idx + 1}</p>
-                            <p className="text-[10px] text-zinc-500">{submittedAt}</p>
-                          </div>
+                        <div
+                          key={submissionId ?? idx}
+                          className="rounded-xl border border-zinc-800 bg-zinc-950/30 p-2"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-[11px] font-semibold text-zinc-200 truncate">
+                                {groupName}
+                              </p>
 
-                          {preview && (
-                            <p className="mt-1 text-[11px] text-zinc-400">
-                              {preview.length > 200 ? preview.slice(0, 200) + "..." : preview}
-                            </p>
-                          )}
+                              {title && (
+                                <p className="mt-0.5 text-[10px] text-zinc-400 truncate">
+                                  {title}
+                                </p>
+                              )}
+
+                              {content && (
+                                <p className="mt-1 text-[11px] text-zinc-400">
+                                  {String(content).length > 200 ? String(content).slice(0, 200) + "…" : String(content)}
+                                </p>
+                              )}
+
+                              {Array.isArray(attachmentUrls) && attachmentUrls.length > 0 && (
+                                <div className="mt-1 space-y-1">
+                                  {attachmentUrls.map((url: string, i: number) => (
+                                    <a
+                                      key={`${submissionId}-att-${i}`}
+                                      href={url}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="block text-[11px] text-sky-300 hover:text-sky-200 underline truncate"
+                                      title={url}
+                                    >
+                                      Đính kèm {i + 1}
+                                    </a>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* CỘT PHẢI: thời gian + nút Chấm điểm */}
+                            <div className="shrink-0 text-right">
+                              <p className="text-[10px] text-zinc-500">{submittedAt}</p>
+
+                              <button
+                                type="button"
+                                onClick={() => openGradeModal(s)}
+                                className="mt-1 inline-flex items-center rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-200 hover:bg-emerald-500/20"
+                              >
+                                Chấm điểm
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
+
                   </div>
                 )}
               </div>
@@ -2329,6 +2425,134 @@ export default function StoryMapControlPage() {
           </div>,
           document.body
         )}
+      {isGradeOpen && gradeTarget && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-xl rounded-2xl border border-zinc-700 bg-zinc-900/95 p-5 shadow-2xl ring-1 ring-white/10 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] font-semibold text-zinc-200">Chấm điểm bài nộp</p>
+              <button
+                type="button"
+                onClick={closeGradeModal}
+                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-[12px] text-zinc-200 hover:bg-zinc-800"
+              >
+                ✕
+              </button>
+            </div>
+
+            {(() => {
+              const s = gradeTarget;
+              const submissionId = s?.submissionId ?? s?.SubmissionId ?? s?.id ?? s?.Id;
+              const groupName = s?.groupName ?? s?.GroupName ?? "";
+              const groupId = s?.groupId ?? s?.GroupId ?? "";
+              const title = s?.title ?? s?.Title ?? "";
+              const content = s?.content ?? s?.Content ?? "";
+              const attachmentUrls = s?.attachmentUrls ?? s?.AttachmentUrls ?? [];
+              const submittedAt = s?.submittedAt ?? s?.SubmittedAt ?? "";
+              const gradedAt = s?.gradedAt ?? s?.GradedAt ?? "";
+              const score = s?.score ?? s?.Score ?? null;
+              const feedback = s?.feedback ?? s?.Feedback ?? null;
+
+              return (
+                <div className="mt-3 space-y-3 text-[12px] text-zinc-300">
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* <div><span className="text-zinc-500">submissionId:</span> {submissionId}</div> */}
+                    <div><span className="text-zinc-500">groupName:</span> {groupName}</div>
+                    {/* <div><span className="text-zinc-500">groupId:</span> {groupId}</div> */}
+                    <div><span className="text-zinc-500">submittedAt:</span> {submittedAt}</div>
+                    <div><span className="text-zinc-500">score:</span> {score ?? "null"}</div>
+                    <div><span className="text-zinc-500">gradedAt:</span> {gradedAt || "null"}</div>
+                  </div>
+
+                  {title && (
+                    <div>
+                      <div className="text-zinc-500">title:</div>
+                      <div className="rounded-lg border-zinc-700 bg-zinc-800/50">{title}</div>
+                    </div>
+                  )}
+
+                  {content && (
+                    <div>
+                      <div className="text-zinc-500">content:</div>
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-2 whitespace-pre-wrap">
+                        {String(content)}
+                      </div>
+                    </div>
+                  )}
+
+                  {Array.isArray(attachmentUrls) && attachmentUrls.length > 0 && (
+                    <div>
+                      <div className="text-zinc-500">attachmentUrls:</div>
+                      <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-2 space-y-1">
+                        {attachmentUrls.map((url: string, i: number) => (
+                          <a
+                            key={`att-${i}`}
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block text-sky-300 hover:text-sky-200 underline break-all"
+                          >
+                            {url}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div>
+                    <div className="text-zinc-500">feedback hiện tại:</div>
+                    <div className="rounded-lg border-zinc-700 bg-zinc-800/50">
+                      {feedback ?? "Chưa có"}
+                    </div>
+                  </div>
+
+                  {/* Form chấm điểm */}
+                  <div className="pt-2 border-t border-zinc-800 space-y-2">
+                    <div>
+                      <div className="text-zinc-500 mb-1">Điểm</div>
+                      <input
+                        type="number"
+                        value={gradeScore}
+                        onChange={(e) => setGradeScore(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-[12px] text-zinc-100
+           focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+
+                      />
+                    </div>
+
+                    <div>
+                      <div className="text-zinc-500 mb-1">Nhận xét</div>
+                      <textarea
+                        value={gradeFeedback}
+                        onChange={(e) => setGradeFeedback(e.target.value)}
+                        className="w-full h-24 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-[12px] text-zinc-100 resize-none"
+                      />
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={closeGradeModal}
+                        className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-[12px] text-zinc-200 hover:bg-zinc-800"
+                      >
+                        Hủy
+                      </button>
+                      <button
+                        type="button"
+                        onClick={submitGrade}
+                        disabled={grading}
+                        className="rounded-lg border border-emerald-500/60 bg-emerald-500/10 px-3 py-2 text-[12px] text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {grading ? "Đang lưu..." : "Lưu điểm"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
       {showCreateGroupModal &&
         createPortal(
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
