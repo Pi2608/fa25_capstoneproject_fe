@@ -25,8 +25,7 @@ export default function MapPreviewModal({ mapDetail, onClose, isDark }: MapPrevi
 
     (async () => {
       try {
-        const L = (await import("leaflet")).default;
-        await import("leaflet/dist/leaflet.css");
+  const L = (await import("leaflet")).default;
 
         if (!mounted || !mapContainerRef.current) return;
 

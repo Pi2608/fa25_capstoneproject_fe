@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import "leaflet/dist/leaflet.css";
 import type { TileLayer, LatLngTuple, FeatureGroup } from "leaflet";
 import type L from "leaflet";
 import { debounce, rafThrottle, BatchUpdater } from "@/utils/performance";
