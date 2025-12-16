@@ -38,6 +38,7 @@ function typeLabel(type: string | undefined, tr: (k: string) => string) {
   if (t.includes("transaction_completed")) return tr("type_transaction_completed");
   if (t.includes("payment") && t.includes("success")) return tr("type_payment_success");
   if (t.includes("subscription") && (t.includes("processed") || t.includes("active"))) return tr("type_subscription_active");
+  if (t.includes("transaction_pending") || t.includes("transactionpending")) return tr("type_transaction_pending");
   return undefined;
 }
 
@@ -98,6 +99,26 @@ function translateMessageToVi(item: NotificationItem): string {
 
 function translateMessage(item: NotificationItem, lang: "vi" | "en") {
   return lang === "vi" ? translateMessageToVi(item) : (item.message || "—");
+}
+
+function parseNotificationMetadata(metadata: string | null | undefined): {
+  transactionId?: string;
+  paymentUrl?: string;
+  planName?: string;
+  planSummary?: string;
+} | null {
+  if (!metadata) return null;
+  try {
+    const parsed = JSON.parse(metadata);
+    return {
+      transactionId: typeof parsed.transactionId === "string" ? parsed.transactionId : undefined,
+      paymentUrl: typeof parsed.paymentUrl === "string" ? parsed.paymentUrl : undefined,
+      planName: typeof parsed.planName === "string" ? parsed.planName : undefined,
+      planSummary: typeof parsed.planSummary === "string" ? parsed.planSummary : undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 export default function NotificationsPage() {
@@ -365,7 +386,34 @@ export default function NotificationsPage() {
                     <div className={`text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
                       {translateMessage(n, lang === "en" ? "en" : "vi")}
                     </div>
-                    {n.linkUrl && (
+                    
+                    {/* Handle TransactionPending notifications */}
+                    {n.type?.toLowerCase().includes("transaction_pending") || n.type?.toLowerCase().includes("transactionpending") ? (() => {
+                      const meta = parseNotificationMetadata(n.metadata ?? null);
+                      if (meta?.transactionId) {
+                        return (
+                          <div className="mt-2 space-y-1">
+                            {meta.planName && (
+                              <p className={`text-xs ${themeClasses.textMuted}`}>
+                                Gói: {meta.planName}
+                              </p>
+                            )}
+                            <Link
+                              href={`/profile/settings/plans?transactionId=${meta.transactionId}`}
+                              className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                isDark
+                                  ? "bg-blue-600 hover:bg-blue-700 text-white"
+                                  : "bg-blue-600 hover:bg-blue-700 text-white"
+                              }`}
+                              onClick={() => onMarkRead(n)}
+                            >
+                              Tiếp tục thanh toán
+                            </Link>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })() : n.linkUrl ? (
                       <Link
                         href={n.linkUrl}
                         className={`mt-1 inline-flex text-xs hover:underline ${isDark ? "text-emerald-300" : "text-emerald-600"}`}
@@ -373,7 +421,7 @@ export default function NotificationsPage() {
                       >
                         {tr("open_link")}
                       </Link>
-                    )}
+                    ) : null}
                   </div>
 
                   <div className="col-span-2">

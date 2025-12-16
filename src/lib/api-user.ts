@@ -186,6 +186,7 @@ export interface NotificationItem {
   createdAt?: string;
   linkUrl?: string | null;
   orgId?: string | null;
+  metadata?: string | null;
 }
 
 export interface GetUserNotificationsResponse {
@@ -246,6 +247,7 @@ function unwrapNotificationsEnvelope(res: unknown): GetUserNotificationsResponse
         createdAt: typeof it.createdAt === "string" ? it.createdAt : undefined,
         linkUrl: typeof it.linkUrl === "string" ? it.linkUrl : null,
         orgId: typeof it.orgId === "string" ? it.orgId : null,
+        metadata: typeof it.metadata === "string" ? it.metadata : null,
       };
     });
 

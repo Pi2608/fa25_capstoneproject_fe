@@ -13,6 +13,7 @@ import {
     upgradePlan,
     cancelPayment,
     confirmPayment,
+    retryPayment,
     type Plan,
     type CurrentMembershipDto,
     type PaymentConfirmationRequest,
@@ -477,6 +478,7 @@ export default function TrangGoiThanhVien() {
         isUpgrade: boolean;
     } | null>(null);
     const [paymentResultPopup, setPaymentResultPopup] = useState<{ type: "success" | "cancel"; msg: string } | null>(null);
+    const [pendingRetryTransactionId, setPendingRetryTransactionId] = useState<string | null>(null);
     const paymentRedirectHandledRef = React.useRef(false);
 
     useEffect(() => {
@@ -553,6 +555,16 @@ export default function TrangGoiThanhVien() {
         const status = params.get("status");
         const orderCode = params.get("orderCode");
         const paymentId = params.get("id");
+
+        // Handle retry scenario - transactionId present but no payment result params
+        if (transactionId && !code && !status && !cancel) {
+            setPendingRetryTransactionId(transactionId);
+            setBanner({
+                type: "info",
+                text: "Bạn có thanh toán đang chờ. Nhấn nút bên dưới để tiếp tục thanh toán.",
+            });
+            return;
+        }
 
         if (!transactionId) return;
 
@@ -864,6 +876,31 @@ export default function TrangGoiThanhVien() {
         }
     }
 
+    async function handleRetryPayment(transactionId: string) {
+        try {
+            setBanner({ type: "info", text: "Đang tạo lại liên kết thanh toán..." });
+            
+            const res = await retryPayment({ transactionId });
+            
+            if (res.paymentUrl && res.paymentUrl.trim() !== "") {
+                // Redirect to payment URL
+                window.location.href = res.paymentUrl;
+                return;
+            }
+            
+            setBanner({
+                type: "error",
+                text: "Không thể tạo lại liên kết thanh toán. Vui lòng thử lại.",
+            });
+        } catch (e: any) {
+            console.error("Retry payment error:", e);
+            setBanner({
+                type: "error",
+                text: e?.message || "Đã xảy ra lỗi khi thử lại thanh toán.",
+            });
+        }
+    }
+
     if (dangLoadTrang) {
         return (
             <div className="w-full">
@@ -908,6 +945,27 @@ export default function TrangGoiThanhVien() {
                     }
                 >
                     {banner.text}
+                </div>
+            )}
+
+            {pendingRetryTransactionId && (
+                <div className="mt-4 mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                                Bạn có thanh toán đang chờ xử lý
+                            </p>
+                            <p className="text-xs text-amber-600 dark:text-amber-300 mt-1">
+                                Nhấn nút bên dưới để tiếp tục thanh toán
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => handleRetryPayment(pendingRetryTransactionId)}
+                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-sm font-medium transition-colors"
+                        >
+                            Tiếp tục thanh toán
+                        </button>
+                    </div>
                 </div>
             )}
 
