@@ -247,10 +247,12 @@ export default function EditMapPage() {
       const newSelected = new Set(selectedLayers);
       if (newSelected.has(layer)) {
         newSelected.delete(layer);
-        resetToOriginalStyle(layer);
+        // DISABLED: Don't change color on deselect
+        // resetToOriginalStyle(layer);
       } else {
         newSelected.add(layer);
-        applyMultiSelectionStyle(layer);
+        // DISABLED: Don't change color on multi-select
+        // applyMultiSelectionStyle(layer);
       }
       setSelectedLayers(newSelected);
 
@@ -264,13 +266,15 @@ export default function EditMapPage() {
       // Single select mode - clear previous selections
       selectedLayers.forEach(l => {
         if (l !== layer) {
-          resetToOriginalStyle(l);
+          // DISABLED: Don't reset color when clearing previous selections
+          // resetToOriginalStyle(l);
         }
       });
 
       setSelectedLayers(new Set([layer]));
       setCurrentLayer(layer);
-      applySelectionStyle(layer);
+      // DISABLED: Don't change color on selection
+      // applySelectionStyle(layer);
 
       // Show style panel and find corresponding feature/layer data
       const feature = features.find(f => f.layer === layer);
@@ -291,7 +295,7 @@ export default function EditMapPage() {
         }
       }
     }
-  }, [selectedLayers, features, resetToOriginalStyle, applySelectionStyle, applyMultiSelectionStyle, mapId]);
+  }, [selectedLayers, features, mapId]);
 
 
   // Use feature management hook for Geoman event handling
@@ -733,6 +737,9 @@ export default function EditMapPage() {
         console.error("Failed to create layer for feature:", featureId);
         return;
       }
+
+      // Store featureId in layer for hover event tracking
+      (layer as any)._featureId = featureId;
 
       // Apply style if available
       if (newFeature.style) {

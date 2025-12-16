@@ -1125,6 +1125,7 @@ function ExplorerView({
   const [draggingFeatureId, setDraggingFeatureId] = useState<string | null>(null);
   const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(null);
   const [updatingFeatureId, setUpdatingFeatureId] = useState<string | null>(null);
+  const [hoveredFeatureId, setHoveredFeatureId] = useState<string | null>(null);
 
   const UNASSIGNED_KEY = "__unassigned__";
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -1152,6 +1153,19 @@ function ExplorerView({
       return next;
     });
   }, [layers]);
+
+  // Listen for feature hover events from map
+  useEffect(() => {
+    const handleFeatureHover = (e: Event) => {
+      const customEvent = e as CustomEvent<{ featureId: string | null }>;
+      setHoveredFeatureId(customEvent.detail?.featureId || null);
+    };
+
+    window.addEventListener('featureHover', handleFeatureHover);
+    return () => {
+      window.removeEventListener('featureHover', handleFeatureHover);
+    };
+  }, []);
 
   const featuresByLayer = useMemo(() => {
     const map = new Map<string, FeatureData[]>();
@@ -1284,10 +1298,16 @@ function ExplorerView({
   const renderFeatureRow = (feature: FeatureData, subtitle?: string) => {
     const isDraggable = Boolean(mapId && feature.featureId);
     const isUpdating = updatingFeatureId === feature.featureId;
+    const isHovered = hoveredFeatureId === (feature.featureId || feature.id);
     return (
       <div
         key={feature.id}
-        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800/60 cursor-pointer group/item transition-colors"
+        className={cn(
+          "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group/item transition-all",
+          isHovered
+            ? "bg-emerald-500/20 border border-emerald-500/50 shadow-sm"
+            : "hover:bg-zinc-800/60 border border-transparent"
+        )}
         onClick={() => onSelectFeature(feature)}
         draggable={isDraggable}
         onDragStart={event => handleFeatureDragStart(event, feature)}
@@ -1525,7 +1545,7 @@ function ExplorerView({
           </div>
           {visibleLayers.length === 0 ? (
             <div className="px-2 py-4 text-center">
-              <p className="text-xs text-zinc-500 italic">Không có layer trùng khớp</p>
+              <p className="text-xs text-zinc-500 italic">Không có layer nào</p>
             </div>
           ) : (
             <div className="space-y-1">

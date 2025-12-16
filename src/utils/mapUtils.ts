@@ -1129,6 +1129,9 @@ export async function loadFeaturesToMap(
       if (layer) {
         const isVisible = feature.isVisible;
 
+        // Store featureId in layer for hover event tracking
+        (layer as any)._featureId = feature.featureId;
+
         // Apply stored style if available
         if (feature.style) {
           try {

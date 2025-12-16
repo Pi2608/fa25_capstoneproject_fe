@@ -156,7 +156,15 @@ export function useLayerStyles() {
         // Don't apply hover style - keep original colors
       }
       setHoveredLayer(layer);
-      
+
+      // Dispatch event for sidebar to highlight corresponding feature
+      const featureId = (layer as any)._featureId || (layer as any).options?.featureId;
+      if (featureId) {
+        window.dispatchEvent(new CustomEvent('featureHover', {
+          detail: { featureId }
+        }));
+      }
+
       // Only bring to front without changing style
       if ('bringToFront' in layer && typeof (layer as any).bringToFront === 'function') {
         (layer as any).bringToFront();
@@ -164,6 +172,11 @@ export function useLayerStyles() {
     } else {
       // No need to reset since we didn't change anything
       setHoveredLayer(null);
+
+      // Clear sidebar highlight
+      window.dispatchEvent(new CustomEvent('featureHover', {
+        detail: { featureId: null }
+      }));
     }
   }, [selectedLayers, storeOriginalStyle]);
 
