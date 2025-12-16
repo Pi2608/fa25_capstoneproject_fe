@@ -40,6 +40,7 @@ import { SaveIcon, UploadIcon, DownloadIcon } from "lucide-react";
 import { useToast } from "@/contexts/ToastContext";
 import html2canvas from "html2canvas";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useAuth } from "@/contexts/AuthContext";
 import PublishButton from "@/components/map/PublishButton";
 import ZoomControls from "@/components/map/controls/ZoomControls";
 import { ZoneStyleEditor } from "@/components/map-editor-ui/ZoneStyleEditor";
@@ -97,6 +98,7 @@ export default function EditMapPage() {
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const { showToast } = useToast();
   const { t, lang } = useI18n();
+  const { userId } = useAuth();
 
   // Export functionality state
   const [isExporting, setIsExporting] = useState<boolean>(false);
@@ -894,6 +896,7 @@ export default function EditMapPage() {
   const collaboration = useMapCollaboration({
     mapId: mapId || null,
     enabled: isMapReady && !!mapId,
+    userId: userId ?? null,
     onSelectionUpdated: (selection) => {
       visualizeRef.current(selection);
     },
