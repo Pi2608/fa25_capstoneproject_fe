@@ -752,6 +752,7 @@ export const messages = {
             type_transaction_completed: "Hoàn tất giao dịch",
             type_payment_success: "Thanh toán thành công",
             type_subscription_active: "Kích hoạt gói",
+            type_transaction_pending: "Thanh toán đang chờ",
         },
         profile: {
             header_title: "Thông tin cá nhân",
@@ -4627,6 +4628,7 @@ export const messages = {
             type_transaction_completed: "Transaction completed",
             type_payment_success: "Payment successful",
             type_subscription_active: "Subscription activated",
+            type_transaction_pending: "Payment pending",
         },
         devdocs: {
             hero_eyebrow: "DEVELOPERS",
