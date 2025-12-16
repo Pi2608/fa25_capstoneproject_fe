@@ -4010,8 +4010,11 @@ export default function EditMapPage() {
                       try {
                         showToast("info", t('mapEditor.uploadingFile'));
 
-                        // Backend tự động tạo layer mới, chỉ cần truyền mapId
-                        const result = await uploadGeoJsonToMap(mapId, file);
+                        // Extract layer name from file name (remove extension)
+                        const layerName = file.name.replace(/\.(geojson|json|kml|gpx)$/i, '');
+
+                        // Backend tự động tạo layer mới với tên từ file
+                        const result = await uploadGeoJsonToMap(mapId, file, layerName);
 
                         showToast("info", t('mapEditor.loadingData'));
 
@@ -4019,7 +4022,14 @@ export default function EditMapPage() {
                         const updatedDetail = await getMapDetail(mapId);
                         setDetail(updatedDetail);
 
-                        showToast("success", t('mapEditor.uploadSuccess', { count: result.featuresAdded, layerId: result.layerId }));
+                        // CRITICAL FIX: Load features from database after upload
+                        // Backend saves features to Map_Feature table and removes them from layer data
+                        // So we need to explicitly load features from DB to display them
+                        if (handleMapDataChangedRef.current) {
+                          await handleMapDataChangedRef.current();
+                        }
+
+                        showToast("success", t('mapEditor.uploadSuccess', { count: result.featuresCreated, layerId: result.layerId }));
 
                         // Clear the input
                         e.target.value = '';

@@ -56,15 +56,20 @@ export function LocationForm({
   const [pickerType, setPickerType] = useState<"image" | "audio">("image");
 
   useEffect(() => {
-    // When initialCoordinates is explicitly null, it means "re-picking"
-    if (initialCoordinates === null && initialLocation) {
-      setCoordinates(null);
-      return;
-    }
-
     // Prioritize initialCoordinates over initialLocation.markerGeometry
     if (initialCoordinates !== undefined && initialCoordinates !== null) {
       setCoordinates(initialCoordinates);
+    } else if (initialLocation && !coordinates) {
+      if (initialLocation.markerGeometry) {
+        try {
+          const geo = JSON.parse(initialLocation.markerGeometry);
+          if (geo.type === "Point" && Array.isArray(geo.coordinates)) {
+            setCoordinates([geo.coordinates[0], geo.coordinates[1]]);
+          }
+        } catch (e) {
+          console.error("Failed to parse coordinates:", e);
+        }
+      }
     }
 
     if (initialLocation) {
@@ -77,16 +82,6 @@ export function LocationForm({
       setIconUrl(initialLocation.iconUrl || "");
       setIconSize(initialLocation.iconSize || 32);
       setAudioUrl(initialLocation.audioUrl || "");
-      if (initialLocation.markerGeometry && !initialCoordinates) {
-        try {
-          const geo = JSON.parse(initialLocation.markerGeometry);
-          if (geo.type === "Point" && Array.isArray(geo.coordinates)) {
-            setCoordinates([geo.coordinates[0], geo.coordinates[1]]);
-          }
-        } catch (e) {
-          console.error("Failed to parse coordinates:", e);
-        }
-      }
     }
   }, [initialLocation, initialCoordinates]);
 
