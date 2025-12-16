@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { getSegments, type Segment } from "@/lib/api-storymap";
 import { getMapDetail } from "@/lib/api-maps";
@@ -36,16 +36,15 @@ import {
   joinGroupCollaborationSession,
   joinGroupCollaborationGroup,
   leaveGroupCollaborationGroup,
-  submitGroupWorkViaSignalR,
-  sendMessageViaSignalR,
+  submitGroupWork,
+  sendMessage,
   registerGroupCollaborationEventHandlers,
   unregisterGroupCollaborationEventHandlers,
   type GroupDto,
   type GroupChatMessage,
   type GroupSubmissionDto,
-  type GroupGradedSubmissionDto,
 } from "@/lib/hubs/groupCollaboration";
-import { getGroupsBySession } from "@/lib/api-groupCollaboration";
+import { getGroupsBySession, getGroupSubmissions } from "@/lib/api-groupCollaboration";
 
 import { toast } from "react-toastify";
 
@@ -127,16 +126,35 @@ export default function StoryMapViewPage() {
   const [currentGroupId, setCurrentGroupId] = useState<string | null>(null);
   const [groupMessages, setGroupMessages] = useState<GroupChatMessage[]>([]);
   const [groupWorkContent, setGroupWorkContent] = useState("");
+  const [groupWorkTitle, setGroupWorkTitle] = useState("");
+  const [groupWorkAttachmentUrls, setGroupWorkAttachmentUrls] = useState("");
+  const [isGroupScoreOpen, setIsGroupScoreOpen] = useState(false);
+  const [groupScoreTarget, setGroupScoreTarget] = useState<any | null>(null);
+  const [loadingGroupScore, setLoadingGroupScore] = useState(false);
+  const [groupScoreError, setGroupScoreError] = useState<string | null>(null);
+
   const [groupChatInput, setGroupChatInput] = useState("");
   const [groupSubmitting, setGroupSubmitting] = useState(false);
+  const viewStateRef = useRef<ViewState>("waiting");
+  useEffect(() => {
+    viewStateRef.current = viewState;
+  }, [viewState]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const storedName = window.sessionStorage.getItem("imos_student_name");
-    const storedCode = window.sessionStorage.getItem("imos_session_code");
+    const storedName =
+      window.localStorage.getItem("imos_student_name") ||
+      window.sessionStorage.getItem("imos_student_name");
+
+    const storedCode =
+      window.localStorage.getItem("imos_session_code") ||
+      window.sessionStorage.getItem("imos_session_code");
+
     const storedParticipant =
-      window.sessionStorage.getItem("imos_participant_id") || participantIdFromUrl;
+      window.localStorage.getItem("imos_participant_id") ||
+      window.sessionStorage.getItem("imos_participant_id") ||
+      participantIdFromUrl;
 
     if (storedName) setDisplayName(storedName);
     if (storedCode) setSessionCode(storedCode);
@@ -239,7 +257,20 @@ export default function StoryMapViewPage() {
           );
         });
 
-        setSessionGroups(myGroup ? [myGroup] : []);
+        const normalizedMyGroup = myGroup
+          ? {
+            ...myGroup,
+            name:
+              myGroup.groupName ??
+              myGroup.name ??
+              myGroup.groupTitle ??
+              myGroup.title ??
+              "",
+          }
+          : null;
+
+        setSessionGroups(normalizedMyGroup ? [normalizedMyGroup] : []);
+
       } catch (e) {
         console.error("[GroupCollab][View] Load groups failed:", e);
       }
@@ -347,11 +378,10 @@ export default function StoryMapViewPage() {
         setIsTeacherPlaying(shouldPlay);
       }
 
-      if (viewState === "waiting") {
+      if (viewStateRef.current === "waiting") {
         setViewState("viewing");
       }
     },
-    [viewState, mapId]
   );
 
   const handleQuestionBroadcast = useCallback((event: QuestionBroadcastEvent) => {
@@ -421,10 +451,8 @@ export default function StoryMapViewPage() {
 
   }, []);
 
-  const { connection, isConnected } = useSessionHub({
-    sessionId: sessionId,
-    enabled: !!sessionId,
-    handlers: {
+  const sessionHubHandlers = useMemo(
+    () => ({
       onJoinedSession: handleJoinedSession,
       onSessionStatusChanged: handleSessionStatusChanged,
       onSegmentSync: handleSegmentSync,
@@ -432,7 +460,22 @@ export default function StoryMapViewPage() {
       onQuestionResults: handleQuestionResults,
       onSessionEnded: handleSessionEnded,
       onMapLayerSync: handleMapLayerSync,
-    },
+    }),
+    [
+      handleJoinedSession,
+      handleSessionStatusChanged,
+      handleSegmentSync,
+      handleQuestionBroadcast,
+      handleQuestionResults,
+      handleSessionEnded,
+      handleMapLayerSync,
+    ]
+  );
+
+  const { connection, isConnected } = useSessionHub({
+    sessionId,
+    enabled: !!sessionId && !!participantId,
+    handlers: sessionHubHandlers,
   });
 
   useEffect(() => {
@@ -464,13 +507,21 @@ export default function StoryMapViewPage() {
             null,
         };
 
-        setSessionGroups((prev) => {
-          if (prev.some((g) => (g as any).groupId === (normalized as any).groupId)) {
-            return prev;
-          }
-          return [...prev, normalized];
-        });
+        const members: any[] = Array.isArray(anyGroup.members)
+          ? anyGroup.members
+          : Array.isArray(anyGroup.groupMembers)
+            ? anyGroup.groupMembers
+            : [];
+
+        const isMine = members.some(
+          (m: any) => (m.sessionParticipantId ?? m.participantId ?? m.id) === participantId
+        );
+
+        if (!isMine) return;
+
+        setSessionGroups([normalized]);
       },
+
       onMessageReceived: (msg: GroupChatMessage) => {
         setGroupMessages((prev) => [...prev, msg]);
       },
@@ -622,14 +673,39 @@ export default function StoryMapViewPage() {
 
   const handleSubmitGroupWork = async () => {
     if (!groupConnection || !currentGroupId || !groupWorkContent.trim() || groupSubmitting) return;
+
     try {
       setGroupSubmitting(true);
-      await submitGroupWorkViaSignalR(groupConnection, {
+
+      const raw = groupWorkContent.trim();
+
+      let content: any = raw;
+      try {
+        content = JSON.parse(raw);
+      } catch {
+        content = raw;
+      }
+
+      const urls = groupWorkAttachmentUrls
+        .split(/[\n,]+/g)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const attachmentUrls = urls.length ? urls : null;
+
+      await submitGroupWork(groupConnection, {
         sessionId,
         groupId: currentGroupId,
-        content: groupWorkContent.trim(),
+        submittedByParticipantId: participantId ?? undefined,
+
+        title: groupWorkTitle.trim() || "Bài nộp nhóm",
+        content,
+        attachmentUrls,
+        payloadJson: raw,
       });
+
       setGroupWorkContent("");
+      setGroupWorkTitle("");
+      setGroupWorkAttachmentUrls("");
       toast.success("Đã gửi bài nhóm!");
     } catch (e) {
       console.error("[GroupCollab][View] Submit group work failed:", e);
@@ -639,15 +715,43 @@ export default function StoryMapViewPage() {
     }
   };
 
+  const openGroupScoreModal = (s: any) => {
+    setGroupScoreTarget(s);
+    setIsGroupScoreOpen(true);
+  };
+
+  const closeGroupScoreModal = () => {
+    setIsGroupScoreOpen(false);
+  };
+
+  const handleLoadGroupScore = async () => {
+    if (!currentGroupId) return;
+
+    try {
+      setLoadingGroupScore(true);
+      setGroupScoreError(null);
+
+      const res = await getGroupSubmissions<any>(currentGroupId);
+
+      const list = Array.isArray(res) ? res : (res?.items ?? []);
+      if (!Array.isArray(list) || list.length === 0) {
+        setGroupScoreError("Chưa có bài nộp nhóm.");
+        return;
+      }
+
+      openGroupScoreModal(list[0]);
+    } catch (e: any) {
+      setGroupScoreError(e?.message || "Không tải được điểm nhóm.");
+    } finally {
+      setLoadingGroupScore(false);
+    }
+  };
 
   const handleSendGroupMessage = async () => {
     if (!groupConnection || !currentGroupId || !groupChatInput.trim()) return;
     try {
-      await sendMessageViaSignalR(
-        groupConnection,
-        currentGroupId,
-        groupChatInput.trim()
-      );
+      await sendMessage(groupConnection, currentGroupId, groupChatInput.trim());
+
       setGroupChatInput("");
     } catch (e) {
       console.error("[GroupCollab][View] Send group message failed:", e);
@@ -699,6 +803,13 @@ export default function StoryMapViewPage() {
       window.sessionStorage.removeItem("imos_student_name");
       window.sessionStorage.removeItem("imos_session_code");
       window.sessionStorage.removeItem("imos_participant_id");
+      window.sessionStorage.removeItem("imos_session_id");
+
+      window.localStorage.removeItem("imos_student_name");
+      window.localStorage.removeItem("imos_session_code");
+      window.localStorage.removeItem("imos_participant_id");
+      window.localStorage.removeItem("imos_session_id");
+
     }
 
     toast.info("Bạn đã rời tiết học.");
@@ -1161,7 +1272,7 @@ export default function StoryMapViewPage() {
             type="button"
             onClick={handleLeaveSession}
             disabled={isLeaving}
-            className="w-full inline-flex items-center justify-center rounded-lg px-3 py-2 text-[13px] font-semibold border border-rose-500/60 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="w-full inline-flex items-center justify-center rounded-lg px-3 py-2 text-[13px] font-bold border border-rose-300 bg-rose-50 text-rose-700 hover:bg-rose-100 hover:border-rose-400 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isLeaving ? "Đang rời..." : "Rời tiết học"}
           </button>
@@ -1237,14 +1348,25 @@ export default function StoryMapViewPage() {
                     key={groupId ?? g.id ?? idx}
                     type="button"
                     onClick={() => handleJoinGroup(groupId)}
-                    className={`w-full flex items-center justify-between rounded-lg px-3 py-2 text-[12px] border ${currentGroupId === groupId
-                      ? "border-emerald-500 bg-emerald-500/10 text-emerald-100"
-                      : "border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-500"
-                      }`}
+                    className="w-full flex items-center justify-between rounded-lg px-3 py-2 text-[12px] border transition hover:opacity-95"
+                    style={{
+                      backgroundColor: g.color ? (g.color.startsWith("#") ? g.color : `#${g.color}`) : "#111827",
+                      borderColor: g.color ? (g.color.startsWith("#") ? g.color : `#${g.color}`) : "#374151",
+                      color: "#fff",
+                    }}
+
+
                   >
-                    <span className="truncate">
-                      {g.name || `Nhóm ${idx + 1}`}
-                    </span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="h-2.5 w-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: g.color ?? "#71717a" }}
+                        title={g.color ?? ""}
+                      />
+                      <span className="truncate">
+                        {g.groupName ?? g.name ?? `Nhóm ${idx + 1}`}
+                      </span>
+                    </div>
 
                     {typeof currentCount === "number" &&
                       typeof maxMembers === "number" && (
@@ -1266,6 +1388,20 @@ export default function StoryMapViewPage() {
                   <p className="text-sm font-bold text-purple-700 flex items-center gap-2">
                     ✏️ Bài làm nhóm
                   </p>
+                  <input
+                    value={groupWorkTitle}
+                    onChange={(e) => setGroupWorkTitle(e.target.value)}
+                    placeholder="Tiêu đề bài làm (tuỳ chọn)"
+                    className="w-full rounded-xl border-2 border-purple-200 bg-white px-4 py-2 text-base text-slate-700 placeholder:text-slate-400 focus:border-purple-400 focus:outline-none"
+                  />
+
+                  <textarea
+                    value={groupWorkAttachmentUrls}
+                    onChange={(e) => setGroupWorkAttachmentUrls(e.target.value)}
+                    placeholder="Link đính kèm (tuỳ chọn) — mỗi link 1 dòng hoặc cách nhau bằng dấu phẩy"
+                    className="w-full rounded-xl border-2 border-purple-200 bg-white px-4 py-2 text-base text-slate-700 placeholder:text-slate-400 resize-none h-20 focus:border-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-100"
+                  />
+
                   <textarea
                     value={groupWorkContent}
                     onChange={(e) => setGroupWorkContent(e.target.value)}
@@ -1284,6 +1420,45 @@ export default function StoryMapViewPage() {
                   >
                     {groupSubmitting ? "⏳ Đang gửi..." : "📤 Gửi bài nhóm"}
                   </button>
+                  {/* ===== Điểm nhóm (View) ===== */}
+                  <div className="space-y-3">
+                    <p className="text-sm font-bold text-emerald-700 flex items-center gap-2">
+                      🏅 Điểm nhóm
+                    </p>
+
+                    <div className="rounded-xl border-2 border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-slate-700">
+                      {groupScoreError ? (
+                        <p className="text-red-500">{groupScoreError}</p>
+                      ) : groupScoreTarget ? (
+                        <div className="space-y-1">
+                          <div>
+                            <span className="font-semibold">Điểm:</span>{" "}
+                            {groupScoreTarget.score ?? "Chưa chấm"}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Nhận xét:</span>{" "}
+                            {groupScoreTarget.feedback ?? "Chưa có"}
+                          </div>
+                          <div>
+                            <span className="font-semibold">Chấm lúc:</span>{" "}
+                            {groupScoreTarget.gradedAt ?? "Chưa chấm"}
+                          </div>
+                        </div>
+                      ) : (
+                        <p>Nhấn “Xem điểm” để tải điểm nhóm.</p>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleLoadGroupScore}
+                      disabled={!currentGroupId || loadingGroupScore}
+                      className="w-full rounded-xl px-4 py-3 text-base font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-200 hover:from-emerald-600 hover:to-teal-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      {loadingGroupScore ? "⏳ Đang tải..." : "🔎 Xem điểm"}
+                    </button>
+                  </div>
+
                 </div>
 
                 {/* Group chat section - bright styling */}
@@ -1379,6 +1554,80 @@ export default function StoryMapViewPage() {
           </div>
         </div>
       )}
+      {isGroupScoreOpen && groupScoreTarget && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 px-3">
+          <div className="w-full max-w-lg rounded-2xl border border-emerald-200 bg-white p-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] font-bold text-emerald-700">Điểm nhóm</p>
+              <button
+                type="button"
+                onClick={closeGroupScoreModal}
+                className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[12px] text-slate-700 hover:bg-slate-100"
+              >
+                ✕
+              </button>
+            </div>
+
+            {(() => {
+              const s = groupScoreTarget;
+              const groupName = s?.groupName ?? s?.GroupName ?? "";
+              const title = s?.title ?? s?.Title ?? "";
+              const content = s?.content ?? s?.Content ?? "";
+              const attachmentUrls = s?.attachmentUrls ?? s?.AttachmentUrls ?? [];
+              const score = s?.score ?? s?.Score ?? null;
+              const feedback = s?.feedback ?? s?.Feedback ?? null;
+              const gradedAt = s?.gradedAt ?? s?.GradedAt ?? null;
+
+              return (
+                <div className="mt-3 space-y-3 text-[12px] text-slate-700">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div><span className="text-slate-500">groupName:</span> {groupName}</div>
+                    <div><span className="text-slate-500">gradedAt:</span> {gradedAt ?? "null"}</div>
+                    <div><span className="text-slate-500">score:</span> {score ?? "null"}</div>
+                    <div><span className="text-slate-500">feedback:</span> {feedback ?? "null"}</div>
+                  </div>
+
+                  {title && (
+                    <div>
+                      <div className="text-slate-500">title:</div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-2">{title}</div>
+                    </div>
+                  )}
+
+                  {content && (
+                    <div>
+                      <div className="text-slate-500">content:</div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 whitespace-pre-wrap">
+                        {String(content)}
+                      </div>
+                    </div>
+                  )}
+
+                  {Array.isArray(attachmentUrls) && attachmentUrls.length > 0 && (
+                    <div>
+                      <div className="text-slate-500">attachmentUrls:</div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 space-y-1">
+                        {attachmentUrls.map((url: string, i: number) => (
+                          <a
+                            key={`att-${i}`}
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block text-sky-600 hover:text-sky-500 underline break-all"
+                          >
+                            {url}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

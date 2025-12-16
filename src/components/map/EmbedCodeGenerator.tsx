@@ -5,6 +5,7 @@ import { Copy, Check, ExternalLink, Code2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { prepareForEmbed } from "@/lib/api-maps";
 import { useToast } from "@/contexts/ToastContext";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface EmbedCodeGeneratorProps {
   mapId: string;
@@ -23,6 +24,7 @@ export default function EmbedCodeGenerator({
   onMapUpdated,
   className = "" 
 }: EmbedCodeGeneratorProps) {
+  const { t } = useI18n();
   const [copied, setCopied] = useState(false);
   const [width, setWidth] = useState("100%");
   const [height, setHeight] = useState("600px");
@@ -43,7 +45,7 @@ export default function EmbedCodeGenerator({
       }
       showToast("success", "Map đã được publish để embed");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Không thể chuẩn bị map cho embed";
+      const message = error instanceof Error ? error.message : t("map_components", "embed_prepare_error");
       showToast("error", message);
     } finally {
       setIsPreparing(false);
@@ -86,7 +88,7 @@ export default function EmbedCodeGenerator({
     return (
       <div className={`p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg ${className}`}>
         <p className="text-sm text-amber-800 dark:text-amber-200">
-          Story maps không thể được embed. Chỉ có map bình thường mới có thể embed.
+          {t("map_components", "embed_storymap_unsupported")}
         </p>
       </div>
     );
@@ -123,7 +125,7 @@ export default function EmbedCodeGenerator({
     return (
       <div className={`p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg ${className}`}>
         <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
-          Map chưa sẵn sàng để embed.
+          {t("map_components", "embed_not_ready")}
         </p>
         <Button
           onClick={handlePrepareForEmbed}

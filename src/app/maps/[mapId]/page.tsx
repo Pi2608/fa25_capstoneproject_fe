@@ -2,13 +2,13 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import "leaflet/dist/leaflet.css";
 import type { TileLayer, LatLngTuple, FeatureGroup } from "leaflet";
 import type L from "leaflet";
 import { debounce, rafThrottle, BatchUpdater } from "@/utils/performance";
 import { type FeatureData, extractLayerStyle, applyLayerStyle, handleLayerVisibilityChange, handleFeatureVisibilityChange, getFeatureType as getFeatureTypeUtil, updateFeatureInDB, deleteFeatureFromDB, loadFeaturesToMap, loadLayerToMap, type ExtendedLayer, saveFeature, } from "@/utils/mapUtils";
 import { getFeatureName, getFeatureBounds, formatCoordinates, copyToClipboard, findFeatureIndex, removeFeatureFromGeoJSON } from "@/utils/zoneOperations";
 import * as mapHelpers from "@/utils/mapHelpers";
+import { calculateEffectiveSegmentDuration } from "@/utils/segmentTiming";
 
 import type { BaseKey, Layer, LeafletMouseEvent, LeafletMapClickEvent, MapWithPM, PMCreateEvent, LayerStyle, PathLayer, LocationType, GeomanLayer } from "@/types";
 
@@ -20,6 +20,7 @@ import { getMapDetail, type MapDetail, updateMap, type UpdateMapRequest, type Up
 import { createMapLocation, deleteLocation, getMapLocations } from "@/lib/api-location";
 
 import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator, MeasurementInfoBox } from "@/components/map-editor-ui";
+import { LocationInfoPanel } from "@/components/map-editor-ui/LocationInfoPanel";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
 import SequentialRoutePlaybackWrapper from "@/components/storymap/SequentialRoutePlaybackWrapper";
@@ -121,10 +122,10 @@ export default function EditMapPage() {
   // POI tooltip modal state
   const [poiTooltipModal, setPoiTooltipModal] = useState<{
     isOpen: boolean;
+    locationId?: string;
     title?: string;
+    subtitle?: string;
     content?: string;
-    x?: number;
-    y?: number;
     poi?: Location;
   }>({
     isOpen: false,
@@ -246,10 +247,12 @@ export default function EditMapPage() {
       const newSelected = new Set(selectedLayers);
       if (newSelected.has(layer)) {
         newSelected.delete(layer);
-        resetToOriginalStyle(layer);
+        // DISABLED: Don't change color on deselect
+        // resetToOriginalStyle(layer);
       } else {
         newSelected.add(layer);
-        applyMultiSelectionStyle(layer);
+        // DISABLED: Don't change color on multi-select
+        // applyMultiSelectionStyle(layer);
       }
       setSelectedLayers(newSelected);
 
@@ -263,13 +266,15 @@ export default function EditMapPage() {
       // Single select mode - clear previous selections
       selectedLayers.forEach(l => {
         if (l !== layer) {
-          resetToOriginalStyle(l);
+          // DISABLED: Don't reset color when clearing previous selections
+          // resetToOriginalStyle(l);
         }
       });
 
       setSelectedLayers(new Set([layer]));
       setCurrentLayer(layer);
-      applySelectionStyle(layer);
+      // DISABLED: Don't change color on selection
+      // applySelectionStyle(layer);
 
       // Show style panel and find corresponding feature/layer data
       const feature = features.find(f => f.layer === layer);
@@ -290,7 +295,7 @@ export default function EditMapPage() {
         }
       }
     }
-  }, [selectedLayers, features, resetToOriginalStyle, applySelectionStyle, applyMultiSelectionStyle, mapId]);
+  }, [selectedLayers, features, mapId]);
 
 
   // Use feature management hook for Geoman event handling
@@ -733,6 +738,9 @@ export default function EditMapPage() {
         return;
       }
 
+      // Store featureId in layer for hover event tracking
+      (layer as any)._featureId = featureId;
+
       // Apply style if available
       if (newFeature.style) {
         try {
@@ -1096,7 +1104,7 @@ export default function EditMapPage() {
         setMapStatus(m.status ?? "draft");
       } catch (e) {
         if (!alive) return;
-        setErr(e instanceof Error ? e.message : "Không tải được bản đồ");
+        setErr(e instanceof Error ? e.message : t('mapEditor.loadMapFailed'));
       } finally {
         if (alive) setLoading(false);
       }
@@ -1615,62 +1623,57 @@ export default function EditMapPage() {
     applyBaseLayer(baseKey);
   }, [baseKey, applyBaseLayer]);
 
+  // Helper function to load segments with their route animations
+  const loadSegmentsWithRoutes = useCallback(async (mapIdParam: string) => {
+    const segmentsData = await getSegments(mapIdParam);
+
+    // Fetch route animations for each segment
+    const segmentsWithRoutes = await Promise.all(
+      segmentsData.map(async (segment) => {
+        try {
+          const routes = await getRouteAnimationsBySegment(mapIdParam, segment.segmentId);
+          return {
+            ...segment,
+            routeAnimations: routes || []
+          };
+        } catch (e) {
+          console.warn("Failed to load routes for segment:", segment.segmentId, e);
+          return {
+            ...segment,
+            routeAnimations: []
+          };
+        }
+      })
+    );
+
+    return segmentsWithRoutes;
+  }, []);
+
   // Load segments and transitions for timeline
   const loadSegmentsAndTransitions = useCallback(async () => {
     if (!mapId) return;
 
     try {
-      const [segmentsData, transitionsData] = await Promise.all([
-        getSegments(mapId),
+      const [segmentsWithRoutes, transitionsData] = await Promise.all([
+        loadSegmentsWithRoutes(mapId),
         getTimelineTransitions(mapId),
       ]);
-
-      // Fetch route animations for each segment
-      const segmentsWithRoutes = await Promise.all(
-        segmentsData.map(async (segment) => {
-          try {
-            const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
-            return {
-              ...segment,
-              routeAnimations: routes || []
-            };
-          } catch (e) {
-            return segment;
-          }
-        })
-      );
 
       setSegments(segmentsWithRoutes);
       setTransitions(transitionsData);
     } catch (error) {
       console.error("Failed to load segments/transitions:", error);
     }
-  }, [mapId]);
+  }, [mapId, loadSegmentsWithRoutes]);
 
   // Handle refresh segments (used by TimelineWorkspace)
   const handleRefreshSegments = useCallback(async () => {
     try {
       // Reload segments with enhanced details (includes locations, routes, zones, layers)
-      const [segmentsData, transitionsData] = await Promise.all([
-        getSegments(mapId),
+      const [segmentsWithRoutes, transitionsData] = await Promise.all([
+        loadSegmentsWithRoutes(mapId),
         getTimelineTransitions(mapId),
       ]);
-
-      // Load route animations for each segment (GetSegmentsAsync doesn't include routes)
-      const segmentsWithRoutes = await Promise.all(
-        segmentsData.map(async (segment) => {
-          try {
-            // Fetch route animations for this segment
-            const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
-            return {
-              ...segment,
-              routeAnimations: routes || []
-            };
-          } catch (e) {
-            return segment;
-          }
-        })
-      );
 
       // Force new array reference to ensure React re-renders
       setSegments([...segmentsWithRoutes]);
@@ -1678,7 +1681,7 @@ export default function EditMapPage() {
     } catch (error) {
       console.error("Failed to refresh segments:", error);
     }
-  }, [mapId]);
+  }, [mapId, loadSegmentsWithRoutes]);
 
   useEffect(() => {
     if (!mapId || !isMapReady) return;
@@ -2814,13 +2817,13 @@ export default function EditMapPage() {
         showToast("success", "Segment created successfully");
       }
 
-      const updatedSegments = await getSegments(mapId);
-
+      // Reload segments with route animations
+      const updatedSegments = await loadSegmentsWithRoutes(mapId);
       setSegments(updatedSegments);
     } catch (error) {
       showToast("error", "Failed to save segment");
     }
-  }, [mapId, showToast]);
+  }, [mapId, showToast, loadSegmentsWithRoutes]);
 
   // Delete segment
   const handleDeleteSegment = useCallback(async (segmentId: string) => {
@@ -2830,13 +2833,13 @@ export default function EditMapPage() {
       await deleteSegment(mapId, segmentId);
       showToast("success", "Segment deleted successfully");
 
-      const updatedSegments = await getSegments(mapId);
-
+      // Reload segments with route animations
+      const updatedSegments = await loadSegmentsWithRoutes(mapId);
       setSegments(updatedSegments);
     } catch (error) {
       showToast("error", "Failed to delete segment");
     }
-  }, [mapId, showToast]);
+  }, [mapId, showToast, loadSegmentsWithRoutes]);
 
   // Save transition (create only - edit not supported by API yet)
   const handleSaveTransition = useCallback(async (data: any, transitionId?: string) => {
@@ -2982,10 +2985,12 @@ export default function EditMapPage() {
       return;
     }
 
-    // Calculate base time from completed segments
+    // FIXED: Calculate base time from completed segments using effective duration
+    // This accounts for route animations that may extend beyond segment duration
     let baseTime = 0;
     for (let i = 0; i < currentPlayback.currentPlayIndex && i < currentSegments.length; i++) {
-      baseTime += currentSegments[i].durationMs / 1000;
+      const effectiveDuration = calculateEffectiveSegmentDuration(currentSegments[i]);
+      baseTime += effectiveDuration / 1000; // Convert to seconds
     }
 
     // Only set initial time when segment changes (not on every render)
@@ -2997,7 +3002,11 @@ export default function EditMapPage() {
 
     // Start smooth time progression using requestAnimationFrame for better performance
     const startTime = Date.now();
-    const currentSegmentDuration = currentSegments[currentPlayback.currentPlayIndex]?.durationMs || 0;
+    // FIXED: Use effective duration for current segment
+    const currentSegment = currentSegments[currentPlayback.currentPlayIndex];
+    const currentSegmentDuration = currentSegment
+      ? calculateEffectiveSegmentDuration(currentSegment)
+      : 0;
     let animationFrameId: number | null = null;
     let lastUpdateTime = startTime;
     let isCancelled = false;
@@ -3180,7 +3189,7 @@ export default function EditMapPage() {
       await updateMap(detail.id, body);
       showToast("success", "Đã lưu thông tin bản đồ và vị trí hiển thị.");
     } catch (e) {
-      showToast("error", e instanceof Error ? e.message : "Lưu thất bại");
+      showToast("error", e instanceof Error ? e.message : t('mapEditor.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -3932,15 +3941,15 @@ export default function EditMapPage() {
                   onKeyDown={async (e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      const newName = editingMapName.trim() || "Untitled Map";
+                      const newName = editingMapName.trim() || t('mapEditor.untitledMap');
                       if (newName !== name) {
                         try {
                           setIsSaving(true);
                           await updateMap(detail?.id || '', { name: newName });
                           setName(newName);
-                          showToast("success", "Đã đổi tên bản đồ");
+                          showToast("success", t('mapEditor.mapRenamed'));
                         } catch (error) {
-                          showToast("error", "Không thể đổi tên bản đồ");
+                          showToast("error", t('mapEditor.renameMapFailed'));
                         } finally {
                           setIsSaving(false);
                         }
@@ -3953,15 +3962,15 @@ export default function EditMapPage() {
                     }
                   }}
                   onBlur={async () => {
-                    const newName = editingMapName.trim() || "Untitled Map";
+                    const newName = editingMapName.trim() || t('mapEditor.untitledMap');
                     if (newName !== name) {
                       try {
                         setIsSaving(true);
                         await updateMap(detail?.id || '', { name: newName });
                         setName(newName);
-                        showToast("success", "Đã đổi tên bản đồ");
+                        showToast("success", t('mapEditor.mapRenamed'));
                       } catch (error) {
-                        showToast("error", "Không thể đổi tên bản đồ");
+                        showToast("error", t('mapEditor.renameMapFailed'));
                       } finally {
                         setIsSaving(false);
                       }
@@ -3970,7 +3979,7 @@ export default function EditMapPage() {
                     setEditingMapName("");
                   }}
                   className="px-2.5 py-1.5 rounded-md bg-white text-black text-sm font-medium w-52 border-2 border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                  placeholder="Untitled Map"
+                  placeholder={t('mapEditor.untitledMap')}
                   autoFocus
                   disabled={isSaving}
                 />
@@ -3981,9 +3990,9 @@ export default function EditMapPage() {
                     setIsEditingMapName(true);
                   }}
                   className="px-2.5 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm font-medium w-52 cursor-pointer transition-colors truncate"
-                  title="Double click để đổi tên"
+                  title={t('mapEditor.doubleClickRename')}
                 >
-                  {name || "Untitled Map"}
+                  {name || t('mapEditor.untitledMap')}
                 </span>
               )}
             </div>
@@ -4006,24 +4015,34 @@ export default function EditMapPage() {
                     const file = e.target.files?.[0];
                     if (file && mapId) {
                       try {
-                        showToast("info", "Đang tải file lên...");
+                        showToast("info", t('mapEditor.uploadingFile'));
 
-                        // Backend tự động tạo layer mới, chỉ cần truyền mapId
-                        const result = await uploadGeoJsonToMap(mapId, file);
+                        // Extract layer name from file name (remove extension)
+                        const layerName = file.name.replace(/\.(geojson|json|kml|gpx)$/i, '');
 
-                        showToast("info", "Đang load dữ liệu...");
+                        // Backend tự động tạo layer mới với tên từ file
+                        const result = await uploadGeoJsonToMap(mapId, file, layerName);
+
+                        showToast("info", t('mapEditor.loadingData'));
 
                         // Refresh toàn bộ map detail để lấy layer mới
                         const updatedDetail = await getMapDetail(mapId);
                         setDetail(updatedDetail);
 
-                        showToast("success", `Tải lên thành công! Đã thêm ${result.featuresAdded} đối tượng vào layer "${result.layerId}".`);
+                        // CRITICAL FIX: Load features from database after upload
+                        // Backend saves features to Map_Feature table and removes them from layer data
+                        // So we need to explicitly load features from DB to display them
+                        if (handleMapDataChangedRef.current) {
+                          await handleMapDataChangedRef.current();
+                        }
+
+                        showToast("success", t('mapEditor.uploadSuccess', { count: result.featuresCreated, layerId: result.layerId }));
 
                         // Clear the input
                         e.target.value = '';
                       } catch (error) {
                         console.error("Upload error:", error);
-                        showToast("error", error instanceof Error ? error.message : "Tải file thất bại");
+                        showToast("error", error instanceof Error ? error.message : t('mapEditor.uploadFailed'));
                         e.target.value = '';
                       }
                     }
@@ -4034,10 +4053,10 @@ export default function EditMapPage() {
                 <label
                   htmlFor="upload-layer"
                   className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white cursor-pointer transition-all flex items-center gap-2"
-                  title="Upload GeoJSON/KML/GPX file to add as layer"
+                  title={t('mapEditor.uploadTooltip')}
                 >
                   <UploadIcon className="w-4 h-4" />
-                  Upload
+                  {t('mapEditor.upload')}
                 </label>
 
                 <div className="h-5 w-px bg-zinc-600/50" />
@@ -4046,17 +4065,17 @@ export default function EditMapPage() {
                   className="rounded-md px-3 py-1.5 text-xs font-medium bg-transparent hover:bg-zinc-700/50 text-zinc-200 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2"
                   onClick={saveMap}
                   disabled={isSaving || !mapRef.current}
-                  title="Lưu thông tin bản đồ và vị trí hiển thị"
+                  title={t('mapEditor.saveTooltip')}
                 >
                   {isSaving ? (
                     <>
                       <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
-                      Saving...
+                      {t('mapEditor.saving')}
                     </>
                   ) : (
                     <>
                       <SaveIcon className="w-4 h-4" />
-                      Save
+                      {t('mapEditor.save')}
                     </>
                   )}
                 </button>
@@ -4074,17 +4093,17 @@ export default function EditMapPage() {
                     }
                   }}
                   disabled={isExporting || !mapRef.current}
-                  title="Xuất bản đồ"
+                  title={t('mapEditor.exportTooltip')}
                 >
                   {isExporting ? (
                     <>
                       <div className="w-4 h-4 border-2 border-zinc-300 border-t-transparent rounded-full animate-spin" />
-                      Đang xuất...
+                      {t('mapEditor.exporting')}
                     </>
                   ) : (
                     <>
                       <DownloadIcon className="w-4 h-4" />
-                      Xuất
+                      {t('mapEditor.export')}
                     </>
                   )}
                 </button>
@@ -4105,7 +4124,7 @@ export default function EditMapPage() {
         className="absolute inset-0 transition-all duration-300"
         style={{
           left: mapStatus === "archived" ? "0" : (leftSidebarView ? "376px" : "56px"), // Hide sidebar when Archived
-          right: isPropertiesPanelOpen ? "360px" : "0",
+          right: (isPropertiesPanelOpen || poiTooltipModal.isOpen) ? "360px" : "0",
           // top: "60px",
           bottom: (!loading && detail?.isStoryMap !== false && mapStatus !== "archived") ? "200px" : "0", // Hide timeline when Archived
         }}
@@ -4673,6 +4692,18 @@ export default function EditMapPage() {
           mapZone={selectedZone.mapZone}
           zone={selectedZone.zone}
           onClose={() => setSelectedZone(null)}
+        />
+      )}
+
+      {/* Location Info Panel - right-side panel */}
+      {poiTooltipModal.isOpen && poiTooltipModal.locationId && (
+        <LocationInfoPanel
+          locationId={poiTooltipModal.locationId}
+          title={poiTooltipModal.title || ''}
+          subtitle={poiTooltipModal.subtitle}
+          content={poiTooltipModal.content}
+          isOpen={poiTooltipModal.isOpen}
+          onClose={() => setPoiTooltipModal({ isOpen: false })}
         />
       )}
     </main>

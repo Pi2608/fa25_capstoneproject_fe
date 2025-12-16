@@ -17,6 +17,7 @@ interface LocationFormProps {
   initialLocation?: Location | null;
   isLoading?: boolean;
   onRepickLocation?: () => void;
+  onCancelRepick?: () => void;
 }
 
 export function LocationForm({
@@ -27,6 +28,7 @@ export function LocationForm({
   initialLocation,
   isLoading = false,
   onRepickLocation,
+  onCancelRepick,
 }: LocationFormProps) {
   const [activeTab, setActiveTab] = useState<TabType>("basic");
   const [title, setTitle] = useState("");
@@ -54,16 +56,10 @@ export function LocationForm({
   const [pickerType, setPickerType] = useState<"image" | "audio">("image");
 
   useEffect(() => {
-    if (initialLocation) {
-      setTitle(initialLocation.title || "");
-      setSubtitle(initialLocation.subtitle || "");
-      setTooltipContent(initialLocation.tooltipContent || "");
-      setLocationType(initialLocation.locationType || "PointOfInterest");
-      setIsVisible(initialLocation.isVisible !== false);
-      setHighlightOnEnter(initialLocation.highlightOnEnter ?? false);
-      setIconUrl(initialLocation.iconUrl || "");
-      setIconSize(initialLocation.iconSize || 32);
-      setAudioUrl(initialLocation.audioUrl || "");
+    // Prioritize initialCoordinates over initialLocation.markerGeometry
+    if (initialCoordinates !== undefined && initialCoordinates !== null) {
+      setCoordinates(initialCoordinates);
+    } else if (initialLocation && !coordinates) {
       if (initialLocation.markerGeometry) {
         try {
           const geo = JSON.parse(initialLocation.markerGeometry);
@@ -74,8 +70,18 @@ export function LocationForm({
           console.error("Failed to parse coordinates:", e);
         }
       }
-    } else if (initialCoordinates) {
-      setCoordinates(initialCoordinates);
+    }
+
+    if (initialLocation) {
+      setTitle(initialLocation.title || "");
+      setSubtitle(initialLocation.subtitle || "");
+      setTooltipContent(initialLocation.tooltipContent || "");
+      setLocationType(initialLocation.locationType || "PointOfInterest");
+      setIsVisible(initialLocation.isVisible !== false);
+      setHighlightOnEnter(initialLocation.highlightOnEnter ?? false);
+      setIconUrl(initialLocation.iconUrl || "");
+      setIconSize(initialLocation.iconSize || 32);
+      setAudioUrl(initialLocation.audioUrl || "");
     }
   }, [initialLocation, initialCoordinates]);
 
@@ -123,6 +129,7 @@ export function LocationForm({
     setSaving(true);
     try {
       const data: CreateLocationRequest = {
+        segmentId: segmentId, // CRITICAL: Must include segmentId to maintain segment association
         title: title.trim(),
         subtitle: subtitle.trim() || undefined,
         tooltipContent: tooltipContent.trim() || undefined,
@@ -139,6 +146,7 @@ export function LocationForm({
         iconFile: iconFile || undefined,
         audioFile: audioFile || undefined,
         iconUrl: iconUrl.trim() || undefined,
+        iconSize: iconSize,
         audioUrl: audioUrl.trim() || undefined,
       };
 
@@ -242,44 +250,38 @@ export function LocationForm({
               </select>
             </div>
             <div className="space-y-1.5">
+              <label className="block text-xs text-zinc-400 mb-1">Tọa độ</label>
               {coordinates ? (
                 <div className="flex items-center justify-between gap-2 p-2 bg-zinc-800/50 rounded border border-zinc-700">
                   <div className="text-xs text-zinc-400">
-                    <span className="font-medium text-zinc-300">📍 Tọa độ:</span>{" "}
+                    <span className="font-medium text-zinc-300">📍</span>{" "}
                     {coordinates[0].toFixed(4)}, {coordinates[1].toFixed(4)}
                   </div>
                   {onRepickLocation && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setCoordinates(null); // Clear coordinates immediately
-                        onRepickLocation();
-                      }}
+                      onClick={onRepickLocation}
                       disabled={saving}
-                      className="px-2 py-1 text-[10px] bg-emerald-600/80 hover:bg-emerald-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                      title="Chọn lại vị trí trên bản đồ"
+                      className="px-2 py-1 text-[10px] bg-emerald-600/80 hover:bg-emerald-600 text-white rounded transition-colors"
                     >
-                      <Icon icon="mdi:map-marker-radius" className="w-3 h-3" />
-                      <span>Chọn lại</span>
+                      Chọn lại
                     </button>
                   )}
                 </div>
               ) : (
-                <div className="p-2 bg-zinc-800/50 rounded border border-zinc-700 border-dashed">
-                  {onRepickLocation ? (
+                <div className="p-2 bg-zinc-800/50 rounded border border-zinc-700 border-dashed space-y-2">
+                  <div className="text-xs text-zinc-500 text-center">
+                    👆 Click vào bản đồ để chọn vị trí
+                  </div>
+                  {onCancelRepick && (
                     <button
                       type="button"
-                      onClick={onRepickLocation}
+                      onClick={onCancelRepick}
                       disabled={saving}
-                      className="w-full px-2 py-1.5 text-xs bg-emerald-600/80 hover:bg-emerald-600 text-white rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                      className="w-full px-2 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 text-white rounded transition-colors"
                     >
-                      <Icon icon="mdi:map-marker-plus" className="w-3.5 h-3.5" />
-                      <span>Chọn vị trí trên bản đồ</span>
+                      Hủy chọn lại
                     </button>
-                  ) : (
-                    <div className="text-xs text-zinc-500 text-center">
-                      Chưa có tọa độ. Vui lòng chọn vị trí trên bản đồ.
-                    </div>
                   )}
                 </div>
               )}
@@ -293,6 +295,38 @@ export function LocationForm({
             {/* Icon Image Upload */}
             <div className="space-y-2">
               <label className="block text-xs text-zinc-400">Ảnh đại diện (Icon)</label>
+
+              {/* Current Icon Preview */}
+              {(iconPreview || iconUrl) && !iconFile && (
+                <div className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded text-xs border border-zinc-700">
+                  <img
+                    src={iconPreview || iconUrl}
+                    alt="Current icon"
+                    className="w-10 h-10 rounded object-cover"
+                  />
+                  <div className="flex-1">
+                    <div className="text-zinc-300 text-xs">Icon hiện tại</div>
+                    {iconUrl && (
+                      <div className="text-zinc-500 text-[10px] truncate max-w-[180px]" title={iconUrl}>
+                        {iconUrl}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIconUrl("");
+                      setIconFile(null);
+                      setIconPreview(null);
+                    }}
+                    className="px-2 py-1 text-[10px] bg-red-600/80 hover:bg-red-600 text-white rounded transition-colors"
+                    title="Xóa icon"
+                  >
+                    <Icon icon="mdi:trash-can-outline" className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <input
                   ref={iconInputRef}
@@ -308,7 +342,7 @@ export function LocationForm({
                   disabled={saving}
                   className="flex-1 px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
                 >
-                  Upload ảnh
+                  {iconUrl || iconPreview ? "Thay đổi" : "Upload ảnh"}
                 </button>
                 <button
                   type="button"
@@ -321,12 +355,15 @@ export function LocationForm({
                   Library
                 </button>
               </div>
+
+              {/* New Upload Preview */}
               {iconFile && (
-                <div className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded text-xs">
+                <div className="flex items-center gap-2 p-2 bg-emerald-900/20 rounded text-xs border border-emerald-700/50">
                   {iconPreview && (
                     <img src={iconPreview} alt="Preview" className="w-8 h-8 rounded object-cover" />
                   )}
-                  <span className="flex-1 truncate text-zinc-300">{iconFile.name}</span>
+                  <span className="flex-1 truncate text-emerald-300 font-medium">{iconFile.name}</span>
+                  <span className="text-[10px] text-emerald-400">Mới</span>
                   <button
                     type="button"
                     onClick={() => { setIconFile(null); setIconPreview(null); }}
@@ -336,6 +373,7 @@ export function LocationForm({
                   </button>
                 </div>
               )}
+
               <div className="text-xs text-zinc-500">hoặc nhập URL:</div>
               <input
                 type="url"
@@ -345,6 +383,7 @@ export function LocationForm({
                 placeholder="https://example.com/icon.png"
                 disabled={saving}
               />
+
               {/* set icon size */}
               <div className="text-xs text-zinc-500">Kích thước hiển thị (px):</div>
               <div className="flex items-center gap-2">

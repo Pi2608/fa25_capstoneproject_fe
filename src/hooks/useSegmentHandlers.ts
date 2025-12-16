@@ -12,6 +12,7 @@ import {
   detachLayerFromSegment,
   createLocation,
   deleteLocation,
+  deleteRouteAnimation,
 } from "@/lib/api-storymap";
 
 type UseSegmentHandlersProps = {
@@ -68,11 +69,69 @@ export function useSegmentHandlers({
 
   const handleDeleteSegment = async () => {
     if (!confirmDelete) return;
+
+    // Count all child resources
+    const locationsCount = confirmDelete.locations?.length || 0;
+    const zonesCount = confirmDelete.zones?.length || 0;
+    const routesCount = confirmDelete.routeAnimations?.length || 0;
+    const totalCount = locationsCount + zonesCount + routesCount;
+
+    if (totalCount > 0) {
+      const items = [];
+      if (locationsCount > 0) items.push(`${locationsCount} location(s)`);
+      if (zonesCount > 0) items.push(`${zonesCount} zone(s)`);
+      if (routesCount > 0) items.push(`${routesCount} route(s)`);
+
+      const confirmMessage = `⚠️ Cảnh báo: Segment này có ${items.join(', ')}.\n\nKhi xóa segment, tất cả các items bên trong cũng sẽ bị xóa theo.\n\nBạn có chắc chắn muốn tiếp tục?`;
+
+      if (!window.confirm(confirmMessage)) {
+        setConfirmDelete(null);
+        return;
+      }
+
+      // Delete all child resources first
+      try {
+        // Delete all locations
+        for (const location of confirmDelete.locations || []) {
+          await deleteLocation(mapId, confirmDelete.segmentId, location.locationId);
+        }
+
+        // Delete all zones
+        for (const zone of confirmDelete.zones || []) {
+          await deleteSegmentZone(mapId, confirmDelete.segmentId, zone.segmentZoneId);
+        }
+
+        // Delete all routes
+        for (const route of confirmDelete.routeAnimations || []) {
+          await deleteRouteAnimation(mapId, confirmDelete.segmentId, route.routeAnimationId);
+        }
+
+        // Update segments state to remove all child resources
+        updateSegmentsState(segs => segs.map(seg => {
+          if (seg.segmentId === confirmDelete.segmentId) {
+            return { ...seg, locations: [], zones: [], routeAnimations: [] };
+          }
+          return seg;
+        }));
+
+        // Refresh view if this segment is active
+        if (activeSegmentId === confirmDelete.segmentId) {
+          await onViewSegment({ ...confirmDelete, locations: [], zones: [], routeAnimations: [] });
+        }
+      } catch (error) {
+        console.error("Failed to delete child resources:", error);
+        alert("Không thể xóa các resources bên trong segment. Vui lòng thử lại.");
+        setConfirmDelete(null);
+        return;
+      }
+    }
+
     try {
       await removeSegment(confirmDelete.segmentId);
       setConfirmDelete(null);
     } catch (error) {
       console.error("Failed to delete segment:", error);
+      alert("Không thể xóa segment. Vui lòng thử lại.");
     }
   };
 

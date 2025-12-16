@@ -163,6 +163,32 @@ export async function getPublicQuestionBanks(): Promise<QuestionBankDto[]> {
   return res;
 }
 
+// Organization-specific question bank functions
+export async function getMyQuestionBanksByOrg(orgId: string): Promise<QuestionBankDto[]> {
+  const res = await getJson<QuestionBankDto[]>(
+    `/question-banks/organization/${orgId}/my`
+  );
+  return res;
+}
+
+export async function getPublicQuestionBanksByOrg(orgId: string): Promise<QuestionBankDto[]> {
+  const res = await getJson<QuestionBankDto[]>(
+    `/question-banks/organization/${orgId}/public`
+  );
+  return res;
+}
+
+export async function duplicateQuestionBank(
+  questionBankId: string,
+  targetWorkspaceId: string
+): Promise<QuestionBankDto> {
+  const res = await postJson<Record<string, never>, QuestionBankDto>(
+    `/question-banks/${questionBankId}/duplicate?targetWorkspaceId=${targetWorkspaceId}`,
+    {}
+  );
+  return res;
+}
+
 export interface UpdateTagsRequest {
   tags: string[];
 }
@@ -431,8 +457,43 @@ export async function deleteSession(sessionId: string) {
   return delJson(`/sessions/${sessionId}`);
 }
 
-export async function getMySessions(): Promise<SessionDto[]> {
-  const res = await getJson<SessionDto[]>("/sessions/my");
+export async function getMySessions(orgId?: string, sortBy?: string, order?: string): Promise<SessionDto[]> {
+  let url = "/sessions/my";
+  const params = new URLSearchParams();
+  if (orgId) params.append("orgId", orgId);
+  if (sortBy) params.append("sortBy", sortBy);
+  if (order) params.append("order", order);
+  
+  if (params.toString()) {
+    url += "?" + params.toString();
+  }
+  
+  const res = await getJson<SessionDto[]>(url);
+  if (!Array.isArray(res)) return [];
+  return res;
+}
+
+export async function getAllSessionsByOrganization(
+  organizationId: string,
+  sortBy?: string,
+  order?: string,
+  hostId?: string,
+  status?: string,
+  hasQuestionBanks?: boolean
+): Promise<SessionDto[]> {
+  let url = `/sessions/organizations/${organizationId}/all`;
+  const params = new URLSearchParams();
+  if (sortBy) params.append("sortBy", sortBy);
+  if (order) params.append("order", order);
+  if (hostId) params.append("hostId", hostId);
+  if (status) params.append("status", status);
+  if (hasQuestionBanks !== undefined) params.append("hasQuestionBanks", String(hasQuestionBanks));
+  
+  if (params.toString()) {
+    url += "?" + params.toString();
+  }
+  
+  const res = await getJson<SessionDto[]>(url);
   if (!Array.isArray(res)) return [];
   return res;
 }
@@ -457,12 +518,7 @@ export interface ParticipantDto {
 
 function normalizeParticipant(raw: any): ParticipantDto {
   if (!raw) {
-    return {
-      id: "",
-      sessionId: "",
-      displayName: "",
-      score: 0,
-    };
+    return { id: "", sessionId: "", displayName: "", score: 0 };
   }
 
   const sessionId =
@@ -475,6 +531,8 @@ function normalizeParticipant(raw: any): ParticipantDto {
   return {
     id:
       raw.id ??
+      raw.sessionParticipantId ??    
+      raw.SessionParticipantId ??
       raw.participantId ??
       raw.ParticipantId ??
       raw.participantID ??
@@ -515,11 +573,9 @@ export async function joinSession(
       (typeof navigator !== "undefined" ? navigator.userAgent : "unknown"),
   };
 
-  const res = await postJson<typeof body, ParticipantDto>(
-    "/sessions/join",
-    body
-  );
-  return res;
+  const res = await postJson<typeof body, any>("/sessions/join", body);
+  return normalizeParticipant(res);
+
 }
 
 export async function leaveSession(participantId: string) {

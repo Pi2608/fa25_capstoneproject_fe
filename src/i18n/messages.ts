@@ -548,6 +548,41 @@ export const messages = {
 
             org_not_found: "Không tìm thấy tổ chức.",
         },
+        session: {
+            toastWelcome: "Xin chào,",
+            pageTitle: "Tham gia phiên học",
+            subtitlePin: "Nhập mã phiên học",
+            subtitleName: "Nhập tên hiển thị của bạn",
+
+            // PIN step
+            pinTitle: "Nhập mã phiên học",
+            pinSubtitle: "Hỏi giáo viên để lấy mã 6 chữ số",
+            verifyingCode: "Đang xác minh mã...",
+
+            // Name step
+            nameTitle: "Tên của bạn là gì?",
+            joiningLabel: "Đang tham gia:",
+            displayNameLabel: "Tên hiển thị",
+            displayNamePlaceholder: "Nhập tên của bạn",
+            displayNameHint: "Tên này sẽ hiển thị với mọi người trong phiên học",
+
+            // Buttons
+            btnBack: "Quay lại",
+            btnJoin: "Tham gia phiên học",
+            btnJoining: "Đang tham gia...",
+            btnBackToHome: "← Quay về trang chủ",
+
+            // Errors
+            errorSessionEnded: "Phiên học này đã kết thúc",
+            errorInvalidCode: "Mã phiên học không hợp lệ. Vui lòng kiểm tra và thử lại.",
+            errorEnterName: "Vui lòng nhập tên của bạn",
+            errorNoMap: "Phiên học không có bản đồ đính kèm",
+            errorNoParticipantInfo: "Không lấy được thông tin tham gia từ server.",
+            errorSessionFull: "Phiên học đã đầy. Không thể tham gia vì đã đạt số lượng người tham gia tối đa.",
+            errorSessionNotFound: "Không tìm thấy phiên học. Vui lòng kiểm tra mã PIN.",
+            errorSessionEndedJoin: "Phiên học đã kết thúc.",
+            errorGeneric: "Không thể tham gia phiên học. Vui lòng thử lại.",
+        },
         blog: {
             breadcrumb: "Tài nguyên / Blog",
             hero_title: "Cập nhật thân thiện và câu chuyện lập bản đồ thực tế",
@@ -779,7 +814,6 @@ export const messages = {
             tabs_usage: "Sử dụng",
             tabs_plans: "Gói",
             tabs_billing: "Thanh toán",
-            tabs_developers: "Nhà phát triển",
             tabs_workspace: "Workspace",
         },
         support: {
@@ -1006,6 +1040,10 @@ export const messages = {
             // Dialog form
             dialog_title_edit: "Chỉnh sửa bộ câu hỏi",
             dialog_title_create: "Tạo bộ câu hỏi mới",
+            dialog_duplicate_title: "Sao chép ngân hàng câu hỏi",
+            dialog_duplicate_desc: "Chọn không gian làm việc để lưu bản sao của bộ câu hỏi này.",
+            toast_duplicate_success: "Sao chép thành công",
+            toast_duplicate_error: "Sao chép thất bại",
             field_name_label: "Tên bộ câu hỏi",
             field_name_placeholder: "VD: Bộ câu hỏi chương 1...",
             field_desc_label: "Mô tả",
@@ -1014,7 +1052,9 @@ export const messages = {
             field_category_placeholder: "VD: Lịch sử, Địa lý...",
             field_tags_label: "Tags (phân cách bằng dấu phẩy)",
             field_tags_placeholder: "VD: ôn tập, giữa kỳ",
-            field_workspace_label: "Workspace",
+            field_workspace_label: "Lưu vào workspace",
+            btn_view: "Xem",
+            btn_duplicate: "Sao chép",
             field_workspace_placeholder: "Chọn workspace",
             field_isTemplate_label: "Dùng như template",
             field_isPublic_label: "Công khai trong tổ chức",
@@ -1027,6 +1067,95 @@ export const messages = {
             menu_edit: "Sửa thông tin",
             menu_delete: "Xóa",
             menu_deleting: "Đang xóa...",
+
+            // Empty state
+            empty_state_my_title: "Chưa có bộ câu hỏi nào",
+            empty_state_public_title: "Chưa có bộ câu hỏi công khai",
+            empty_state_my_desc: "Tạo bộ câu hỏi đầu tiên của bạn để bắt đầu xây dựng bài kiểm tra và đánh giá cho học sinh. Bạn có thể tổ chức các câu hỏi theo chủ đề, độ khó hoặc khóa học.",
+            empty_state_public_desc: "Chưa có bộ câu hỏi công khai nào. Tạo một bộ câu hỏi và đánh dấu nó là công khai để chia sẻ với những người khác.",
+            empty_state_create_btn: "Tạo bộ câu hỏi",
+        },
+        org_sessions: {
+            // Header
+            header_back: "← Quay lại",
+            header_title: "Danh sách session",
+            header_create_btn: "Tạo session mới",
+
+            // Tabs
+            tab_my: "Session của tôi",
+            tab_all: "Tất cả session",
+
+            // Search
+            search_placeholder: "Nhập mã session để tìm...",
+            search_button: "Tìm",
+            search_searching: "Đang tìm...",
+            search_error_empty: "Vui lòng nhập mã session.",
+            search_error_not_found: "Không tìm thấy session với mã này.",
+
+            // Filters
+            filter_sort_by_label: "Sắp xếp theo",
+            filter_sort_by_date: "Ngày tạo",
+            filter_sort_by_name: "Tên session",
+            filter_sort_by_status: "Trạng thái",
+
+            filter_order_label: "Thứ tự",
+            filter_order_newest: "Mới nhất",
+            filter_order_oldest: "Cũ nhất",
+
+            filter_host_label: "Lọc theo giáo viên",
+            filter_host_all: "Tất cả",
+
+            filter_status_label: "Lọc theo trạng thái",
+            filter_status_all: "Tất cả",
+            filter_status_waiting: "Chưa bắt đầu",
+            filter_status_in_progress: "Đang diễn ra",
+            filter_status_paused: "Tạm dừng",
+            filter_status_completed: "Đã kết thúc",
+            filter_status_cancelled: "Đã hủy",
+
+            filter_qb_label: "Lọc theo bộ câu hỏi",
+            filter_qb_all: "Tất cả",
+            filter_qb_with: "Có bộ câu hỏi",
+            filter_qb_without: "Không có bộ câu hỏi",
+
+            // Loading & Error
+            loading_text: "Đang tải danh sách session...",
+            error_load_failed: "Không tải được danh sách session. Vui lòng thử lại.",
+
+            // Empty State
+            empty_my_title: "Chưa có session nào",
+            empty_my_desc: "Tạo session đầu tiên của bạn để bắt đầu dạy học tương tác với học sinh.",
+            empty_all_title: "Chưa có session nào trong tổ chức",
+            empty_all_desc: "Các thành viên trong tổ chức chưa tạo session nào.",
+            empty_action_btn: "Tạo session mới",
+
+            // Table Headers
+            th_code: "Mã",
+            th_name: "Tên session",
+            th_map: "Bản đồ",
+            th_host: "Giáo viên",
+            th_status: "Trạng thái",
+            th_participants: "Số người",
+            th_created: "Ngày tạo",
+            th_question_banks: "Bộ câu hỏi",
+            th_actions: "Hành động",
+
+            // Status Display
+            status_waiting: "Chưa bắt đầu",
+            status_in_progress: "Đang diễn ra",
+            status_paused: "Tạm dừng",
+            status_completed: "Đã kết thúc",
+            status_cancelled: "Đã hủy",
+
+            // Delete Dialog & Actions
+            btn_delete: "Xóa",
+            delete_title: "Xóa session?",
+            delete_confirm_msg: "Bạn có chắc chắn muốn xóa",
+            delete_warning: "Hành động này không thể hoàn tác.",
+            delete_cancel_btn: "Hủy",
+            delete_confirm_btn: "Xóa vĩnh viễn",
+            delete_deleting_btn: "Đang xóa...",
+            delete_error_msg: "Xóa session thất bại. Vui lòng thử lại.",
         },
         org_detail: {
             "btn_question_banks": "Bộ câu hỏi",
@@ -1111,7 +1240,7 @@ export const messages = {
             stat_actions: "Hành động",
 
             // Share panel
-            share_ws: "Chia sẻ workspace",
+            share_ws: "Chia sẻ tổ chức",
             close_share: "Đóng chia sẻ",
             ph_add_collaborator: "Thêm cộng tác viên",
             invite: "Mời",
@@ -1226,6 +1355,17 @@ export const messages = {
             copied: "Đã sao chép",
         },
         workspace_detail: {
+            delete_map_title: "Xoá bản đồ",
+            delete_map_desc: "Bạn có chắc chắn muốn xoá bản đồ “{name}”? Hành động này không thể hoàn tác.",
+            cancel: "Hủy",
+            deleting: "Đang xoá...",
+            delete_map_cta: "Xoá bản đồ",
+
+            toast_deleted: "Đã xoá bản đồ!",
+            toast_removed: "Đã gỡ bản đồ khỏi workspace!",
+
+            manage_delete_failed: "Không thể xoá",
+            err_generic: "Có lỗi xảy ra. Vui lòng thử lại.",
             storymap_section_title: "Bản đồ cho Storymap",
             storymap_menu_title: "Tùy chọn",
             storymap_menu_delete: "Xoá bản đồ",
@@ -1268,12 +1408,28 @@ export const messages = {
             col_actions: "Hành động",
             remove: "Gỡ",
 
-            save_success: "Đã lưu bộ câu hỏi",
-            save_failed: "Không thể lưu bộ câu hỏi.",
-            delete_success: "Đã xoá bộ câu hỏi.",
-            delete_failed: "Không thể xoá bộ câu hỏi.",
-            manage_err_has_active_sessions:
-                "Không thể xoá map vì còn active sessions. Hãy xoá hoặc hủy tất cả active sessions trước.",
+            // Delete dialog
+            delete_dialog_title: "Xóa bản đồ?",
+            delete_dialog_confirm: "Bạn có chắc chắn muốn xóa bản đồ",
+            delete_dialog_warning: "Hành động này không thể hoàn tác.",
+            delete_dialog_cancel: "Hủy",
+            delete_dialog_confirm_btn: "Xóa bản đồ",
+            delete_dialog_deleting: "Đang xóa...",
+            
+            // Create map dialog
+            create_map_dialog_title: "Chọn loại bản đồ",
+            create_map_normal_title: "Bản đồ thường",
+            create_map_normal_desc: "Tạo bản đồ để hiển thị và chia sẻ dữ liệu địa lý",
+            create_map_storymap_title: "Storymap",
+            create_map_storymap_desc: "Tạo storymap với timeline và segments để có thể tạo session học tập",
+            create_map_dialog_cancel: "Hủy",
+            create_map_dialog_create: "Tạo bản đồ",
+            
+            // Toast messages
+            delete_map_success: "Đã xóa bản đồ.",
+            remove_map_success: "Đã gỡ bản đồ khỏi workspace.",
+            err_generic: "Có lỗi xảy ra. Vui lòng thử lại.",
+            manage_delete_failed: "Xóa bản đồ thất bại. Vui lòng thử lại.",
         },
         organization: {
             not_found_title: "Không tìm thấy tổ chức",
@@ -1281,6 +1437,23 @@ export const messages = {
             go_to_profile: "Về trang cá nhân",
             create_new: "Tạo tổ chức mới",
             manage_delete_failed: "Xóa Tổ chức thất bại. Vui lòng thử lại"
+        },
+        templates: {
+            // Picker Dialog
+            picker_title: "Chọn template",
+            picker_close_btn: "Đóng",
+            picker_error_load: "Không tải được danh sách template",
+            picker_empty_title: "Chưa có template nào",
+            picker_empty_desc: "Bạn có thể tạo ở trang",
+            picker_error_create: "Tạo map từ template thất bại",
+            
+            // Form
+            form_placeholder_name: "Tên template",
+            form_choose_file: "Chọn file .geojson trước",
+            form_button_create: "Tạo template từ GeoJSON",
+            form_button_creating: "Đang tạo…",
+            form_success: "OK. TemplateId: {templateId}",
+            form_error_create: "Tạo template thất bại",
         },
         my_exports: {
             header_title: "Exports của tôi",
@@ -1353,6 +1526,9 @@ export const messages = {
             payment_success: "Thanh toán thành công! Gói của bạn đã được kích hoạt.",
             payment_failed: "Thanh toán thất bại. Vui lòng thử lại.",
             payment_cancelled: "Bạn đã hủy thanh toán.",
+            payment_success_title: "Thanh toán thành công",
+            payment_failed_title: "Thanh toán thất bại",
+            close: "Đóng",
 
             // Thông tin gói hiện tại
             current_plan_label: "Gói hiện tại",
@@ -1363,6 +1539,7 @@ export const messages = {
                 "Tổ chức này chưa có gói. Hãy liên hệ Owner để chọn gói.",
             status_label: "Trạng thái:",
             end_date_label: "Hết hạn:",
+            billing_cycle_end_label: "Chu kỳ thanh toán kết thúc:",
             auto_renew_label: "Tự gia hạn:",
             toggle_on: "Bật",
             toggle_off: "Tắt",
@@ -1516,13 +1693,17 @@ export const messages = {
             plan_free: "Miễn phí"
         },
         usage: {
+            organization_info: "Thông tin tổ chức",
+            current_plan: "Gói hiện tại",
+            total_members: "Tổng thành viên",
+            organization_name: "Tên tổ chức",
             title: "Sử dụng",
             organization: "Tổ chức",
             noOrgSelected: "Chưa chọn tổ chức.",
             resetOn: "Làm mới vào",
             period: "Chu kỳ",
             lastReset: "Làm mới lần cuối",
-
+            nextReset: "Làm mới lần tiếp theo",
             limits_overview: "Tổng quan hạn mức",
             limits_checkQuotaPlusOne: "Kiểm tra hạn mức (Bản đồ +1)",
 
@@ -2124,6 +2305,30 @@ export const messages = {
             browse_btn: "Duyệt bản đồ",
             templates_btn: "Xem mẫu",
         },
+        map_components: {
+            // ReportViolationDialog
+            report_title: "Report Violation",
+            report_reason_inappropriate: "Nội dung không phù hợp",
+            report_reason_copyright: "Vi phạm bản quyền",
+            report_reason_spam: "Spam",
+            report_reason_misinformation: "Thông tin sai lệch",
+            report_reason_harassment: "Quấy rối",
+            report_reason_other: "Khác",
+            report_choose_reason: "Vui lòng chọn lý do báo cáo",
+            report_success: "Đã gửi báo cáo thành công. Cảm ơn bạn đã phản hồi!",
+            report_error: "Không thể gửi báo cáo",
+            
+            // PublishButton
+            publish_error: "Không thể publish map",
+            unpublish_error: "Không thể unpublish map",
+            archive_error: "Không thể archive map",
+            restore_error: "Không thể restore map",
+            
+            // EmbedCodeGenerator
+            embed_prepare_error: "Không thể chuẩn bị map cho embed",
+            embed_storymap_unsupported: "Story maps không thể được embed. Chỉ có map bình thường mới có thể embed.",
+            embed_not_ready: "Map chưa sẵn sàng để embed.",
+        },
         help: {
             sec_start: "BẮT ĐẦU",
             sec_upload_anything: "TẢI LÊN MỌI THỨ",
@@ -2586,6 +2791,26 @@ export const messages = {
             cta_title: "Bắt đầu bản đồ đầu tiên trong vài phút",
             cta_desc: "Có gói miễn phí • Không cần thẻ tín dụng",
         },
+        mapEditor: {
+            untitledMap: "Bản đồ chưa đặt tên",
+            doubleClickRename: "Double click để đổi tên",
+            mapRenamed: "Đã đổi tên bản đồ",
+            renameMapFailed: "Không thể đổi tên bản đồ",
+            uploadingFile: "Đang tải file lên...",
+            loadingData: "Đang load dữ liệu...",
+            uploadSuccess: "Tải lên thành công! Đã thêm {count} đối tượng vào layer \"{layerId}\".",
+            uploadFailed: "Tải file thất bại",
+            uploadTooltip: "Upload GeoJSON/KML/GPX file to add as layer",
+            upload: "Upload",
+            saving: "Saving...",
+            save: "Save",
+            saveTooltip: "Lưu thông tin bản đồ và vị trí hiển thị",
+            exportTooltip: "Xuất bản đồ",
+            exporting: "Đang xuất...",
+            export: "Xuất",
+            loadMapFailed: "Không tải được bản đồ",
+            saveFailed: "Lưu thất bại",
+        },
         footer: {
             tagline: 'Xây dựng và chia sẻ bản đồ tương tác thật dễ dàng. Mạnh mẽ cho đội nhóm, đơn giản cho mọi người.',
             product: 'Sản phẩm',
@@ -3044,12 +3269,17 @@ export const messages = {
             level_advanced: "Advanced",
         },
         usage: {
+            organization_info: "Organization info",
+            current_plan: "Current plan",
+            total_members: "Total members",
+            organization_name: "Organization name",
             title: "Usage",
             organization: "Organization",
             noOrgSelected: "No organization selected.",
             resetOn: "Resets on",
             period: "Period",
             lastReset: "Last reset",
+            nextReset: "Next reset",
 
             limits_overview: "Quota overview",
             limits_checkQuotaPlusOne: "Check quota (Maps +1)",
@@ -3359,6 +3589,10 @@ export const messages = {
             // Dialog form
             dialog_title_edit: "Edit question bank",
             dialog_title_create: "Create new question bank",
+            dialog_duplicate_title: "Duplicate Question Bank",
+            dialog_duplicate_desc: "Choose a workspace to save this copy.",
+            toast_duplicate_success: "Duplicated successfully",
+            toast_duplicate_error: "Duplicate failed",
             field_name_label: "Question bank name",
             field_name_placeholder: "E.g. Chapter 1 review...",
             field_desc_label: "Description",
@@ -3367,7 +3601,9 @@ export const messages = {
             field_category_placeholder: "E.g. History, Geography...",
             field_tags_label: "Tags (separated by commas)",
             field_tags_placeholder: "E.g. revision, midterm",
-            field_workspace_label: "Workspace",
+            field_workspace_label: "Save to workspace",
+            btn_view: "View",
+            btn_duplicate: "Duplicate",
             field_workspace_placeholder: "Select workspace",
             field_isTemplate_label: "Use as template",
             field_isPublic_label: "Public inside organization",
@@ -3380,6 +3616,95 @@ export const messages = {
             menu_edit: "Edit info",
             menu_delete: "Delete",
             menu_deleting: "Deleting...",
+
+            // Empty state
+            empty_state_my_title: "No Question Banks Yet",
+            empty_state_public_title: "No Public Question Banks",
+            empty_state_my_desc: "Create your first question bank to start building quizzes and assessments for your students. You can organize questions by topic, difficulty, or course.",
+            empty_state_public_desc: "No public question banks are available yet. Create a question bank and mark it as public to share with others.",
+            empty_state_create_btn: "Create Question Bank",
+        },
+        org_sessions: {
+            // Header
+            header_back: "← Back",
+            header_title: "Session List",
+            header_create_btn: "Create New Session",
+
+            // Tabs
+            tab_my: "My Sessions",
+            tab_all: "All Sessions",
+
+            // Search
+            search_placeholder: "Enter session code to find...",
+            search_button: "Find",
+            search_searching: "Searching...",
+            search_error_empty: "Please enter a session code.",
+            search_error_not_found: "No session found with this code.",
+
+            // Filters
+            filter_sort_by_label: "Sort by",
+            filter_sort_by_date: "Created Date",
+            filter_sort_by_name: "Session Name",
+            filter_sort_by_status: "Status",
+
+            filter_order_label: "Order",
+            filter_order_newest: "Newest",
+            filter_order_oldest: "Oldest",
+
+            filter_host_label: "Filter by Teacher",
+            filter_host_all: "All",
+
+            filter_status_label: "Filter by Status",
+            filter_status_all: "All",
+            filter_status_waiting: "Not Started",
+            filter_status_in_progress: "In Progress",
+            filter_status_paused: "Paused",
+            filter_status_completed: "Completed",
+            filter_status_cancelled: "Cancelled",
+
+            filter_qb_label: "Filter by Question Banks",
+            filter_qb_all: "All",
+            filter_qb_with: "With Question Banks",
+            filter_qb_without: "Without Question Banks",
+
+            // Loading & Error
+            loading_text: "Loading session list...",
+            error_load_failed: "Failed to load session list. Please try again.",
+
+            // Empty State
+            empty_my_title: "No Sessions Yet",
+            empty_my_desc: "Create your first session to start interactive teaching with students.",
+            empty_all_title: "No Sessions in Organization",
+            empty_all_desc: "Members in this organization have not created any sessions yet.",
+            empty_action_btn: "Create New Session",
+
+            // Table Headers
+            th_code: "Code",
+            th_name: "Session Name",
+            th_map: "Map",
+            th_host: "Teacher",
+            th_status: "Status",
+            th_participants: "Participants",
+            th_created: "Created Date",
+            th_question_banks: "Question Banks",
+            th_actions: "Actions",
+
+            // Status Display
+            status_waiting: "Not Started",
+            status_in_progress: "In Progress",
+            status_paused: "Paused",
+            status_completed: "Completed",
+            status_cancelled: "Cancelled",
+
+            // Delete Dialog & Actions
+            btn_delete: "Delete",
+            delete_title: "Delete Session?",
+            delete_confirm_msg: "Are you sure you want to delete",
+            delete_warning: "This action cannot be undone.",
+            delete_cancel_btn: "Cancel",
+            delete_confirm_btn: "Delete Permanently",
+            delete_deleting_btn: "Deleting...",
+            delete_error_msg: "Failed to delete session. Please try again.",
         },
         sessionCreate: {
             back: "← Back",
@@ -3470,6 +3795,41 @@ export const messages = {
             toast_create_error: "Failed to create session.",
 
             org_not_found: "Organization not found.",
+        },
+        session: {
+            toastWelcome: "Welcome,",
+            pageTitle: "Join Session",
+            subtitlePin: "Enter the session code",
+            subtitleName: "Enter your display name",
+
+            // PIN step
+            pinTitle: "Enter Session Code",
+            pinSubtitle: "Ask your teacher for the 6-digit code",
+            verifyingCode: "Verifying code...",
+
+            // Name step
+            nameTitle: "What's your name?",
+            joiningLabel: "Joining:",
+            displayNameLabel: "Display Name",
+            displayNamePlaceholder: "Enter your name",
+            displayNameHint: "This name will be visible to everyone in the session",
+
+            // Buttons
+            btnBack: "Back",
+            btnJoin: "Join Session",
+            btnJoining: "Joining...",
+            btnBackToHome: "← Back to Home",
+
+            // Errors
+            errorSessionEnded: "This session has ended",
+            errorInvalidCode: "Invalid session code. Please check and try again.",
+            errorEnterName: "Please enter your name",
+            errorNoMap: "Session does not have a map attached",
+            errorNoParticipantInfo: "Could not get participant info from server.",
+            errorSessionFull: "Session is full. Cannot join because maximum participants limit has been reached.",
+            errorSessionNotFound: "Session not found. Please check the PIN.",
+            errorSessionEndedJoin: "Session has ended.",
+            errorGeneric: "Failed to join session. Please try again.",
         },
         org_question_builder: {
             // Header
@@ -3621,6 +3981,30 @@ export const messages = {
             browse_btn: "Browse maps",
             templates_btn: "View templates",
         },
+        map_components: {
+            // ReportViolationDialog
+            report_title: "Report Violation",
+            report_reason_inappropriate: "Inappropriate content",
+            report_reason_copyright: "Copyright violation",
+            report_reason_spam: "Spam",
+            report_reason_misinformation: "Misinformation",
+            report_reason_harassment: "Harassment",
+            report_reason_other: "Other",
+            report_choose_reason: "Please choose a reason for your report",
+            report_success: "Report submitted successfully. Thank you for your feedback!",
+            report_error: "Failed to submit report",
+            
+            // PublishButton
+            publish_error: "Failed to publish map",
+            unpublish_error: "Failed to unpublish map",
+            archive_error: "Failed to archive map",
+            restore_error: "Failed to restore map",
+            
+            // EmbedCodeGenerator
+            embed_prepare_error: "Failed to prepare map for embed",
+            embed_storymap_unsupported: "Story maps cannot be embedded. Only regular maps can be embedded.",
+            embed_not_ready: "Map is not ready to embed.",
+        },
         organization: {
             not_found_title: "Organization Not Found",
             not_found_description: "This organization does not exist or has been deleted. Please check the URL or create a new organization.",
@@ -3665,6 +4049,9 @@ export const messages = {
             payment_success: "Payment successful! Your plan has been activated.",
             payment_failed: "Payment failed. Please try again.",
             payment_cancelled: "You cancelled the payment.",
+            payment_success_title: "Payment Successful",
+            payment_failed_title: "Payment Failed",
+            close: "Close",
 
             // Current plan section
             current_plan_label: "Current plan",
@@ -3675,6 +4062,7 @@ export const messages = {
                 "This organization has no plan. Please contact the Owner to select one.",
             status_label: "Status:",
             end_date_label: "Expires:",
+            billing_cycle_end_label: "Billing cycle ends:",
             auto_renew_label: "Auto-renew:",
             toggle_on: "On",
             toggle_off: "Off",
@@ -3713,6 +4101,8 @@ export const messages = {
                 "Note: You may be redirected to a payment gateway to complete the transaction. After completion, your plan status will be updated automatically.",
         },
         workspace_detail: {
+            manage_delete_failed: "Failed to delete",
+            err_generic: "Something went wrong. Please try again.",
             storymap_section_title: "Storymap maps",
             storymap_menu_title: "Options",
             storymap_menu_delete: "Delete map",
@@ -3769,6 +4159,24 @@ export const messages = {
 
             manage_err_has_active_sessions:
                 "Cannot delete map while it has active sessions. Please end or cancel all active sessions first.",
+            
+            // Dialog text keys
+            delete_dialog_title: "Delete map?",
+            delete_dialog_confirm: "Are you sure you want to delete the map",
+            delete_dialog_warning: "This action cannot be undone.",
+            delete_dialog_cancel: "Cancel",
+            delete_dialog_confirm_btn: "Delete map",
+            delete_dialog_deleting: "Deleting...",
+            create_map_dialog_title: "Choose map type",
+            create_map_normal_title: "Regular Map",
+            create_map_normal_desc: "Create a map to display and share geographic data",
+            create_map_storymap_title: "Storymap",
+            create_map_storymap_desc: "Create a storymap with timeline and segments to create learning sessions",
+            create_map_dialog_cancel: "Cancel",
+            create_map_dialog_create: "Create map",
+            delete_map_success: "Map deleted.",
+            remove_map_success: "Removed map from workspace.",
+            err_generic: "An error occurred. Please try again.",
         },
         support: {
             eyebrow: "Help & Support",
@@ -4062,7 +4470,6 @@ export const messages = {
             tabs_usage: "Usage",
             tabs_plans: "Plans",
             tabs_billing: "Billing",
-            tabs_developers: "Developer",
             tabs_workspace: "Workspace",
         },
         membership: {
@@ -4988,6 +5395,23 @@ export const messages = {
             finalPrimary: "Get started",
             finalSecondary: "See pricing"
         },
+        templates: {
+            // Picker Dialog
+            picker_title: "Choose template",
+            picker_close_btn: "Close",
+            picker_error_load: "Failed to load template list",
+            picker_empty_title: "No templates yet",
+            picker_empty_desc: "You can create one on the",
+            picker_error_create: "Failed to create map from template",
+            
+            // Form
+            form_placeholder_name: "Template name",
+            form_choose_file: "Choose a .geojson file first",
+            form_button_create: "Create template from GeoJSON",
+            form_button_creating: "Creating…",
+            form_success: "OK. TemplateId: {templateId}",
+            form_error_create: "Failed to create template",
+        },
         my_exports: {
             header_title: "My exports",
 
@@ -5221,6 +5645,26 @@ export const messages = {
             faq4_a: "Share links for comment and edit with role-based permissions.",
             cta_title: "Start your first map in minutes",
             cta_desc: "Free plan available • No credit card required",
+        },
+        mapEditor: {
+            untitledMap: "Untitled Map",
+            doubleClickRename: "Double click to rename",
+            mapRenamed: "Map renamed successfully",
+            renameMapFailed: "Failed to rename map",
+            uploadingFile: "Uploading file...",
+            loadingData: "Loading data...",
+            uploadSuccess: "Upload successful! Added {count} features to layer \"{layerId}\".",
+            uploadFailed: "Failed to upload file",
+            uploadTooltip: "Upload GeoJSON/KML/GPX file to add as layer",
+            upload: "Upload",
+            saving: "Saving...",
+            save: "Save",
+            saveTooltip: "Save map information and view position",
+            exportTooltip: "Export map",
+            exporting: "Exporting...",
+            export: "Export",
+            loadMapFailed: "Failed to load map",
+            saveFailed: "Save failed",
         },
         footer: {
             tagline: 'Create and share interactive maps with ease. Powerful for teams, simple for everyone.',

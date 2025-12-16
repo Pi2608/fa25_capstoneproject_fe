@@ -398,6 +398,7 @@ export default function MembersPage() {
   );
 
   const isOwner = currentUserRow?.license === "Owner";
+  const isAdminOrOwner = currentUserRow?.license === "Owner" || currentUserRow?.license === "Admin";
 
   const canTransfer = (target: MemberRow) => {
     if (!currentUserRow) return false;
@@ -720,16 +721,18 @@ export default function MembersPage() {
               <th className="px-3 py-2 text-sm font-medium text-left">
                 {t("settings_members.col_role")}
               </th>
-              <th className="w-[280px] px-3 py-2 text-sm font-medium text-left">
-                {t("settings_members.col_actions")}
-              </th>
+              {isAdminOrOwner && (
+                <th className="w-[280px] px-3 py-2 text-sm font-medium text-left">
+                  {t("settings_members.col_actions")}
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={isAdminOrOwner ? 5 : 4}
                   className={`px-3 py-6 text-center text-sm ${themeClasses.textMuted}`}
                 >
                   {t("settings_members.loading_members")}
@@ -739,7 +742,7 @@ export default function MembersPage() {
             {!loading && members.length === 0 && (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={isAdminOrOwner ? 5 : 4}
                   className={`px-3 py-6 text-center text-sm ${themeClasses.textMuted}`}
                 >
                   {t("settings_members.no_members")}
@@ -820,36 +823,38 @@ export default function MembersPage() {
                       </select>
                     </td>
 
-                    <td className="px-3 py-3 text-sm">
-                      <div className="flex items-center gap-2">
-                        <button
-                          disabled={busy || !canTransfer(m)}
-                          onClick={() => handleTransferOwnershipClick(m)}
-                          title={transferTitle}
-                          className="px-2 py-1 text-xs font-medium rounded-md border border-sky-300 text-sky-700 bg-white hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-sky-400/40 dark:text-sky-300 dark:bg-transparent dark:hover:bg-sky-500/10"
-                        >
-                          {t("settings_members.transfer_ownership")}
-                        </button>
+                    {isAdminOrOwner && (
+                      <td className="px-3 py-3 text-sm">
+                        <div className="flex items-center gap-2">
+                          <button
+                            disabled={busy || !canTransfer(m)}
+                            onClick={() => handleTransferOwnershipClick(m)}
+                            title={transferTitle}
+                            className="px-2 py-1 text-xs font-medium rounded-md border border-sky-300 text-sky-700 bg-white hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-sky-400/40 dark:text-sky-300 dark:bg-transparent dark:hover:bg-sky-500/10"
+                          >
+                            {t("settings_members.transfer_ownership")}
+                          </button>
 
-                        <button
-                          disabled={
-                            busy ||
-                            m.license === "Owner" ||
-                            isMe === true ||
-                            !isOwner
-                          }
-                          onClick={() => handleRemoveClick(m)}
-                          className="px-2 py-1 text-xs font-medium rounded-md bg-red-600 text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-red-500/85 dark:hover:bg-red-500"
-                          title={
-                            isOwner
-                              ? t("settings_members.remove_member_title")
-                              : t("settings_members.remove_only_owner")
-                          }
-                        >
-                          {t("settings_members.remove")}
-                        </button>
-                      </div>
-                    </td>
+                          <button
+                            disabled={
+                              busy ||
+                              m.license === "Owner" ||
+                              isMe === true ||
+                              !isOwner
+                            }
+                            onClick={() => handleRemoveClick(m)}
+                            className="px-2 py-1 text-xs font-medium rounded-md bg-red-600 text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-red-500/85 dark:hover:bg-red-500"
+                            title={
+                              isOwner
+                                ? t("settings_members.remove_member_title")
+                                : t("settings_members.remove_only_owner")
+                            }
+                          >
+                            {t("settings_members.remove")}
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

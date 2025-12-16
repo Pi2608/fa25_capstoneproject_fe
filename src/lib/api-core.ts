@@ -194,3 +194,7 @@ export function patchJson<TReq, TRes>(path: string, body: TReq, init?: RequestIn
 export function postFormData<TRes>(path: string, formData: FormData, init?: RequestInit): Promise<TRes> {
   return apiFetch<TRes>(path, { ...init, method: "POST", body: formData });
 }
+
+export function putFormData<TRes>(path: string, formData: FormData, init?: RequestInit): Promise<TRes> {
+  return apiFetch<TRes>(path, { ...init, method: "PUT", body: formData });
+}

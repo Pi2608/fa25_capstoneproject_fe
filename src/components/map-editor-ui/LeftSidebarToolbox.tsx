@@ -416,6 +416,8 @@ export function LeftSidebarToolbox({
       setWaitingForLocation(false);
       setEditingLocation(null);
       setInlineFormMode("list");
+      // CRITICAL FIX: Clear editing state to show updated location
+      window.dispatchEvent(new Event("cancelLocationEdit"));
     } catch (error) {
       console.error("Failed to save location:", error);
       alert("Không thể lưu location. Vui lòng thử lại.");
@@ -787,6 +789,8 @@ export function LeftSidebarToolbox({
                     setWaitingForMapLocation(false);
                     setMapLocationCoordinates(null);
                     setMapEditingLocation(null);
+                    // CRITICAL FIX: Clear editing state to show updated location
+                    window.dispatchEvent(new Event("cancelLocationEdit"));
                   } catch (error) {
                     console.error("Failed to save location:", error);
                   }
@@ -796,19 +800,28 @@ export function LeftSidebarToolbox({
                   setWaitingForMapLocation(false);
                   setMapLocationCoordinates(null);
                   setMapEditingLocation(null);
+                  // CRITICAL FIX: Dispatch event to show location marker again
+                  window.dispatchEvent(new Event("cancelLocationEdit"));
+                }}
+                onRepickLocation={() => {
+                  setMapLocationCoordinates(null);
+                  setWaitingForMapLocation(true);
+                }}
+                onCancelRepick={() => {
+                  if (mapEditingLocation?.markerGeometry) {
+                    try {
+                      const geo = JSON.parse(mapEditingLocation.markerGeometry);
+                      if (geo.type === "Point" && Array.isArray(geo.coordinates)) {
+                        setMapLocationCoordinates([geo.coordinates[0], geo.coordinates[1]]);
+                      }
+                    } catch (e) {
+                      console.error("Failed to parse coordinates:", e);
+                    }
+                  }
+                  setWaitingForMapLocation(false);
                 }}
                 initialCoordinates={mapLocationCoordinates}
                 initialLocation={mapEditingLocation as any}
-                onRepickLocation={() => {
-                  setWaitingForMapLocation(true);
-                  setMapLocationCoordinates(null);
-                  setMapEditingLocation(null);
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('showMapInstruction', {
-                      detail: { message: 'Click on the map to place the location marker' }
-                    }));
-                  }
-                }}
               />
             )}
 
@@ -828,21 +841,28 @@ export function LeftSidebarToolbox({
                   setPickedCoordinates(null);
                   setEditingLocation(null);
                   setInlineFormMode("list");
+                  // CRITICAL FIX: Dispatch event to show location marker again
+                  window.dispatchEvent(new Event("cancelLocationEdit"));
+                }}
+                onRepickLocation={() => {
+                  setPickedCoordinates(null);
+                  setWaitingForLocation(true);
+                }}
+                onCancelRepick={() => {
+                  if (editingLocation?.markerGeometry) {
+                    try {
+                      const geo = JSON.parse(editingLocation.markerGeometry);
+                      if (geo.type === "Point" && Array.isArray(geo.coordinates)) {
+                        setPickedCoordinates([geo.coordinates[0], geo.coordinates[1]]);
+                      }
+                    } catch (e) {
+                      console.error("Failed to parse coordinates:", e);
+                    }
+                  }
+                  setWaitingForLocation(false);
                 }}
                 initialCoordinates={pickedCoordinates}
                 initialLocation={editingLocation}
-                onRepickLocation={() => {
-                  if (currentMap) {
-                    setWaitingForLocation(true);
-                    setPickedCoordinates(null);
-                    // Show instruction message
-                    if (typeof window !== 'undefined') {
-                      window.dispatchEvent(new CustomEvent('showMapInstruction', {
-                        detail: { message: 'Click on the map to place the location marker' }
-                      }));
-                    }
-                  }
-                }}
               />
             )}
 
@@ -1105,6 +1125,7 @@ function ExplorerView({
   const [draggingFeatureId, setDraggingFeatureId] = useState<string | null>(null);
   const [dropTargetLayerId, setDropTargetLayerId] = useState<string | null>(null);
   const [updatingFeatureId, setUpdatingFeatureId] = useState<string | null>(null);
+  const [hoveredFeatureId, setHoveredFeatureId] = useState<string | null>(null);
 
   const UNASSIGNED_KEY = "__unassigned__";
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -1132,6 +1153,19 @@ function ExplorerView({
       return next;
     });
   }, [layers]);
+
+  // Listen for feature hover events from map
+  useEffect(() => {
+    const handleFeatureHover = (e: Event) => {
+      const customEvent = e as CustomEvent<{ featureId: string | null }>;
+      setHoveredFeatureId(customEvent.detail?.featureId || null);
+    };
+
+    window.addEventListener('featureHover', handleFeatureHover);
+    return () => {
+      window.removeEventListener('featureHover', handleFeatureHover);
+    };
+  }, []);
 
   const featuresByLayer = useMemo(() => {
     const map = new Map<string, FeatureData[]>();
@@ -1264,10 +1298,16 @@ function ExplorerView({
   const renderFeatureRow = (feature: FeatureData, subtitle?: string) => {
     const isDraggable = Boolean(mapId && feature.featureId);
     const isUpdating = updatingFeatureId === feature.featureId;
+    const isHovered = hoveredFeatureId === (feature.featureId || feature.id);
     return (
       <div
         key={feature.id}
-        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-zinc-800/60 cursor-pointer group/item transition-colors"
+        className={cn(
+          "flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group/item transition-all",
+          isHovered
+            ? "bg-emerald-500/20 border border-emerald-500/50 shadow-sm"
+            : "hover:bg-zinc-800/60 border border-transparent"
+        )}
         onClick={() => onSelectFeature(feature)}
         draggable={isDraggable}
         onDragStart={event => handleFeatureDragStart(event, feature)}
@@ -1505,7 +1545,7 @@ function ExplorerView({
           </div>
           {visibleLayers.length === 0 ? (
             <div className="px-2 py-4 text-center">
-              <p className="text-xs text-zinc-500 italic">Không có layer trùng khớp</p>
+              <p className="text-xs text-zinc-500 italic">Không có layer nào</p>
             </div>
           ) : (
             <div className="space-y-1">

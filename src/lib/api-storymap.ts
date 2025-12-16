@@ -52,6 +52,7 @@ export type Segment = {
   layers: SegmentLayer[]; // Backend already includes these
   locations: Location[]; // Backend already includes these (PoiDto)
   storyContent?: StoryContent | string | null;
+  routeAnimations?: any[]; // Optional: RouteAnimation[] - loaded on frontend, defined later in file
 };
 
 export type CreateSegmentRequest = {
@@ -699,6 +700,7 @@ export type CreateLocationRequest = {
   iconFile?: File | Blob;
   audioFile?: File | Blob;
   iconUrl?: string;
+  iconSize?: number;
 };
 
 export async function getSegmentLocations(mapId: string, segmentId: string): Promise<Location[]> {
@@ -754,6 +756,7 @@ export async function createLocation(
 
   // Optional number field
   if (data.zIndex !== undefined) formData.append('ZIndex', data.zIndex.toString());
+  if (data.iconSize !== undefined) formData.append('IconSize', data.iconSize.toString());
 
   // Media file fields
   if (data.iconFile) formData.append('IconFile', data.iconFile);
@@ -770,10 +773,86 @@ export async function updateLocation(
   locationId: string,
   data: Partial<CreateLocationRequest>
 ): Promise<Location> {
-  return await putJson<Partial<CreateLocationRequest>, Location>(
-    `/storymaps/${mapId}/segments/${segmentId}/locations/${locationId}`,
-    data
-  );
+  // Check if we have file uploads - only use FormData if files are present
+  const hasFileUploads = !!(data.iconFile || data.audioFile);
+
+  if (hasFileUploads) {
+    // Use FormData when uploading files
+    const formData = new FormData();
+
+    // Add all fields that are present in data
+    if (data.segmentId !== undefined) formData.append('SegmentId', data.segmentId);
+    if (data.zoneId !== undefined) formData.append('ZoneId', data.zoneId);
+    if (data.title !== undefined) formData.append('Title', data.title);
+    if (data.subtitle !== undefined) formData.append('Subtitle', data.subtitle);
+    if (data.locationType !== undefined) formData.append('LocationType', data.locationType);
+    if (data.markerGeometry !== undefined) formData.append('MarkerGeometry', data.markerGeometry);
+    if (data.storyContent !== undefined) formData.append('StoryContent', data.storyContent);
+    if (data.mediaResources !== undefined) formData.append('MediaResources', data.mediaResources);
+    if (data.displayOrder !== undefined) formData.append('DisplayOrder', data.displayOrder.toString());
+    if (data.highlightOnEnter !== undefined) formData.append('HighlightOnEnter', data.highlightOnEnter.toString());
+    if (data.showTooltip !== undefined) formData.append('ShowTooltip', data.showTooltip.toString());
+    if (data.tooltipContent !== undefined) formData.append('TooltipContent', data.tooltipContent);
+    if (data.effectType !== undefined) formData.append('EffectType', data.effectType);
+    if (data.openSlideOnClick !== undefined) formData.append('OpenSlideOnClick', data.openSlideOnClick.toString());
+    if (data.slideContent !== undefined) formData.append('SlideContent', data.slideContent);
+    if (data.linkedLocationId !== undefined) formData.append('LinkedLocationId', data.linkedLocationId);
+    if (data.playAudioOnClick !== undefined) formData.append('PlayAudioOnClick', data.playAudioOnClick.toString());
+    if (data.audioUrl !== undefined) formData.append('AudioUrl', data.audioUrl);
+    if (data.externalUrl !== undefined) formData.append('ExternalUrl', data.externalUrl);
+    if (data.associatedLayerId !== undefined) formData.append('AssociatedLayerId', data.associatedLayerId);
+    if (data.animationPresetId !== undefined) formData.append('AnimationPresetId', data.animationPresetId);
+    if (data.animationOverrides !== undefined) formData.append('AnimationOverrides', data.animationOverrides);
+    if (data.isVisible !== undefined) formData.append('IsVisible', data.isVisible.toString());
+    if (data.zIndex !== undefined) formData.append('ZIndex', data.zIndex.toString());
+    if (data.iconUrl !== undefined) formData.append('IconUrl', data.iconUrl);
+    if (data.iconSize !== undefined) formData.append('IconSize', data.iconSize.toString());
+
+    // Add file uploads
+    if (data.iconFile) formData.append('IconFile', data.iconFile);
+    if (data.audioFile) formData.append('AudioFile', data.audioFile);
+
+    const { putFormData } = await import('./api-core');
+    return await putFormData<Location>(
+      `/storymaps/${mapId}/segments/${segmentId}/locations/${locationId}`,
+      formData
+    );
+  } else {
+    // Use JSON when no files are being uploaded
+    const payload: any = {};
+
+    if (data.segmentId !== undefined) payload.segmentId = data.segmentId;
+    if (data.zoneId !== undefined) payload.zoneId = data.zoneId;
+    if (data.title !== undefined) payload.title = data.title;
+    if (data.subtitle !== undefined) payload.subtitle = data.subtitle;
+    if (data.locationType !== undefined) payload.locationType = data.locationType;
+    if (data.markerGeometry !== undefined) payload.markerGeometry = data.markerGeometry;
+    if (data.storyContent !== undefined) payload.storyContent = data.storyContent;
+    if (data.mediaResources !== undefined) payload.mediaResources = data.mediaResources;
+    if (data.displayOrder !== undefined) payload.displayOrder = data.displayOrder;
+    if (data.highlightOnEnter !== undefined) payload.highlightOnEnter = data.highlightOnEnter;
+    if (data.showTooltip !== undefined) payload.showTooltip = data.showTooltip;
+    if (data.tooltipContent !== undefined) payload.tooltipContent = data.tooltipContent;
+    if (data.effectType !== undefined) payload.effectType = data.effectType;
+    if (data.openSlideOnClick !== undefined) payload.openSlideOnClick = data.openSlideOnClick;
+    if (data.slideContent !== undefined) payload.slideContent = data.slideContent;
+    if (data.linkedLocationId !== undefined) payload.linkedLocationId = data.linkedLocationId;
+    if (data.playAudioOnClick !== undefined) payload.playAudioOnClick = data.playAudioOnClick;
+    if (data.audioUrl !== undefined) payload.audioUrl = data.audioUrl;
+    if (data.externalUrl !== undefined) payload.externalUrl = data.externalUrl;
+    if (data.associatedLayerId !== undefined) payload.associatedLayerId = data.associatedLayerId;
+    if (data.animationPresetId !== undefined) payload.animationPresetId = data.animationPresetId;
+    if (data.animationOverrides !== undefined) payload.animationOverrides = data.animationOverrides;
+    if (data.isVisible !== undefined) payload.isVisible = data.isVisible;
+    if (data.zIndex !== undefined) payload.zIndex = data.zIndex;
+    if (data.iconUrl !== undefined) payload.iconUrl = data.iconUrl;
+    if (data.iconSize !== undefined) payload.iconSize = data.iconSize;
+
+    return await putJson<any, Location>(
+      `/storymaps/${mapId}/segments/${segmentId}/locations/${locationId}`,
+      payload
+    );
+  }
 }
 
 export async function deleteLocation(

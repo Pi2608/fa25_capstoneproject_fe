@@ -389,18 +389,13 @@ export default function AccountsPage() {
                     isDark
                       ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
                       : "border-gray-200 bg-gray-50 text-gray-600"
-                  }`}>Hoạt động gần nhất</th>
-                  <th className={`p-3 border-b text-left font-extrabold text-xs ${
-                    isDark
-                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
-                      : "border-gray-200 bg-gray-50 text-gray-600"
                   }`}></th>
                 </tr>
               </thead>
               <tbody>
                 {loading && filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className={`p-4 text-center ${
+                    <td colSpan={5} className={`p-4 text-center ${
                       isDark ? "text-zinc-400" : "text-gray-500"
                     }`}>
                       Đang tải…
@@ -408,7 +403,7 @@ export default function AccountsPage() {
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className={`p-4 text-center ${
+                    <td colSpan={5} className={`p-4 text-center ${
                       isDark ? "text-zinc-400" : "text-gray-500"
                     }`}>
                       Không tìm thấy tài nguyên.
@@ -442,9 +437,6 @@ export default function AccountsPage() {
                           </span>
                         )}
                       </td>
-                      <td className={`p-3 border-b text-left ${
-                        isDark ? "border-zinc-800" : "border-gray-200"
-                      }`}>{timeAgoVi(u.lastLoginAt || u.createdAt)}</td>
                       <td className={`p-3 border-b text-left ${
                         isDark ? "border-zinc-800" : "border-gray-200"
                       }`}>

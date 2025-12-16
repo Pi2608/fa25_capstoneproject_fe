@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { Workspace } from "@/types/workspace";
 import { formatDate } from "@/utils/formatUtils";
 import { getOrganizationById, OrganizationDetailDto } from "@/lib/api-organizations";
@@ -14,7 +15,7 @@ type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name" | "author";
 
 function safeMessage(err: unknown, fallback: string): string {
-  if (err instanceof Error) {};
+  if (err instanceof Error) { };
   if (err && typeof err === "object" && "message" in err) {
     const m = (err as { message?: unknown }).message;
     if (typeof m === "string") return m;
@@ -82,10 +83,9 @@ function userMessage(
   const status = e.status ?? 0;
 
   if (status === 400) {
-    if( text.includes("active") && text.includes("sessions"))
-      {
-        return t("workspace_detail.manage_err_has_active_sessions");
-      }
+    if (text.includes("active") && text.includes("sessions")) {
+      return t("workspace_detail.manage_err_has_active_sessions");
+    }
     return t("workspace_detail.manage_delete_failed")
   }
 
@@ -234,7 +234,7 @@ export default function WorkspaceDetailPage() {
     setDeleteMapLoading(true);
     try {
       await deleteMap(deleteMapOpen.mapId);
-      showToast("success", "Đã xoá bản đồ.");
+      showToast("success", t("workspace_detail.delete_map_success"));
       setDeleteMapOpen({ open: false });
       await loadData();
     } catch (e) {
@@ -248,7 +248,7 @@ export default function WorkspaceDetailPage() {
     async (mapId: string) => {
       try {
         await removeMapFromWorkspace(workspaceId, mapId);
-        showToast("success", "Đã gỡ bản đồ khỏi workspace.");
+        showToast("success", t("workspace_detail.remove_map_success"));
         await loadData();
       } catch (e) {
         showToast("error", userMessage(e, t));
@@ -273,7 +273,9 @@ export default function WorkspaceDetailPage() {
   if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">{t("workspace_detail.loading")}</div>;
   if (err || !org || !workspace) return <div className="max-w-3xl px-4 text-red-400">{err ?? t("workspace_detail.not_found")}</div>;
 
-  const deleteMapLabel = deleteMapOpen.mapName || "bản đồ này";
+  const deleteMapLabel =
+    deleteMapOpen.mapName || t("workspace_detail.delete_map_fallback_name");
+
 
   return (
     <div className="min-w-0 relative px-4">
@@ -344,24 +346,15 @@ export default function WorkspaceDetailPage() {
       </div>
 
       {sortedMaps.length === 0 && (
-        <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-800 flex items-center justify-center">
-            <svg className="w-8 h-8 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-            </svg>
-          </div>
-          <h3 className="text-lg font-semibold text-zinc-200 mb-2">{t("workspace_detail.empty_title")}</h3>
-          <p className="text-zinc-400 mb-4">{t("workspace_detail.empty_desc")}</p>
-          <button
-            onClick={() => setShowCreateMapDialog(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            {t("workspace_detail.create_map")}
-          </button>
-        </div>
+        <EmptyState
+          illustration="map"
+          title={t("workspace_detail.empty_title")}
+          description={t("workspace_detail.empty_desc")}
+          action={{
+            label: t("workspace_detail.create_map"),
+            onClick: () => setShowCreateMapDialog(true),
+          }}
+        />
       )}
 
       {sortedMaps.length > 0 && viewMode === "grid" && (
@@ -564,33 +557,28 @@ export default function WorkspaceDetailPage() {
         </section>
       )}
 
-      {publishedMaps.length === 0 && (
-        <div className="mt-10 text-sm text-zinc-500">
-          {t("workspace_detail.storymap_empty_text")}
-        </div>
-      )}
 
       {deleteMapOpen.open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
-            <h2 className="text-xl font-semibold text-white mb-4">Xoá bản đồ?</h2>
+            <h2 className="text-xl font-semibold text-white mb-4">{t("workspace_detail.delete_dialog_title")}</h2>
             <p className="text-sm text-zinc-300 mb-6">
-              Bạn có chắc chắn muốn xoá bản đồ{" "}
-              <span className="font-semibold text-white">"{deleteMapLabel}"</span>? Hành động này không thể hoàn tác.
+              {t("workspace_detail.delete_dialog_confirm")}{" "}
+              <span className="font-semibold text-white">"{deleteMapLabel}"</span>? {t("workspace_detail.delete_dialog_warning")}
             </p>
             <div className="flex justify-end gap-2">
               <button
                 className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
                 onClick={() => setDeleteMapOpen({ open: false })}
               >
-                Hủy
+                {t("workspace_detail.delete_dialog_cancel")}
               </button>
               <button
                 onClick={() => void handleDeleteMap()}
                 disabled={deleteMapLoading}
                 className="px-4 py-2 rounded-lg bg-red-500 text-zinc-900 text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
               >
-                {deleteMapLoading ? "Đang xoá..." : "Xoá bản đồ"}
+                {deleteMapLoading ? t("workspace_detail.delete_dialog_deleting") : t("workspace_detail.delete_dialog_confirm_btn")}
               </button>
             </div>
           </div>
@@ -602,7 +590,7 @@ export default function WorkspaceDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
           <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-w-md w-full mx-4">
             <div className="p-6">
-              <h2 className="text-xl font-semibold text-white mb-4">Chọn loại bản đồ</h2>
+              <h2 className="text-xl font-semibold text-white mb-4">{t("workspace_detail.create_map_dialog_title")}</h2>
               <div className="space-y-3 mb-6">
                 <button
                   onClick={() => setMapType("normal")}
@@ -619,8 +607,8 @@ export default function WorkspaceDetailPage() {
                       )}
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold text-white mb-1">Bản đồ thường</div>
-                      <div className="text-sm text-zinc-400">Tạo bản đồ để hiển thị và chia sẻ dữ liệu địa lý</div>
+                      <div className="font-semibold text-white mb-1">{t("workspace_detail.create_map_normal_title")}</div>
+                      <div className="text-sm text-zinc-400">{t("workspace_detail.create_map_normal_desc")}</div>
                     </div>
                   </div>
                 </button>
@@ -640,8 +628,8 @@ export default function WorkspaceDetailPage() {
                       )}
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold text-white mb-1">Storymap</div>
-                      <div className="text-sm text-zinc-400">Tạo storymap với timeline và segments để có thể tạo session học tập</div>
+                      <div className="font-semibold text-white mb-1">{t("workspace_detail.create_map_storymap_title")}</div>
+                      <div className="text-sm text-zinc-400">{t("workspace_detail.create_map_storymap_desc")}</div>
                     </div>
                   </div>
                 </button>
@@ -652,13 +640,13 @@ export default function WorkspaceDetailPage() {
                   onClick={() => setShowCreateMapDialog(false)}
                   className="px-4 py-2 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
                 >
-                  Hủy
+                  {t("workspace_detail.create_map_dialog_cancel")}
                 </button>
                 <button
                   onClick={() => void handleCreateMap()}
                   className="px-4 py-2 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-400 transition-colors"
                 >
-                  Tạo bản đồ
+                  {t("workspace_detail.create_map_dialog_create")}
                 </button>
               </div>
             </div>

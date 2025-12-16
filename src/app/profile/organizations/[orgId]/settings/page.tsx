@@ -55,8 +55,8 @@ function InlineAlert({
     kind === "error"
       ? "bg-red-50 text-red-800 ring-red-200 dark:bg-red-500/10 dark:text-red-200 dark:ring-red-400/30"
       : kind === "warning"
-      ? "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-400/30"
-      : "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-400/30";
+        ? "bg-amber-50 text-amber-800 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-200 dark:ring-amber-400/30"
+        : "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-200 dark:ring-emerald-400/30";
   return (
     <div className={`rounded-lg px-3 py-2 text-sm ring-1 ${map}`}>{text}</div>
   );
@@ -95,10 +95,9 @@ export default function OrgSettingsPage() {
   }, [me, members]);
 
   const planName = useMemo(() => {
-    if (sub?.activeMembership?.planName) return sub.activeMembership.planName;
-    if (sub?.pendingMembership?.planName) return sub.pendingMembership.planName;
-    const ex = sub?.expiredMemberships?.[0]?.planName;
-    return ex ?? "—";
+    if (sub?.primaryPlanName) return sub.primaryPlanName;
+    if (sub?.activeMemberships?.[0]?.planName) return sub.activeMemberships[0].planName;
+    return "—";
   }, [sub]);
 
   const loadAll = useCallback(async () => {
@@ -152,12 +151,15 @@ export default function OrgSettingsPage() {
     }
   }, [orgId, isOwner, resourceType, requestedAmount, t]);
 
-  const mapsUsed = usage?.currentUsage?.mapsCount ?? 0;
-  const mapsLimit = usage?.quotas?.mapsMax ?? 0;
-  const membersUsed = usage?.currentUsage?.membersCount ?? 0;
-  const membersLimit = usage?.quotas?.membersMax ?? 0;
-  const storageUsed = usage?.currentUsage?.storageUsedMB ?? 0;
-  const storageLimit = usage?.quotas?.storageMaxMB ?? 0;
+  // Helper to get quota by resource type
+  const getQuota = (type: string) => {
+    return usage?.aggregatedQuotas?.find(q => q.resourceType === type);
+  };
+
+  const mapsQuota = getQuota("maps");
+  const usersQuota = getQuota("users");
+  const exportsQuota = getQuota("exports");
+  const tokensQuota = getQuota("tokens");
 
   return (
     <div className="px-4 lg:px-8 py-8">
@@ -213,7 +215,7 @@ export default function OrgSettingsPage() {
                 <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
                   {t("orgSettings.subscription_active")}{" "}
                   <span className="text-zinc-900 dark:text-zinc-300">
-                    {sub?.activeMembership?.isActive
+                    {sub?.hasActiveSubscription
                       ? t("orgSettings.yes")
                       : t("orgSettings.no")}
                   </span>
@@ -221,24 +223,30 @@ export default function OrgSettingsPage() {
                 <div className="text-xs text-zinc-600 dark:text-zinc-400">
                   {t("orgSettings.subscription_period")}{" "}
                   <span className="text-zinc-900 dark:text-zinc-300">
-                    {sub?.activeMembership?.startDate
+                    {sub?.activeMemberships?.[0]?.billingCycleStartDate
                       ? new Date(
-                          sub.activeMembership.startDate
-                        ).toLocaleDateString()
+                        sub.activeMemberships[0].billingCycleStartDate
+                      ).toLocaleDateString()
                       : "—"}
                   </span>{" "}
                   –{" "}
                   <span className="text-zinc-900 dark:text-zinc-300">
-                    {sub?.activeMembership?.endDate
+                    {sub?.activeMemberships?.[0]?.billingCycleEndDate
                       ? new Date(
-                          sub.activeMembership.endDate
-                        ).toLocaleDateString()
+                        sub.activeMemberships[0].billingCycleEndDate
+                      ).toLocaleDateString()
                       : "—"}
+                  </span>
+                </div>
+                <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
+                  Chi phí hàng tháng:{" "}
+                  <span className="text-zinc-900 dark:text-zinc-300">
+                    {sub?.totalMonthlyCost?.toLocaleString() ?? 0} VND
                   </span>
                 </div>
               </div>
               <div className="rounded-full bg-emerald-100 text-emerald-800 text-xs px-3 py-1 dark:bg-emerald-500/15 dark:text-emerald-300">
-                {sub?.orgName ?? ""}
+                {sub?.organizationName ?? ""}
               </div>
             </div>
           </Card>
@@ -252,28 +260,38 @@ export default function OrgSettingsPage() {
                 <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400 mb-1">
                   <span>{t("orgSettings.usage_maps_label")}</span>
                   <span className="text-zinc-900 dark:text-zinc-300">
-                    {mapsUsed}/{mapsLimit}
+                    {mapsQuota?.currentUsage ?? 0}/{mapsQuota?.limit ?? 0}
                   </span>
                 </div>
-                <Meter value={mapsUsed} max={mapsLimit} />
+                <Meter value={mapsQuota?.currentUsage ?? 0} max={mapsQuota?.limit ?? 0} />
               </div>
               <div>
                 <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400 mb-1">
                   <span>{t("orgSettings.usage_members_label")}</span>
-                  <span className="text-zinc-900 dark:text-zinc-300">
-                    {membersUsed}/{membersLimit}
+                  <span className={`${usersQuota?.isExceeded ? "text-red-500" : "text-zinc-900 dark:text-zinc-300"}`}>
+                    {usersQuota?.currentUsage ?? 0}/{usersQuota?.limit ?? 0}
+                    {usersQuota?.isExceeded && " ⚠️"}
                   </span>
                 </div>
-                <Meter value={membersUsed} max={membersLimit} />
+                <Meter value={usersQuota?.currentUsage ?? 0} max={usersQuota?.limit ?? 0} />
               </div>
               <div>
                 <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400 mb-1">
-                  <span>{t("orgSettings.usage_storage_label")}</span>
+                  <span>Exports</span>
                   <span className="text-zinc-900 dark:text-zinc-300">
-                    {storageUsed}/{storageLimit}
+                    {exportsQuota?.currentUsage ?? 0}/{exportsQuota?.limit ?? 0}
                   </span>
                 </div>
-                <Meter value={storageUsed} max={storageLimit} />
+                <Meter value={exportsQuota?.currentUsage ?? 0} max={exportsQuota?.limit ?? 0} />
+              </div>
+              <div>
+                <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400 mb-1">
+                  <span>Tokens</span>
+                  <span className="text-zinc-900 dark:text-zinc-300">
+                    {tokensQuota?.currentUsage ?? 0}/{tokensQuota?.limit ?? 0}
+                  </span>
+                </div>
+                <Meter value={tokensQuota?.currentUsage ?? 0} max={tokensQuota?.limit ?? 0} />
               </div>
             </div>
           </Card>
@@ -288,7 +306,7 @@ export default function OrgSettingsPage() {
                   {t("orgSettings.billing_invoices_label")}
                 </span>
                 <span className="text-zinc-900 dark:text-zinc-200">
-                  {billing?.invoices?.length ?? 0}
+                  {billing?.recentInvoices?.length ?? 0}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -304,25 +322,24 @@ export default function OrgSettingsPage() {
                   {t("orgSettings.billing_total_spent_label")}
                 </span>
                 <span className="text-zinc-900 dark:text-zinc-200">
-                  {billing?.spendingSummary?.totalSpent ?? 0}{" "}
-                  {billing?.spendingSummary?.currency ?? ""}
+                  {billing?.totalSpentThisMonth?.toLocaleString() ?? 0} VND
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-zinc-600 dark:text-zinc-400">
-                  {t("orgSettings.billing_period_label")}
+                  Phương thức thanh toán
                 </span>
                 <span className="text-zinc-900 dark:text-zinc-200">
-                  {billing?.spendingSummary?.periodStart
-                    ? new Date(
-                        billing.spendingSummary.periodStart
-                      ).toLocaleDateString()
-                    : "—"}{" "}
-                  –{" "}
-                  {billing?.spendingSummary?.periodEnd
-                    ? new Date(
-                        billing.spendingSummary.periodEnd
-                      ).toLocaleDateString()
+                  {billing?.paymentMethod ?? "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-zinc-600 dark:text-zinc-400">
+                  Thanh toán tiếp theo
+                </span>
+                <span className="text-zinc-900 dark:text-zinc-200">
+                  {billing?.nextBillingDate
+                    ? new Date(billing.nextBillingDate).toLocaleDateString()
                     : "—"}
                 </span>
               </div>
@@ -391,11 +408,10 @@ export default function OrgSettingsPage() {
               )}
               {quotaResult && (
                 <div
-                  className={`rounded-lg ring-1 px-3 py-2 text-sm ${
-                    quotaResult.isAllowed
-                      ? "ring-emerald-200 bg-emerald-50 text-emerald-800 dark:ring-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-200"
-                      : "ring-amber-200 bg-amber-50 text-amber-800 dark:ring-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200"
-                  }`}
+                  className={`rounded-lg ring-1 px-3 py-2 text-sm ${quotaResult.isAllowed
+                    ? "ring-emerald-200 bg-emerald-50 text-emerald-800 dark:ring-emerald-400/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+                    : "ring-amber-200 bg-amber-50 text-amber-800 dark:ring-amber-400/30 dark:bg-amber-500/10 dark:text-amber-200"
+                    }`}
                 >
                   <div className="font-semibold">
                     {quotaResult.isAllowed
@@ -425,6 +441,71 @@ export default function OrgSettingsPage() {
             </ul>
           </Card>
         </div>
+
+        {/* Members Section */}
+        <Card>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="text-sm font-medium text-zinc-700 dark:text-zinc-400">
+              Thành viên tổ chức ({members?.members?.length ?? 0})
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-zinc-200 dark:border-white/10">
+                  <th className="text-left py-3 px-2 font-medium text-zinc-600 dark:text-zinc-400">Thành viên</th>
+                  <th className="text-left py-3 px-2 font-medium text-zinc-600 dark:text-zinc-400">Email</th>
+                  <th className="text-left py-3 px-2 font-medium text-zinc-600 dark:text-zinc-400">Vai trò</th>
+                  <th className="text-left py-3 px-2 font-medium text-zinc-600 dark:text-zinc-400">Ngày tham gia</th>
+                  <th className="text-left py-3 px-2 font-medium text-zinc-600 dark:text-zinc-400">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                {members?.members?.map((member) => (
+                  <tr key={member.memberId} className="border-b border-zinc-100 dark:border-white/5 hover:bg-zinc-50 dark:hover:bg-white/5">
+                    <td className="py-3 px-2">
+                      <div className="font-medium text-zinc-900 dark:text-zinc-100">{member.fullName || "—"}</div>
+                    </td>
+                    <td className="py-3 px-2 text-zinc-600 dark:text-zinc-400">{member.email}</td>
+                    <td className="py-3 px-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${member.role === "Owner"
+                          ? "bg-purple-100 text-purple-800 dark:bg-purple-500/20 dark:text-purple-300"
+                          : member.role === "Admin"
+                            ? "bg-blue-100 text-blue-800 dark:bg-blue-500/20 dark:text-blue-300"
+                            : member.role === "Viewer"
+                              ? "bg-gray-100 text-gray-800 dark:bg-gray-500/20 dark:text-gray-300"
+                              : "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300"
+                        }`}>
+                        {member.role === "Owner" ? "Chủ sở hữu"
+                          : member.role === "Admin" ? "Quản trị viên"
+                            : member.role === "Viewer" ? "Người xem"
+                              : "Thành viên"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 text-zinc-600 dark:text-zinc-400">
+                      {member.joinedAt ? new Date(member.joinedAt).toLocaleDateString("vi-VN") : "—"}
+                    </td>
+                    <td className="py-3 px-2">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${member.isActive
+                          ? "bg-green-100 text-green-800 dark:bg-green-500/20 dark:text-green-300"
+                          : "bg-red-100 text-red-800 dark:bg-red-500/20 dark:text-red-300"
+                        }`}>
+                        {member.isActive ? "Hoạt động" : "Không hoạt động"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {(!members?.members || members.members.length === 0) && (
+                  <tr>
+                    <td colSpan={5} className="py-8 text-center text-zinc-500 dark:text-zinc-400">
+                      Chưa có thành viên nào
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       </div>
     </div>
   );

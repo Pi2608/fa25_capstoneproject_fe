@@ -44,3 +44,18 @@ export function getSessionSubmissions<T = unknown>(
     `/api/groups/sessions/${encodeURIComponent(sessionId)}/submissions`
   );
 }
+
+export interface GroupSubmissionApiDto {
+  submissionId: string;
+  groupId: string;
+  groupName?: string | null;
+
+  title: string;              
+  content?: string | null;
+  attachmentUrls?: string[] | null;
+
+  score?: number | null;
+  feedback?: string | null;
+  submittedAt: string;
+  gradedAt?: string | null;
+}

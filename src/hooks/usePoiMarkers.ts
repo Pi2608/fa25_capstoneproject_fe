@@ -11,10 +11,10 @@ interface UsePoiMarkersParams {
   setPoiTooltipModal: React.Dispatch<
     React.SetStateAction<{
       isOpen: boolean;
+      locationId?: string;
       title?: string;
+      subtitle?: string;
       content?: string;
-      x?: number;
-      y?: number;
     }>
   >;
 }
@@ -30,6 +30,7 @@ export function usePoiMarkers({
   setPoiTooltipModal,
 }: UsePoiMarkersParams) {
   const poiMarkersRef = useRef<L.Marker[]>([]);
+  const editingLocationIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!mapRef.current || !mapId || !isMapReady) return;
@@ -76,6 +77,11 @@ export function usePoiMarkers({
 
           try {
             if (poi.isVisible === false) {
+              continue;
+            }
+
+            // CRITICAL FIX: Skip rendering location being edited to prevent duplicate markers
+            if (editingLocationIdRef.current && poi.locationId === editingLocationIdRef.current) {
               continue;
             }
 
@@ -174,19 +180,7 @@ export function usePoiMarkers({
               });
             }
 
-            // Add permanent tooltip label above marker (like segmentRenderer)
-            const tooltipLabel = poi.title || '';
-            if (tooltipLabel) {
-              marker.bindTooltip(tooltipLabel, {
-                permanent: true,
-                direction: 'top',
-                className: 'location-title-tooltip',
-                opacity: 0.95,
-                offset: [0, -(iconSize / 2) - 8],
-              });
-            }
-
-            // Add tooltip popup if enabled (similar to slide popup)
+            // Add click handler to show info panel (replaces old popup)
             if (poi.showTooltip !== false && poi.tooltipContent) {
               // Process content
               const rawContent = poi.tooltipContent || "";
@@ -227,21 +221,16 @@ export function usePoiMarkers({
                 // Decode failed, use as-is
               }
 
-              // Create popup content with same style as slide popup
-              const popupContent = `
-                <div style="max-width: 300px; font-family: system-ui, -apple-system, sans-serif;">
-                  <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">${poi.title
-                }</h3>
-                  <div style="margin: 8px 0; font-size: 14px; color: #333; white-space: pre-wrap;">${processedContent || ""
-                }</div>
-                </div>
-              `;
-
-              marker.bindPopup(popupContent, {
-                maxWidth: 320,
-                className: "poi-popup",
+              // Add click listener to open info panel
+              marker.on('click', () => {
+                setPoiTooltipModal({
+                  isOpen: true,
+                  locationId: poi.locationId,
+                  title: poi.title || '',
+                  subtitle: poi.subtitle,
+                  content: processedContent,
+                });
               });
-            } else {
             }
 
             // Add popup if enabled - rich HTML content with media, audio, external link
@@ -345,11 +334,36 @@ export function usePoiMarkers({
 
     // Listen for POI changes
     const handlePoiChange = () => {
+      // CRITICAL FIX: Don't clear editing state here, let form close event handle it
+      // This prevents flickering when location is updated but form is still open
       if (!cancelled && mapRef.current) {
         loadAndRenderPois();
       }
     };
 
+    // CRITICAL FIX: Listen for repick location event to hide old marker when choosing new position
+    const handleRepickLocation = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const locationId = customEvent.detail?.locationId;
+      if (locationId) {
+        editingLocationIdRef.current = locationId;
+        // Re-render to hide the location being edited
+        if (!cancelled && mapRef.current) {
+          loadAndRenderPois();
+        }
+      }
+    };
+
+    // Listen for cancel edit to show location again
+    const handleCancelEdit = () => {
+      editingLocationIdRef.current = null;
+      if (!cancelled && mapRef.current) {
+        loadAndRenderPois();
+      }
+    };
+
+    window.addEventListener("repickLocation", handleRepickLocation as EventListener);
+    window.addEventListener("cancelLocationEdit", handleCancelEdit);
     window.addEventListener("locationCreated", handlePoiChange);
     window.addEventListener("locationUpdated", handlePoiChange);
     window.addEventListener("locationDeleted", handlePoiChange);
@@ -360,6 +374,8 @@ export function usePoiMarkers({
 
     return () => {
       cancelled = true;
+      window.removeEventListener("repickLocation", handleRepickLocation as EventListener);
+      window.removeEventListener("cancelLocationEdit", handleCancelEdit);
       window.removeEventListener("locationCreated", handlePoiChange);
       window.removeEventListener("locationUpdated", handlePoiChange);
       window.removeEventListener("locationDeleted", handlePoiChange);

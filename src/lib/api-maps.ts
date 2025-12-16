@@ -485,7 +485,10 @@ export function addLayerToMap(mapId: string, body: AddLayerToMapRequest) {
 export interface UploadGeoJsonToMapResponse {
   layerId: string;
   message: string;
-  featuresAdded: number;
+  featuresCreated: number;
+  featuresFailed: number;
+  featuresSkipped: number;
+  totalFeaturesInFile: number;
   dataSize: number;
 }
 

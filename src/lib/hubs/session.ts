@@ -2,16 +2,14 @@ import * as signalR from "@microsoft/signalr";
 import { getToken } from "../api-core";
 import { isTokenValid, createBaseConnection, API_BASE_URL } from "./base";
 
-
 // ===================== SESSION SIGNALR TYPES =====================
 
 export interface SessionStatusChangedEvent {
   sessionId: string;
-  // Backend session status values
   status: "WAITING" | "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "CANCELLED";
   message?: string;
   changedAt?: string;
-  timestamp?: string; // Legacy field, use changedAt if available
+  timestamp?: string;
 }
 
 export interface ParticipantJoinedEvent {
@@ -19,6 +17,8 @@ export interface ParticipantJoinedEvent {
   participantId: string;
   displayName: string;
   totalParticipants: number;
+  // keep extra fields if backend sends more
+  [key: string]: unknown;
 }
 
 export interface ParticipantLeftEvent {
@@ -26,6 +26,13 @@ export interface ParticipantLeftEvent {
   participantId: string;
   displayName: string;
   totalParticipants: number;
+  [key: string]: unknown;
+}
+
+export interface LeftSessionEvent {
+  sessionId: string;
+  message?: string;
+  [key: string]: unknown;
 }
 
 export interface QuestionActivatedEvent {
@@ -49,31 +56,33 @@ export interface QuestionActivatedEvent {
   correctLongitude?: number | null;
   acceptanceRadiusMeters?: number | null;
   activatedAt: string;
+  [key: string]: unknown;
 }
 
-// Backend sends TimeExtendedEvent
 export interface QuestionTimeExtendedEvent {
   sessionId: string;
   sessionQuestionId: string;
   additionalSeconds?: number;
   newEndTime?: string;
-  extendedBy?: number; // Backend might use this field
+  extendedBy?: number;
+  [key: string]: unknown;
 }
 
 export interface QuestionSkippedEvent {
   sessionId: string;
   sessionQuestionId: string;
   skippedAt: string;
+  [key: string]: unknown;
 }
 
-// Backend sends ResponseSubmittedEvent, mapping to our interface
 export interface ResponseReceivedEvent {
   sessionId: string;
   sessionQuestionId: string;
-  participantId: string; // Backend uses SessionParticipantId
+  participantId: string;
   displayName?: string;
   totalResponses?: number;
   totalParticipants?: number;
+  [key: string]: unknown;
 }
 
 export interface LeaderboardEntry {
@@ -81,13 +90,14 @@ export interface LeaderboardEntry {
   displayName: string;
   score: number;
   rank: number;
+  [key: string]: unknown;
 }
 
-// Backend sends LeaderboardUpdateEvent
 export interface LeaderboardUpdatedEvent {
   sessionId: string;
   leaderboard: LeaderboardEntry[];
   updatedAt?: string;
+  [key: string]: unknown;
 }
 
 export interface TeacherFocusChangedEvent {
@@ -96,9 +106,9 @@ export interface TeacherFocusChangedEvent {
   longitude: number;
   zoom: number;
   timestamp: string;
+  [key: string]: unknown;
 }
 
-// Backend event is "MapStateSync", mapping to our interface
 export interface MapStateSyncEvent {
   sessionId: string;
   latitude: number;
@@ -108,25 +118,15 @@ export interface MapStateSyncEvent {
   pitch?: number;
   syncedBy?: string;
   syncedAt?: string;
+  [key: string]: unknown;
 }
 
 export interface SessionEndedEvent {
   sessionId: string;
   endedAt: string;
   finalLeaderboard: LeaderboardEntry[];
+  [key: string]: unknown;
 }
-
-// JoinedSession event - sent when client joins a session
-export interface JoinedSessionEvent {
-  sessionId: string;
-  sessionCode: string;
-  status: string; // "WAITING", "IN_PROGRESS", "PAUSED", "COMPLETED"
-  message?: string;
-  mapState?: MapStateSyncEvent | null;
-  segmentState?: SegmentSyncEvent | null;
-}
-
-// ===================== SEGMENT SYNC EVENTS =====================
 
 export interface SegmentSyncEvent {
   sessionId: string;
@@ -135,17 +135,23 @@ export interface SegmentSyncEvent {
   segmentName?: string;
   isPlaying: boolean;
   syncedAt: string;
+  [key: string]: unknown;
 }
-
-// ===================== MAP LAYER SYNC EVENTS =====================
 
 export interface MapLayerSyncEvent {
   sessionId: string;
   layerKey: string;
   syncedAt: string;
+  [key: string]: unknown;
 }
 
-// ===================== QUESTION BROADCAST EVENTS =====================
+/** ✅ Backend có SyncMapLockState + MapLockStateSync */
+export interface MapLockStateSyncEvent {
+  sessionId: string;
+  isLocked: boolean;
+  syncedAt: string;
+  [key: string]: unknown;
+}
 
 export interface QuestionBroadcastEvent {
   sessionId: string;
@@ -163,6 +169,7 @@ export interface QuestionBroadcastEvent {
   points: number;
   timeLimit: number;
   broadcastedAt: string;
+  [key: string]: unknown;
 }
 
 export interface QuestionResultsEvent {
@@ -177,14 +184,34 @@ export interface QuestionResultsEvent {
   }>;
   correctAnswer?: string;
   showedAt: string;
+  [key: string]: unknown;
+}
+
+/** ✅ Backend có BroadcastQuestionResponsesUpdate -> "QuestionResponsesUpdate" */
+export interface QuestionResponsesUpdateEvent {
+  sessionId: string;
+  sessionQuestionId: string;
+  totalResponses: number;
+  totalParticipants?: number;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+// JoinedSession event - sent when client joins a session
+export interface JoinedSessionEvent {
+  sessionId: string;
+  sessionCode: string;
+  status: string;
+  message?: string;
+  mapState?: MapStateSyncEvent | null;
+  segmentState?: SegmentSyncEvent | null;
+  /** ✅ Backend gửi MapLockState trong JoinedSession */
+  mapLockState?: MapLockStateSyncEvent | null;
+  [key: string]: unknown;
 }
 
 // ===================== CONNECTION SETUP =====================
 
-/**
- * Create SignalR connection for session hub
- * This hub handles real-time session events (questions, responses, leaderboard, etc.)
- */
 export function createSessionConnection(
   sessionId: string,
   token?: string
@@ -194,28 +221,22 @@ export function createSessionConnection(
     return null;
   }
 
-  // For session hub, allow guest connections (no token required)
-  // Get token if available, but don't require it to be valid
   let authToken: string | null | undefined = token || getToken();
 
-  // If token is empty string or null/undefined, treat as no token (guest mode)
-  if (!authToken || (typeof authToken === 'string' && authToken.trim().length === 0)) {
-    authToken = undefined; // No token - will connect as guest
+  if (!authToken || (typeof authToken === "string" && authToken.trim().length === 0)) {
+    authToken = undefined;
   } else if (!isTokenValid(authToken)) {
-    // Token exists but is invalid - log warning but still allow connection as guest
     console.warn("[SignalR Session] Token provided but invalid, connecting as guest");
-    authToken = undefined; // Treat as no token, allow guest connection
+    authToken = undefined;
   }
-  // If token is valid, it will be used for authenticated connection
 
   const baseUrl = API_BASE_URL.replace(/\/$/, "");
   const hubUrl = `${baseUrl}/hubs/session`;
 
   return createBaseConnection(hubUrl, {
     token: authToken || undefined,
-    allowGuest: true, // Session hub allows guest connections
-    onClose: (error) => {
-    },
+    allowGuest: true,
+    onClose: () => {},
     onReconnecting: (error) => {
       console.warn("[SignalR Session] Reconnecting...", error);
     },
@@ -230,15 +251,10 @@ export async function startSessionConnection(
   sessionId: string
 ): Promise<boolean> {
   try {
-    if (connection.state === signalR.HubConnectionState.Connected) {
-      return true;
-    }
+    if (connection.state === signalR.HubConnectionState.Connected) return true;
 
     if (connection.state !== signalR.HubConnectionState.Disconnected) {
-      console.warn(
-        "[SignalR Session] Connection not in disconnected state:",
-        connection.state
-      );
+      console.warn("[SignalR Session] Connection not in disconnected state:", connection.state);
       return false;
     }
 
@@ -247,10 +263,7 @@ export async function startSessionConnection(
     try {
       await connection.invoke("JoinSession", sessionId);
     } catch (invokeError) {
-      console.error(
-        "[SignalR Session] Failed to join session group:",
-        invokeError
-      );
+      console.error("[SignalR Session] Failed to join session group:", invokeError);
       return false;
     }
 
@@ -274,9 +287,7 @@ export async function leaveSessionConnection(
   }
 }
 
-export async function stopSessionConnection(
-  connection: signalR.HubConnection
-): Promise<void> {
+export async function stopSessionConnection(connection: signalR.HubConnection): Promise<void> {
   try {
     if (connection.state !== signalR.HubConnectionState.Disconnected) {
       await connection.stop();
@@ -290,20 +301,35 @@ export async function stopSessionConnection(
 
 export interface SessionEventHandlers {
   onJoinedSession?: (event: JoinedSessionEvent) => void;
+  onLeftSession?: (event: LeftSessionEvent) => void;
+
   onSessionStatusChanged?: (event: SessionStatusChangedEvent) => void;
   onParticipantJoined?: (event: ParticipantJoinedEvent) => void;
   onParticipantLeft?: (event: ParticipantLeftEvent) => void;
+
   onQuestionActivated?: (event: QuestionActivatedEvent) => void;
   onQuestionTimeExtended?: (event: QuestionTimeExtendedEvent) => void;
   onQuestionSkipped?: (event: QuestionSkippedEvent) => void;
   onResponseReceived?: (event: ResponseReceivedEvent) => void;
   onLeaderboardUpdated?: (event: LeaderboardUpdatedEvent) => void;
+
+  /** optional: nếu muốn bắt raw MapStateSync */
+  onMapStateSync?: (event: MapStateSyncEvent) => void;
   onTeacherFocusChanged?: (event: TeacherFocusChangedEvent) => void;
+
   onSessionEnded?: (event: SessionEndedEvent) => void;
   onSegmentSync?: (event: SegmentSyncEvent) => void;
   onMapLayerSync?: (event: MapLayerSyncEvent) => void;
+
+  /** ✅ Backend có MapLockStateSync */
+  onMapLockStateSync?: (event: MapLockStateSyncEvent) => void;
+
   onQuestionBroadcast?: (event: QuestionBroadcastEvent) => void;
   onQuestionResults?: (event: QuestionResultsEvent) => void;
+
+  /** ✅ Backend có QuestionResponsesUpdate */
+  onQuestionResponsesUpdate?: (event: QuestionResponsesUpdateEvent) => void;
+
   onError?: (event: unknown) => void;
 }
 
@@ -311,26 +337,60 @@ export function registerSessionEventHandlers(
   connection: signalR.HubConnection,
   handlers: SessionEventHandlers
 ): void {
-  // Always register a no-op for server "error" method to avoid warnings in production logs.
-  connection.on("error", (event: unknown) => {
+  // ✅ Backend bắn "Error" (PascalCase). Để an toàn, nghe cả 2.
+  const handleError = (event: unknown) => {
     handlers.onError?.(event);
-  });
+  };
+  connection.on("Error", handleError);
+  connection.on("error", handleError);
 
-  // Handle JoinedSession event - sent when client joins a session
   if (handlers.onJoinedSession) {
     connection.on("JoinedSession", handlers.onJoinedSession);
+  }
+
+  if (handlers.onLeftSession) {
+    connection.on("LeftSession", handlers.onLeftSession);
   }
 
   if (handlers.onSessionStatusChanged) {
     connection.on("SessionStatusChanged", handlers.onSessionStatusChanged);
   }
 
+  // ✅ Normalize participantId để không bị undefined nếu backend gửi SessionParticipantId
   if (handlers.onParticipantJoined) {
-    connection.on("ParticipantJoined", handlers.onParticipantJoined);
+    connection.on("ParticipantJoined", (event: any) => {
+      const participantId =
+        event?.participantId ??
+        event?.sessionParticipantId ??
+        event?.SessionParticipantId ??
+        event?.participantID;
+
+      handlers.onParticipantJoined?.({
+        ...event,
+        sessionId: event?.sessionId ?? event?.SessionId,
+        participantId,
+        displayName: event?.displayName ?? event?.DisplayName,
+        totalParticipants: event?.totalParticipants ?? event?.TotalParticipants ?? 0,
+      });
+    });
   }
 
   if (handlers.onParticipantLeft) {
-    connection.on("ParticipantLeft", handlers.onParticipantLeft);
+    connection.on("ParticipantLeft", (event: any) => {
+      const participantId =
+        event?.participantId ??
+        event?.sessionParticipantId ??
+        event?.SessionParticipantId ??
+        event?.participantID;
+
+      handlers.onParticipantLeft?.({
+        ...event,
+        sessionId: event?.sessionId ?? event?.SessionId,
+        participantId,
+        displayName: event?.displayName ?? event?.DisplayName,
+        totalParticipants: event?.totalParticipants ?? event?.TotalParticipants ?? 0,
+      });
+    });
   }
 
   if (handlers.onQuestionActivated) {
@@ -338,7 +398,6 @@ export function registerSessionEventHandlers(
   }
 
   if (handlers.onQuestionTimeExtended) {
-    // Backend sends "TimeExtended" event
     connection.on("TimeExtended", handlers.onQuestionTimeExtended);
   }
 
@@ -346,20 +405,35 @@ export function registerSessionEventHandlers(
     connection.on("QuestionSkipped", handlers.onQuestionSkipped);
   }
 
+  // ✅ Normalize participantId cho ResponseSubmitted
   if (handlers.onResponseReceived) {
-    // Backend sends "ResponseSubmitted" event
-    connection.on("ResponseSubmitted", handlers.onResponseReceived);
+    connection.on("ResponseSubmitted", (event: any) => {
+      const participantId =
+        event?.participantId ??
+        event?.sessionParticipantId ??
+        event?.SessionParticipantId;
+
+      handlers.onResponseReceived?.({
+        ...event,
+        sessionId: event?.sessionId ?? event?.SessionId,
+        sessionQuestionId: event?.sessionQuestionId ?? event?.SessionQuestionId,
+        participantId,
+        displayName: event?.displayName ?? event?.DisplayName,
+        totalResponses: event?.totalResponses ?? event?.TotalResponses,
+        totalParticipants: event?.totalParticipants ?? event?.TotalParticipants,
+      });
+    });
   }
 
   if (handlers.onLeaderboardUpdated) {
-    // Backend sends "LeaderboardUpdate" event
     connection.on("LeaderboardUpdate", handlers.onLeaderboardUpdated);
   }
 
-  if (handlers.onTeacherFocusChanged) {
-    // Backend sends "MapStateSync" event
-    connection.on("MapStateSync", (event: MapStateSyncEvent) => {
-      // Convert to TeacherFocusChangedEvent format
+  // ✅ MapStateSync: giữ logic cũ (convert sang TeacherFocusChanged) + optional bắt raw
+  connection.on("MapStateSync", (event: MapStateSyncEvent) => {
+    handlers.onMapStateSync?.(event);
+
+    if (handlers.onTeacherFocusChanged) {
       const focusEvent: TeacherFocusChangedEvent = {
         sessionId: event.sessionId,
         latitude: event.latitude,
@@ -367,9 +441,9 @@ export function registerSessionEventHandlers(
         zoom: event.zoomLevel,
         timestamp: event.syncedAt || new Date().toISOString(),
       };
-      handlers.onTeacherFocusChanged!(focusEvent);
-    });
-  }
+      handlers.onTeacherFocusChanged(focusEvent);
+    }
+  });
 
   if (handlers.onSessionEnded) {
     connection.on("SessionEnded", handlers.onSessionEnded);
@@ -377,6 +451,15 @@ export function registerSessionEventHandlers(
 
   if (handlers.onSegmentSync) {
     connection.on("SegmentSync", handlers.onSegmentSync);
+  }
+
+  if (handlers.onMapLayerSync) {
+    connection.on("MapLayerSync", handlers.onMapLayerSync);
+  }
+
+  // ✅ Backend có MapLockStateSync (JoinSession cũng bắn event này nếu có cache)
+  if (handlers.onMapLockStateSync) {
+    connection.on("MapLockStateSync", handlers.onMapLockStateSync);
   }
 
   if (handlers.onQuestionBroadcast) {
@@ -387,32 +470,39 @@ export function registerSessionEventHandlers(
     connection.on("QuestionResults", handlers.onQuestionResults);
   }
 
-  if (handlers.onMapLayerSync) {
-    connection.on("MapLayerSync", handlers.onMapLayerSync);
+  if (handlers.onQuestionResponsesUpdate) {
+    connection.on("QuestionResponsesUpdate", handlers.onQuestionResponsesUpdate);
   }
-
 }
 
-export function unregisterSessionEventHandlers(
-  connection: signalR.HubConnection
-): void {
+export function unregisterSessionEventHandlers(connection: signalR.HubConnection): void {
+  connection.off("Error");
   connection.off("error");
+
   connection.off("JoinedSession");
+  connection.off("LeftSession");
+
   connection.off("SessionStatusChanged");
   connection.off("ParticipantJoined");
   connection.off("ParticipantLeft");
+
   connection.off("QuestionActivated");
   connection.off("TimeExtended");
   connection.off("QuestionSkipped");
   connection.off("ResponseSubmitted");
   connection.off("LeaderboardUpdate");
+
   connection.off("MapStateSync");
-  connection.off("TeacherFocusChanged");
+  connection.off("TeacherFocusChanged"); // (có thể không dùng, giữ cho an toàn)
+
   connection.off("SessionEnded");
   connection.off("SegmentSync");
+  connection.off("MapLayerSync");
+  connection.off("MapLockStateSync");
+
   connection.off("QuestionBroadcast");
   connection.off("QuestionResults");
-  connection.off("MapLayerSync");
+  connection.off("QuestionResponsesUpdate");
 }
 
 // ===================== TEACHER FOCUS (MAP SYNC) =====================
@@ -425,10 +515,6 @@ export interface MapStateSyncRequest {
   pitch?: number;
 }
 
-/**
- * Send Teacher Focus (Map Sync) via SignalR Hub
- * This syncs the teacher's map view to all students
- */
 export async function sendTeacherFocusViaSignalR(
   connection: signalR.HubConnection,
   sessionId: string,
@@ -464,10 +550,6 @@ export interface SegmentSyncRequest {
   isPlaying: boolean;
 }
 
-/**
- * Send Segment Sync via SignalR Hub
- * This syncs the current segment to all students
- */
 export async function sendSegmentSyncViaSignalR(
   connection: signalR.HubConnection,
   sessionId: string,
@@ -493,12 +575,32 @@ export async function sendSegmentSyncViaSignalR(
   }
 }
 
+// ===================== MAP LOCK STATE SYNC =====================
+
+export async function sendMapLockStateSyncViaSignalR(
+  connection: signalR.HubConnection,
+  sessionId: string,
+  isLocked: boolean
+): Promise<boolean> {
+  try {
+    if (connection.state !== signalR.HubConnectionState.Connected) {
+      console.error("[SignalR Session] Connection not connected for SyncMapLockState");
+      return false;
+    }
+
+    await connection.invoke("SyncMapLockState", sessionId, {
+      IsLocked: isLocked,
+    });
+
+    return true;
+  } catch (error) {
+    console.error("[SignalR Session] Failed to sync map lock state:", error);
+    return false;
+  }
+}
+
 // ===================== MAP LAYER SYNC =====================
 
-/**
- * Send Map Layer Sync via SignalR Hub
- * This syncs the current base map layer to all students
- */
 export async function sendMapLayerSyncViaSignalR(
   connection: signalR.HubConnection,
   sessionId: string,
@@ -537,9 +639,6 @@ export interface QuestionBroadcastRequest {
   timeLimit: number;
 }
 
-/**
- * Broadcast a question to all students via SignalR Hub
- */
 export async function broadcastQuestionViaSignalR(
   connection: signalR.HubConnection,
   sessionId: string,
@@ -569,9 +668,6 @@ export async function broadcastQuestionViaSignalR(
   }
 }
 
-/**
- * Show question results to all students via SignalR Hub
- */
 export async function showQuestionResultsViaSignalR(
   connection: signalR.HubConnection,
   sessionId: string,
@@ -603,4 +699,3 @@ export async function showQuestionResultsViaSignalR(
     return false;
   }
 }
-

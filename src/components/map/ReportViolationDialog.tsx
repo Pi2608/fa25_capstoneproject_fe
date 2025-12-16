@@ -5,6 +5,7 @@ import { AlertTriangle, X, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { reportMap, type ReportMapRequest } from "@/lib/api-map-reports";
 import { useToast } from "@/contexts/ToastContext";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface ReportViolationDialogProps {
   mapId: string;
@@ -16,12 +17,12 @@ interface ReportViolationDialogProps {
 }
 
 const REPORT_REASONS = [
-  { value: "inappropriate_content", label: "Nội dung không phù hợp" },
-  { value: "copyright_violation", label: "Vi phạm bản quyền" },
-  { value: "spam", label: "Spam" },
-  { value: "misinformation", label: "Thông tin sai lệch" },
-  { value: "harassment", label: "Quấy rối" },
-  { value: "other", label: "Khác" },
+  { value: "inappropriate_content", labelKey: "report_reason_inappropriate" },
+  { value: "copyright_violation", labelKey: "report_reason_copyright" },
+  { value: "spam", labelKey: "report_reason_spam" },
+  { value: "misinformation", labelKey: "report_reason_misinformation" },
+  { value: "harassment", labelKey: "report_reason_harassment" },
+  { value: "other", labelKey: "report_reason_other" },
 ] as const;
 
 export default function ReportViolationDialog({
@@ -32,6 +33,7 @@ export default function ReportViolationDialog({
   userEmail,
   userName,
 }: ReportViolationDialogProps) {
+  const { t } = useI18n();
   const [reason, setReason] = useState<string>("");
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -43,7 +45,7 @@ export default function ReportViolationDialog({
     e.preventDefault();
     
     if (!reason.trim()) {
-      showToast("error", "Vui lòng chọn lý do báo cáo");
+      showToast("error", t("map_components", "report_choose_reason"));
       return;
     }
 
@@ -58,12 +60,12 @@ export default function ReportViolationDialog({
       };
 
       await reportMap(request);
-      showToast("success", "Đã gửi báo cáo thành công. Cảm ơn bạn đã phản hồi!");
+      showToast("success", t("map_components", "report_success"));
       onClose();
       setReason("");
       setDescription("");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Không thể gửi báo cáo";
+      const message = error instanceof Error ? error.message : t("map_components", "report_error");
       showToast("error", message);
     } finally {
       setIsSubmitting(false);
@@ -80,7 +82,7 @@ export default function ReportViolationDialog({
             </div>
             <div>
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                Báo cáo vi phạm
+                {t("map_components", "report_title")}
               </h2>
               <p className="text-sm text-zinc-500 dark:text-zinc-400">
                 Map: {mapName}
@@ -98,7 +100,7 @@ export default function ReportViolationDialog({
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-              Lý do báo cáo <span className="text-red-500">*</span>
+              {t("map_components", "report_choose_reason")} <span className="text-red-500">*</span>
             </label>
             <select
               value={reason}
@@ -106,10 +108,10 @@ export default function ReportViolationDialog({
               required
               className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
             >
-              <option value="">-- Chọn lý do --</option>
+              <option value="">-- {t("map_components", "report_choose_reason")} --</option>
               {REPORT_REASONS.map((r) => (
                 <option key={r.value} value={r.value}>
-                  {r.label}
+                  {t("map_components", r.labelKey)}
                 </option>
               ))}
             </select>
@@ -117,13 +119,13 @@ export default function ReportViolationDialog({
 
           <div>
             <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-              Mô tả chi tiết (tùy chọn)
+              {t("map_components", "report_choose_reason")} (optional)
             </label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={4}
-              placeholder="Mô tả chi tiết về vi phạm..."
+              placeholder="Describe the violation..."
               className="w-full px-3 py-2 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 resize-none"
             />
           </div>
@@ -136,7 +138,7 @@ export default function ReportViolationDialog({
               disabled={isSubmitting}
               className="flex-1"
             >
-              Hủy
+              {t("common", "cancel")}
             </Button>
             <Button
               type="submit"
@@ -146,12 +148,12 @@ export default function ReportViolationDialog({
               {isSubmitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                  Đang gửi...
+                  Submitting...
                 </>
               ) : (
                 <>
                   <Send className="h-4 w-4 mr-2" />
-                  Gửi báo cáo
+                  Report
                 </>
               )}
             </Button>

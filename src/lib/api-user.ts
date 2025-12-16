@@ -78,8 +78,78 @@ export interface UserUsageResponse {
   [k: string]: unknown;
 }
 
+export interface UsageQuotaDto {
+  resourceType: string;
+  currentUsage: number;
+  limit: number;
+  percentageUsed: number;
+  isUnlimited: boolean;
+  isExceeded: boolean;
+}
+
+export interface OrganizationUsageResponse {
+  organizationId: string;
+  organizationName: string;
+  membershipId: string;
+  planName: string;
+  quotas: UsageQuotaDto[];
+  totalMembers: number;
+  lastResetDate: string;
+  nextResetDate: string;
+}
+
 export function getUserUsage(orgId: string) {
   return getJson<UserUsageResponse>(`/usage/user/${encodeURIComponent(orgId)}`);
+}
+
+export function getOrganizationUsage(orgId: string) {
+  return getJson<OrganizationUsageResponse>(`/usage/organization/${encodeURIComponent(orgId)}`);
+}
+
+export interface OrganizationMapsUsageResponse {
+  organizationId: string;
+  organizationName: string;
+  totalMaps: number;
+  totalViews: number;
+  maps: {
+    id: string;
+    name: string;
+    description: string;
+    views: number;
+    isPublic: boolean;
+    status: string;
+    isStoryMap: boolean;
+    createdAt: string;
+    updatedAt: string;
+    ownerId: string;
+    ownerName: string;
+    workspaceName: string;
+  }[];
+}
+
+export interface PlanLimitsResponse {
+  planName: string;
+  priceMonthly: number;
+  organizationMax?: number | null;
+  locationMax?: number | null;
+  viewsMonthly?: number | null;
+  mapsMax?: number | null;
+  membersMax?: number | null;
+  mapQuota?: number | null;
+  exportQuota?: number | null;
+  maxLayer?: number | null;
+  tokenMonthly?: number | null;
+  mediaFileMax?: number | null;
+  videoFileMax?: number | null;
+  audioFileMax?: number | null;
+}
+
+export function getOrganizationMapsUsage(orgId: string) {
+  return getJson<OrganizationMapsUsageResponse>(`/usage/organization/${encodeURIComponent(orgId)}/maps`);
+}
+
+export function getPlanLimits(planId: number) {
+  return getJson<PlanLimitsResponse>(`/usage/plans/${planId}/limits`);
 }
 
 export function checkUserQuota(orgId: string, req: CheckQuotaRequest) {

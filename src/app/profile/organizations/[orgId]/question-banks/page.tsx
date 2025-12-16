@@ -5,12 +5,14 @@ import { createPortal } from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { useToast } from "@/contexts/ToastContext";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "next-themes";
 import { getThemeClasses } from "@/utils/theme-utils";
 import {
   createQuestionBank,
   deleteQuestionBank,
   updateQuestionBank,
+  duplicateQuestionBank,
   type QuestionBankDto,
 } from "@/lib/api-ques";
 import type { Workspace } from "@/types/workspace";
@@ -27,6 +29,85 @@ import {
 import { useQuestionBanksData } from "@/hooks/useQuestionBanksData";
 import { useBankForm } from "@/hooks/useBankForm";
 import { useRowMenu } from "@/hooks/useRowMenu";
+import { EmptyState } from "@/components/ui/EmptyState";
+
+function DuplicateBankDialog({
+  isOpen,
+  saving,
+  workspaces,
+  onClose,
+  onConfirm,
+}: {
+  isOpen: boolean;
+  saving: boolean;
+  workspaces: Workspace[];
+  onClose: () => void;
+  onConfirm: (workspaceId: string) => void;
+}) {
+  const { resolvedTheme, theme } = useTheme();
+  const { t } = useI18n();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
+  const [workspaceId, setWorkspaceId] = useState("");
+
+  useEffect(() => {
+    if (isOpen && workspaces.length > 0) {
+      setWorkspaceId(workspaces[0].workspaceId);
+    }
+  }, [isOpen, workspaces]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className={`w-full max-w-md rounded-2xl p-6 shadow-xl ${themeClasses.panel}`}>
+        <h3 className={`mb-4 text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
+          {t("org_question_banks", "dialog_duplicate_title")}
+        </h3>
+
+        <p className={`mb-4 text-sm ${isDark ? "text-gray-400" : "text-gray-600"}`}>
+          {t("org_question_banks", "dialog_duplicate_desc")}
+        </p>
+
+        <div className="mb-6">
+          <label className={`mb-2 block text-sm font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>
+            {t("org_question_banks", "field_workspace_label")}
+          </label>
+          <select
+            value={workspaceId}
+            onChange={(e) => setWorkspaceId(e.target.value)}
+            className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
+          >
+            {workspaces.map((ws) => (
+              <option key={ws.workspaceId} value={ws.workspaceId}>
+                {ws.workspaceName}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className={`px-4 py-2 text-sm font-medium ${isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
+              }`}
+            disabled={saving}
+          >
+            {t("org_question_banks", "dialog_btn_cancel")}
+          </button>
+          <button
+            onClick={() => onConfirm(workspaceId)}
+            disabled={saving || !workspaceId}
+            className="rounded-full bg-emerald-500 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+          >
+            {saving ? t("common", "loading") : t("org_question_banks", "btn_duplicate")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function BankFormDialog({
   isOpen,
@@ -70,11 +151,10 @@ function BankFormDialog({
           </h2>
           <button
             onClick={onClose}
-            className={`text-sm ${
-              isDark
-                ? "text-zinc-500 hover:text-white"
-                : "text-gray-500 hover:text-gray-900"
-            }`}
+            className={`text-sm ${isDark
+              ? "text-zinc-500 hover:text-white"
+              : "text-gray-500 hover:text-gray-900"
+              }`}
           >
             ✕
           </button>
@@ -214,8 +294,8 @@ function BankFormDialog({
             {saving
               ? t("org_question_banks", "dialog_btn_saving")
               : isEditMode
-              ? t("org_question_banks", "dialog_btn_save_edit")
-              : t("org_question_banks", "dialog_btn_save_create")}
+                ? t("org_question_banks", "dialog_btn_save_edit")
+                : t("org_question_banks", "dialog_btn_save_create")}
           </button>
         </div>
       </div>
@@ -336,15 +416,14 @@ const MenuButton = ({
   <button
     onClick={onClick}
     disabled={disabled}
-    className={`flex w-full items-center rounded-lg px-3 py-2 text-left font-medium disabled:opacity-60 ${
-      danger
-        ? isDark
-          ? "text-red-400 hover:bg-red-500/10"
-          : "text-red-600 hover:bg-red-50"
-        : isDark
+    className={`flex w-full items-center rounded-lg px-3 py-2 text-left font-medium disabled:opacity-60 ${danger
+      ? isDark
+        ? "text-red-400 hover:bg-red-500/10"
+        : "text-red-600 hover:bg-red-50"
+      : isDark
         ? "text-zinc-200 hover:bg-white/10"
         : "text-gray-700 hover:bg-gray-100"
-    }`}
+      }`}
   >
     {children}
   </button>
@@ -363,6 +442,9 @@ export default function QuestionBanksPage() {
 
   const [activeTab, setActiveTab] = useState<TabKey>("my");
   const [deletingBankId, setDeletingBankId] = useState<string | null>(null);
+  const [duplicateBankId, setDuplicateBankId] = useState<string | null>(null);
+  const [processingDuplicate, setProcessingDuplicate] = useState(false);
+  const { userId } = useAuth();
 
   const data = useQuestionBanksData(orgId);
   const bankForm = useBankForm(data.workspaces);
@@ -449,6 +531,21 @@ export default function QuestionBanksPage() {
     }
   };
 
+  const handleDuplicateConfirm = async (targetWorkspaceId: string) => {
+    if (!duplicateBankId) return;
+    setProcessingDuplicate(true);
+    try {
+      await duplicateQuestionBank(duplicateBankId, targetWorkspaceId);
+      showToast("success", t("org_question_banks", "toast_duplicate_success"));
+      setDuplicateBankId(null);
+      data.loadAll();
+    } catch (e) {
+      showToast("error", safeMessage(e, t("org_question_banks", "toast_duplicate_error")));
+    } finally {
+      setProcessingDuplicate(false);
+    }
+  };
+
   const goToEditQuestions = (id: string) => {
     router.push(
       `/profile/organizations/${orgId}/question-banks/${id}/question`
@@ -468,9 +565,8 @@ export default function QuestionBanksPage() {
   if (data.err || !data.org) {
     return (
       <div
-        className={`max-w-3xl px-4 ${
-          isDark ? "text-red-400" : "text-red-600"
-        }`}
+        className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"
+          }`}
       >
         {data.err ?? t("org_question_banks", "error_not_found")}
       </div>
@@ -480,9 +576,8 @@ export default function QuestionBanksPage() {
   return (
     <div className="min-w-0 px-4 pb-10">
       <div
-        className={`mx-auto max-w-6xl ${
-          isDark ? "text-zinc-50" : "text-zinc-900"
-        }`}
+        className={`mx-auto max-w-6xl ${isDark ? "text-zinc-50" : "text-zinc-900"
+          }`}
       >
         {/* Header */}
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -495,9 +590,8 @@ export default function QuestionBanksPage() {
             </button>
             <div>
               <h1
-                className={`text-2xl font-semibold sm:text-3xl ${
-                  isDark ? "text-zinc-100" : "text-emerald-700"
-                }`}
+                className={`text-2xl font-semibold sm:text-3xl ${isDark ? "text-zinc-100" : "text-emerald-700"
+                  }`}
               >
                 {t("org_question_banks", "header_title")}
               </h1>
@@ -517,31 +611,29 @@ export default function QuestionBanksPage() {
         {/* Tabs */}
         <div className="mb-4">
           <div
-            className={`inline-flex rounded-full p-1 text-xs ${
-              isDark ? "bg-zinc-900" : "bg-zinc-100"
-            }`}
+            className={`inline-flex rounded-full p-1 text-xs ${isDark ? "bg-zinc-900" : "bg-zinc-100"
+              }`}
           >
             {(["my", "public"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`rounded-full px-4 py-1.5 font-medium transition-colors ${
-                  activeTab === tab
-                    ? isDark
-                      ? "bg-zinc-800 text-emerald-300 shadow-sm"
-                      : "bg-white text-emerald-600 shadow-sm"
-                    : isDark
+                className={`rounded-full px-4 py-1.5 font-medium transition-colors ${activeTab === tab
+                  ? isDark
+                    ? "bg-zinc-800 text-emerald-300 shadow-sm"
+                    : "bg-white text-emerald-600 shadow-sm"
+                  : isDark
                     ? "text-zinc-400 hover:bg-zinc-800 hover:text-emerald-300"
                     : "text-zinc-600 hover:bg-white hover:text-emerald-600"
-                }`}
+                  }`}
               >
                 {tab === "my"
                   ? t("org_question_banks", "tabs_my", {
-                      count: data.myBanks.length,
-                    })
+                    count: data.myBanks.length,
+                  })
                   : t("org_question_banks", "tabs_public", {
-                      count: data.publicBanks.length,
-                    })}
+                    count: data.publicBanks.length,
+                  })}
               </button>
             ))}
           </div>
@@ -555,9 +647,8 @@ export default function QuestionBanksPage() {
             className={`flex items-center justify-between border-b px-4 py-3 text-sm font-semibold ${themeClasses.tableBorder}`}
           >
             <h2
-              className={`font-semibold ${
-                isDark ? "text-emerald-300" : "text-emerald-600"
-              }`}
+              className={`font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"
+                }`}
             >
               {activeTab === "my"
                 ? t("org_question_banks", "section_title_my")
@@ -571,19 +662,35 @@ export default function QuestionBanksPage() {
           </div>
 
           {displayBanks.length === 0 ? (
-            <div className={`px-4 py-6 text-sm ${themeClasses.textMuted}`}>
-              {activeTab === "my"
-                ? t("org_question_banks", "empty_my")
-                : t("org_question_banks", "empty_public")}
-            </div>
+            <EmptyState
+              illustration="questions"
+              title={
+                activeTab === "my"
+                  ? t("org_question_banks", "empty_state_my_title")
+                  : t("org_question_banks", "empty_state_public_title")
+              }
+              description={
+                activeTab === "my"
+                  ? t("org_question_banks", "empty_state_my_desc")
+                  : t("org_question_banks", "empty_state_public_desc")
+              }
+              action={
+                activeTab === "my"
+                  ? {
+                    label: t("org_question_banks", "empty_state_create_btn"),
+                    onClick: bankForm.openCreate,
+                    variant: "default" as const,
+                  }
+                  : undefined
+              }
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
                   <tr
-                    className={`${
-                      isDark ? "bg-zinc-900/70" : "bg-zinc-50/70"
-                    } ${themeClasses.tableHeader}`}
+                    className={`${isDark ? "bg-zinc-900/70" : "bg-zinc-50/70"
+                      } ${themeClasses.tableHeader}`}
                   >
                     {[
                       t("org_question_banks", "th_name"),
@@ -595,9 +702,8 @@ export default function QuestionBanksPage() {
                     ].map((h, idx) => (
                       <th
                         key={idx}
-                        className={`px-4 py-2 font-semibold ${
-                          idx === 5 ? "text-right" : "text-left"
-                        }`}
+                        className={`px-4 py-2 font-semibold ${idx === 5 ? "text-right" : "text-left"
+                          }`}
                       >
                         {h}
                       </th>
@@ -619,9 +725,8 @@ export default function QuestionBanksPage() {
                         className={`border-t ${themeClasses.tableBorder}`}
                       >
                         <td
-                          className={`px-4 py-2 font-semibold ${
-                            isDark ? "text-emerald-300" : "text-emerald-600"
-                          }`}
+                          className={`px-4 py-2 font-semibold ${isDark ? "text-emerald-300" : "text-emerald-600"
+                            }`}
                         >
                           {bank.bankName}
                         </td>
@@ -633,20 +738,18 @@ export default function QuestionBanksPage() {
                             className={
                               count === 0
                                 ? themeClasses.textMuted
-                                : `font-semibold ${
-                                    isDark
-                                      ? "text-emerald-300"
-                                      : "text-emerald-600"
-                                  }`
+                                : `font-semibold ${isDark
+                                  ? "text-emerald-300"
+                                  : "text-emerald-600"
+                                }`
                             }
                           >
                             {labelFromCount(count)}
                           </span>
                         </td>
                         <td
-                          className={`px-4 py-2 ${
-                            isDark ? "text-zinc-400" : "text-zinc-600"
-                          }`}
+                          className={`px-4 py-2 ${isDark ? "text-zinc-400" : "text-zinc-600"
+                            }`}
                         >
                           {tags.length ? tags.join(", ") : "—"}
                         </td>
@@ -657,7 +760,8 @@ export default function QuestionBanksPage() {
                         </td>
                         <td className="px-4 py-2">
                           <div className="flex flex-wrap justify-end gap-2">
-                            {activeTab === "my" ? (
+                            {/* If Owner: Show Edit/Options. If Not Owner: Show View/Duplicate */}
+                            {bank.userId === userId ? (
                               <>
                                 <button
                                   onClick={() => goToEditQuestions(id)}
@@ -682,19 +786,29 @@ export default function QuestionBanksPage() {
                                 </button>
                               </>
                             ) : (
-                              <button
-                                onClick={() => goToEditQuestions(id)}
-                                className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                                  isDark
+                              <>
+                                <button
+                                  onClick={() => goToEditQuestions(id)}
+                                  className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${isDark
                                     ? "bg-zinc-800 text-zinc-50 hover:bg-zinc-700"
                                     : "bg-gray-800 text-white hover:bg-gray-700"
-                                }`}
-                              >
-                                {t(
-                                  "org_question_banks",
-                                  "btn_view_use"
-                                )}
-                              </button>
+                                    }`}
+                                >
+                                  {t(
+                                    "org_question_banks",
+                                    "btn_view"
+                                  )}
+                                </button>
+                                <button
+                                  onClick={() => setDuplicateBankId(id)}
+                                  className="inline-flex items-center rounded-full bg-blue-500 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-600"
+                                >
+                                  {t(
+                                    "org_question_banks",
+                                    "btn_duplicate"
+                                  )}
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -714,6 +828,14 @@ export default function QuestionBanksPage() {
           onEdit={bankForm.openEdit}
           onDelete={handleDelete}
           onClose={rowMenu.close}
+        />
+
+        <DuplicateBankDialog
+          isOpen={!!duplicateBankId}
+          saving={processingDuplicate}
+          workspaces={data.workspaces}
+          onClose={() => setDuplicateBankId(null)}
+          onConfirm={handleDuplicateConfirm}
         />
 
         <BankFormDialog

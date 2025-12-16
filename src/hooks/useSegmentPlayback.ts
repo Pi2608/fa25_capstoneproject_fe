@@ -10,6 +10,7 @@ import {
   applyLayerCrossFade,
   type RenderSegmentOptions,
 } from "@/utils/segmentRenderer";
+import { calculateEffectiveSegmentDuration } from "@/utils/segmentTiming";
 
 type UseSegmentPlaybackProps = {
   mapId: string;
@@ -70,9 +71,13 @@ export function useSegmentPlayback({
     return transitions.find(t => t.fromSegmentId === fromId && t.toSegmentId === toId);
   }, [transitions]);
 
-  // Load route animations for current segment (always load, not just when playing)
+  // Load route animations for current segment (when NOT playing)
   // This ensures route lines are visible even when not playing
+  // When playing, routes are loaded in auto-play effect for accurate timing
   useEffect(() => {
+    // Skip if playing - routes are loaded in auto-play effect
+    if (isPlaying) return;
+
     if (segments.length === 0 || currentPlayIndex >= segments.length) {
       setRouteAnimations([]);
       setSegmentStartTime(0);
@@ -104,18 +109,11 @@ export function useSegmentPlayback({
             return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
           });
           setRouteAnimations(sortedAnimations);
-          // Reset start time when segment changes (only if playing)
-          if (isPlaying) {
-            setSegmentStartTime(Date.now());
-          }
         }
       } catch (e) {
         console.warn("Failed to load route animations:", e);
         if (!cancelled) {
           setRouteAnimations([]);
-          if (isPlaying) {
-            setSegmentStartTime(0);
-          }
         }
       }
     })();
@@ -302,6 +300,15 @@ export function useSegmentPlayback({
         cameraAnimationDurationMs: t.animateCamera ? t.cameraAnimationDurationMs : undefined,
       } : undefined;
 
+      // Debug: Log transition info
+      if (t) {
+        console.log(`🔄 [TRANSITION] From "${prevSegment?.name || 'START'}" → "${segment.name}"`, {
+          transitionDuration: t.durationMs,
+          cameraAnimation: t.animateCamera,
+          cameraDuration: t.cameraAnimationDurationMs,
+        });
+      }
+
       if (!currentMap) {
         console.warn("⚠️ Map not ready yet, retrying segment playback...");
         timeoutId = setTimeout(playNextSegment, 200);
@@ -310,8 +317,39 @@ export function useSegmentPlayback({
 
       setActiveSegmentId(segment.segmentId);
 
-      // FIXED: Always apply camera state when advancing to a new segment
-      // This ensures camera state is applied even after route animations complete
+      // CRITICAL FIX: Load routes and set start time BEFORE rendering
+      // This ensures segmentStartTime reflects the ACTUAL segment start, not when rendering completes
+      let currentSegmentRoutes: RouteAnimation[] = [];
+      try {
+        const animations = await getRouteAnimationsBySegment(mapId, segment.segmentId);
+        // Sort routes by displayOrder for sequential playback
+        currentSegmentRoutes = (animations || []).sort((a, b) => {
+          // First sort by displayOrder
+          if (a.displayOrder !== b.displayOrder) {
+            return a.displayOrder - b.displayOrder;
+          }
+          // Then by startTimeMs if available
+          if (a.startTimeMs !== undefined && b.startTimeMs !== undefined) {
+            return a.startTimeMs - b.startTimeMs;
+          }
+          // Finally by creation time
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        });
+
+        console.log(`[AUTO-PLAY] Loaded ${currentSegmentRoutes.length} routes for segment "${segment.name}"`);
+      } catch (e) {
+        console.warn("Failed to load routes for segment:", segment.segmentId, e);
+      }
+
+      // CRITICAL: Set segmentStartTime BEFORE handleViewSegment to capture TRUE start time
+      // handleViewSegment may take several seconds to render, we don't want routes delayed by that
+      const actualSegmentStartTime = Date.now();
+      setRouteAnimations(currentSegmentRoutes);
+      setSegmentStartTime(actualSegmentStartTime);
+
+      console.log(`⏰ [TIMING] Segment "${segment.name}" start time set to: ${actualSegmentStartTime}`);
+
+      // Now render segment (this may take time, but routes will start based on actualSegmentStartTime)
       await handleViewSegment(segment, {
         ...options,
         skipCameraState: false, // Force camera state application
@@ -327,10 +365,25 @@ export function useSegmentPlayback({
         return; // Don't schedule next segment
       }
 
-      const duration = segment.durationMs || 5000;
+      // FIXED: Use effective duration that accounts for route animations
+      // This ensures routes have enough time to complete before advancing to next segment
+      const effectiveDuration = calculateEffectiveSegmentDuration(segment, currentSegmentRoutes);
+
+      // Debug logging - CRITICAL INFO ONLY
+      console.log(`\n🎬 [SEGMENT "${segment.name}"] PLAYBACK START`);
+      console.log(`   Base: ${segment.durationMs}ms | Routes: ${currentSegmentRoutes.length} | Effective: ${effectiveDuration}ms`);
+      if (currentSegmentRoutes.length > 0) {
+        console.log(`   Route data:`, currentSegmentRoutes.map((r, i) => ({
+          index: i + 1,
+          startTimeMs: r.startTimeMs ?? 'null',
+          durationMs: r.durationMs,
+          autoPlay: r.autoPlay,
+        })));
+      }
+
       timeoutId = setTimeout(() => {
         setCurrentPlayIndex(prev => prev + 1);
-      }, duration);
+      }, effectiveDuration);
     };
 
     playNextSegment();
@@ -486,12 +539,12 @@ export function useSegmentPlayback({
         // Flags already set above
         setIsPlaying(true);
 
-        // Automatically stop after segment duration
-        const duration = segment.durationMs || 5000;
+        // FIXED: Use effective duration that accounts for route animations
+        const effectiveDuration = calculateEffectiveSegmentDuration(segment, animations);
         setTimeout(() => {
           handleStopPreview();
           isSingleSegmentPlayRef.current = false;
-        }, duration);
+        }, effectiveDuration);
       } else {
         // No route animations, just show the segment for its duration
         setSegmentStartTime(Date.now());

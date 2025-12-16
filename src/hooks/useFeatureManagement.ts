@@ -100,6 +100,9 @@ export function useFeatureManagement({
           const featureId = savedFeature.featureId;
           recentlyCreatedFeatureIdsRef.current.add(featureId);
 
+          // Store featureId in layer for hover event tracking
+          (e.layer as any)._featureId = featureId;
+
           // Remove from tracking after 5 seconds (enough time for SignalR event to arrive)
           setTimeout(() => {
             recentlyCreatedFeatureIdsRef.current.delete(featureId);

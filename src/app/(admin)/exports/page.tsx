@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getPendingExports, approveExport, rejectExport, type ExportResponse } from "@/lib/api-maps";
+import { approveExport, rejectExport, type ExportResponse } from "@/lib/api-maps";
+import { adminGetAllExports } from "@/lib/admin-api";
 import { useTheme } from "../layout";
 import { getThemeClasses } from "@/utils/theme-utils";
 import ExportedImagePreviewModal from "@/components/admin/ExportedImagePreviewModal";
@@ -48,6 +49,16 @@ function getStatusLabel(status: string): string {
   return status;
 }
 
+function getStatusLabelFromCode(statusCode: number): string {
+  const statusMap: Record<number, string> = {
+    2: "Chờ phê duyệt",
+    3: "Đã phê duyệt",
+    4: "Từ chối",
+    5: "Thất bại",
+  };
+  return statusMap[statusCode] || "Unknown";
+}
+
 export default function AdminExportsPage() {
   const { isDark } = useTheme();
   const theme = getThemeClasses(isDark);
@@ -55,6 +66,11 @@ export default function AdminExportsPage() {
   const [exports, setExports] = useState<ExportResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(20);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<number | null>(null); // null = all statuses
   const [actioningId, setActioningId] = useState<number | null>(null);
   const [rejectModal, setRejectModal] = useState<{ isOpen: boolean; exportId: number | null; exportItem: ExportResponse | null }>({
     isOpen: false,
@@ -70,15 +86,23 @@ export default function AdminExportsPage() {
   const loadExports = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await getPendingExports();
-      setExports(data);
+      const response = await adminGetAllExports({
+        page: currentPage,
+        pageSize: pageSize,
+        status: statusFilter,
+      });
+      setExports(response.exports);
+      setTotalPages(response.totalPages);
+      setTotal(response.total);
     } catch (error) {
-      console.error("Failed to load pending exports:", error);
+      console.error("Failed to load exports:", error);
       setExports([]);
+      setTotalPages(1);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentPage, pageSize, statusFilter]);
 
   useEffect(() => {
     loadExports();
@@ -148,7 +172,14 @@ export default function AdminExportsPage() {
     <div className="grid gap-5">
       <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="m-0 text-xl font-extrabold">Quản lý Export Map - Chờ phê duyệt</h2>
+          <h2 className="m-0 text-xl font-extrabold">
+            Quản lý Export Map
+            {statusFilter !== null && (
+              <span className="text-sm font-normal opacity-60 ml-2">
+                ({getStatusLabelFromCode(statusFilter)})
+              </span>
+            )}
+          </h2>
           <div className="flex gap-2 flex-wrap">
             <input
               className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 min-w-[200px] ${theme.input}`}
@@ -156,6 +187,21 @@ export default function AdminExportsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            <select
+              className={`h-[34px] px-2.5 text-sm rounded-lg border outline-none focus:ring-1 ${theme.input}`}
+              value={statusFilter === null ? "" : String(statusFilter)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setStatusFilter(value === "" ? null : Number(value));
+                setCurrentPage(1); // Reset to first page when filter changes
+              }}
+            >
+              <option value="">Tất cả trạng thái</option>
+              <option value="2">Chờ phê duyệt</option>
+              <option value="3">Đã phê duyệt</option>
+              <option value="4">Từ chối</option>
+              <option value="5">Thất bại</option>
+            </select>
             <button
               className={`h-[34px] px-4 text-sm rounded-lg border font-medium transition-colors ${isDark
                   ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
@@ -192,7 +238,9 @@ export default function AdminExportsPage() {
               ) : filteredExports.length === 0 ? (
                 <tr>
                   <td colSpan={7} className={`p-8 text-center ${theme.textMuted}`}>
-                    Không có export nào đang chờ phê duyệt
+                    {statusFilter !== null 
+                      ? `Không có export nào với trạng thái "${getStatusLabelFromCode(statusFilter)}"`
+                      : "Không có export nào"}
                   </td>
                 </tr>
               ) : (
@@ -264,6 +312,42 @@ export default function AdminExportsPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between mt-4">
+            <div className={`text-sm ${isDark ? "text-zinc-400" : "text-gray-600"}`}>
+              Hiển thị {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, total)} của {total} exports
+            </div>
+            <div className="flex gap-2">
+              <button
+                className={`px-3 py-1.5 text-sm rounded-lg border font-medium transition-colors disabled:opacity-50 ${
+                  isDark
+                    ? "bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700"
+                    : "bg-white hover:bg-gray-50 text-gray-900 border-gray-300"
+                }`}
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1 || loading}
+              >
+                Trước
+              </button>
+              <span className={`px-3 py-1.5 text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
+                Trang {currentPage} / {totalPages}
+              </span>
+              <button
+                className={`px-3 py-1.5 text-sm rounded-lg border font-medium transition-colors disabled:opacity-50 ${
+                  isDark
+                    ? "bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700"
+                    : "bg-white hover:bg-gray-50 text-gray-900 border-gray-300"
+                }`}
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages || loading}
+              >
+                Sau
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Reject Modal */}

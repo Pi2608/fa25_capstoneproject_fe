@@ -1,7 +1,6 @@
 // Location and POI related types
 
-export type LocationType = "PointOfInterest" | "Line" | "Polygon" | "TextOnly" | "MediaSpot" | "Custom";
-
+export type LocationType = "PointOfInterest" | "Landmark" | "Route" | "Event"
 export type LocationPoiDialogForm = {
   title: string;
   subtitle?: string;
