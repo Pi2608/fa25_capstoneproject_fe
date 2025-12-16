@@ -70,7 +70,8 @@ export function createMapCollaborationConnection(
 
 export async function startMapCollaborationConnection(
   connection: signalR.HubConnection,
-  mapId?: string
+  mapId?: string,
+  userId?: string | null
 ): Promise<boolean> {
   try {
     if (connection.state === signalR.HubConnectionState.Connected) {
@@ -89,7 +90,11 @@ export async function startMapCollaborationConnection(
 
     if (mapId) {
       try {
-        await connection.invoke("JoinMap", mapId);
+        if (userId) {
+          await connection.invoke("JoinMap", mapId, userId);
+        } else {
+          await connection.invoke("JoinMap", mapId);
+        }
       } catch (invokeError) {
         console.error(
           "[SignalR MapCollaboration] Failed to join map group:",

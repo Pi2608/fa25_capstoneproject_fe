@@ -3,8 +3,17 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as signalR from "@microsoft/signalr";
 import { getToken } from "@/lib/api-core";
+import { parseToken } from "@/utils/jwt";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+/** Extract userId from current JWT token */
+function getUserIdFromToken(): string | null {
+  const token = getToken();
+  if (!token) return null;
+  const { userId } = parseToken(token);
+  return userId;
+}
 
 export interface ActiveMapUser {
   userId: string;
@@ -32,6 +41,7 @@ export interface MapSelection {
 interface UseMapCollaborationOptions {
   mapId: string | null;
   enabled?: boolean;
+  userId?: string | null;
   onUserJoined?: (user: { userId: string; userName: string; joinedAt: string }) => void;
   onUserLeft?: (user: { userId: string; leftAt: string }) => void;
   onSelectionUpdated?: (selection: MapSelection) => void;
@@ -59,8 +69,14 @@ export function useMapCollaboration({
   onFeatureDeleted,
   onFeatureCreated,
   shouldIgnoreFeatureCreated,
+  userId,
 }: UseMapCollaborationOptions) {
   const connectionRef = useRef<signalR.HubConnection | null>(null);
+  const userIdRef = useRef<string | null>(userId ?? null);
+
+  useEffect(() => {
+    userIdRef.current = userId ?? null;
+  }, [userId]);
   const [isConnected, setIsConnected] = useState(false);
   const [activeUsers, setActiveUsers] = useState<ActiveMapUser[]>([]);
   const heartbeatIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -242,9 +258,14 @@ export function useMapCollaboration({
     connection.onreconnected(() => {
       setIsConnected(true);
       if (targetMapId) {
-        connection.invoke("JoinMap", targetMapId).catch((err) => {
-          console.error("Failed to rejoin map after reconnect:", err);
-        });
+        const uid = userIdRef.current;
+        if (uid) {
+          connection.invoke("JoinMap", targetMapId, uid).catch((err) => {
+            console.error("Failed to rejoin map after reconnect:", err);
+          });
+        } else {
+          console.error("Map collaboration: userId not provided when rejoining after reconnect");
+        }
       }
     });
 
@@ -271,8 +292,9 @@ export function useMapCollaboration({
     if (connectionRef.current) {
       try {
         const currentMapId = currentMapIdRef.current;
-        if (currentMapId) {
-          await connectionRef.current.invoke("LeaveMap", currentMapId);
+        const uid = userIdRef.current;
+        if (currentMapId && uid) {
+          await connectionRef.current.invoke("LeaveMap", currentMapId, uid);
         }
         await connectionRef.current.stop();
       } catch (error) {
@@ -297,7 +319,12 @@ export function useMapCollaboration({
     }) => {
       if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
         try {
-          await connectionRef.current.invoke("UpdateSelection", selection);
+          const uid = userIdRef.current;
+          if (uid) {
+            await connectionRef.current.invoke("UpdateSelection", selection, uid);
+          } else {
+            console.error("Map collaboration: cannot UpdateSelection, userId not provided");
+          }
         } catch (error) {
           console.error("Failed to update selection:", error);
         }
@@ -310,7 +337,12 @@ export function useMapCollaboration({
     async (mapId: string) => {
       if (connectionRef.current?.state === signalR.HubConnectionState.Connected) {
         try {
-          await connectionRef.current.invoke("ClearSelection", { mapId });
+          const uid = userIdRef.current;
+          if (uid) {
+            await connectionRef.current.invoke("ClearSelection", { mapId }, uid);
+          } else {
+            console.error("Map collaboration: cannot ClearSelection, userId not provided");
+          }
         } catch (error) {
           console.error("Failed to clear selection:", error);
         }
@@ -352,7 +384,10 @@ export function useMapCollaboration({
         if (connectionRef.current && currentMapIdRef.current !== mapId) {
           try {
             if (currentMapIdRef.current) {
-              await connectionRef.current.invoke("LeaveMap", currentMapIdRef.current);
+              const uid = userIdRef.current;
+              if (uid) {
+                await connectionRef.current.invoke("LeaveMap", currentMapIdRef.current, uid);
+              }
             }
             await connectionRef.current.stop();
           } catch (error) {
@@ -369,7 +404,12 @@ export function useMapCollaboration({
             try {
               await connectionRef.current.start();
               setIsConnected(true);
-              await connectionRef.current.invoke("JoinMap", mapId);
+              const uid = userIdRef.current;
+              if (uid) {
+                await connectionRef.current.invoke("JoinMap", mapId, uid);
+              } else {
+                console.error("Map collaboration: userId not provided when joining map (existing connection)");
+              }
               currentMapIdRef.current = mapId;
               isConnectingRef.current = false;
               return;
@@ -379,7 +419,12 @@ export function useMapCollaboration({
             }
           } else if (state === signalR.HubConnectionState.Connected) {
             // Already connected, just join the new map
-            await connectionRef.current.invoke("JoinMap", mapId);
+            const uid = userIdRef.current;
+            if (uid) {
+              await connectionRef.current.invoke("JoinMap", mapId, uid);
+            } else {
+              console.error("Map collaboration: userId not provided when joining map (already connected)");
+            }
             currentMapIdRef.current = mapId;
             isConnectingRef.current = false;
             return;
@@ -398,8 +443,13 @@ export function useMapCollaboration({
         currentMapIdRef.current = mapId;
         setIsConnected(true);
 
-        // Join the map
-        await connection.invoke("JoinMap", mapId);
+        // Join the map with userId
+        const uid = userIdRef.current;
+        if (uid) {
+          await connection.invoke("JoinMap", mapId, uid);
+        } else {
+          console.error("Map collaboration: userId not provided when joining map (new connection)");
+        }
 
         // Start heartbeat
         if (heartbeatIntervalRef.current) {
@@ -410,9 +460,14 @@ export function useMapCollaboration({
             connectionRef.current?.state === signalR.HubConnectionState.Connected &&
             currentMapIdRef.current
           ) {
-            connectionRef.current.invoke("SendHeartbeat", currentMapIdRef.current).catch((err) => {
-              console.error("Heartbeat failed:", err);
-            });
+            const heartbeatUid = userIdRef.current;
+            if (heartbeatUid) {
+              connectionRef.current.invoke("SendHeartbeat", currentMapIdRef.current, heartbeatUid).catch((err) => {
+                console.error("Heartbeat failed:", err);
+              });
+            } else {
+              console.error("Map collaboration: cannot send heartbeat without userId");
+            }
           }
         }, 30000); // Every 30 seconds
       } catch (error) {
