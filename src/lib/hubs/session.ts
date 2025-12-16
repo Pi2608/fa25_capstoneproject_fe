@@ -60,13 +60,14 @@ export interface QuestionActivatedEvent {
 }
 
 export interface QuestionTimeExtendedEvent {
-  sessionId: string;
   sessionQuestionId: string;
-  additionalSeconds?: number;
-  newEndTime?: string;
-  extendedBy?: number;
+  questionId: string;
+  additionalSeconds: number;
+  newTimeLimit: number;
+  extendedAt: string;
   [key: string]: unknown;
 }
+
 
 export interface QuestionSkippedEvent {
   sessionId: string;
@@ -145,7 +146,6 @@ export interface MapLayerSyncEvent {
   [key: string]: unknown;
 }
 
-/** ✅ Backend có SyncMapLockState + MapLockStateSync */
 export interface MapLockStateSyncEvent {
   sessionId: string;
   isLocked: boolean;
@@ -159,13 +159,13 @@ export interface QuestionBroadcastEvent {
   questionId: string;
   questionText: string;
   questionType: string;
-  questionImageUrl?: string;
+  questionImageUrl?: string | null;
   options?: Array<{
     id: string;
     optionText: string;
-    optionImageUrl?: string;
+    optionImageUrl?: string | null;
     displayOrder: number;
-  }>;
+  }> | null;
   points: number;
   timeLimit: number;
   broadcastedAt: string;
@@ -236,7 +236,7 @@ export function createSessionConnection(
   return createBaseConnection(hubUrl, {
     token: authToken || undefined,
     allowGuest: true,
-    onClose: () => {},
+    onClose: () => { },
     onReconnecting: (error) => {
       console.warn("[SignalR Session] Reconnecting...", error);
     },
@@ -337,7 +337,6 @@ export function registerSessionEventHandlers(
   connection: signalR.HubConnection,
   handlers: SessionEventHandlers
 ): void {
-  // ✅ Backend bắn "Error" (PascalCase). Để an toàn, nghe cả 2.
   const handleError = (event: unknown) => {
     handlers.onError?.(event);
   };
@@ -398,7 +397,16 @@ export function registerSessionEventHandlers(
   }
 
   if (handlers.onQuestionTimeExtended) {
-    connection.on("TimeExtended", handlers.onQuestionTimeExtended);
+    connection.on("TimeExtended", (event: any) => {
+      handlers.onQuestionTimeExtended?.({
+        ...event,
+        sessionQuestionId: event?.sessionQuestionId ?? event?.SessionQuestionId,
+        questionId: event?.questionId ?? event?.QuestionId,
+        additionalSeconds: event?.additionalSeconds ?? event?.AdditionalSeconds ?? 0,
+        newTimeLimit: event?.newTimeLimit ?? event?.NewTimeLimit ?? 0,
+        extendedAt: event?.extendedAt ?? event?.ExtendedAt,
+      });
+    });
   }
 
   if (handlers.onQuestionSkipped) {
@@ -457,14 +465,28 @@ export function registerSessionEventHandlers(
     connection.on("MapLayerSync", handlers.onMapLayerSync);
   }
 
-  // ✅ Backend có MapLockStateSync (JoinSession cũng bắn event này nếu có cache)
   if (handlers.onMapLockStateSync) {
     connection.on("MapLockStateSync", handlers.onMapLockStateSync);
   }
 
   if (handlers.onQuestionBroadcast) {
-    connection.on("QuestionBroadcast", handlers.onQuestionBroadcast);
+    connection.on("QuestionBroadcast", (event: any) => {
+      handlers.onQuestionBroadcast?.({
+        ...event,
+        sessionId: event?.sessionId ?? event?.SessionId,
+        sessionQuestionId: event?.sessionQuestionId ?? event?.SessionQuestionId,
+        questionId: event?.questionId ?? event?.QuestionId,
+        questionText: event?.questionText ?? event?.QuestionText,
+        questionType: event?.questionType ?? event?.QuestionType,
+        questionImageUrl: event?.questionImageUrl ?? event?.QuestionImageUrl ?? null,
+        options: event?.options ?? event?.Options ?? null,
+        points: event?.points ?? event?.Points ?? 0,
+        timeLimit: event?.timeLimit ?? event?.TimeLimit ?? 0,
+        broadcastedAt: event?.broadcastedAt ?? event?.BroadcastedAt,
+      });
+    });
   }
+
 
   if (handlers.onQuestionResults) {
     connection.on("QuestionResults", handlers.onQuestionResults);
@@ -624,20 +646,23 @@ export async function sendMapLayerSyncViaSignalR(
 // ===================== QUESTION BROADCAST =====================
 
 export interface QuestionBroadcastRequest {
-  sessionQuestionId: string;
+  sessionQuestionId?: string;
   questionId: string;
   questionText: string;
   questionType: string;
-  questionImageUrl?: string;
+  questionImageUrl?: string | null;
   options?: Array<{
     id: string;
     optionText: string;
-    optionImageUrl?: string;
+    optionImageUrl?: string | null;
     displayOrder: number;
-  }>;
+  }> | null;
   points: number;
   timeLimit: number;
 }
+
+const GUID_REGEX =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 export async function broadcastQuestionViaSignalR(
   connection: signalR.HubConnection,
@@ -650,23 +675,36 @@ export async function broadcastQuestionViaSignalR(
       return false;
     }
 
-    await connection.invoke("BroadcastQuestionToStudents", sessionId, {
-      SessionQuestionId: question.sessionQuestionId,
+    const sessionQuestionId =
+      question.sessionQuestionId && GUID_REGEX.test(question.sessionQuestionId)
+        ? question.sessionQuestionId
+        : undefined;
+
+    const payload = {
+      SessionQuestionId: sessionQuestionId,
       QuestionId: question.questionId,
       QuestionText: question.questionText,
       QuestionType: question.questionType,
       QuestionImageUrl: question.questionImageUrl ?? null,
-      Options: question.options ?? null,
-      Points: question.points,
-      TimeLimit: question.timeLimit,
-    });
+      Options:
+        question.options?.map((o) => ({
+          Id: o.id,
+          OptionText: o.optionText,
+          OptionImageUrl: o.optionImageUrl ?? null,
+          DisplayOrder: o.displayOrder,
+        })) ?? null,
+      Points: Number.isFinite(question.points) ? Math.trunc(question.points) : 0,
+      TimeLimit: Number.isFinite(question.timeLimit) ? Math.trunc(question.timeLimit) : 0,
+    };
 
+    await connection.invoke("BroadcastQuestionToStudents", sessionId, payload);
     return true;
   } catch (error) {
     console.error("[SignalR Session] Failed to broadcast question:", error);
     return false;
   }
 }
+
 
 export async function showQuestionResultsViaSignalR(
   connection: signalR.HubConnection,
@@ -696,6 +734,35 @@ export async function showQuestionResultsViaSignalR(
     return true;
   } catch (error) {
     console.error("[SignalR Session] Failed to show question results:", error);
+    return false;
+  }
+}
+
+export async function broadcastTimeExtendedViaSignalR(
+  connection: signalR.HubConnection,
+  sessionId: string,
+  data: {
+    sessionQuestionId: string;
+    questionId: string; // Guid string
+    additionalSeconds: number;
+    newTimeLimit: number;
+  }
+): Promise<boolean> {
+  try {
+    if (connection.state !== signalR.HubConnectionState.Connected) return false;
+
+    const payload = {
+      SessionQuestionId: data.sessionQuestionId,
+      QuestionId: data.questionId,
+      AdditionalSeconds: Math.trunc(data.additionalSeconds),
+      NewTimeLimit: Math.trunc(data.newTimeLimit),
+      ExtendedAt: new Date().toISOString(),
+    };
+
+    await connection.invoke("BroadcastTimeExtended", sessionId, payload);
+    return true;
+  } catch (e) {
+    console.error("[SignalR Session] Failed to broadcast time extended:", e);
     return false;
   }
 }

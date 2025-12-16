@@ -26,6 +26,7 @@ import {
   type SessionEndedEvent,
   type JoinedSessionEvent,
   type MapLayerSyncEvent,
+  type QuestionTimeExtendedEvent,
 } from "@/lib/hubs/session";
 import type { BaseKey } from "@/types/common";
 
@@ -117,6 +118,32 @@ export default function StoryMapViewPage() {
   } | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const startCountdown = useCallback((seconds: number) => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (seconds > 0) {
+      setTimeRemaining(seconds);
+
+      timerRef.current = setInterval(() => {
+        setTimeRemaining((prev) => {
+          if (prev === null || prev <= 1) {
+            if (timerRef.current) {
+              clearInterval(timerRef.current);
+              timerRef.current = null;
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      setTimeRemaining(0);
+    }
+  }, []);
 
   const [isLeaving, setIsLeaving] = useState(false);
 
@@ -395,28 +422,83 @@ export default function StoryMapViewPage() {
     setSelectedLocation(null);
 
     if (event.timeLimit > 0) {
-      setTimeRemaining(event.timeLimit);
+      startCountdown(event.timeLimit);
+    } else {
+      setTimeRemaining(null);
+    }
 
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
+
+    toast.success(`Câu hỏi mới! ${event.points} điểm`);
+  }, [startCountdown]);
+
+  const handleQuestionTimeExtended = useCallback((event: QuestionTimeExtendedEvent) => {
+    setCurrentQuestion((prev) => {
+      if (!prev) return prev;
+
+      if (String(prev.sessionQuestionId) !== String(event.sessionQuestionId)) {
+        return prev;
       }
 
-      timerRef.current = setInterval(() => {
-        setTimeRemaining((prev) => {
-          if (prev === null || prev <= 1) {
-            if (timerRef.current) {
-              clearInterval(timerRef.current);
-              timerRef.current = null;
-            }
+      return {
+        ...prev,
+        timeLimit: event.newTimeLimit,
+      };
+    });
+
+    setTimeRemaining((prev) => {
+      if (prev === null) return prev;
+      const next = Math.max(0, prev + (event.additionalSeconds ?? 0));
+
+      if (next > 0 && !timerRef.current) {
+        startCountdown(next);
+        return next;
+      }
+
+      return next;
+    });
+
+    toast.info(`⏱️ Được cộng thêm ${event.additionalSeconds}s`);
+  }, [startCountdown]);
+
+  const handleTimeExtended = useCallback((raw: any) => {
+    const sessionQuestionId = pick(raw, "sessionQuestionId", "SessionQuestionId");
+    const additionalSeconds = pick(raw, "additionalSeconds", "AdditionalSeconds");
+    const newTimeLimit = pick(raw, "newTimeLimit", "NewTimeLimit");
+
+    if (!sessionQuestionId) return;
+
+    if (!currentQuestion?.sessionQuestionId) return;
+    if (currentQuestion.sessionQuestionId !== sessionQuestionId) return;
+
+    const add = typeof additionalSeconds === "number" ? additionalSeconds : 0;
+
+    setTimeRemaining((prev) => (typeof prev === "number" ? prev + add : prev));
+
+    setCurrentQuestion((prev) => {
+      if (!prev || prev.sessionQuestionId !== sessionQuestionId) return prev;
+
+      const nextTimeLimit =
+        typeof newTimeLimit === "number"
+          ? newTimeLimit
+          : (prev.timeLimit ?? 0) + add;
+
+      return { ...prev, timeLimit: nextTimeLimit };
+    });
+
+    if (timerRef.current == null && viewStateRef.current === "question") {
+      timerRef.current = window.setInterval(() => {
+        setTimeRemaining((t) => {
+          if (t == null) return t;
+          if (t <= 1) {
+            if (timerRef.current) window.clearInterval(timerRef.current);
+            timerRef.current = null;
             return 0;
           }
-          return prev - 1;
+          return t - 1;
         });
       }, 1000);
     }
-
-    toast.success(`Câu hỏi mới! ${event.points} điểm`);
-  }, []);
+  }, [currentQuestion?.sessionQuestionId, viewState]);
 
   const handleQuestionResults = useCallback((event: QuestionResultsEvent) => {
     setQuestionResults(event);
@@ -458,6 +540,7 @@ export default function StoryMapViewPage() {
       onSegmentSync: handleSegmentSync,
       onQuestionBroadcast: handleQuestionBroadcast,
       onQuestionResults: handleQuestionResults,
+      onQuestionTimeExtended: handleQuestionTimeExtended,
       onSessionEnded: handleSessionEnded,
       onMapLayerSync: handleMapLayerSync,
     }),
@@ -467,9 +550,12 @@ export default function StoryMapViewPage() {
       handleSegmentSync,
       handleQuestionBroadcast,
       handleQuestionResults,
+      handleQuestionTimeExtended,
+      handleTimeExtended,
       handleSessionEnded,
       handleMapLayerSync,
     ]
+
   );
 
   const { connection, isConnected } = useSessionHub({
