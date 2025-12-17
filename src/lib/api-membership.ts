@@ -435,3 +435,189 @@ export function cancelPaymentWithReason(transactionId: string, request: CancelPa
     request
   );
 }
+
+// ============================================
+// Admin Transaction APIs
+// ============================================
+
+export interface AdminTransactionFilterParams {
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortOrder?: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  userId?: string;
+  orgId?: string;
+  minAmount?: number;
+  maxAmount?: number;
+  paymentGateway?: string;
+  search?: string;
+}
+
+export interface AdminUserDto {
+  userId: string;
+  email: string;
+  fullName: string;
+}
+
+export interface AdminOrgDto {
+  orgId: string;
+  orgName: string;
+}
+
+export interface AdminPlanDto {
+  planId: number;
+  planName: string;
+  priceMonthly: number;
+}
+
+export interface AdminPaymentGatewayDto {
+  gatewayId: string;
+  name: string;
+}
+
+export interface AdminTransactionDto {
+  transactionId: string;
+  amount: number;
+  currency: string;
+  status: string;
+  createdAt: string;
+  description: string;
+  user: AdminUserDto;
+  organization: AdminOrgDto;
+  plan: AdminPlanDto;
+  paymentGateway: AdminPaymentGatewayDto;
+  canDownloadReceipt: boolean;
+}
+
+export interface AdminTransactionListResponse {
+  transactions: AdminTransactionDto[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
+export interface TransactionStatistics {
+  totalCount: number;
+  totalRevenue: number;
+  currency: string;
+  successCount: number;
+  pendingCount: number;
+  failedCount: number;
+  cancelledCount: number;
+  successRate: number;
+}
+
+// Get admin transactions with filtering
+export function getAdminTransactions(params: AdminTransactionFilterParams) {
+  const queryParams = new URLSearchParams();
+
+  if (params.page) queryParams.append('page', params.page.toString());
+  if (params.pageSize) queryParams.append('pageSize', params.pageSize.toString());
+  if (params.sortBy) queryParams.append('sortBy', params.sortBy);
+  if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+  if (params.startDate) queryParams.append('startDate', params.startDate);
+  if (params.endDate) queryParams.append('endDate', params.endDate);
+  if (params.status) queryParams.append('status', params.status);
+  if (params.userId) queryParams.append('userId', params.userId);
+  if (params.orgId) queryParams.append('orgId', params.orgId);
+  if (params.minAmount !== undefined) queryParams.append('minAmount', params.minAmount.toString());
+  if (params.maxAmount !== undefined) queryParams.append('maxAmount', params.maxAmount.toString());
+  if (params.paymentGateway) queryParams.append('paymentGateway', params.paymentGateway);
+  if (params.search) queryParams.append('search', params.search);
+
+  const queryString = queryParams.toString();
+  return getJson<AdminTransactionListResponse>(
+    `/admin/billing/transactions${queryString ? `?${queryString}` : ''}`
+  );
+}
+
+// Get transaction statistics
+export function getTransactionStatistics(params: AdminTransactionFilterParams) {
+  const queryParams = new URLSearchParams();
+
+  if (params.startDate) queryParams.append('startDate', params.startDate);
+  if (params.endDate) queryParams.append('endDate', params.endDate);
+  if (params.status) queryParams.append('status', params.status);
+  if (params.userId) queryParams.append('userId', params.userId);
+  if (params.orgId) queryParams.append('orgId', params.orgId);
+  if (params.minAmount !== undefined) queryParams.append('minAmount', params.minAmount.toString());
+  if (params.maxAmount !== undefined) queryParams.append('maxAmount', params.maxAmount.toString());
+  if (params.paymentGateway) queryParams.append('paymentGateway', params.paymentGateway);
+  if (params.search) queryParams.append('search', params.search);
+
+  const queryString = queryParams.toString();
+  return getJson<TransactionStatistics>(
+    `/admin/billing/transactions/statistics${queryString ? `?${queryString}` : ''}`
+  );
+}
+
+// Bulk download receipts
+export async function bulkDownloadReceipts(transactionIds: string[]) {
+  const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/billing/transactions/receipts/bulk-download`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    },
+    body: JSON.stringify({ transactionIds }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `receipts-${new Date().toISOString().split('T')[0]}-${transactionIds.length}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
+
+// Export transactions
+export async function exportTransactions(format: 'csv' | 'xlsx', params: AdminTransactionFilterParams) {
+  const queryParams = new URLSearchParams();
+  queryParams.append('format', format);
+
+  if (params.startDate) queryParams.append('startDate', params.startDate);
+  if (params.endDate) queryParams.append('endDate', params.endDate);
+  if (params.status) queryParams.append('status', params.status);
+  if (params.userId) queryParams.append('userId', params.userId);
+  if (params.orgId) queryParams.append('orgId', params.orgId);
+  if (params.minAmount !== undefined) queryParams.append('minAmount', params.minAmount.toString());
+  if (params.maxAmount !== undefined) queryParams.append('maxAmount', params.maxAmount.toString());
+  if (params.paymentGateway) queryParams.append('paymentGateway', params.paymentGateway);
+  if (params.search) queryParams.append('search', params.search);
+
+  const response = await fetch(
+    `${process.env.NEXT_PUBLIC_API_URL}/admin/billing/transactions/export?${queryParams.toString()}`,
+    {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `transactions-export-${new Date().toISOString().split('T')[0]}.${format}`;
+  document.body.appendChild(a);
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
+}
