@@ -3679,9 +3679,8 @@ function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: an
 
       const createdFeature = await createMapFeature(mapId, featureRequest);
 
-      window.dispatchEvent(new CustomEvent("featureCreated", {
-        detail: { feature: createdFeature }
-      }));
+      // Only dispatch layerCreated to trigger map detail refresh
+      // (Removed featureCreated event as it's not listened to anywhere)
       window.dispatchEvent(new Event("layerCreated"));
 
       const center = getZoneCenter(selectedZone);
