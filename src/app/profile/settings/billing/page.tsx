@@ -253,7 +253,7 @@ export default function BillingPage() {
                       <LandmarkIcon />
                     </div>
                   </div>
-                  <div className="mt-2 text-2xl font-semibold tracking-tight text-black">
+                  <div className="mt-2 text-2xl font-semibold tracking-tight ">
                     {billing.organizationName}
                   </div>
                 </div>
@@ -265,7 +265,7 @@ export default function BillingPage() {
                       <DocIcon />
                     </div>
                   </div>
-                  <div className="mt-2 text-2xl font-semibold tracking-tight text-black">
+                  <div className="mt-2 text-2xl font-semibold tracking-tight ">
                     {billing.totalSpentThisMonth !== undefined
                       ? formatCurrency(billing.totalSpentThisMonth, currency)
                       : "—"
@@ -280,7 +280,7 @@ export default function BillingPage() {
                       <ArrowsIcon />
                     </div>
                   </div>
-                  <div className="mt-2 text-2xl font-semibold tracking-tight text-black">
+                  <div className="mt-2 text-2xl font-semibold tracking-tight ">
                     {String(billing.recentTransactions?.length ?? 0)}
                   </div>
                 </div>
