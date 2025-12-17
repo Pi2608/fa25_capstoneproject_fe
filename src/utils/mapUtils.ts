@@ -53,6 +53,7 @@ export interface FeatureData {
   isVisible: boolean;
   featureId?: string;
   layerId?: string | null; // Layer ID that this feature belongs to
+  description?: string | null; // Feature description
 }
 
 export interface LayerInfo {
@@ -1132,6 +1133,31 @@ export async function loadFeaturesToMap(
         // Store featureId in layer for hover event tracking
         (layer as any)._featureId = feature.featureId;
 
+        // Parse and attach properties to layer
+        let parsedProperties: Record<string, unknown> = {};
+        if (feature.properties) {
+          try {
+            parsedProperties = typeof feature.properties === 'string'
+              ? JSON.parse(feature.properties)
+              : feature.properties;
+          } catch (error) {
+            console.warn("Failed to parse feature properties:", error);
+          }
+        }
+
+        // Attach GeoJSON-like structure to layer for compatibility
+        if (!layer.feature) {
+          layer.feature = {
+            type: 'Feature',
+            properties: parsedProperties,
+            geometry: {
+              type: feature.geometryType,
+            }
+          };
+        } else {
+          layer.feature.properties = parsedProperties;
+        }
+
         // Apply stored style if available
         if (feature.style) {
           try {
@@ -1155,6 +1181,7 @@ export async function loadFeaturesToMap(
           isVisible,
           featureId: feature.featureId,
           layerId: feature.layerId || null, // Store layerId from backend
+          description: feature.description || null, // Store description from backend
         });
       }
     }

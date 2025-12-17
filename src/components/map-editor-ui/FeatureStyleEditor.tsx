@@ -40,13 +40,38 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
 
   const [activeTab, setActiveTab] = useState<"style" | "attributes">("style");
   
-  // Refs for debouncing
+  // Refs for debouncing and tracking feature changes
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasChangesRef = useRef(false);
-  const isInitialMountRef = useRef(true);
+  const currentFeatureIdRef = useRef<string | undefined>(undefined);
+  const isLoadingInitialValuesRef = useRef(false);
+  const isReadyForAutoSaveRef = useRef(false); // Prevents premature autosave
 
-  // Load initial values from feature
+  // Load initial values from feature when feature changes
   useEffect(() => {
+    // Check if this is a new feature
+    const isNewFeature = currentFeatureIdRef.current !== feature.featureId;
+
+    if (isNewFeature) {
+      currentFeatureIdRef.current = feature.featureId;
+      isLoadingInitialValuesRef.current = true;
+      isReadyForAutoSaveRef.current = false; // Block autosave until initial load completes
+      hasChangesRef.current = false;
+
+      // Clear any pending save
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+    }
+
+    // Load description from feature (separate field, not in properties)
+    if (feature.description !== undefined && feature.description !== null) {
+      setDescription(String(feature.description));
+    } else {
+      setDescription("");
+    }
+
     if (feature.layer) {
       const style = extractLayerStyle(feature.layer);
 
@@ -58,24 +83,44 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
       if (style.radius !== undefined) setRadius(style.radius as number);
       if (style.dashArray) setDashArray(style.dashArray as string);
 
-      // Load properties
+      // Load properties (custom attributes only, NOT description)
+      // Properties come from layer.feature.properties which is already parsed
       if (feature.layer.feature?.properties) {
         const props = feature.layer.feature.properties;
         const customProps: Record<string, string> = {};
-        Object.keys(props).forEach((key) => {
+
+        // If props is a string (shouldn't happen but handle it), try to parse
+        let parsedProps = props;
+        if (typeof props === 'string') {
+          try {
+            parsedProps = JSON.parse(props);
+          } catch (e) {
+            console.warn('Failed to parse properties string:', e);
+            parsedProps = {};
+          }
+        }
+
+        Object.keys(parsedProps).forEach((key) => {
+          // Exclude standard fields - description should NOT be in properties
           if (!["name", "description", "zIndex"].includes(key)) {
-            customProps[key] = String(props[key]);
+            customProps[key] = String(parsedProps[key]);
           }
         });
         setCustomAttributes(customProps);
 
-        if (props.description) setDescription(String(props.description));
-        if (props.zIndex) setZIndex(Number(props.zIndex));
+        // Only load zIndex from properties
+        if (parsedProps.zIndex) setZIndex(Number(parsedProps.zIndex));
       }
     }
-    
-    // Reset initial mount flag when feature changes
-    isInitialMountRef.current = true;
+
+    // After loading values, reset the loading flag after a safe delay
+    // Using 500ms to ensure all React state updates have completed and settled
+    if (isNewFeature) {
+      setTimeout(() => {
+        isLoadingInitialValuesRef.current = false;
+        isReadyForAutoSaveRef.current = true;
+      }, 500);
+    }
   }, [feature]);
 
   // Apply style to layer in real-time
@@ -104,7 +149,9 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
 
   // Auto-save function with debouncing
   const autoSave = useCallback(async () => {
-    if (!hasChangesRef.current) return;
+    if (!hasChangesRef.current) {
+      return;
+    }
 
     hasChangesRef.current = false;
 
@@ -125,29 +172,35 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
         style.dashArray = dashArray;
       }
 
+      // Properties should NOT include description - it's a separate field
       const properties = {
         ...customAttributes,
-        description,
+        // Do NOT include description here - it's sent separately
       };
 
-      await onUpdate({
+      const updates = {
         name,
         description,
         style,
         properties,
         isVisible,
         zIndex,
-      });
+      };
+
+      await onUpdate(updates);
     } catch (error) {
-      console.error("Failed to auto-save feature:", error);
+      console.error("[FeatureStyleEditor] Failed to auto-save feature:", error);
     }
-  }, [name, description, color, fillColor, opacity, fillOpacity, weight, radius, dashArray, customAttributes, isVisible, zIndex, feature.type, onUpdate]);
+  }, [name, description, color, fillColor, opacity, fillOpacity, weight, radius, dashArray, customAttributes, isVisible, zIndex, feature.type, feature.featureId, onUpdate]);
 
   // Debounced auto-save
   useEffect(() => {
-    // Skip auto-save on initial mount
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
+    // Skip auto-save if loading initial values or not ready yet
+    if (isLoadingInitialValuesRef.current) {
+      return;
+    }
+
+    if (!isReadyForAutoSaveRef.current) {
       return;
     }
 
@@ -176,8 +229,12 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
 
   // Auto-save when attributes change
   useEffect(() => {
-    // Skip auto-save on initial mount
-    if (isInitialMountRef.current) {
+    // Skip auto-save if loading initial values or not ready yet
+    if (isLoadingInitialValuesRef.current) {
+      return;
+    }
+
+    if (!isReadyForAutoSaveRef.current) {
       return;
     }
 
@@ -313,13 +370,19 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
                 <div>
                   <label className="text-xs text-zinc-400 mb-1.5 block">Màu viền</label>
                   <div className="flex items-center gap-2">
-                    <input
-                      type="color"
-                      value={color}
-                      onChange={(e) => setColor(e.target.value)}
-                      className="w-12 h-10 rounded border border-zinc-700 bg-zinc-800 cursor-pointer hover:border-emerald-500 transition-colors"
-                      title="Chọn màu viền"
-                    />
+                    <div className="relative w-9 h-9 flex-shrink-0">
+                      <input
+                        type="color"
+                        value={color}
+                        onChange={(e) => setColor(e.target.value)}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        title="Chọn màu viền"
+                      />
+                      <div
+                        className="absolute inset-0 rounded-lg border-2 border-zinc-600 hover:border-emerald-500 transition-all pointer-events-none shadow-sm"
+                        style={{ backgroundColor: color }}
+                      />
+                    </div>
                     <input
                       type="text"
                       value={color}
@@ -330,17 +393,25 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
                   </div>
                 </div>
 
+                <br/>
+                
                 {supportsFill && (
                   <div>
                     <label className="text-xs text-zinc-400 mb-1.5 block">Màu nền</label>
                     <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={fillColor}
-                        onChange={(e) => setFillColor(e.target.value)}
-                        className="w-12 h-10 rounded border border-zinc-700 bg-zinc-800 cursor-pointer hover:border-emerald-500 transition-colors"
-                        title="Chọn màu nền"
-                      />
+                      <div className="relative w-9 h-9 flex-shrink-0">
+                        <input
+                          type="color"
+                          value={fillColor}
+                          onChange={(e) => setFillColor(e.target.value)}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          title="Chọn màu nền"
+                        />
+                        <div
+                          className="absolute inset-0 rounded-lg border-2 border-zinc-600 hover:border-emerald-500 transition-all pointer-events-none shadow-sm"
+                          style={{ backgroundColor: fillColor }}
+                        />
+                      </div>
                       <input
                         type="text"
                         value={fillColor}

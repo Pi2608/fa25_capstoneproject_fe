@@ -862,6 +862,7 @@ export default function EditMapPage() {
           layer,
           isVisible: newFeature.isVisible ?? true,
           featureId,
+          description: newFeature.description || null,
         };
 
         setFeatureVisibility(prevVisibility => ({
@@ -2780,6 +2781,13 @@ export default function EditMapPage() {
         updateRequest.properties = JSON.stringify(updates.properties);
       }
 
+      console.log('[handleUpdateFeature] Sending to API:', {
+        featureId: feature.featureId,
+        updates,
+        updateRequest,
+        properties: updateRequest.properties,
+      });
+
       // Update in database
       await updateMapFeature(mapId, feature.featureId, updateRequest);
 
@@ -2787,16 +2795,18 @@ export default function EditMapPage() {
       setFeatures((prev) =>
         prev.map((f) =>
           f.featureId === feature.featureId
-            ? { ...f, name: updates.name || f.name, isVisible: updates.isVisible ?? f.isVisible }
+            ? {
+                ...f,
+                name: updates.name || f.name,
+                description: updates.description !== undefined ? updates.description : f.description,
+                isVisible: updates.isVisible ?? f.isVisible
+              }
             : f
         )
       );
 
-      // Update selected entity
-      setSelectedEntity({
-        type: "feature",
-        data: { ...feature, name: updates.name || feature.name, isVisible: updates.isVisible ?? feature.isVisible },
-      });
+      // Note: Do NOT update selectedEntity here to avoid re-triggering auto-save loop
+      // The feature layer already has the updated style applied in real-time by FeatureStyleEditor
 
       showToast("success", "Feature updated successfully");
     } catch (error) {

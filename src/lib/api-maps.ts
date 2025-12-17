@@ -691,8 +691,6 @@ export function getMapFeatureById(mapId: string, featureId: string) {
   return getJson<MapFeatureResponse>(`/maps/${mapId}/features/${featureId}`);
 }
 
-
-
 export interface PublishMapResponse {
   success: boolean;
   message?: string;
@@ -718,12 +716,12 @@ export function restoreMap(mapId: string) {
 export type ExportRequest = {
   mapId: string;
   format: "pdf" | "png" | "geojson" | "svg";
-  membershipId?: string; // Optional
-  viewState?: string; // JSON string of { center: [lat, lng], zoom: number }
-  mapImageData?: string; // Base64 encoded image data from frontend capture
-  svgPathData?: string; // JSON string of extracted SVG path data from Leaflet layers
-  visibleLayerIds?: Record<string, boolean>; // Which layers should be visible
-  visibleFeatureIds?: Record<string, boolean>; // Which features should be visible
+  membershipId?: string;
+  viewState?: string;
+  mapImageData?: string;
+  svgPathData?: string;
+  visibleLayerIds?: Record<string, boolean>;
+  visibleFeatureIds?: Record<string, boolean>;
   options?: {
     width?: string;
     height?: string;

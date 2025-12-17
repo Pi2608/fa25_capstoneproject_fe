@@ -220,11 +220,11 @@ export default function BillingPage() {
   // Format amount for display
   const formatAmount = (amount: number) => {
     if (amount >= 1000000) {
-      return `${(amount / 1000000).toFixed(1)}M₫`;
+      return `${(amount / 1000000).toFixed(1)}M$`;
     } else if (amount >= 1000) {
-      return `${(amount / 1000).toFixed(1)}k₫`;
+      return `${(amount / 1000).toFixed(1)}k$`;
     }
-    return `${amount.toLocaleString()}₫`;
+    return `${amount.toLocaleString()}$`;
   };
 
   return (
@@ -380,7 +380,7 @@ export default function BillingPage() {
                   <td className={cn(
                     "p-3 border-b text-right",
                     isDark ? "text-zinc-200" : "text-gray-900"
-                  )}>{tx.amount.toLocaleString()}₫</td>
+                  )}>{tx.amount.toLocaleString()}$</td>
                   <td className={cn(
                     "p-3 border-b text-left",
                     isDark ? "border-zinc-800" : "border-gray-200"

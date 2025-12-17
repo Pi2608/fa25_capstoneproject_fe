@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Icon } from "./Icon";
+import { useI18n } from "@/i18n/I18nProvider";
 import type { MapZone, Zone, UpdateMapZoneRequest } from "@/lib/api-maps";
 
 interface ZoneStyleEditorProps {
@@ -17,6 +18,7 @@ export function ZoneStyleEditor({
     zone,
     onClose,
 }: ZoneStyleEditorProps) {
+    const { t } = useI18n();
     const [boundaryColor, setBoundaryColor] = useState(mapZone.boundaryColor || "#3388ff");
     const [boundaryWidth, setBoundaryWidth] = useState(mapZone.boundaryWidth || 2);
     const [fillColor, setFillColor] = useState(mapZone.fillColor || "#3388ff");
@@ -61,12 +63,12 @@ export function ZoneStyleEditor({
             <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800 p-3 flex items-center justify-between z-10">
                 <div className="flex items-center gap-2">
                     <Icon icon="mdi:vector-polygon" className="w-5 h-5 text-blue-400" />
-                    <h3 className="font-semibold text-sm text-zinc-200">Zone Style</h3>
+                    <h3 className="font-semibold text-sm text-zinc-200">{t('mapEditor', 'zoneStyleTitle')}</h3>
                 </div>
                 <button
                     onClick={onClose}
                     className="p-1 hover:bg-zinc-800 rounded transition-colors"
-                    title="Close"
+                    title={t('common', 'close')}
                 >
                     <Icon icon="mdi:close" className="w-5 h-5 text-zinc-400" />
                 </button>
@@ -82,7 +84,7 @@ export function ZoneStyleEditor({
 
                 {/* Border Settings */}
                 <div className="border-t border-zinc-800 pt-4">
-                    <h4 className="text-xs font-medium text-zinc-400 mb-3">BORDER</h4>
+                    <h4 className="text-xs font-medium text-zinc-400 mb-3">{t('mapEditor', 'zoneStyleBorder')}</h4>
 
                     <div className="space-y-3">
                         <label className="flex items-center gap-2">
@@ -92,11 +94,11 @@ export function ZoneStyleEditor({
                                 onChange={(e) => setHighlightBoundary(e.target.checked)}
                                 className="w-4 h-4 rounded"
                             />
-                            <span className="text-xs text-zinc-300">Highlight Border</span>
+                            <span className="text-xs text-zinc-300">{t('mapEditor', 'zoneStyleHighlightBorder')}</span>
                         </label>
 
                         <div className="flex items-center gap-2">
-                            <label className="text-xs text-zinc-400 w-16">Color:</label>
+                            <label className="text-xs text-zinc-400 w-16">{t('mapEditor', 'zoneStyleColor')}</label>
                             <input
                                 type="color"
                                 value={boundaryColor}
@@ -112,7 +114,7 @@ export function ZoneStyleEditor({
                         </div>
 
                         <div className="flex items-center gap-2">
-                            <label className="text-xs text-zinc-400 w-16">Width:</label>
+                            <label className="text-xs text-zinc-400 w-16">{t('mapEditor', 'zoneStyleWidth')}</label>
                             <input
                                 type="range"
                                 min="1"
@@ -128,7 +130,7 @@ export function ZoneStyleEditor({
 
                 {/* Fill Settings */}
                 <div className="border-t border-zinc-800 pt-4">
-                    <h4 className="text-xs font-medium text-zinc-400 mb-3">FILL</h4>
+                    <h4 className="text-xs font-medium text-zinc-400 mb-3">{t('mapEditor', 'zoneStyleFill')}</h4>
 
                     <div className="space-y-3">
                         <label className="flex items-center gap-2">
@@ -138,13 +140,13 @@ export function ZoneStyleEditor({
                                 onChange={(e) => setFillZone(e.target.checked)}
                                 className="w-4 h-4 rounded"
                             />
-                            <span className="text-xs text-zinc-300">Enable Fill</span>
+                            <span className="text-xs text-zinc-300">{t('mapEditor', 'zoneStyleEnableFill')}</span>
                         </label>
 
                         {fillZone && (
                             <>
                                 <div className="flex items-center gap-2">
-                                    <label className="text-xs text-zinc-400 w-16">Color:</label>
+                                    <label className="text-xs text-zinc-400 w-16">{t('mapEditor', 'zoneStyleColor')}</label>
                                     <input
                                         type="color"
                                         value={fillColor}
@@ -160,7 +162,7 @@ export function ZoneStyleEditor({
                                 </div>
 
                                 <div className="flex items-center gap-2">
-                                    <label className="text-xs text-zinc-400 w-16">Opacity:</label>
+                                    <label className="text-xs text-zinc-400 w-16">{t('mapEditor', 'zoneStyleOpacity')}</label>
                                     <input
                                         type="range"
                                         min="0"
@@ -179,7 +181,7 @@ export function ZoneStyleEditor({
 
                 {/* Label Settings */}
                 <div className="border-t border-zinc-800 pt-4">
-                    <h4 className="text-xs font-medium text-zinc-400 mb-3">LABEL</h4>
+                    <h4 className="text-xs font-medium text-zinc-400 mb-3">{t('mapEditor', 'zoneStyleLabel')}</h4>
 
                     <div className="space-y-3">
                         <label className="flex items-center gap-2">
@@ -189,12 +191,12 @@ export function ZoneStyleEditor({
                                 onChange={(e) => setShowLabel(e.target.checked)}
                                 className="w-4 h-4 rounded"
                             />
-                            <span className="text-xs text-zinc-300">Show Label</span>
+                            <span className="text-xs text-zinc-300">{t('mapEditor', 'zoneStyleShowLabel')}</span>
                         </label>
 
                         {showLabel && (
                             <div>
-                                <label className="text-xs text-zinc-400 block mb-1">Custom Label:</label>
+                                <label className="text-xs text-zinc-400 block mb-1">{t('mapEditor', 'zoneStyleCustomLabel')}</label>
                                 <input
                                     type="text"
                                     value={labelOverride}
@@ -213,14 +215,14 @@ export function ZoneStyleEditor({
                         onClick={onClose}
                         className="flex-1 px-3 py-2 text-xs rounded bg-zinc-800 hover:bg-zinc-700 text-white transition-colors"
                     >
-                        Cancel
+                        {t('common', 'cancel')}
                     </button>
                     <button
                         onClick={handleSave}
                         disabled={saving}
                         className="flex-1 px-3 py-2 text-xs rounded bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-50"
                     >
-                        {saving ? "Saving..." : "Save"}
+                        {saving ? t('mapEditor', 'zoneStyleSaving') : t('mapEditor', 'zoneStyleSave')}
                     </button>
                 </div>
             </div>
