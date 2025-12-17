@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import type { BaseKey } from "@/types";
 import type { FeatureData } from "@/utils/mapUtils";
 import type { LayerDTO } from "@/lib/api-maps";
-import { addLayerToMap, updateMapLayer, updateMapFeature, removeLayerFromMap } from "@/lib/api-maps";
+import { addLayerToMap, updateMapLayer, updateMapFeature, removeLayerFromMap, createMapFeature } from "@/lib/api-maps";
 import {
   type Segment,
   type TimelineTransition,
@@ -50,8 +50,8 @@ import { LibraryView } from "./LibraryView";
 
 interface LeftSidebarToolboxProps {
   isStoryMap?: boolean; // When false, show Locations/Zones instead of Segments/Transitions
-  activeView: "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "library" | null;
-  onViewChange: (view: "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "library" | null) => void;
+  activeView: "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "search" | "library" | null;
+  onViewChange: (view: "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "search" | "library" | null) => void;
 
 
   features: FeatureData[];
@@ -89,7 +89,7 @@ interface LeftSidebarToolboxProps {
   onAddLayer?: (data: AttachLayerRequest) => Promise<void>;
 }
 
-type ViewType = "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "library";
+type ViewType = "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "search" | "library";
 type FormMode = "list" | "create" | "edit";
 
 export function LeftSidebarToolbox({
@@ -507,6 +507,12 @@ export function LeftSidebarToolbox({
                 isActive={activeView === "zones"}
                 onClick={() => handleIconClick("zones")}
               />
+              <IconButton
+                icon="mdi:map-search"
+                label="Search"
+                isActive={activeView === "search"}
+                onClick={() => handleIconClick("search")}
+              />
             </>
           )}
           <IconButton
@@ -549,14 +555,10 @@ export function LeftSidebarToolbox({
                 {activeView === "transitions" && (transitionFormMode === "list" ? "TRANSITIONS" : transitionFormMode === "create" ? "NEW TRANSITION" : "EDIT TRANSITION")}
                 {activeView === "locations" && "LOCATIONS"}
                 {activeView === "zones" && "ZONES"}
+                {activeView === "search" && "SEARCH / TÌM KIẾM"}
                 {activeView === "icons" && "ASSETS"}
                 {activeView === "library" && "USER LIBRARY"}
               </span>
-              {activeView === "explorer" && (
-                <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] rounded">
-                  {features.length + layers.length}
-                </span>
-              )}
               {activeView === "segments" && segmentFormMode === "list" && (
                 <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] rounded">
                   {segments.length}
@@ -718,7 +720,7 @@ export function LeftSidebarToolbox({
                 onSave={handleSaveTransitionForm}
               />
             )}
-            {activeView === "icons" && <IconLibraryView />}
+            {activeView === "icons" && <IconLibraryView currentMap={currentMap} mapId={mapId} />}
 
             {activeView === "library" && <LibraryView />}
 
@@ -829,6 +831,11 @@ export function LeftSidebarToolbox({
             {/* Map Zones View (when isStoryMap = false) */}
             {activeView === "zones" && !isStoryMap && (
               <MapZonesView mapId={mapId} />
+            )}
+
+            {/* Search Administrative Zones View */}
+            {activeView === "search" && !isStoryMap && (
+              <SearchZoneView mapId={mapId} currentMap={currentMap} />
             )}
 
             {/* Inline Forms for adding/editing location and zone */}
@@ -3087,7 +3094,7 @@ function TransitionFormView({
   );
 }
 
-function IconLibraryView() {
+function IconLibraryView({ currentMap, mapId }: { currentMap?: any; mapId?: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const startIconPlacement = (iconKey: string) => {
@@ -3207,11 +3214,13 @@ function IconLibraryView() {
 
   return (
     <div className="p-3 space-y-4 text-xs">
-      <p className="text-zinc-400 text-[11px]">
-        Thư viện icon – hiện tại chỉ là UI chọn icon, chưa gắn logic tool hay map.
-      </p>
+      <div className="border-b border-zinc-800 pb-4">
+        <p className="text-zinc-400 text-[11px]">
+          Thư viện icon – hiện tại chỉ là UI chọn icon, chưa gắn logic tool hay map.
+        </p>
+      </div>
 
-      {categories.map((cat) => (
+        {categories.map((cat) => (
         <div key={cat.title} className="space-y-2">
           <h4 className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wide">
             {cat.title}
@@ -3621,6 +3630,211 @@ function MapZonesView({ mapId }: { mapId?: string }) {
         onConfirm={confirmDeleteZone}
         variant="danger"
       />
+    </div>
+  );
+}
+
+// Search Administrative Zones View - similar to ZoneForm layout
+function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: any }) {
+  const [zones, setZones] = useState<import("@/lib/api-storymap").Zone[]>([]);
+  const [selectedZone, setSelectedZone] = useState<import("@/lib/api-storymap").Zone | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      setZones([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const { searchZones } = await import("@/lib/api-storymap");
+      const results = await searchZones(searchQuery.trim());
+      setZones(results || []);
+    } catch (error) {
+      console.error("Failed to search zones:", error);
+      setZones([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleAddToMap = async () => {
+    if (!selectedZone || !currentMap || !mapId) {
+      return;
+    }
+
+    setIsAdding(true);
+    try {
+      const { convertZoneToFeatureRequest, getZoneCenter } = await import("@/utils/zoneToFeature");
+      const { createMapFeature } = await import("@/lib/api-maps");
+
+      const featureRequest = convertZoneToFeatureRequest(selectedZone, mapId, null);
+      if (!featureRequest) {
+        alert("Failed to convert zone to feature. Unsupported geometry type.");
+        return;
+      }
+
+      const createdFeature = await createMapFeature(mapId, featureRequest);
+
+      window.dispatchEvent(new CustomEvent("featureCreated", {
+        detail: { feature: createdFeature }
+      }));
+      window.dispatchEvent(new Event("layerCreated"));
+
+      const center = getZoneCenter(selectedZone);
+      if (center) {
+        currentMap.setView([center[1], center[0]], 10, { animate: true });
+      }
+
+      setSelectedZone(null);
+      setSearchQuery("");
+      setZones([]);
+    } catch (error) {
+      console.error("Failed to add zone to map:", error);
+      alert("Failed to add zone to map. Please try again.");
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const getGeometryType = (geometry: string): string => {
+    try {
+      const geoJson = JSON.parse(geometry);
+      return geoJson.type || "Unknown";
+    } catch {
+      return "Unknown";
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Search Section */}
+      <div className="p-3 border-b border-zinc-800 space-y-2">
+        <div className="flex gap-1">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleSearch();
+              }
+            }}
+            placeholder="Nhập tên vùng (VD: Việt Nam, Hà Nội, Quận 1)..."
+            className="flex-1 bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-500"
+            disabled={isSearching || isAdding}
+          />
+          <button
+            onClick={handleSearch}
+            disabled={isSearching || !searchQuery.trim() || isAdding}
+            className="px-2 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[60px]"
+          >
+            {isSearching ? (
+              <>
+                <Icon icon="mdi:loading" className="w-3.5 h-3.5 animate-spin" />
+              </>
+            ) : (
+              <>
+                <Icon icon="mdi:magnify" className="w-3.5 h-3.5 mr-1" />
+                Tìm
+              </>
+            )}
+          </button>
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setZones([]);
+                setSelectedZone(null);
+              }}
+              disabled={isSearching || isAdding}
+              className="px-2 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs transition-colors disabled:opacity-50"
+            >
+              <Icon icon="mdi:close" className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Results List */}
+      <div className="flex-1 overflow-y-auto">
+        {zones.length === 0 ? (
+          <div className="p-8 text-center text-zinc-500 text-xs">
+            <Icon icon="mdi:map-search" className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>{searchQuery.trim() ? "Không tìm thấy zone nào" : "Nhập từ khóa để tìm kiếm"}</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-zinc-800">
+            {zones.map((zone) => {
+              const geometryType = getGeometryType(zone.geometry);
+              const isSelected = selectedZone?.zoneId === zone.zoneId;
+              return (
+                <button
+                  key={zone.zoneId}
+                  onClick={() => setSelectedZone(zone)}
+                  disabled={isAdding}
+                  className={`w-full text-left p-2 hover:bg-zinc-800/50 transition-colors disabled:opacity-50 ${
+                    isSelected ? 'bg-blue-900/30 border-l-4 border-blue-500' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-white text-xs truncate">{zone.name}</div>
+                      {zone.description && (
+                        <div className="text-[10px] text-zinc-400 mt-0.5 line-clamp-2">
+                          {zone.description}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 rounded text-[10px]">
+                          {zone.zoneType}
+                        </span>
+                        {zone.adminLevel !== undefined && (
+                          <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 rounded text-[10px]">
+                            Level {zone.adminLevel}
+                          </span>
+                        )}
+                        <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 rounded text-[10px]">
+                          {geometryType}
+                        </span>
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <Icon icon="mdi:check-circle" className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Add to Map Button */}
+      {selectedZone && (
+        <div className="p-3 border-t border-zinc-800">
+          <button
+            onClick={handleAddToMap}
+            disabled={isAdding}
+            className="w-full px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isAdding ? (
+              <>
+                <Icon icon="mdi:loading" className="w-4 h-4 animate-spin" />
+                <span>Đang thêm...</span>
+              </>
+            ) : (
+              <>
+                <Icon icon="mdi:plus-circle" className="w-4 h-4" />
+                <span>Thêm "{selectedZone.name}" vào bản đồ</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
