@@ -8,6 +8,7 @@ import type { FeatureData } from "@/utils/mapUtils";
 import type { LayerDTO } from "@/lib/api-maps";
 import type { Segment } from "@/lib/api-storymap";
 import { FeatureStyleEditor } from "./FeatureStyleEditor";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type SelectedEntity = {
   type: "feature" | "layer" | "segment";
@@ -28,6 +29,7 @@ export function PropertiesPanel({
   onUpdate,
 }: PropertiesPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (panelRef.current) {
@@ -73,12 +75,12 @@ export function PropertiesPanel({
             icon={getItemIcon(selectedItem.type)}
             className="w-5 h-5 text-emerald-400"
           />
-          <h3 className="font-semibold text-sm text-zinc-100">Properties</h3>
+          <h3 className="font-semibold text-sm text-zinc-100">{t('mapEditor', 'propertiesPanelTitle')}</h3>
         </div>
         <button
           onClick={handleClose}
           className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors"
-          title="Close"
+          title={t('common', 'close')}
         >
           <Icon icon="mdi:close" className="w-4 h-4 text-zinc-400 hover:text-zinc-200" />
         </button>
@@ -122,30 +124,32 @@ function LayerPropertiesContent({
   layer: LayerDTO;
   onUpdate?: (updates: any) => Promise<void>;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="space-y-4">
       <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
         <h4 className="text-sm font-semibold text-zinc-200 mb-3 flex items-center gap-2">
           <Icon icon="mdi:information-outline" className="w-4 h-4 text-emerald-400" />
-          Layer Info
+          {t('mapEditor', 'propertiesPanelLayerInfo')}
         </h4>
         <div className="space-y-2.5">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Name:</span>
+            <span className="text-zinc-400">{t('mapEditor', 'propertiesPanelName')}</span>
             <span className="text-zinc-100 font-medium">{layer.layerName}</span>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Type:</span>
+            <span className="text-zinc-400">{t('mapEditor', 'propertiesPanelType')}</span>
             <span className="text-zinc-100">{layer.layerType}</span>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Features:</span>
+            <span className="text-zinc-400">{t('mapEditor', 'propertiesPanelFeatures')}</span>
             <span className="text-zinc-100">{layer.featureCount}</span>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Visible:</span>
+            <span className="text-zinc-400">{t('mapEditor', 'propertiesPanelVisible')}</span>
             <span className={cn("text-sm font-medium", layer.isPublic ? "text-emerald-400" : "text-zinc-500")}>
-              {layer.isPublic ? "Yes" : "No"}
+              {layer.isPublic ? t('mapEditor', 'propertiesPanelYes') : t('mapEditor', 'propertiesPanelNo')}
             </span>
           </div>
         </div>
@@ -153,7 +157,7 @@ function LayerPropertiesContent({
 
       <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
         <p className="text-xs text-blue-300/80 italic">
-          Layer configuration options will be expanded in future updates.
+          {t('mapEditor', 'propertiesPanelLayerNote')}
         </p>
       </div>
     </div>
@@ -167,24 +171,26 @@ function SegmentPropertiesContent({
   segment: Segment;
   onUpdate?: (updates: any) => Promise<void>;
 }) {
+  const { t } = useI18n();
+
   return (
     <div className="space-y-4">
       <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
         <h4 className="text-sm font-semibold text-zinc-200 mb-3 flex items-center gap-2">
           <Icon icon="mdi:information-outline" className="w-4 h-4 text-emerald-400" />
-          Segment Info
+          {t('mapEditor', 'propertiesPanelSegmentInfo')}
         </h4>
         <div className="space-y-2.5">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Name:</span>
+            <span className="text-zinc-400">{t('mapEditor', 'propertiesPanelName')}</span>
             <span className="text-zinc-100 font-medium">{segment.name}</span>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Duration:</span>
+            <span className="text-zinc-400">{t('mapEditor', 'propertiesPanelDuration')}</span>
             <span className="text-zinc-100">{(segment.durationMs / 1000).toFixed(1)}s</span>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Order:</span>
+            <span className="text-zinc-400">{t('mapEditor', 'propertiesPanelOrder')}</span>
             <span className="text-zinc-100">#{segment.displayOrder + 1}</span>
           </div>
         </div>
@@ -194,7 +200,7 @@ function SegmentPropertiesContent({
         <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
           <h4 className="text-sm font-semibold text-zinc-200 mb-2 flex items-center gap-2">
             <Icon icon="mdi:text" className="w-4 h-4 text-blue-400" />
-            Description
+            {t('mapEditor', 'propertiesPanelDescription')}
           </h4>
           <p className="text-sm text-zinc-300 leading-relaxed">{segment.description}</p>
         </div>
@@ -203,19 +209,19 @@ function SegmentPropertiesContent({
       <div className="bg-zinc-800/30 rounded-xl p-4 border border-zinc-700/30">
         <h4 className="text-sm font-semibold text-zinc-200 mb-3 flex items-center gap-2">
           <Icon icon="mdi:package-variant-closed" className="w-4 h-4 text-purple-400" />
-          Contents
+          {t('mapEditor', 'propertiesPanelContents')}
         </h4>
         <div className="space-y-2.5">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Zones:</span>
+            <span className="text-zinc-400">{t('mapEditor', 'propertiesPanelZones')}</span>
             <span className="text-zinc-100 font-medium">{segment.zones?.length || 0}</span>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Layers:</span>
+            <span className="text-zinc-400">{t('mapEditor', 'propertiesPanelLayers')}</span>
             <span className="text-zinc-100 font-medium">{segment.layers?.length || 0}</span>
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-zinc-400">Locations:</span>
+            <span className="text-zinc-400">{t('mapEditor', 'propertiesPanelLocations')}</span>
             <span className="text-zinc-100 font-medium">{segment.locations?.length || 0}</span>
           </div>
         </div>
@@ -223,7 +229,7 @@ function SegmentPropertiesContent({
 
       <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
         <p className="text-xs text-blue-300/80 italic">
-          Detailed segment editing is available in the left sidebar.
+          {t('mapEditor', 'propertiesPanelSegmentNote')}
         </p>
       </div>
     </div>

@@ -6,11 +6,12 @@ import { LocationForm } from "./forms/LocationForm";
 import { ZoneForm } from "./forms/ZoneForm";
 import { LayerForm } from "./forms/LayerForm";
 import { RouteAnimationForm } from "./forms/RouteAnimationForm";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { cn } from "@/lib/utils";
 import type { BaseKey } from "@/types";
 import type { FeatureData } from "@/utils/mapUtils";
 import type { LayerDTO } from "@/lib/api-maps";
-import { addLayerToMap, updateMapLayer, updateMapFeature, removeLayerFromMap } from "@/lib/api-maps";
+import { addLayerToMap, updateMapLayer, updateMapFeature, removeLayerFromMap, createMapFeature } from "@/lib/api-maps";
 import {
   type Segment,
   type TimelineTransition,
@@ -49,8 +50,8 @@ import { LibraryView } from "./LibraryView";
 
 interface LeftSidebarToolboxProps {
   isStoryMap?: boolean; // When false, show Locations/Zones instead of Segments/Transitions
-  activeView: "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "library" | null;
-  onViewChange: (view: "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "library" | null) => void;
+  activeView: "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "search" | "library" | null;
+  onViewChange: (view: "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "search" | "library" | null) => void;
 
 
   features: FeatureData[];
@@ -88,7 +89,7 @@ interface LeftSidebarToolboxProps {
   onAddLayer?: (data: AttachLayerRequest) => Promise<void>;
 }
 
-type ViewType = "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "library";
+type ViewType = "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "search" | "library";
 type FormMode = "list" | "create" | "edit";
 
 export function LeftSidebarToolbox({
@@ -506,6 +507,12 @@ export function LeftSidebarToolbox({
                 isActive={activeView === "zones"}
                 onClick={() => handleIconClick("zones")}
               />
+              <IconButton
+                icon="mdi:map-search"
+                label="Search"
+                isActive={activeView === "search"}
+                onClick={() => handleIconClick("search")}
+              />
             </>
           )}
           <IconButton
@@ -548,14 +555,10 @@ export function LeftSidebarToolbox({
                 {activeView === "transitions" && (transitionFormMode === "list" ? "TRANSITIONS" : transitionFormMode === "create" ? "NEW TRANSITION" : "EDIT TRANSITION")}
                 {activeView === "locations" && "LOCATIONS"}
                 {activeView === "zones" && "ZONES"}
+                {activeView === "search" && "SEARCH / TÌM KIẾM"}
                 {activeView === "icons" && "ASSETS"}
                 {activeView === "library" && "USER LIBRARY"}
               </span>
-              {activeView === "explorer" && (
-                <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] rounded">
-                  {features.length + layers.length}
-                </span>
-              )}
               {activeView === "segments" && segmentFormMode === "list" && (
                 <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 text-[10px] rounded">
                   {segments.length}
@@ -717,7 +720,7 @@ export function LeftSidebarToolbox({
                 onSave={handleSaveTransitionForm}
               />
             )}
-            {activeView === "icons" && <IconLibraryView />}
+            {activeView === "icons" && <IconLibraryView currentMap={currentMap} mapId={mapId} />}
 
             {activeView === "library" && <LibraryView />}
 
@@ -828,6 +831,11 @@ export function LeftSidebarToolbox({
             {/* Map Zones View (when isStoryMap = false) */}
             {activeView === "zones" && !isStoryMap && (
               <MapZonesView mapId={mapId} />
+            )}
+
+            {/* Search Administrative Zones View */}
+            {activeView === "search" && !isStoryMap && (
+              <SearchZoneView mapId={mapId} currentMap={currentMap} />
             )}
 
             {/* Inline Forms for adding/editing location and zone */}
@@ -1774,11 +1782,26 @@ function SegmentsView({
   mapId?: string;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [deleteSegmentModal, setDeleteSegmentModal] = useState<{ open: boolean; segmentId: string | null; segmentName: string | null }>({
+    open: false,
+    segmentId: null,
+    segmentName: null,
+  });
 
   const filteredSegments = segments.filter(s =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     s.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleDeleteSegment = (segmentId: string, segmentName: string) => {
+    setDeleteSegmentModal({ open: true, segmentId, segmentName });
+  };
+
+  const confirmDeleteSegment = () => {
+    if (deleteSegmentModal.segmentId && onDeleteSegment) {
+      onDeleteSegment(deleteSegmentModal.segmentId);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -1837,9 +1860,7 @@ function SegmentsView({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm(`Delete segment "${segment.name}"?`)) {
-                                onDeleteSegment(segment.segmentId);
-                              }
+                              handleDeleteSegment(segment.segmentId, segment.name);
                             }}
                             className="p-1 hover:bg-zinc-700 rounded"
                             title="Delete segment"
@@ -1966,6 +1987,18 @@ function SegmentsView({
           <span>New Segment</span>
         </button>
       </div>
+
+      {/* Delete Segment Confirmation Modal */}
+      <ConfirmModal
+        open={deleteSegmentModal.open}
+        onOpenChange={(open) => setDeleteSegmentModal({ open, segmentId: null, segmentName: null })}
+        title="Delete Segment"
+        description={`Are you sure you want to delete segment "${deleteSegmentModal.segmentName}"? This action will remove all associated locations, zones, layers, and route animations. This cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteSegment}
+        variant="danger"
+      />
     </div>
   );
 }
@@ -1990,6 +2023,22 @@ export function SegmentItemsList({
 }) {
   const [routeAnimations, setRouteAnimations] = useState<RouteAnimation[]>([]);
   const [isLoadingRoutes, setIsLoadingRoutes] = useState(false);
+  const [deleteZoneModal, setDeleteZoneModal] = useState<{ open: boolean; segmentZoneId: string | null }>({
+    open: false,
+    segmentZoneId: null,
+  });
+  const [deleteLocationModal, setDeleteLocationModal] = useState<{ open: boolean; locationId: string | null }>({
+    open: false,
+    locationId: null,
+  });
+  const [deleteLayerModal, setDeleteLayerModal] = useState<{ open: boolean; layerId: string | null }>({
+    open: false,
+    layerId: null,
+  });
+  const [deleteRouteModal, setDeleteRouteModal] = useState<{ open: boolean; routeAnimationId: string | null }>({
+    open: false,
+    routeAnimationId: null,
+  });
 
   // Load route animations on mount or when segmentId changes
   const loadRouteAnimations = useCallback(() => {
@@ -2029,9 +2078,13 @@ export function SegmentItemsList({
   }, [segmentId, loadRouteAnimations]);
 
   const handleDeleteZone = async (segmentZoneId: string) => {
-    if (!window.confirm("Remove this zone from segment?")) return;
+    setDeleteZoneModal({ open: true, segmentZoneId });
+  };
+
+  const confirmDeleteZone = async () => {
+    if (!deleteZoneModal.segmentZoneId) return;
     try {
-      await deleteSegmentZone(mapId, segmentId, segmentZoneId);
+      await deleteSegmentZone(mapId, segmentId, deleteZoneModal.segmentZoneId);
       // Dispatch event to refresh segments
       window.dispatchEvent(new CustomEvent("zoneDeleted", {
         detail: { segmentId }
@@ -2043,9 +2096,13 @@ export function SegmentItemsList({
   };
 
   const handleDeleteLocation = async (locationId: string) => {
-    if (!window.confirm("Remove this location from segment?")) return;
+    setDeleteLocationModal({ open: true, locationId });
+  };
+
+  const confirmDeleteLocation = async () => {
+    if (!deleteLocationModal.locationId) return;
     try {
-      await deleteLocation(mapId, segmentId, locationId);
+      await deleteLocation(mapId, segmentId, deleteLocationModal.locationId);
       // Dispatch event to refresh segments
       window.dispatchEvent(new CustomEvent("locationDeleted", {
         detail: { segmentId }
@@ -2057,9 +2114,13 @@ export function SegmentItemsList({
   };
 
   const handleDeleteLayer = async (layerId: string) => {
-    if (!window.confirm("Remove this layer from segment?")) return;
+    setDeleteLayerModal({ open: true, layerId });
+  };
+
+  const confirmDeleteLayer = async () => {
+    if (!deleteLayerModal.layerId) return;
     try {
-      await detachLayerFromSegment(mapId, segmentId, layerId);
+      await detachLayerFromSegment(mapId, segmentId, deleteLayerModal.layerId);
       // Dispatch event to refresh segments
       window.dispatchEvent(new CustomEvent("layerDeleted", {
         detail: { segmentId }
@@ -2071,10 +2132,14 @@ export function SegmentItemsList({
   };
 
   const handleDeleteRoute = async (routeAnimationId: string) => {
-    if (!window.confirm("Delete this route animation?")) return;
+    setDeleteRouteModal({ open: true, routeAnimationId });
+  };
+
+  const confirmDeleteRoute = async () => {
+    if (!deleteRouteModal.routeAnimationId) return;
     try {
-      await deleteRouteAnimation(mapId, segmentId, routeAnimationId);
-      setRouteAnimations(prev => prev.filter(r => r.routeAnimationId !== routeAnimationId));
+      await deleteRouteAnimation(mapId, segmentId, deleteRouteModal.routeAnimationId);
+      setRouteAnimations(prev => prev.filter(r => r.routeAnimationId !== deleteRouteModal.routeAnimationId));
     } catch (e) {
       console.error("Failed to delete route:", e);
       alert("Failed to delete route animation");
@@ -2279,6 +2344,54 @@ export function SegmentItemsList({
           <p className="text-xs text-zinc-500">No items attached</p>
         </div>
       )}
+
+      {/* Delete Zone Confirmation Modal */}
+      <ConfirmModal
+        open={deleteZoneModal.open}
+        onOpenChange={(open) => setDeleteZoneModal({ open, segmentZoneId: null })}
+        title="Remove Zone from Segment"
+        description="Are you sure you want to remove this zone from the segment? This action cannot be undone."
+        confirmText="Remove"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteZone}
+        variant="danger"
+      />
+
+      {/* Delete Location Confirmation Modal */}
+      <ConfirmModal
+        open={deleteLocationModal.open}
+        onOpenChange={(open) => setDeleteLocationModal({ open, locationId: null })}
+        title="Remove Location from Segment"
+        description="Are you sure you want to remove this location from the segment? This action cannot be undone."
+        confirmText="Remove"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteLocation}
+        variant="danger"
+      />
+
+      {/* Delete Layer Confirmation Modal */}
+      <ConfirmModal
+        open={deleteLayerModal.open}
+        onOpenChange={(open) => setDeleteLayerModal({ open, layerId: null })}
+        title="Remove Layer from Segment"
+        description="Are you sure you want to remove this layer from the segment? This action cannot be undone."
+        confirmText="Remove"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteLayer}
+        variant="danger"
+      />
+
+      {/* Delete Route Animation Confirmation Modal */}
+      <ConfirmModal
+        open={deleteRouteModal.open}
+        onOpenChange={(open) => setDeleteRouteModal({ open, routeAnimationId: null })}
+        title="Delete Route Animation"
+        description="Are you sure you want to delete this route animation? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteRoute}
+        variant="danger"
+      />
     </div>
   );
 }
@@ -2624,6 +2737,21 @@ function TransitionsView({
   onEditTransition: (transition: TimelineTransition) => void;
   onDeleteTransition?: (transitionId: string) => void;
 }) {
+  const [deleteTransitionModal, setDeleteTransitionModal] = useState<{ open: boolean; transitionId: string | null }>({
+    open: false,
+    transitionId: null,
+  });
+
+  const handleDeleteTransition = (transitionId: string) => {
+    setDeleteTransitionModal({ open: true, transitionId });
+  };
+
+  const confirmDeleteTransition = () => {
+    if (deleteTransitionModal.transitionId && onDeleteTransition) {
+      onDeleteTransition(deleteTransitionModal.transitionId);
+    }
+  };
+
   return (
     <div className="p-3 space-y-2">
       {transitions.length === 0 ? (
@@ -2667,9 +2795,7 @@ function TransitionsView({
                     {onDeleteTransition && (
                       <button
                         onClick={() => {
-                          if (window.confirm("Delete this transition?")) {
-                            onDeleteTransition(transition.timelineTransitionId);
-                          }
+                          handleDeleteTransition(transition.timelineTransitionId);
                         }}
                         className="p-1 hover:bg-zinc-700 rounded"
                         title="Delete transition"
@@ -2706,6 +2832,18 @@ function TransitionsView({
         <Icon icon="mdi:plus-circle-outline" className="w-5 h-5" />
         <span className="text-sm font-medium">Create Transition</span>
       </button>
+
+      {/* Delete Transition Confirmation Modal */}
+      <ConfirmModal
+        open={deleteTransitionModal.open}
+        onOpenChange={(open) => setDeleteTransitionModal({ open, transitionId: null })}
+        title="Delete Transition"
+        description="Are you sure you want to delete this transition? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteTransition}
+        variant="danger"
+      />
     </div>
   );
 }
@@ -2956,7 +3094,7 @@ function TransitionFormView({
   );
 }
 
-function IconLibraryView() {
+function IconLibraryView({ currentMap, mapId }: { currentMap?: any; mapId?: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const startIconPlacement = (iconKey: string) => {
@@ -3076,11 +3214,13 @@ function IconLibraryView() {
 
   return (
     <div className="p-3 space-y-4 text-xs">
-      <p className="text-zinc-400 text-[11px]">
-        Thư viện icon – hiện tại chỉ là UI chọn icon, chưa gắn logic tool hay map.
-      </p>
+      <div className="border-b border-zinc-800 pb-4">
+        <p className="text-zinc-400 text-[11px]">
+          Thư viện icon – hiện tại chỉ là UI chọn icon, chưa gắn logic tool hay map.
+        </p>
+      </div>
 
-      {categories.map((cat) => (
+        {categories.map((cat) => (
         <div key={cat.title} className="space-y-2">
           <h4 className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wide">
             {cat.title}
@@ -3325,6 +3465,10 @@ function MapZonesView({ mapId }: { mapId?: string }) {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; zoneId: string | null }>({
+    open: false,
+    zoneId: null,
+  });
 
   const loadZones = async () => {
     if (!mapId) return;
@@ -3369,13 +3513,18 @@ function MapZonesView({ mapId }: { mapId?: string }) {
   };
 
   const handleDeleteZone = async (mapZoneId: string) => {
-    if (!mapId) return;
-    if (!confirm("Bạn có chắc muốn xóa zone này?")) return;
+    setDeleteModal({ open: true, zoneId: mapZoneId });
+  };
+
+  const confirmDeleteZone = async () => {
+    if (!mapId || !deleteModal.zoneId) return;
 
     try {
       const { deleteMapZone } = await import("@/lib/api-maps");
-      await deleteMapZone(mapId, mapZoneId);
+      await deleteMapZone(mapId, deleteModal.zoneId);
       loadZones();
+      // Dispatch event to refresh zones on map
+      window.dispatchEvent(new CustomEvent("refreshMapZones"));
     } catch (err) {
       console.error("Failed to delete map zone:", err);
     }
@@ -3469,6 +3618,222 @@ function MapZonesView({ mapId }: { mapId?: string }) {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        open={deleteModal.open}
+        onOpenChange={(open) => setDeleteModal({ open, zoneId: null })}
+        title="Xóa Zone"
+        description="Bạn có chắc chắn muốn xóa zone này khỏi bản đồ? Hành động này không thể hoàn tác."
+        confirmText="Xóa"
+        cancelText="Hủy"
+        onConfirm={confirmDeleteZone}
+        variant="danger"
+      />
+    </div>
+  );
+}
+
+// Search Administrative Zones View - similar to ZoneForm layout
+function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: any }) {
+  const [zones, setZones] = useState<import("@/lib/api-storymap").Zone[]>([]);
+  const [selectedZone, setSelectedZone] = useState<import("@/lib/api-storymap").Zone | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+
+  const handleSearch = async () => {
+    if (!searchQuery.trim()) {
+      setZones([]);
+      return;
+    }
+
+    setIsSearching(true);
+    try {
+      const { searchZones } = await import("@/lib/api-storymap");
+      const results = await searchZones(searchQuery.trim());
+      setZones(results || []);
+    } catch (error) {
+      console.error("Failed to search zones:", error);
+      setZones([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleAddToMap = async () => {
+    if (!selectedZone || !currentMap || !mapId) {
+      return;
+    }
+
+    setIsAdding(true);
+    try {
+      const { convertZoneToFeatureRequest, getZoneCenter } = await import("@/utils/zoneToFeature");
+      const { createMapFeature } = await import("@/lib/api-maps");
+
+      const featureRequest = convertZoneToFeatureRequest(selectedZone, mapId, null);
+      if (!featureRequest) {
+        alert("Failed to convert zone to feature. Unsupported geometry type.");
+        return;
+      }
+
+      const createdFeature = await createMapFeature(mapId, featureRequest);
+
+      // Only dispatch layerCreated to trigger map detail refresh
+      // (Removed featureCreated event as it's not listened to anywhere)
+      window.dispatchEvent(new Event("layerCreated"));
+
+      const center = getZoneCenter(selectedZone);
+      if (center) {
+        currentMap.setView([center[1], center[0]], 10, { animate: true });
+      }
+
+      setSelectedZone(null);
+      setSearchQuery("");
+      setZones([]);
+    } catch (error) {
+      console.error("Failed to add zone to map:", error);
+      alert("Failed to add zone to map. Please try again.");
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const getGeometryType = (geometry: string): string => {
+    try {
+      const geoJson = JSON.parse(geometry);
+      return geoJson.type || "Unknown";
+    } catch {
+      return "Unknown";
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Search Section */}
+      <div className="p-3 border-b border-zinc-800 space-y-2">
+        <div className="flex gap-1">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleSearch();
+              }
+            }}
+            placeholder="Nhập tên vùng (VD: Việt Nam, Hà Nội, Quận 1)..."
+            className="flex-1 bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-500"
+            disabled={isSearching || isAdding}
+          />
+          <button
+            onClick={handleSearch}
+            disabled={isSearching || !searchQuery.trim() || isAdding}
+            className="px-2 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[60px]"
+          >
+            {isSearching ? (
+              <>
+                <Icon icon="mdi:loading" className="w-3.5 h-3.5 animate-spin" />
+              </>
+            ) : (
+              <>
+                <Icon icon="mdi:magnify" className="w-3.5 h-3.5 mr-1" />
+                Tìm
+              </>
+            )}
+          </button>
+          {searchQuery && (
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setZones([]);
+                setSelectedZone(null);
+              }}
+              disabled={isSearching || isAdding}
+              className="px-2 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs transition-colors disabled:opacity-50"
+            >
+              <Icon icon="mdi:close" className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Results List */}
+      <div className="flex-1 overflow-y-auto">
+        {zones.length === 0 ? (
+          <div className="p-8 text-center text-zinc-500 text-xs">
+            <Icon icon="mdi:map-search" className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <p>{searchQuery.trim() ? "Không tìm thấy zone nào" : "Nhập từ khóa để tìm kiếm"}</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-zinc-800">
+            {zones.map((zone) => {
+              const geometryType = getGeometryType(zone.geometry);
+              const isSelected = selectedZone?.zoneId === zone.zoneId;
+              return (
+                <button
+                  key={zone.zoneId}
+                  onClick={() => setSelectedZone(zone)}
+                  disabled={isAdding}
+                  className={`w-full text-left p-2 hover:bg-zinc-800/50 transition-colors disabled:opacity-50 ${
+                    isSelected ? 'bg-blue-900/30 border-l-4 border-blue-500' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-white text-xs truncate">{zone.name}</div>
+                      {zone.description && (
+                        <div className="text-[10px] text-zinc-400 mt-0.5 line-clamp-2">
+                          {zone.description}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 rounded text-[10px]">
+                          {zone.zoneType}
+                        </span>
+                        {zone.adminLevel !== undefined && (
+                          <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 rounded text-[10px]">
+                            Level {zone.adminLevel}
+                          </span>
+                        )}
+                        <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 rounded text-[10px]">
+                          {geometryType}
+                        </span>
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <Icon icon="mdi:check-circle" className="w-4 h-4 text-blue-400 flex-shrink-0" />
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Add to Map Button */}
+      {selectedZone && (
+        <div className="p-3 border-t border-zinc-800">
+          <button
+            onClick={handleAddToMap}
+            disabled={isAdding}
+            className="w-full px-3 py-2 bg-green-600 hover:bg-green-500 text-white rounded text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          >
+            {isAdding ? (
+              <>
+                <Icon icon="mdi:loading" className="w-4 h-4 animate-spin" />
+                <span>Đang thêm...</span>
+              </>
+            ) : (
+              <>
+                <Icon icon="mdi:plus-circle" className="w-4 h-4" />
+                <span>Thêm "{selectedZone.name}" vào bản đồ</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
