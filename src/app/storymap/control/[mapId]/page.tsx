@@ -16,6 +16,9 @@ import {
   skipCurrentQuestion,
   extendQuestionTime,
   getSession,
+  getSessionQuestionResponses,
+  getMapPinsData,
+  type MapPinsDataDto,
   type SessionDto,
   type SessionRunningQuestionDto,
   type LeaderboardEntryDto,
@@ -23,6 +26,7 @@ import {
 } from "@/lib/api-ques";
 
 import {
+  QuestionBroadcastEvent,
   showQuestionResultsViaSignalR,
   type QuestionResultsEvent,
 } from "@/lib/hubs/session";
@@ -48,6 +52,7 @@ import {
   type GroupSubmissionGradedDto,
 } from "@/lib/hubs/groupCollaboration";
 
+import { toast } from "react-toastify";
 
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
 import { useLoading } from "@/contexts/LoadingContext";
@@ -177,6 +182,7 @@ export default function StoryMapControlPage() {
   const [loadingQuestions, setLoadingQuestions] = useState(false);
 
   const [questionControlLoading, setQuestionControlLoading] = useState(false);
+  const [currentQuestion, setCurrentQuestion] = useState<QuestionBroadcastEvent | null>(null);
 
   const [questionBankMeta, setQuestionBankMeta] =
     useState<QuestionBankMeta | null>(null);
@@ -195,6 +201,21 @@ export default function StoryMapControlPage() {
   const [showGroupSubmissions, setShowGroupSubmissions] = useState(false);
   const [groupSubmissionsError, setGroupSubmissionsError] = useState<string | null>(null);
   const [submissionsGroupId, setSubmissionsGroupId] = useState<string | null>(null);
+
+  const [isRespOpen, setIsRespOpen] = useState(false);
+  const [respLoading, setRespLoading] = useState(false);
+  const [respError, setRespError] = useState<string | null>(null);
+  const [respItems, setRespItems] = useState<
+    Array<{
+      name: string;
+      answer: string;
+      isCorrect?: boolean;
+      pointsEarned?: number;
+      responseTimeSeconds?: number;
+      submittedAt?: string;
+    }>
+  >([]);
+
 
   const [sessionQuestionBanks, setSessionQuestionBanks] = useState<
     SessionQuestionBankInfo[]
@@ -223,6 +244,10 @@ export default function StoryMapControlPage() {
   const [draftGroupName, setDraftGroupName] = useState("");
   const [draftGroupColor, setDraftGroupColor] = useState("#22c55e"); // mặc định xanh
   const [creatingGroup, setCreatingGroup] = useState(false);
+
+  const [isExtendOpen, setIsExtendOpen] = useState(false);
+  const [extendSeconds, setExtendSeconds] = useState<string>("10");
+  const [extendError, setExtendError] = useState<string | null>(null);
 
   const [showShareModal, setShowShareModal] = useState(false);
   const shareOverlayGuardRef = useRef(false);
@@ -326,6 +351,16 @@ export default function StoryMapControlPage() {
   const { showLoading, hideLoading } = useLoading();
   const [currentQuestionIndex, setCurrentQuestionIndex] =
     useState<number | null>(null);
+  const [currentBroadcastSessionQuestionId, setCurrentBroadcastSessionQuestionId] =
+    useState<string | null>(null);
+
+  const [isRestartRun, setIsRestartRun] = useState(false);
+
+  const isLastQuestion =
+    questions.length > 0 &&
+    currentQuestionIndex != null &&
+    currentQuestionIndex >= questions.length - 1;
+
   const [currentQuestionResults, setCurrentQuestionResults] =
     useState<QuestionResultsEvent | null>(null);
 
@@ -350,9 +385,23 @@ export default function StoryMapControlPage() {
           sendMapLayerSyncViaSignalR(connection, session.sessionId, selectedLayer);
         }
       },
+
+
       onParticipantLeft: () => {
         handleLoadParticipants();
       },
+
+      onQuestionBroadcast: (event: any) => {
+        const sqid = event?.sessionQuestionId ?? event?.SessionQuestionId;
+        if (sqid) setCurrentBroadcastSessionQuestionId(String(sqid));
+
+        const qid = event?.questionId ?? event?.QuestionId;
+        if (qid && Array.isArray(questions) && questions.length > 0) {
+          const idx = questions.findIndex((q) => q.questionId === qid);
+          if (idx >= 0) setCurrentQuestionIndex(idx);
+        }
+      },
+
       onQuestionResults: (event) => {
         setCurrentQuestionResults(event);
         setShowStudentAnswers(true);
@@ -890,6 +939,7 @@ export default function StoryMapControlPage() {
   ) => {
     if (!session || changingStatus) return;
 
+    const prevStatus = session.status;
     try {
       setChangingStatus(true);
       if (action === "start") await startSession(session.sessionId);
@@ -913,6 +963,14 @@ export default function StoryMapControlPage() {
           : prev
       );
 
+      if (action === "start" && (prevStatus === "Ended" || prevStatus === "Completed")) {
+        setIsRestartRun(true);
+        setCurrentQuestionIndex(null);
+        setCurrentBroadcastSessionQuestionId(null);
+        setCurrentQuestionResults(null);
+        setShowStudentAnswers(false);
+        setError(null);
+      }
 
       if (action === "start" && connection && segments.length > 0) {
         const segmentIndex = currentIndex >= 0 ? currentIndex : 0;
@@ -989,6 +1047,8 @@ export default function StoryMapControlPage() {
       setCurrentQuestionIndex(index);
       setCurrentQuestionResults(null);
       setShowStudentAnswers(false);
+
+      setCurrentBroadcastSessionQuestionId(null);
 
       await broadcastQuestionViaSignalR(connection, session.sessionId, {
         sessionQuestionId: question.sessionQuestionId ?? question.questionId,
@@ -1087,60 +1147,83 @@ export default function StoryMapControlPage() {
     if (!session || questionControlLoading || !connection) return;
     if (!questions.length) return;
 
+    const prevIndex = currentQuestionIndex ?? -1;
+    const nextIndex = Math.min(prevIndex + 1, questions.length - 1);
+    const nextQuestion = questions[nextIndex];
+
+    if (!nextQuestion) return;
+
     try {
       setQuestionControlLoading(true);
-
-      await activateNextQuestion(session.sessionId);
-
       setCurrentQuestionResults(null);
       setShowStudentAnswers(false);
 
-      const prevIndex = currentQuestionIndex ?? -1;
-      const nextIndex = Math.min(prevIndex + 1, questions.length - 1);
-      const nextQuestion = questions[nextIndex];
-
-      setQuestionControlLoading(false);
-
-      if (nextQuestion) {
+      if (isRestartRun) {
         await handleBroadcastQuestion(nextQuestion, nextIndex);
-      } else {
-        setCurrentQuestionIndex(nextIndex);
+        return;
       }
+
+      await activateNextQuestion(session.sessionId);
+
+      await handleBroadcastQuestion(nextQuestion, nextIndex);
     } catch (e: any) {
+      const msg = String(e?.message || "");
+
+
+      if (msg.includes("Session.NoMoreQuestions")) {
+        toast.info("Hết câu hỏi trong queue. Chuyển sang chế độ phát lại từ danh sách.");
+        setIsRestartRun(true);
+        await handleBroadcastQuestion(nextQuestion, nextIndex);
+        return;
+      }
+
       console.error("Next question failed:", e);
-      setError(e?.message || "Không chuyển được sang câu tiếp theo");
+      toast.error(e?.message || "Không chuyển được sang câu tiếp theo");
     } finally {
       setQuestionControlLoading(false);
     }
   };
 
-
   const handleSkipQuestion = async () => {
     if (!session || questionControlLoading || !connection) return;
     if (!questions.length) return;
 
+    const prevIndex = currentQuestionIndex ?? -1;
+    const isLast = prevIndex >= questions.length - 1;
+
+    if (isLast) {
+      toast.info("Đang ở câu cuối, không thể bỏ qua thêm.");
+      return;
+    }
+
+    const nextIndex = Math.min(prevIndex + 1, questions.length - 1);
+    const nextQuestion = questions[nextIndex];
+
+    if (!nextQuestion) return;
+
     try {
       setQuestionControlLoading(true);
-
-      await skipCurrentQuestion(session.sessionId);
-
       setCurrentQuestionResults(null);
       setShowStudentAnswers(false);
 
-      const prevIndex = currentQuestionIndex ?? -1;
-      const nextIndex = Math.min(prevIndex + 1, questions.length - 1);
-      const nextQuestion = questions[nextIndex];
-
-      setQuestionControlLoading(false);
-
-      if (nextQuestion) {
-        await handleBroadcastQuestion(nextQuestion, nextIndex);
-      } else {
-        setCurrentQuestionIndex(nextIndex);
+      if (!isRestartRun) {
+        await skipCurrentQuestion(session.sessionId);
       }
+
+      await handleBroadcastQuestion(nextQuestion, nextIndex);
     } catch (e: any) {
+      const msg = String(e?.message || "");
+
+      if (msg.includes("Session.NoMoreQuestions")) {
+        toast.info("Hết câu hỏi trong queue. Chuyển sang chế độ phát theo danh sách.");
+        setIsRestartRun(true);
+        await handleBroadcastQuestion(nextQuestion, nextIndex);
+        return;
+      }
+
       console.error("Skip question failed:", e);
-      setError(e?.message || "Không bỏ qua được câu hỏi");
+      toast.error(e?.message || "Không bỏ qua được câu hỏi");
+
     } finally {
       setQuestionControlLoading(false);
     }
@@ -1149,23 +1232,104 @@ export default function StoryMapControlPage() {
   const handleExtendQuestion = async () => {
     if (!session || questionControlLoading) return;
 
-    const sessionQuestionId = window.prompt(
-      "Nhập sessionQuestionId của câu hỏi đang chạy:"
-    );
-    if (!sessionQuestionId) return;
+    const sessionQuestionId = currentBroadcastSessionQuestionId;
+    if (!sessionQuestionId) {
+      toast.error('Chưa có câu hỏi nào đang phát. Hãy bấm "Câu tiếp" để broadcast câu hỏi trước.');
+      return;
+    }
 
-    const secondsStr = window.prompt("Gia hạn thêm bao nhiêu giây?", "10");
-    const seconds = secondsStr ? parseInt(secondsStr, 10) : NaN;
-    if (!seconds || Number.isNaN(seconds) || seconds <= 0) return;
+    setExtendError(null);
+    setExtendSeconds("10");
+    setIsExtendOpen(true);
+  };
+
+  const closeExtendModal = () => {
+    setIsExtendOpen(false);
+    setExtendError(null);
+  };
+
+  const submitExtendTime = async () => {
+    if (!session || questionControlLoading) return;
+
+    const sessionQuestionId = currentBroadcastSessionQuestionId;
+    if (!sessionQuestionId) {
+      setExtendError("Chưa có câu hỏi nào đang broadcast.");
+      return;
+    }
+
+    const seconds = Number(extendSeconds);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      setExtendError("Số giây không hợp lệ. Vui lòng nhập số > 0.");
+      return;
+    }
 
     try {
+      setExtendError(null);
       setQuestionControlLoading(true);
       await extendQuestionTime(sessionQuestionId, seconds);
+      try {
+        setExtendError(null);
+        setQuestionControlLoading(true);
+
+        await extendQuestionTime(sessionQuestionId, seconds);
+
+        toast.success(`Đã cộng thêm ${seconds}s cho câu hỏi đang phát`);
+        setIsExtendOpen(false);
+      } catch (e: any) {
+        setExtendError(e?.message || "Không gia hạn được thời gian cho câu hỏi");
+        toast.error(e?.message || "❌ Cộng thời gian thất bại");
+      } finally {
+        setQuestionControlLoading(false);
+      }
+
+      setIsExtendOpen(false);
     } catch (e: any) {
-      console.error("Extend question failed:", e);
-      setError(e?.message || "Không gia hạn được thời gian cho câu hỏi");
+      setExtendError(e?.message || "Không gia hạn được thời gian cho câu hỏi");
     } finally {
       setQuestionControlLoading(false);
+    }
+  };
+
+  const loadStudentResponses = async () => {
+    const sessionQuestionId = currentBroadcastSessionQuestionId;
+    if (!sessionQuestionId) {
+      toast.error('Chưa có câu hỏi đang phát. Hãy bấm "Câu tiếp" trước.');
+      return;
+    }
+
+    try {
+      setRespLoading(true);
+      setRespError(null);
+
+      const data = await getSessionQuestionResponses(sessionQuestionId);
+
+      const mapped = (data.answers || []).map((a) => {
+        const answer =
+          a.optionText ??
+          a.responseText ??
+          (a.responseLatitude != null && a.responseLongitude != null
+            ? `${a.responseLatitude}, ${a.responseLongitude}`
+            : "(không có câu trả lời)");
+
+        return {
+          name: a.displayName || a.participantId,
+          answer,
+          isCorrect: Boolean(a.isCorrect),
+          pointsEarned: typeof a.pointsEarned === "number" ? a.pointsEarned : undefined,
+          responseTimeSeconds:
+            typeof a.responseTimeSeconds === "number" ? a.responseTimeSeconds : undefined,
+          submittedAt: a.submittedAt,
+        };
+
+      });
+
+      setRespItems(mapped);
+    } catch (e: any) {
+      const msg = e?.message || "Không tải được câu trả lời";
+      setRespError(msg);
+      toast.error(msg);
+    } finally {
+      setRespLoading(false);
     }
   };
 
@@ -1516,19 +1680,96 @@ export default function StoryMapControlPage() {
                         </p>
                       )}
 
-                      {!loadingLeaderboard &&
-                        leaderboard.length > 0 &&
-                        leaderboard.map((p, idx) => (
-                          <div
-                            key={p.participantId ?? idx}
-                            className="flex items-center justify-between text-[11px] text-zinc-200"
-                          >
-                            <span>
-                              #{p.rank ?? idx + 1} {p.displayName}
-                            </span>
-                            <span className="font-semibold">{p.score}</span>
-                          </div>
-                        ))}
+                      {!loadingLeaderboard && leaderboard.length > 0 && (
+                        <div className="space-y-1">
+                          {leaderboard.map((p, idx) => {
+                            const place = Number(p.rank ?? idx + 1);
+
+                            const isTop1 = place === 1;
+                            const isTop2 = place === 2;
+                            const isTop3 = place === 3;
+
+                            const rowCls =
+                              "flex items-center justify-between gap-3 rounded-lg border px-2.5 py-2 text-[11px] " +
+                              (isTop1
+                                ? "border-amber-400/70 bg-gradient-to-r from-amber-500/25 via-amber-500/10 to-transparent"
+                                : isTop2
+                                  ? "border-zinc-300/30 bg-gradient-to-r from-zinc-200/10 via-zinc-200/5 to-transparent"
+                                  : isTop3
+                                    ? "border-orange-400/60 bg-gradient-to-r from-orange-500/20 via-orange-500/10 to-transparent"
+                                    : "border-zinc-800 bg-zinc-950/30");
+
+                            const badgeCls =
+                              "inline-flex h-6 min-w-6 items-center justify-center rounded-full px-2 text-[10px] font-bold border " +
+                              (isTop1
+                                ? "border-amber-400/70 bg-amber-500/15 text-amber-200"
+                                : isTop2
+                                  ? "border-zinc-200/30 bg-zinc-200/10 text-zinc-100"
+                                  : isTop3
+                                    ? "border-orange-400/60 bg-orange-500/15 text-orange-200"
+                                    : "border-zinc-700 bg-zinc-900 text-zinc-300");
+
+                            return (
+                              <div key={p.participantId ?? idx} className={rowCls}>
+                                <div className="min-w-0 flex items-center gap-2">
+                                  <span className={badgeCls}>#{place}</span>
+
+                                  <div className="min-w-0">
+                                    <p
+                                      className={
+                                        "truncate font-semibold " +
+                                        (isTop1
+                                          ? "text-amber-200"
+                                          : isTop2
+                                            ? "text-zinc-100"
+                                            : isTop3
+                                              ? "text-orange-200"
+                                              : "text-zinc-200")
+                                      }
+                                    >
+                                      {p.displayName}
+                                    </p>
+
+                                    {(isTop1 || isTop2 || isTop3) && (
+                                      <p
+                                        className={
+                                          "mt-0.5 text-[10px] " +
+                                          (isTop1
+                                            ? "text-amber-300/90"
+                                            : isTop2
+                                              ? "text-zinc-300"
+                                              : "text-orange-300/90")
+                                        }
+                                      >
+                                        {isTop1 ? "Top 1" : isTop2 ? "Top 2" : "Top 3"}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="shrink-0 text-right">
+                                  <p
+                                    className={
+                                      "text-[12px] font-extrabold " +
+                                      (isTop1
+                                        ? "text-amber-200"
+                                        : isTop2
+                                          ? "text-zinc-100"
+                                          : isTop3
+                                            ? "text-orange-200"
+                                            : "text-zinc-200")
+                                    }
+                                  >
+                                    {p.score}
+                                  </p>
+                                  <p className="text-[10px] text-zinc-500">điểm</p>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
                     </div>
                   )}
 
@@ -1839,6 +2080,7 @@ export default function StoryMapControlPage() {
                   )}
                 </div>
 
+
                 {/* NÚT ĐIỀU KHIỂN CÂU HỎI */}
                 {session && (
                   <div className="border-t border-zinc-800 pt-2">
@@ -1852,8 +2094,10 @@ export default function StoryMapControlPage() {
                         disabled={
                           !session ||
                           questionControlLoading ||
-                          session.status !== "Running"
+                          session.status !== "Running" ||
+                          isLastQuestion
                         }
+
                         className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-sky-400/70 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Câu tiếp
@@ -1864,7 +2108,8 @@ export default function StoryMapControlPage() {
                         disabled={
                           !session ||
                           questionControlLoading ||
-                          session.status !== "Running"
+                          session.status !== "Running" ||
+                          isLastQuestion
                         }
                         className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-amber-400/70 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
@@ -1881,6 +2126,17 @@ export default function StoryMapControlPage() {
                         className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-emerald-500/70 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         + thời gian
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsRespOpen(true);
+                          loadStudentResponses();
+                        }}
+                        disabled={!session || questionControlLoading || session.status !== "Running"}
+                        className="inline-flex justify-center rounded-lg px-2 py-1.5 text-[11px] font-medium border border-zinc-700 bg-zinc-950/60 text-zinc-200 hover:bg-zinc-900/70 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Các câu trả lời
                       </button>
                     </div>
                   </div>
@@ -2429,6 +2685,162 @@ export default function StoryMapControlPage() {
           </div>,
           document.body
         )}
+
+      {isExtendOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-700 bg-zinc-900/95 p-5 shadow-2xl ring-1 ring-white/10">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] font-semibold text-zinc-200">Gia hạn thời gian</p>
+              <button
+                type="button"
+                onClick={closeExtendModal}
+                className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-[12px] text-zinc-200 hover:bg-zinc-800"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className="block text-[12px] text-zinc-400 mb-1">
+                  Nhập số giây muốn cộng thêm
+                </label>
+
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  step={1}
+                  value={extendSeconds}
+                  onChange={(e) => setExtendSeconds(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/20"
+                  placeholder="Ví dụ: 10"
+                />
+
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {[5, 10, 20, 30].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setExtendSeconds(String(s))}
+                      className="rounded-lg border border-zinc-700 bg-zinc-800/50 px-2 py-1 text-[11px] text-zinc-100 hover:bg-zinc-800"
+                    >
+                      +{s}s
+                    </button>
+                  ))}
+                </div>
+
+                {extendError && (
+                  <p className="mt-2 text-[12px] text-red-300">{extendError}</p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={closeExtendModal}
+                  className="rounded-lg border border-zinc-800 bg-zinc-900/40 px-3 py-2 text-xs text-zinc-200 hover:bg-zinc-900"
+                >
+                  Hủy
+                </button>
+
+                <button
+                  type="button"
+                  onClick={submitExtendTime}
+                  disabled={questionControlLoading}
+                  className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-500 disabled:bg-zinc-700 disabled:text-zinc-400 disabled:cursor-not-allowed"
+                >
+                  {questionControlLoading ? "Đang cộng..." : "Cộng thời gian"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isRespOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 px-3">
+          <div className="w-full max-w-2xl rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <p className="text-[13px] font-semibold text-zinc-200">Câu trả lời học sinh</p>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={loadStudentResponses}
+                  disabled={respLoading}
+                  className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1 text-[12px] text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  {respLoading ? "Đang tải..." : "Tải lại"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsRespOpen(false)}
+                  className="rounded-lg border border-zinc-800 bg-zinc-900 px-2 py-1 text-[12px] text-zinc-200 hover:bg-zinc-800"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            {respError && <p className="mt-2 text-[12px] text-rose-300">{respError}</p>}
+
+            <div className="mt-3 max-h-[60vh] overflow-auto rounded-xl border border-zinc-800">
+              {respItems.length === 0 && !respLoading ? (
+                <p className="p-3 text-[12px] text-zinc-400">Chưa có câu trả lời.</p>
+              ) : (
+                <ul className="divide-y divide-zinc-800">
+                  {respItems.map((it, idx) => (
+                    <li key={idx} className="p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="text-sm font-semibold text-zinc-100">{it.name}</p>
+
+                        {typeof it.isCorrect === "boolean" && (
+                          <span
+                            className={[
+                              "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold border",
+                              it.isCorrect
+                                ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                                : "border-rose-500/60 bg-rose-500/10 text-rose-200",
+                            ].join(" ")}
+                          >
+                            {it.isCorrect ? "Đúng" : "Sai"}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-zinc-400">
+                        {typeof it.pointsEarned === "number" && (
+                          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5">
+                            {it.pointsEarned} điểm
+                          </span>
+                        )}
+                        {typeof it.responseTimeSeconds === "number" && (
+                          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5">
+                            {it.responseTimeSeconds}s
+                          </span>
+                        )}
+                        {it.submittedAt && (
+                          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5">
+                            {new Date(it.submittedAt).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="mt-2 text-[13px] text-zinc-300 whitespace-pre-wrap">
+                        {it.answer}
+                      </p>
+                    </li>
+
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isGradeOpen && gradeTarget && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
           <div className="w-full max-w-xl rounded-2xl border border-zinc-700 bg-zinc-900/95 p-5 shadow-2xl ring-1 ring-white/10 max-h-[85vh] overflow-y-auto">

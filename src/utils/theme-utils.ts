@@ -12,12 +12,13 @@ export function getThemeClasses(isDark: boolean) {
     select: isDark
       ? "border-zinc-800 bg-zinc-800/96 text-zinc-100 focus:border-zinc-700 focus:ring-zinc-700"
       : "border-gray-300 bg-white text-gray-900 focus:border-gray-400 focus:ring-gray-400",
-    tableBorder: isDark ? "border-zinc-800" : "border-gray-200",
+    tableBorder: isDark ? "border-zinc-800" : "border-emerald-200",
     tableHeader: isDark
       ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
-      : "border-gray-200 bg-gray-50 text-gray-600",
-    tableCell: isDark ? "border-zinc-800" : "border-gray-200",
-    textMuted: isDark ? "text-zinc-400" : "text-gray-900",
+      : "border-emerald-200 bg-emerald-50 text-emerald-800",
+    tableCell: isDark ? "border-zinc-800" : "border-emerald-100",
+    text: isDark ? "text-zinc-200" : "text-black",
+    textMuted: isDark ? "text-zinc-400" : "text-black",
     button: isDark
       ? "border-zinc-800 bg-zinc-800/90 text-zinc-200 hover:bg-zinc-700"
       : "border-gray-300 bg-white text-gray-900 hover:bg-gray-50",

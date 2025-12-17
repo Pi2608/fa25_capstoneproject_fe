@@ -12,7 +12,7 @@ import { toast } from "react-toastify";
 import {
   createSession,
   getMyQuestionBanks,
-  getPublicQuestionBanks,
+  getMyQuestionBanksByOrg,
   type QuestionBankDto,
 } from "@/lib/api-ques";
 import { getOrganizationById } from "@/lib/api-organizations";
@@ -300,13 +300,12 @@ const fetchMapsForWorkspace = useCallback(
         setQuestionBanksLoading(true);
         setQuestionBanksError(null);
 
-        const [myBanks, publicBanks] = await Promise.all([
-          getMyQuestionBanks(),
-          getPublicQuestionBanks(),
-        ]);
+          const myBanks = orgId
+          ? await getMyQuestionBanksByOrg(orgId)
+          : await getMyQuestionBanks();
 
         const bankMap = new Map<string, QuestionBankDto>();
-        [...myBanks, ...publicBanks].forEach((bank) => {
+        [...myBanks].forEach((bank) => {
           if (!bankMap.has(bank.questionBankId)) {
             bankMap.set(bank.questionBankId, bank);
           }

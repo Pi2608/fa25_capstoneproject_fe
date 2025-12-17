@@ -294,17 +294,69 @@ export function cancelPayment(body: CancelPaymentRequest) {
   );
 }
 
+export interface RetryPaymentRequest {
+  transactionId: string;
+}
+
+export interface RetryPaymentResponse {
+  transactionId: string;
+  paymentUrl: string;
+  status: string;
+  message?: string;
+}
+
+export function retryPayment(body: RetryPaymentRequest) {
+  return postJson<RetryPaymentRequest, RetryPaymentResponse>(
+    "/payment/retry",
+    body
+  );
+}
+
 export interface PaymentHistoryItem {
   transactionId: string;
   amount: number;
   status: string;
   purpose: string;
+  description?: string; // Human-readable description
   transactionDate: string;
   createdAt: string;
   transactionReference?: string;
+  canRetry?: boolean;
   paymentGateway?: {
     gatewayId: string;
     name: string;
+  };
+  plannedPlan?: {
+    planId: number;
+    planName: string;
+    description?: string;
+    priceMonthly?: number;
+    durationMonths?: number;
+    maxLocationsPerOrg?: number;
+    maxMapsPerMonth?: number;
+    mapQuota?: number;
+    exportQuota?: number;
+    maxUsersPerOrg?: number;
+    maxCustomLayers?: number;
+    monthlyTokens?: number;
+    prioritySupport?: boolean;
+    features?: string; // JSON string
+    maxInteractionsPerMap?: number;
+    maxMediaFileSizeBytes?: number;
+    maxVideoFileSizeBytes?: number;
+    maxAudioFileSizeBytes?: number;
+    maxConnectionsPerMap?: number;
+    allow3DEffects?: boolean;
+    allowVideoContent?: boolean;
+    allowAudioContent?: boolean;
+    allowAnimatedConnections?: boolean;
+    isActive?: boolean;
+    createdAt?: string;
+    updatedAt?: string | null;
+  };
+  pendingPayment?: {
+    paymentUrl?: string;
+    lastUpdatedAt?: string;
   };
   membership?: {
     membershipId: string;
@@ -337,4 +389,49 @@ export interface PaymentHistoryResponse {
 
 export function getPaymentHistory(page = 1, pageSize = 20) {
   return getJson<PaymentHistoryResponse>(`/payment/history?page=${page}&pageSize=${pageSize}`);
+}
+
+// Pending payment types
+export interface PendingTransactionDto {
+  transactionId: string;
+  planId: number;
+  planName: string;
+  amount: number;
+  currency: string;
+  createdAt: string;
+  paymentUrl?: string;
+  expiresAt?: string;
+  expiresInMinutes: number;
+  description: string;
+}
+
+export interface PendingPaymentCheckResponse {
+  hasPending: boolean;
+  transaction?: PendingTransactionDto;
+}
+
+export interface CancelPaymentRequest {
+  reason: string;
+  notes?: string;
+}
+
+export interface CancelPaymentResponse {
+  success: boolean;
+  transactionId: string;
+  newStatus: string;
+  cancellationReason: string;
+  message: string;
+}
+
+// Check for pending payment for organization
+export function checkPendingPaymentForOrg(orgId: string) {
+  return getJson<PendingPaymentCheckResponse>(`/payment/pending-for-org/${orgId}`);
+}
+
+// Cancel payment with reason
+export function cancelPaymentWithReason(transactionId: string, request: CancelPaymentRequest) {
+  return postJson<CancelPaymentRequest, CancelPaymentResponse>(
+    `/payment/cancel/${transactionId}`,
+    request
+  );
 }

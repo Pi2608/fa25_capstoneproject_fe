@@ -138,9 +138,6 @@ export default function OrgSessionsPage() {
         const ownerStatus = currentOrg?.myRole === "Owner" || currentOrg?.myRole === "Admin";
         setIsOwner(ownerStatus);
 
-        if (ownerStatus) {
-          await loadAllSessions();
-        }
       } catch (e) {
         console.error("Failed to check owner status", e);
         if (!alive) return;
