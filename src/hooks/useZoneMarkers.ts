@@ -60,6 +60,7 @@ export function useZoneMarkers({
                         let geoJsonData;
                         try {
                             geoJsonData = JSON.parse(zone.geometry);
+                            console.log(geoJsonData)
                         } catch (parseError) {
                             console.error(`Failed to parse zone geometry for ${zone.name}:`, parseError);
                             continue;
@@ -74,6 +75,17 @@ export function useZoneMarkers({
                                 fillColor: mapZone.fillColor || "#3388ff",
                                 fillOpacity: mapZone.fillZone ? (mapZone.fillOpacity || 0.2) : 0,
                             }),
+                            // Handle Point geometry with circleMarker
+                            pointToLayer: (_feature, latlng) => {
+                                return L.circleMarker(latlng, {
+                                    radius: 8,
+                                    fillColor: mapZone.fillColor || "#3388ff",
+                                    fillOpacity: mapZone.fillZone ? (mapZone.fillOpacity || 1) : 1,
+                                    color: mapZone.boundaryColor || "#3388ff",
+                                    weight: mapZone.boundaryWidth || 2,
+                                    opacity: mapZone.highlightBoundary ? 1 : 0.8,
+                                });
+                            },
                         });
 
                         // Store zone ID for cleanup

@@ -6,6 +6,7 @@ import { LocationForm } from "./forms/LocationForm";
 import { ZoneForm } from "./forms/ZoneForm";
 import { LayerForm } from "./forms/LayerForm";
 import { RouteAnimationForm } from "./forms/RouteAnimationForm";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { cn } from "@/lib/utils";
 import type { BaseKey } from "@/types";
 import type { FeatureData } from "@/utils/mapUtils";
@@ -1774,11 +1775,26 @@ function SegmentsView({
   mapId?: string;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
+  const [deleteSegmentModal, setDeleteSegmentModal] = useState<{ open: boolean; segmentId: string | null; segmentName: string | null }>({
+    open: false,
+    segmentId: null,
+    segmentName: null,
+  });
 
   const filteredSegments = segments.filter(s =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     s.description?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleDeleteSegment = (segmentId: string, segmentName: string) => {
+    setDeleteSegmentModal({ open: true, segmentId, segmentName });
+  };
+
+  const confirmDeleteSegment = () => {
+    if (deleteSegmentModal.segmentId && onDeleteSegment) {
+      onDeleteSegment(deleteSegmentModal.segmentId);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -1837,9 +1853,7 @@ function SegmentsView({
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              if (window.confirm(`Delete segment "${segment.name}"?`)) {
-                                onDeleteSegment(segment.segmentId);
-                              }
+                              handleDeleteSegment(segment.segmentId, segment.name);
                             }}
                             className="p-1 hover:bg-zinc-700 rounded"
                             title="Delete segment"
@@ -1966,6 +1980,18 @@ function SegmentsView({
           <span>New Segment</span>
         </button>
       </div>
+
+      {/* Delete Segment Confirmation Modal */}
+      <ConfirmModal
+        open={deleteSegmentModal.open}
+        onOpenChange={(open) => setDeleteSegmentModal({ open, segmentId: null, segmentName: null })}
+        title="Delete Segment"
+        description={`Are you sure you want to delete segment "${deleteSegmentModal.segmentName}"? This action will remove all associated locations, zones, layers, and route animations. This cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteSegment}
+        variant="danger"
+      />
     </div>
   );
 }
@@ -1990,6 +2016,22 @@ export function SegmentItemsList({
 }) {
   const [routeAnimations, setRouteAnimations] = useState<RouteAnimation[]>([]);
   const [isLoadingRoutes, setIsLoadingRoutes] = useState(false);
+  const [deleteZoneModal, setDeleteZoneModal] = useState<{ open: boolean; segmentZoneId: string | null }>({
+    open: false,
+    segmentZoneId: null,
+  });
+  const [deleteLocationModal, setDeleteLocationModal] = useState<{ open: boolean; locationId: string | null }>({
+    open: false,
+    locationId: null,
+  });
+  const [deleteLayerModal, setDeleteLayerModal] = useState<{ open: boolean; layerId: string | null }>({
+    open: false,
+    layerId: null,
+  });
+  const [deleteRouteModal, setDeleteRouteModal] = useState<{ open: boolean; routeAnimationId: string | null }>({
+    open: false,
+    routeAnimationId: null,
+  });
 
   // Load route animations on mount or when segmentId changes
   const loadRouteAnimations = useCallback(() => {
@@ -2029,9 +2071,13 @@ export function SegmentItemsList({
   }, [segmentId, loadRouteAnimations]);
 
   const handleDeleteZone = async (segmentZoneId: string) => {
-    if (!window.confirm("Remove this zone from segment?")) return;
+    setDeleteZoneModal({ open: true, segmentZoneId });
+  };
+
+  const confirmDeleteZone = async () => {
+    if (!deleteZoneModal.segmentZoneId) return;
     try {
-      await deleteSegmentZone(mapId, segmentId, segmentZoneId);
+      await deleteSegmentZone(mapId, segmentId, deleteZoneModal.segmentZoneId);
       // Dispatch event to refresh segments
       window.dispatchEvent(new CustomEvent("zoneDeleted", {
         detail: { segmentId }
@@ -2043,9 +2089,13 @@ export function SegmentItemsList({
   };
 
   const handleDeleteLocation = async (locationId: string) => {
-    if (!window.confirm("Remove this location from segment?")) return;
+    setDeleteLocationModal({ open: true, locationId });
+  };
+
+  const confirmDeleteLocation = async () => {
+    if (!deleteLocationModal.locationId) return;
     try {
-      await deleteLocation(mapId, segmentId, locationId);
+      await deleteLocation(mapId, segmentId, deleteLocationModal.locationId);
       // Dispatch event to refresh segments
       window.dispatchEvent(new CustomEvent("locationDeleted", {
         detail: { segmentId }
@@ -2057,9 +2107,13 @@ export function SegmentItemsList({
   };
 
   const handleDeleteLayer = async (layerId: string) => {
-    if (!window.confirm("Remove this layer from segment?")) return;
+    setDeleteLayerModal({ open: true, layerId });
+  };
+
+  const confirmDeleteLayer = async () => {
+    if (!deleteLayerModal.layerId) return;
     try {
-      await detachLayerFromSegment(mapId, segmentId, layerId);
+      await detachLayerFromSegment(mapId, segmentId, deleteLayerModal.layerId);
       // Dispatch event to refresh segments
       window.dispatchEvent(new CustomEvent("layerDeleted", {
         detail: { segmentId }
@@ -2071,10 +2125,14 @@ export function SegmentItemsList({
   };
 
   const handleDeleteRoute = async (routeAnimationId: string) => {
-    if (!window.confirm("Delete this route animation?")) return;
+    setDeleteRouteModal({ open: true, routeAnimationId });
+  };
+
+  const confirmDeleteRoute = async () => {
+    if (!deleteRouteModal.routeAnimationId) return;
     try {
-      await deleteRouteAnimation(mapId, segmentId, routeAnimationId);
-      setRouteAnimations(prev => prev.filter(r => r.routeAnimationId !== routeAnimationId));
+      await deleteRouteAnimation(mapId, segmentId, deleteRouteModal.routeAnimationId);
+      setRouteAnimations(prev => prev.filter(r => r.routeAnimationId !== deleteRouteModal.routeAnimationId));
     } catch (e) {
       console.error("Failed to delete route:", e);
       alert("Failed to delete route animation");
@@ -2279,6 +2337,54 @@ export function SegmentItemsList({
           <p className="text-xs text-zinc-500">No items attached</p>
         </div>
       )}
+
+      {/* Delete Zone Confirmation Modal */}
+      <ConfirmModal
+        open={deleteZoneModal.open}
+        onOpenChange={(open) => setDeleteZoneModal({ open, segmentZoneId: null })}
+        title="Remove Zone from Segment"
+        description="Are you sure you want to remove this zone from the segment? This action cannot be undone."
+        confirmText="Remove"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteZone}
+        variant="danger"
+      />
+
+      {/* Delete Location Confirmation Modal */}
+      <ConfirmModal
+        open={deleteLocationModal.open}
+        onOpenChange={(open) => setDeleteLocationModal({ open, locationId: null })}
+        title="Remove Location from Segment"
+        description="Are you sure you want to remove this location from the segment? This action cannot be undone."
+        confirmText="Remove"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteLocation}
+        variant="danger"
+      />
+
+      {/* Delete Layer Confirmation Modal */}
+      <ConfirmModal
+        open={deleteLayerModal.open}
+        onOpenChange={(open) => setDeleteLayerModal({ open, layerId: null })}
+        title="Remove Layer from Segment"
+        description="Are you sure you want to remove this layer from the segment? This action cannot be undone."
+        confirmText="Remove"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteLayer}
+        variant="danger"
+      />
+
+      {/* Delete Route Animation Confirmation Modal */}
+      <ConfirmModal
+        open={deleteRouteModal.open}
+        onOpenChange={(open) => setDeleteRouteModal({ open, routeAnimationId: null })}
+        title="Delete Route Animation"
+        description="Are you sure you want to delete this route animation? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteRoute}
+        variant="danger"
+      />
     </div>
   );
 }
@@ -2624,6 +2730,21 @@ function TransitionsView({
   onEditTransition: (transition: TimelineTransition) => void;
   onDeleteTransition?: (transitionId: string) => void;
 }) {
+  const [deleteTransitionModal, setDeleteTransitionModal] = useState<{ open: boolean; transitionId: string | null }>({
+    open: false,
+    transitionId: null,
+  });
+
+  const handleDeleteTransition = (transitionId: string) => {
+    setDeleteTransitionModal({ open: true, transitionId });
+  };
+
+  const confirmDeleteTransition = () => {
+    if (deleteTransitionModal.transitionId && onDeleteTransition) {
+      onDeleteTransition(deleteTransitionModal.transitionId);
+    }
+  };
+
   return (
     <div className="p-3 space-y-2">
       {transitions.length === 0 ? (
@@ -2667,9 +2788,7 @@ function TransitionsView({
                     {onDeleteTransition && (
                       <button
                         onClick={() => {
-                          if (window.confirm("Delete this transition?")) {
-                            onDeleteTransition(transition.timelineTransitionId);
-                          }
+                          handleDeleteTransition(transition.timelineTransitionId);
                         }}
                         className="p-1 hover:bg-zinc-700 rounded"
                         title="Delete transition"
@@ -2706,6 +2825,18 @@ function TransitionsView({
         <Icon icon="mdi:plus-circle-outline" className="w-5 h-5" />
         <span className="text-sm font-medium">Create Transition</span>
       </button>
+
+      {/* Delete Transition Confirmation Modal */}
+      <ConfirmModal
+        open={deleteTransitionModal.open}
+        onOpenChange={(open) => setDeleteTransitionModal({ open, transitionId: null })}
+        title="Delete Transition"
+        description="Are you sure you want to delete this transition? This action cannot be undone."
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={confirmDeleteTransition}
+        variant="danger"
+      />
     </div>
   );
 }
@@ -3325,6 +3456,10 @@ function MapZonesView({ mapId }: { mapId?: string }) {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteModal, setDeleteModal] = useState<{ open: boolean; zoneId: string | null }>({
+    open: false,
+    zoneId: null,
+  });
 
   const loadZones = async () => {
     if (!mapId) return;
@@ -3369,13 +3504,18 @@ function MapZonesView({ mapId }: { mapId?: string }) {
   };
 
   const handleDeleteZone = async (mapZoneId: string) => {
-    if (!mapId) return;
-    if (!confirm("Bạn có chắc muốn xóa zone này?")) return;
+    setDeleteModal({ open: true, zoneId: mapZoneId });
+  };
+
+  const confirmDeleteZone = async () => {
+    if (!mapId || !deleteModal.zoneId) return;
 
     try {
       const { deleteMapZone } = await import("@/lib/api-maps");
-      await deleteMapZone(mapId, mapZoneId);
+      await deleteMapZone(mapId, deleteModal.zoneId);
       loadZones();
+      // Dispatch event to refresh zones on map
+      window.dispatchEvent(new CustomEvent("refreshMapZones"));
     } catch (err) {
       console.error("Failed to delete map zone:", err);
     }
@@ -3469,6 +3609,18 @@ function MapZonesView({ mapId }: { mapId?: string }) {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        open={deleteModal.open}
+        onOpenChange={(open) => setDeleteModal({ open, zoneId: null })}
+        title="Xóa Zone"
+        description="Bạn có chắc chắn muốn xóa zone này khỏi bản đồ? Hành động này không thể hoàn tác."
+        confirmText="Xóa"
+        cancelText="Hủy"
+        onConfirm={confirmDeleteZone}
+        variant="danger"
+      />
     </div>
   );
 }
