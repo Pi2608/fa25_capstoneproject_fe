@@ -6,9 +6,8 @@ import { useTheme } from "next-themes";
 import { useI18n } from "@/i18n/I18nProvider";
 import { Download, Copy, CreditCard, X } from "lucide-react";
 import { validateTransaction } from "./TransactionValidation";
-import toast from "react-hot-toast";
 import { getToken } from "@/lib/api-core";
-
+import { useToast } from "@/contexts/ToastContext";
 interface TransactionDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -43,6 +42,7 @@ export function TransactionDetailModal({
   const { resolvedTheme } = useTheme();
   const { t } = useI18n();
   const isDark = resolvedTheme === "dark";
+  const { showToast } = useToast();
 
   // Validation
   const validation = validateTransaction(transaction, currentOrgPlan);
@@ -97,20 +97,20 @@ export function TransactionDetailModal({
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      toast.success("Receipt downloaded successfully");
+      showToast("success", t("billing.toast_receipt_downloaded"));
     } catch (error) {
       console.error("Failed to download receipt:", error);
-      toast.error("Failed to download receipt. Please try again.");
+      showToast("error", t("billing.toast_receipt_failed"));
     }
   };
 
   const handleCopyTransactionId = async () => {
     try {
       await navigator.clipboard.writeText(transaction.transactionId);
-      toast.success("Transaction ID copied to clipboard");
+      showToast("success", t("billing.toast_id_copied"));
     } catch (error) {
       console.error("Failed to copy:", error);
-      toast.error("Please manually select and copy the ID");
+      showToast("error", t("billing.toast_copy_failed"));
       // Fallback: select the text
       const elem = document.getElementById("transaction-id-text");
       if (elem) {
@@ -134,7 +134,7 @@ export function TransactionDetailModal({
       window.location.href = response.paymentUrl;
     } catch (error) {
       console.error("Failed to continue payment:", error);
-      toast.error("Failed to process payment. Please try again or contact support.");
+      showToast("error", t("billing.toast_payment_failed"));
     }
   };
 
@@ -167,14 +167,14 @@ export function TransactionDetailModal({
               "text-xl font-semibold",
               isDark ? "text-zinc-50" : "text-zinc-900"
             )}>
-              Transaction Details
+              {t("billing.modal_title")}
             </h2>
             <div className={cn(
               "text-sm mt-1",
               isDark ? "text-zinc-400" : "text-zinc-600"
             )}>
-              Organization: {transaction.membership?.organization?.orgName || "N/A"} |{" "}
-              Current: {currentOrgPlan.planName} → Target: {transaction.plannedPlan?.planName || "N/A"}
+              {t("billing.modal_org_label")} {transaction.membership?.organization?.orgName || "N/A"} |{" "}
+              {t("billing.modal_current_label")} {currentOrgPlan.planName} → {t("billing.modal_target_label")} {transaction.plannedPlan?.planName || "N/A"}
             </div>
           </div>
           <button
@@ -196,7 +196,7 @@ export function TransactionDetailModal({
               "text-lg font-semibold mb-3",
               isDark ? "text-zinc-50" : "text-zinc-900"
             )}>
-              Transaction Information
+              {t("billing.modal_transaction_info")}
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
@@ -204,7 +204,7 @@ export function TransactionDetailModal({
                   "text-sm font-medium",
                   isDark ? "text-zinc-400" : "text-zinc-600"
                 )}>
-                  Transaction ID
+                  {t("billing.modal_transaction_id")}
                 </div>
                 <div
                   id="transaction-id-text"
@@ -221,7 +221,7 @@ export function TransactionDetailModal({
                   "text-sm font-medium",
                   isDark ? "text-zinc-400" : "text-zinc-600"
                 )}>
-                  Date
+                  {t("billing.modal_date")}
                 </div>
                 <div className={cn(
                   "mt-1",
@@ -235,7 +235,7 @@ export function TransactionDetailModal({
                   "text-sm font-medium",
                   isDark ? "text-zinc-400" : "text-zinc-600"
                 )}>
-                  Status
+                  {t("billing.modal_status")}
                 </div>
                 <div className="mt-1">
                   <StatusBadge status={transaction.status} />
@@ -246,7 +246,7 @@ export function TransactionDetailModal({
                   "text-sm font-medium",
                   isDark ? "text-zinc-400" : "text-zinc-600"
                 )}>
-                  Amount
+                  {t("billing.modal_amount")}
                 </div>
                 <div className={cn(
                   "mt-1 text-lg font-semibold",
@@ -261,7 +261,7 @@ export function TransactionDetailModal({
                     "text-sm font-medium",
                     isDark ? "text-zinc-400" : "text-zinc-600"
                   )}>
-                    Payment Gateway
+                    {t("billing.modal_payment_gateway")}
                   </div>
                   <div className={cn(
                     "mt-1",
@@ -277,7 +277,7 @@ export function TransactionDetailModal({
                     "text-sm font-medium",
                     isDark ? "text-zinc-400" : "text-zinc-600"
                   )}>
-                    Payment Reference
+                    {t("billing.modal_payment_reference")}
                   </div>
                   <div className={cn(
                     "mt-1 font-mono text-sm",
@@ -297,7 +297,7 @@ export function TransactionDetailModal({
                 "text-lg font-semibold mb-3",
                 isDark ? "text-zinc-50" : "text-zinc-900"
               )}>
-                Plan Details: {transaction.plannedPlan.planName}
+                {t("billing.modal_plan_details")}: {transaction.plannedPlan.planName}
               </h3>
 
               {transaction.plannedPlan.description && (
@@ -315,19 +315,19 @@ export function TransactionDetailModal({
                   "text-sm font-semibold mb-2",
                   isDark ? "text-zinc-300" : "text-zinc-700"
                 )}>
-                  Pricing & Duration
+                  {t("billing.modal_pricing_duration")}
                 </h4>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <span className={cn("text-sm", isDark ? "text-zinc-400" : "text-zinc-600")}>Monthly Price:</span>
+                    <span className={cn("text-sm", isDark ? "text-zinc-400" : "text-zinc-600")}>{t("billing.modal_monthly_price")}</span>
                     <span className={cn("ml-2 font-medium", isDark ? "text-zinc-200" : "text-zinc-900")}>
                       {formatCurrency(transaction.plannedPlan.priceMonthly || 0)}
                     </span>
                   </div>
                   <div>
-                    <span className={cn("text-sm", isDark ? "text-zinc-400" : "text-zinc-600")}>Duration:</span>
+                    <span className={cn("text-sm", isDark ? "text-zinc-400" : "text-zinc-600")}>{t("billing.modal_duration")}</span>
                     <span className={cn("ml-2 font-medium", isDark ? "text-zinc-200" : "text-zinc-900")}>
-                      {transaction.plannedPlan.durationMonths} month{transaction.plannedPlan.durationMonths !== 1 ? 's' : ''}
+                      {transaction.plannedPlan.durationMonths} {transaction.plannedPlan.durationMonths !== 1 ? t("billing.modal_months") : t("billing.modal_month")}
                     </span>
                   </div>
                 </div>
@@ -339,16 +339,16 @@ export function TransactionDetailModal({
                   "text-sm font-semibold mb-2",
                   isDark ? "text-zinc-300" : "text-zinc-700"
                 )}>
-                  Quotas
+                  {t("billing.modal_quotas")}
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                  <QuotaItem label="Maps" value={transaction.plannedPlan.mapQuota} isDark={isDark} />
-                  <QuotaItem label="Exports" value={transaction.plannedPlan.exportQuota} isDark={isDark} />
-                  <QuotaItem label="Users" value={transaction.plannedPlan.maxUsersPerOrg} isDark={isDark} />
-                  <QuotaItem label="Locations" value={transaction.plannedPlan.maxLocationsPerOrg} isDark={isDark} />
-                  <QuotaItem label="Maps/Month" value={transaction.plannedPlan.maxMapsPerMonth} isDark={isDark} />
-                  <QuotaItem label="Custom Layers" value={transaction.plannedPlan.maxCustomLayers} isDark={isDark} />
-                  <QuotaItem label="Monthly Tokens" value={transaction.plannedPlan.monthlyTokens} isDark={isDark} />
+                  <QuotaItem label={t("billing.modal_maps")} value={transaction.plannedPlan.mapQuota} isDark={isDark} />
+                  <QuotaItem label={t("billing.modal_exports")} value={transaction.plannedPlan.exportQuota} isDark={isDark} />
+                  <QuotaItem label={t("billing.modal_users")} value={transaction.plannedPlan.maxUsersPerOrg} isDark={isDark} />
+                  <QuotaItem label={t("billing.modal_locations")} value={transaction.plannedPlan.maxLocationsPerOrg} isDark={isDark} />
+                  <QuotaItem label={t("billing.modal_maps_per_month")} value={transaction.plannedPlan.maxMapsPerMonth} isDark={isDark} />
+                  <QuotaItem label={t("billing.modal_custom_layers")} value={transaction.plannedPlan.maxCustomLayers} isDark={isDark} />
+                  <QuotaItem label={t("billing.modal_monthly_tokens")} value={transaction.plannedPlan.monthlyTokens} isDark={isDark} />
                 </div>
               </div>
 
@@ -358,14 +358,14 @@ export function TransactionDetailModal({
                   "text-sm font-semibold mb-2",
                   isDark ? "text-zinc-300" : "text-zinc-700"
                 )}>
-                  Interactive Features
+                  {t("billing.modal_interactive_features")}
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <QuotaItem label="Interactions/Map" value={transaction.plannedPlan.maxInteractionsPerMap} isDark={isDark} />
-                  <QuotaItem label="Connections/Map" value={transaction.plannedPlan.maxConnectionsPerMap} isDark={isDark} />
-                  <QuotaItem label="Media Size" value={formatFileSize(transaction.plannedPlan.maxMediaFileSizeBytes)} isDark={isDark} isString />
-                  <QuotaItem label="Video Size" value={formatFileSize(transaction.plannedPlan.maxVideoFileSizeBytes)} isDark={isDark} isString />
-                  <QuotaItem label="Audio Size" value={formatFileSize(transaction.plannedPlan.maxAudioFileSizeBytes)} isDark={isDark} isString />
+                  <QuotaItem label={t("billing.modal_interactions_per_map")} value={transaction.plannedPlan.maxInteractionsPerMap} isDark={isDark} />
+                  <QuotaItem label={t("billing.modal_connections_per_map")} value={transaction.plannedPlan.maxConnectionsPerMap} isDark={isDark} />
+                  <QuotaItem label={t("billing.modal_media_size")} value={formatFileSize(transaction.plannedPlan.maxMediaFileSizeBytes)} isDark={isDark} isString />
+                  <QuotaItem label={t("billing.modal_video_size")} value={formatFileSize(transaction.plannedPlan.maxVideoFileSizeBytes)} isDark={isDark} isString />
+                  <QuotaItem label={t("billing.modal_audio_size")} value={formatFileSize(transaction.plannedPlan.maxAudioFileSizeBytes)} isDark={isDark} isString />
                 </div>
               </div>
 
@@ -375,14 +375,13 @@ export function TransactionDetailModal({
                   "text-sm font-semibold mb-2",
                   isDark ? "text-zinc-300" : "text-zinc-700"
                 )}>
-                  Features
+                  {t("billing.modal_features")}
                 </h4>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <FeatureItem label="3D Effects" enabled={transaction.plannedPlan.allow3DEffects} isDark={isDark} />
-                  <FeatureItem label="Video Content" enabled={transaction.plannedPlan.allowVideoContent} isDark={isDark} />
-                  <FeatureItem label="Audio Content" enabled={transaction.plannedPlan.allowAudioContent} isDark={isDark} />
-                  <FeatureItem label="Animated Connections" enabled={transaction.plannedPlan.allowAnimatedConnections} isDark={isDark} />
-                  <FeatureItem label="Priority Support" enabled={transaction.plannedPlan.prioritySupport} isDark={isDark} />
+                  <FeatureItem label={t("billing.modal_video_content")} enabled={transaction.plannedPlan.allowVideoContent} isDark={isDark} yesText={t("billing.modal_yes")} noText={t("billing.modal_no")} />
+                  <FeatureItem label={t("billing.modal_audio_content")} enabled={transaction.plannedPlan.allowAudioContent} isDark={isDark} yesText={t("billing.modal_yes")} noText={t("billing.modal_no")} />
+                  <FeatureItem label={t("billing.modal_animated_connections")} enabled={transaction.plannedPlan.allowAnimatedConnections} isDark={isDark} yesText={t("billing.modal_yes")} noText={t("billing.modal_no")} />
+                  <FeatureItem label={t("billing.modal_priority_support")} enabled={transaction.plannedPlan.prioritySupport} isDark={isDark} yesText={t("billing.modal_yes")} noText={t("billing.modal_no")} />
                 </div>
               </div>
             </section>
@@ -403,7 +402,7 @@ export function TransactionDetailModal({
                     "font-medium",
                     isDark ? "text-amber-300" : "text-amber-700"
                   )}>
-                    This upgrade is no longer valid
+                    {t("billing.modal_warning_invalid")}
                   </div>
                   <div className={cn(
                     "text-sm mt-1",
@@ -428,7 +427,7 @@ export function TransactionDetailModal({
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
             >
               <Download size={16} />
-              Download Receipt
+              {t("billing.modal_btn_download_receipt")}
             </button>
           )}
 
@@ -442,7 +441,7 @@ export function TransactionDetailModal({
             )}
           >
             <Copy size={16} />
-            Copy Transaction ID
+            {t("billing.modal_btn_copy_id")}
           </button>
 
           {isPending && (
@@ -457,7 +456,7 @@ export function TransactionDetailModal({
               )}
             >
               <CreditCard size={16} />
-              Continue Payment
+              {t("billing.modal_btn_continue_payment")}
             </button>
           )}
 
@@ -470,7 +469,7 @@ export function TransactionDetailModal({
                 : "bg-white hover:bg-zinc-50 text-zinc-700 border-zinc-300"
             )}
           >
-            Close
+            {t("billing.modal_btn_close")}
           </button>
         </div>
       </div>
@@ -511,7 +510,7 @@ function QuotaItem({ label, value, isDark, isString = false }: { label: string; 
   );
 }
 
-function FeatureItem({ label, enabled, isDark }: { label: string; enabled?: boolean; isDark: boolean }) {
+function FeatureItem({ label, enabled, isDark, yesText, noText }: { label: string; enabled?: boolean; isDark: boolean; yesText: string; noText: string }) {
   return (
     <div className="flex items-center gap-2">
       <span className={cn("text-sm", isDark ? "text-zinc-400" : "text-zinc-600")}>{label}:</span>
@@ -521,7 +520,7 @@ function FeatureItem({ label, enabled, isDark }: { label: string; enabled?: bool
           ? (isDark ? "text-emerald-400" : "text-emerald-600")
           : (isDark ? "text-rose-400" : "text-rose-600")
       )}>
-        {enabled ? "Yes" : "No"}
+        {enabled ? yesText : noText}
       </span>
     </div>
   );

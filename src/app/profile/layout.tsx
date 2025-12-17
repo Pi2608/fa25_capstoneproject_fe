@@ -58,10 +58,10 @@ function NavItem({
 
   return (
     <Link href={href} aria-current={active ? "page" : undefined}>
-      <Button variant="ghost" className={`w-full justify-between px-3 py-2 h-9 transition-colors ${activeCls}`}>
-        <span className="flex items-center gap-2 truncate">
-          <Icon className="h-4 w-4 opacity-90" />
-          <span className="truncate text-sm">{label}</span>
+      <Button variant="ghost" className={`w-full justify-between px-2.5 lg:px-3 py-2 h-8 lg:h-9 transition-colors ${activeCls}`}>
+        <span className="flex items-center gap-1.5 lg:gap-2 truncate">
+          <Icon className="h-3.5 w-3.5 lg:h-4 lg:w-4 opacity-90" />
+          <span className="truncate text-xs lg:text-sm">{label}</span>
         </span>
         {right}
       </Button>
@@ -87,7 +87,7 @@ function ThemeToggle() {
   }
 
   const base =
-    "inline-flex items-center gap-2 h-8 px-3 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60";
+    "inline-flex items-center gap-1.5 lg:gap-2 h-7 lg:h-8 px-2 lg:px-3 rounded-md text-[10px] lg:text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/60";
 
   return (
     <button
@@ -96,8 +96,8 @@ function ThemeToggle() {
       title={isDark ? t("profilelayout.switch_to_light") : t("profilelayout.switch_to_dark")}
       className={`${base} ${themeClasses.button}`}
     >
-      {isDark ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-      <span>{isDark ? t("profilelayout.theme_dark") : t("profilelayout.theme_light")}</span>
+      {isDark ? <Moon className="h-3 w-3 lg:h-4 lg:w-4" /> : <Sun className="h-3 w-3 lg:h-4 lg:w-4" />}
+      <span className="hidden sm:inline">{isDark ? t("profilelayout.theme_dark") : t("profilelayout.theme_light")}</span>
     </button>
   );
 }
@@ -302,12 +302,12 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
       className={mainClass}
     >
       <div className="flex min-h-screen">
-        <aside className="hidden md:flex md:flex-col w-72 fixed left-0 top-0 h-screen z-20 border-r bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="flex-1 min-h-0 overflow-hidden p-4 flex flex-col gap-4">
+        <aside className="hidden md:flex md:flex-col w-64 lg:w-72 fixed left-0 top-0 h-screen z-20 border-r bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="flex-1 min-h-0 overflow-hidden p-3 lg:p-4 flex flex-col gap-3 lg:gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="h-3 w-3 rounded-md bg-emerald-500 shadow" />
-                <span className="text-lg font-semibold">IMOS</span>
+                <span className="h-2.5 w-2.5 lg:h-3 lg:w-3 rounded-md bg-emerald-500 shadow" />
+                <span className="text-base lg:text-lg font-semibold">IMOS</span>
               </div>
               <ThemeToggle />
             </div>
@@ -419,12 +419,12 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
               </div> */}
 
               <Link href="/profile/settings/plans">
-                <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white">{t("profilelayout.select_plan")}</Button>
+                <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs lg:text-sm py-1.5 lg:py-2 h-8 lg:h-9">{t("profilelayout.select_plan")}</Button>
               </Link>
 
               <Link href="/login">
-                <Button variant="destructive" className="w-full">
-                  <LogOut className="h-4 w-4 mr-2" />
+                <Button variant="destructive" className="w-full text-xs lg:text-sm py-1.5 lg:py-2 h-8 lg:h-9">
+                  <LogOut className="h-3.5 w-3.5 lg:h-4 lg:w-4 mr-1.5 lg:mr-2" />
                   {t("profilelayout.logout")}
                 </Button>
               </Link>
@@ -432,17 +432,17 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <header className="md:hidden w-full sticky top-0 z-30 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="px-4 py-3 flex items-center justify-between">
+        <header className="md:hidden w-full fixed top-0 left-0 right-0 z-30 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="px-3 xs:px-4 py-3 xs:py-3.5 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" aria-label={t("profilelayout.open_menu")}>
-                    <Menu className="h-5 w-5" />
+                  <Button variant="ghost" size="icon" className="h-9 w-9 xs:h-10 xs:w-10" aria-label={t("profilelayout.open_menu")}>
+                    <Menu className="h-4.5 w-4.5 xs:h-5 xs:w-5" />
                   </Button>
                 </SheetTrigger>
 
-                <SheetContent side="left" className="w-72 p-0">
+                <SheetContent side="left" className="w-72 p-0 [&>button]:hidden">
                   <div className="h-full flex flex-col">
                     <div className="p-4 flex items-center justify-between border-b">
                       <div className="flex items-center gap-2">
@@ -509,7 +509,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
               </Sheet>
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-md bg-emerald-500 shadow" />
-                <span className="text-lg font-semibold">IMOS</span>
+                <span className="text-base xs:text-lg font-semibold">IMOS</span>
               </div>
             </div>
 
@@ -519,8 +519,8 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Link href="/profile/notifications">
-                      <Button variant="outline" size="icon" className="relative" aria-label={t("profilelayout.nav_notifications")}>
-                        <Bell className="h-5 w-5" />
+                      <Button variant="outline" size="icon" className="relative h-9 w-9 xs:h-10 xs:w-10" aria-label={t("profilelayout.nav_notifications")}>
+                        <Bell className="h-4.5 w-4.5 xs:h-5 xs:w-5" />
                         {unread > 0 && (
                           <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-600 text-[11px] font-bold text-white px-1">
                             {unread > 99 ? "99+" : unread}
@@ -532,14 +532,14 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                   <TooltipContent>{t("profilelayout.nav_notifications")}</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              <Link href="/profile/select-plan">
-                <Button className="font-semibold">{t("profilelayout.select_plan")}</Button>
+              <Link href="/profile/select-plan" className="hidden sm:inline-flex">
+                <Button className="font-semibold text-sm px-3 h-9">{t("profilelayout.select_plan")}</Button>
               </Link>
             </div>
           </div>
         </header>
 
-        <section className="flex-1 overflow-auto px-4 sm:px-8 lg:px-10 py-8 md:ml-72">
+        <section className="flex-1 overflow-auto px-2 xs:px-3 sm:px-4 md:px-6 lg:px-8 xl:px-10 pt-16 xs:pt-18 sm:pt-20 md:pt-8 pb-3 xs:pb-4 sm:pb-6 md:pb-8 md:ml-64 lg:ml-72">
           {children}
         </section>
       </div>

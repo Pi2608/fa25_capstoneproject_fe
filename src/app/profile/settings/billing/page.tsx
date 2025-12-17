@@ -18,7 +18,8 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { useTheme } from "next-themes";
 import { getThemeClasses } from "@/utils/theme-utils";
 import { TransactionDetailModal } from "@/components/billing/TransactionDetailModal";
-import { Toaster } from "react-hot-toast";
+import { useToast } from "@/contexts/ToastContext";
+import { ToastContainer } from "react-toastify";
 
 function cn(...a: Array<string | false | null | undefined>) {
   return a.filter(Boolean).join(" ");
@@ -35,43 +36,13 @@ function formatDate(iso: string) {
   return isNaN(d.getTime()) ? iso : d.toLocaleString();
 }
 
-function Panel(props: { className?: string; children: React.ReactNode }) {
-  return (
-    <div
-      className={cn(
-        "rounded-3xl border shadow-lg overflow-hidden",
-        "bg-gradient-to-b from-emerald-200/35 via-emerald-100/20 to-white/60",
-        "ring-1 ring-emerald-500/10 border-emerald-200/60",
-        "dark:from-zinc-900/70 dark:via-zinc-900/50 dark:to-zinc-900/40",
-        "dark:border-white/10 dark:ring-white/10",
-        props.className
-      )}
-    >
-      {props.children}
-    </div>
-  );
-}
 
-function Surface(props: { className?: string; children: React.ReactNode }) {
-  return (
-    <div
-      className={cn(
-        "rounded-2xl border p-5",
-        "bg-white/90 backdrop-blur-sm border-emerald-200/60",
-        "dark:bg-zinc-950/60 dark:border-white/10",
-        props.className
-      )}
-    >
-      {props.children}
-    </div>
-  );
-}
 
 function StatusBadge({ status }: { status: string }) {
   const { t } = useI18n();
   const s = (status ?? "").toLowerCase();
   let cls =
-    "border-zinc-300 text-zinc-700 bg-zinc-50 dark:border-white/10 dark:text-zinc-300 dark:bg-zinc-900/50";
+    "border-gray-300 text-gray-700 bg-gray-50 dark:border-white/10 dark:text-zinc-300 dark:bg-zinc-900/50";
   if (s === "success" || s === "paid")
     cls =
       "border-emerald-300 text-emerald-700 bg-emerald-50 dark:border-emerald-400/30 dark:text-emerald-300 dark:bg-emerald-500/10";
@@ -98,21 +69,6 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function StatCard(props: { title: string; value: string; icon?: JSX.Element }) {
-  return (
-    <Surface className="h-full">
-      <div className="flex items-start justify-between gap-3">
-        <div className="text-sm text-zinc-600 dark:text-zinc-400">{props.title}</div>
-        <div className="rounded-xl px-2.5 py-2 text-emerald-600 bg-emerald-500/10 ring-1 ring-emerald-500/15">
-          {props.icon}
-        </div>
-      </div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-        {props.value}
-      </div>
-    </Surface>
-  );
-}
 
 const LandmarkIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" className="fill-current">
@@ -136,6 +92,7 @@ export default function BillingPage() {
   const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
   const isDark = currentTheme === "dark";
   const themeClasses = getThemeClasses(isDark);
+  const { showToast } = useToast();
 
   const [orgs, setOrgs] = useState<MyOrganizationDto[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>("");
@@ -240,8 +197,6 @@ export default function BillingPage() {
   }, [paymentHistoryPage, paymentHistoryPageSize]);
 
   const handleViewDetails = (transaction: PaymentHistoryItem) => {
-    console.log("🔍 Transaction plannedPlan:", transaction.plannedPlan); // ⭐ Add this
-  console.log("🔍 Full transaction:", transaction); // ⭐ Add this
     setSelectedTransaction(transaction);
     setIsModalOpen(true);
   };
@@ -253,17 +208,17 @@ export default function BillingPage() {
 
   return (
     <>
-      <Toaster position="top-right" />
+      <ToastContainer position="top-right" />
       <div className="mx-auto max-w-7xl px-6 pt-3 pb-8 md:pt-5">
         <div className="mb-4">
-          <h1 className="text-2xl font-semibold">{t("billing.title")}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("billing.title")}</h1>
         </div>
 
-        <Panel className="p-6 -mt-1">
+        <div className="p-6 -mt-1">
           <div className="mb-4 flex items-center gap-3">
             <span className={`text-sm ${themeClasses.textMuted}`}>{t("billing.orgLabel")}</span>
             <select
-              className={`w-52 rounded-2xl border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-400 ${themeClasses.select}`}
+              className={`w-52 rounded-2xl border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.select}`}
               value={selectedOrgId}
               onChange={(e) => setSelectedOrgId(e.target.value)}
             >
@@ -277,48 +232,72 @@ export default function BillingPage() {
 
           {loading ? (
             <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-              <div className="h-28 rounded-2xl bg-emerald-200/40 animate-pulse dark:bg-zinc-800/60" />
-              <div className="h-28 rounded-2xl bg-emerald-200/40 animate-pulse dark:bg-zinc-800/60" />
-              <div className="h-28 rounded-2xl bg-emerald-200/40 animate-pulse dark:bg-zinc-800/60" />
-              <div className="h-64 rounded-2xl bg-emerald-200/40 animate-pulse dark:bg-zinc-800/60 md:col-span-3" />
+              <div className="h-28 rounded-2xl bg-gray-200 animate-pulse tracking-tight" />
+              <div className="h-28 rounded-2xl bg-gray-200 animate-pulse tracking-tight" />
+              <div className="h-28 rounded-2xl bg-gray-200 animate-pulse tracking-tight" />
+              <div className="h-64 rounded-2xl bg-gray-200 animate-pulse tracking-tight md:col-span-3" />
             </div>
           ) : error ? (
-            <Surface className="border-rose-300 bg-rose-50/80 dark:bg-rose-500/10 dark:border-rose-400/30">
+            <div className="border-rose-300 bg-rose-50/80 dark:bg-rose-500/10 dark:border-rose-400/30">
               <div className="text-sm text-rose-700 dark:text-rose-300">{error}</div>
-            </Surface>
+            </div>
           ) : !billing ? (
-            <Surface>{t("billing.noData")}</Surface>
+            <div>{t("billing.noData")}</div>
           ) : (
             <>
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-                <StatCard title={t("billing.stats_org")} value={billing.organizationName} icon={<LandmarkIcon />} />
-                <StatCard
-                  title={t("billing.stats_periodTotal")}
-                  value={
-                    billing.totalSpentThisMonth !== undefined
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-3 tracking-tight">
+                <div className={`h-full hover:shadow-md transition-shadow rounded-2xl border p-6 ${themeClasses.kpiCard}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-sm font-medium tracking-tight">{t("billing.stats_org")}</div>
+                    <div className="rounded-xl px-2.5 py-2 text-emerald-600 bg-emerald-50 ring-1 ring-emerald-200/50 dark:bg-emerald-500/10 dark:ring-emerald-500/15">
+                      <LandmarkIcon />
+                    </div>
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold tracking-tight ">
+                    {billing.organizationName}
+                  </div>
+                </div>
+
+                <div className={`h-full hover:shadow-md transition-shadow rounded-2xl border p-6 ${themeClasses.kpiCard}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-sm font-medium tracking-tight">{t("billing.stats_periodTotal")}</div>
+                    <div className="rounded-xl px-2.5 py-2 text-emerald-600 bg-emerald-50 ring-1 ring-emerald-200/50 dark:bg-emerald-500/10 dark:ring-emerald-500/15">
+                      <DocIcon />
+                    </div>
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold tracking-tight ">
+                    {billing.totalSpentThisMonth !== undefined
                       ? formatCurrency(billing.totalSpentThisMonth, currency)
                       : "—"
-                  }
-                  icon={<DocIcon />}
-                />
-                <StatCard
-                  title={t("billing.stats_recentCount")}
-                  value={String(billing.recentTransactions?.length ?? 0)}
-                  icon={<ArrowsIcon />}
-                />
+                    }
+                  </div>
+                </div>
+
+                <div className={`h-full hover:shadow-md transition-shadow rounded-2xl border p-6 ${themeClasses.kpiCard}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="text-sm font-medium tracking-tight">{t("billing.stats_recentCount")}</div>
+                    <div className="rounded-xl px-2.5 py-2 text-emerald-600 bg-emerald-50 ring-1 ring-emerald-200/50 dark:bg-emerald-500/10 dark:ring-emerald-500/15">
+                      <ArrowsIcon />
+                    </div>
+                  </div>
+                  <div className="mt-2 text-2xl font-semibold tracking-tight ">
+                    {String(billing.recentTransactions?.length ?? 0)}
+                  </div>
+                </div>
               </div>
 
-              <Surface className="mt-6">
+              
+              <div className="mt-6">
                 <div className="pb-3">
-                  <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  <div className="text-2xl font-semibold tracking-tight">
                     {t("billing.recent_title")}
                   </div>
-                  <div className="text-sm text-zinc-600 dark:text-zinc-400">{t("billing.recent_desc")}</div>
+                  <div className="text-sm text-gray-900 dark:text-zinc-400">{t("billing.recent_desc")}</div>
                 </div>
 
                 {billing.recentTransactions && billing.recentTransactions.length > 0 ? (
                   <div className={`overflow-hidden rounded-2xl border ${themeClasses.tableBorder}`}>
-                    <table className="w-full text-sm">
+                    <table className={`w-full text-sm ${isDark ? "bg-zinc-950" : "bg-white"}`}>
                       <thead className={themeClasses.tableHeader}>
                         <tr>
                           <th className="px-5 py-3 text-left font-semibold">{t("billing.recent_table_id")}</th>
@@ -336,7 +315,6 @@ export default function BillingPage() {
                             key={tRow.transactionId}
                             className={cn(
                               `border-b ${themeClasses.tableCell}`,
-                              i % 2 ? (isDark ? "bg-zinc-900/40" : "bg-gray-50/40") : "",
                               isDark ? "hover:bg-zinc-900" : "hover:bg-gray-50"
                             )}
                           >
@@ -361,19 +339,19 @@ export default function BillingPage() {
                 ) : (
                   <div className={`text-sm ${themeClasses.textMuted}`}>{t("billing.recent_empty")}</div>
                 )}
-              </Surface>
+              </div>
 
-              <Surface className="mt-6">
+              <div className="mt-6">
                 <div className="pb-3">
-                  <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  <div className="text-2xl font-semibold tracking-tight">
                     {t("billing.invoices_title")}
                   </div>
-                  <div className="text-sm text-zinc-600 dark:text-zinc-400">{t("billing.invoices_desc")}</div>
+                  <div className="text-sm text-gray-900 dark:text-zinc-400">{t("billing.invoices_desc")}</div>
                 </div>
 
                 {billing.recentInvoices && billing.recentInvoices.length > 0 ? (
                   <div className={`overflow-hidden rounded-2xl border ${themeClasses.tableBorder}`}>
-                    <table className="w-full text-sm">
+                    <table className={`w-full text-sm ${isDark ? "bg-zinc-950" : "bg-white"}`}>
                       <thead className={themeClasses.tableHeader}>
                         <tr>
                           <th className="px-5 py-3 text-left font-semibold">{t("billing.invoices_table_id")}</th>
@@ -391,7 +369,6 @@ export default function BillingPage() {
                             key={inv.invoiceId}
                             className={cn(
                               `border-b ${themeClasses.tableCell}`,
-                              i % 2 ? (isDark ? "bg-zinc-900/40" : "bg-gray-50/40") : "",
                               isDark ? "hover:bg-zinc-900" : "hover:bg-gray-50"
                             )}
                           >
@@ -414,37 +391,37 @@ export default function BillingPage() {
                 ) : (
                   <div className={`text-sm ${themeClasses.textMuted}`}>{t("billing.invoices_empty")}</div>
                 )}
-              </Surface>
+              </div>
             </>
           )}
 
           {/* User Payment History Section */}
-          <Surface className="mt-6">
+          <div className="mt-6">
             <div className="pb-3">
-              <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-                Lịch sử thanh toán của bạn
+              <div className="text-2xl font-semibold tracking-tight">
+                {t("billing.payment_history_title")}
               </div>
-              <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                Tất cả các giao dịch thanh toán của bạn (bao gồm đang chờ xử lý)
+              <div className="text-sm text-gray-900 dark:text-zinc-400">
+                {t("billing.payment_history_desc")}
               </div>
             </div>
 
             {loadingPaymentHistory ? (
-              <div className={`text-sm ${themeClasses.textMuted}`}>Đang tải...</div>
+              <div className={`text-sm ${themeClasses.textMuted}`}>{t("billing.payment_history_loading")}</div>
             ) : userPaymentHistory.length === 0 ? (
-              <div className={`text-sm ${themeClasses.textMuted}`}>Chưa có giao dịch.</div>
+              <div className={`text-sm ${themeClasses.textMuted}`}>{t("billing.payment_history_empty")}</div>
             ) : (
               <div className={`overflow-hidden rounded-2xl border ${themeClasses.tableBorder}`}>
-                <table className="w-full text-sm">
+                <table className={`w-full text-sm ${isDark ? "bg-zinc-950" : "bg-white"}`}>
                   <thead className={themeClasses.tableHeader}>
                     <tr>
-                      <th className="px-5 py-3 text-left font-semibold">Mã giao dịch</th>
-                      <th className="px-5 py-3 text-left font-semibold">Ngày</th>
-                      <th className="px-5 py-3 text-left font-semibold">Mục đích</th>
-                      <th className="px-5 py-3 text-left font-semibold">Gói</th>
-                      <th className="px-5 py-3 text-right font-semibold">Số tiền</th>
-                      <th className="px-5 py-3 text-left font-semibold">Trạng thái</th>
-                      <th className="px-5 py-3 text-left font-semibold">Thao tác</th>
+                      <th className="px-5 py-3 text-left font-semibold">{t("billing.payment_history_col_id")}</th>
+                      <th className="px-5 py-3 text-left font-semibold">{t("billing.payment_history_col_date")}</th>
+                      <th className="px-5 py-3 text-left font-semibold">{t("billing.payment_history_col_purpose")}</th>
+                      <th className="px-5 py-3 text-left font-semibold">{t("billing.payment_history_col_plan")}</th>
+                      <th className="px-5 py-3 text-right font-semibold">{t("billing.payment_history_col_amount")}</th>
+                      <th className="px-5 py-3 text-left font-semibold">{t("billing.payment_history_col_status")}</th>
+                      <th className="px-5 py-3 text-left font-semibold">{t("billing.payment_history_col_actions")}</th>
                     </tr>
                   </thead>
                   <tbody className={`divide-y ${themeClasses.tableBorder}`}>
@@ -453,11 +430,10 @@ export default function BillingPage() {
                         key={item.transactionId}
                         className={cn(
                           `border-b ${themeClasses.tableCell}`,
-                          i % 2 ? (isDark ? "bg-zinc-900/40" : "bg-gray-50/40") : "",
                           isDark ? "hover:bg-zinc-900" : "hover:bg-gray-50"
                         )}
                       >
-                        <td className={`px-5 py-3 font-mono text-[13px] ${isDark ? "text-zinc-200" : "text-gray-900"}`}>
+                        <td className={`px-5 py-3 font-mono text-[13px] ${themeClasses.text}`}>
                           {item.transactionId}
                         </td>
                         <td className={`px-5 py-3 ${themeClasses.textMuted}`}>
@@ -467,7 +443,7 @@ export default function BillingPage() {
                         <td className={`px-5 py-3 ${themeClasses.textMuted}`}>
                           {item.plannedPlan?.planName || item.membership?.plan?.planName || "—"}
                         </td>
-                        <td className={`px-5 py-3 text-right ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
+                        <td className={`px-5 py-3 text-right ${themeClasses.text}`}>
                           {formatCurrency(item.amount, "USD")}
                         </td>
                         <td className="px-5 py-3">
@@ -476,13 +452,9 @@ export default function BillingPage() {
                         <td className="px-5 py-3">
                           <button
                             onClick={() => handleViewDetails(item)}
-                            className={`px-3 py-1 text-xs rounded transition-colors ${
-                              isDark
-                                ? "bg-zinc-700 hover:bg-zinc-600 text-zinc-200"
-                                : "bg-gray-200 hover:bg-gray-300 text-gray-700"
-                            }`}
+                            className={`px-3 py-1 text-xs rounded transition-colors font-medium text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:text-emerald-300 dark:hover:bg-emerald-500/10`}
                           >
-                            View Details
+                            {t("billing.payment_history_view_details")}
                           </button>
                         </td>
                       </tr>
@@ -496,38 +468,38 @@ export default function BillingPage() {
             {paymentHistoryTotal > paymentHistoryPageSize && (
               <div className="mt-4 flex items-center justify-between">
                 <div className={`text-sm ${themeClasses.textMuted}`}>
-                  Trang {paymentHistoryPage} / {Math.ceil(paymentHistoryTotal / paymentHistoryPageSize)} • {paymentHistoryTotal} giao dịch
+                  {t("billing.payment_history_pagination_page")} {paymentHistoryPage} {t("billing.payment_history_pagination_of")} {Math.ceil(paymentHistoryTotal / paymentHistoryPageSize)} • {paymentHistoryTotal} {t("billing.payment_history_pagination_total")}
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     disabled={paymentHistoryPage <= 1 || loadingPaymentHistory}
                     onClick={() => setPaymentHistoryPage((p) => Math.max(1, p - 1))}
                     className={cn(
-                      "rounded-md px-3 py-1.5 text-sm",
+                      "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                       paymentHistoryPage <= 1 || loadingPaymentHistory
-                        ? (isDark ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gray-300 text-gray-500 cursor-not-allowed")
-                        : themeClasses.button
+                        ? (isDark ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gray-100 text-gray-400 cursor-not-allowed")
+                        : (isDark ? "bg-zinc-800 text-zinc-200 hover:bg-zinc-700" : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50")
                     )}
                   >
-                    Trước
+                    {t("billing.payment_history_btn_prev")}
                   </button>
                   <button
                     disabled={paymentHistoryPage >= Math.ceil(paymentHistoryTotal / paymentHistoryPageSize) || loadingPaymentHistory}
                     onClick={() => setPaymentHistoryPage((p) => Math.min(Math.ceil(paymentHistoryTotal / paymentHistoryPageSize), p + 1))}
                     className={cn(
-                      "rounded-md px-3 py-1.5 text-sm",
+                      "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
                       paymentHistoryPage >= Math.ceil(paymentHistoryTotal / paymentHistoryPageSize) || loadingPaymentHistory
-                        ? (isDark ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gray-300 text-gray-500 cursor-not-allowed")
-                        : themeClasses.button
+                        ? (isDark ? "bg-zinc-800 text-zinc-500 cursor-not-allowed" : "bg-gray-100 text-gray-400 cursor-not-allowed")
+                        : (isDark ? "bg-zinc-800 text-zinc-200 hover:bg-zinc-700" : "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50")
                     )}
                   >
-                    Sau
+                    {t("billing.payment_history_btn_next")}
                   </button>
                 </div>
               </div>
             )}
-          </Surface>
-        </Panel>
+          </div>
+        </div>
       </div>
 
       {/* Transaction Detail Modal */}

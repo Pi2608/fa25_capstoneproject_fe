@@ -7,6 +7,10 @@ import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useI18n } from "@/i18n/I18nProvider";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Button } from "@/components/ui/button";
+import { Menu, ChevronDown } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 type MenuItem = { label: string; desc?: string; href: string };
 
@@ -117,6 +121,7 @@ export default function HomeHeader() {
   const { isLoggedIn, clear } = useAuthStatus();
   const { t } = useI18n();
   const [isHydrated, setIsHydrated] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     setIsHydrated(true);
@@ -136,7 +141,6 @@ export default function HomeHeader() {
   ];
 
   const RESOURCES: MenuItem[] = [
-    { label: t("header", "res_customers"), desc: t("header", "res_customers_desc"), href: "/resources/customers" },
     { label: t("header", "res_help"), desc: t("header", "res_help_desc"), href: "/resources/help-center" },
     { label: t("header", "res_gallery"), desc: t("header", "res_gallery_desc"), href: "/resources/map-gallery" },
     { label: t("header", "res_blog"), desc: t("header", "res_blog_desc"), href: "/resources/blog" },
@@ -149,10 +153,10 @@ export default function HomeHeader() {
         className="pointer-events-none absolute inset-x-0 top-0 h-24 -z-10
              bg-gradient-to-b from-black/60 to-transparent"
       />
-      <div className="max-w-7xl mx-auto px-6 py-3 flex justify-between items-center">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded-md bg-emerald-500 shadow" />
-          <span className="text-lg md:text-xl font-bold tracking-tight">IMOS</span>
+      <div className="max-w-7xl mx-auto px-3 xs:px-4 sm:px-6 py-2 xs:py-2.5 sm:py-3 flex justify-between items-center">
+        <Link href="/" className="flex items-center gap-1.5 xs:gap-2">
+          <div className="h-5 w-5 xs:h-6 xs:w-6 rounded-md bg-emerald-500 shadow" />
+          <span className="text-base xs:text-lg md:text-xl font-bold tracking-tight">IMOS</span>
         </Link>
 
         <nav className="hidden md:flex items-center gap-8">
@@ -178,6 +182,160 @@ export default function HomeHeader() {
           </Link>
         </nav>
 
+        {/* Mobile Menu */}
+        <div className="md:hidden flex items-center gap-2">
+          {!isHydrated ? (
+            <div className="h-8 w-8 rounded-lg flex items-center justify-center">
+              <div className="h-1 w-1 rounded-full bg-gray-400 dark:bg-gray-500 animate-pulse" />
+            </div>
+          ) : (
+            <>
+              {isLoggedIn && (
+                <Link
+                  href="/profile/information"
+                  className="text-xs xs:text-sm px-2 xs:px-3 py-1.5 xs:py-2 rounded-lg bg-emerald-500 font-semibold text-white shadow hover:bg-emerald-400 transition"
+                >
+                  {t("header", "profile")}
+                </Link>
+              )}
+              <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 xs:h-9 xs:w-9">
+                    <Menu className="h-4 w-4 xs:h-5 xs:w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[280px] xs:w-[320px] p-0 [&>button]:hidden">
+                  <ScrollArea className="h-full">
+                    <div className="p-4 xs:p-6 space-y-6">
+                      {/* Logo */}
+                      <div className="flex items-center gap-2 pb-4 border-b">
+                        <div className="h-6 w-6 rounded-md bg-emerald-500 shadow" />
+                        <span className="text-lg font-bold tracking-tight">IMOS</span>
+                      </div>
+
+                      {/* Services Section */}
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">
+                          {t("header", "services")}
+                        </h3>
+                        <div className="space-y-1">
+                          {SERVICES.map(it => (
+                            <Link
+                              key={it.href}
+                              href={it.href}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className="block px-3 py-2.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 transition"
+                            >
+                              <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                                {it.label}
+                              </div>
+                              {it.desc && (
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                  {it.desc}
+                                </p>
+                              )}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Main Links */}
+                      <div className="space-y-1">
+                        <Link
+                          href="/tutorial"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="block px-3 py-2.5 rounded-lg text-sm font-semibold hover:bg-emerald-50 dark:hover:bg-white/10 transition"
+                        >
+                          {t("header", "tutorial")}
+                        </Link>
+                        <Link
+                          href="/pricing"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="block px-3 py-2.5 rounded-lg text-sm font-semibold hover:bg-emerald-50 dark:hover:bg-white/10 transition"
+                        >
+                          {t("header", "pricing")}
+                        </Link>
+                        <Link
+                          href="/community"
+                          onClick={() => setMobileMenuOpen(false)}
+                          className="block px-3 py-2.5 rounded-lg text-sm font-semibold hover:bg-emerald-50 dark:hover:bg-white/10 transition"
+                        >
+                          {t("header", "community")}
+                        </Link>
+                      </div>
+
+                      {/* Resources Section */}
+                      <div>
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">
+                          {t("header", "resources")}
+                        </h3>
+                        <div className="space-y-1">
+                          {RESOURCES.map(it => (
+                            <Link
+                              key={it.href}
+                              href={it.href}
+                              onClick={() => setMobileMenuOpen(false)}
+                              className="block px-3 py-2.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-white/10 transition"
+                            >
+                              <div className="text-sm font-semibold text-gray-900 dark:text-white">
+                                {it.label}
+                              </div>
+                              {it.desc && (
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                  {it.desc}
+                                </p>
+                              )}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Auth Buttons */}
+                      {!isLoggedIn ? (
+                        <div className="space-y-2 pt-4 border-t">
+                          <Link
+                            href="/login"
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="block w-full text-center rounded-lg px-4 py-2.5 font-semibold border border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition"
+                          >
+                            {t("header", "login")}
+                          </Link>
+                          <Link
+                            href="/register"
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="block w-full text-center rounded-lg bg-emerald-500 px-4 py-2.5 font-bold text-white shadow hover:bg-emerald-400 transition"
+                          >
+                            {t("header", "getStarted")}
+                          </Link>
+                        </div>
+                      ) : (
+                        <div className="space-y-2 pt-4 border-t">
+                          <Link
+                            href="/profile/information"
+                            onClick={() => setMobileMenuOpen(false)}
+                            className="block w-full text-center rounded-lg bg-emerald-500 px-4 py-2.5 font-bold text-white shadow hover:bg-emerald-400 transition"
+                          >
+                            {t("header", "profile")}
+                          </Link>
+                          <button
+                            onClick={() => {
+                              setMobileMenuOpen(false);
+                              onLogout();
+                            }}
+                            className="block w-full text-center rounded-lg px-4 py-2.5 font-semibold border border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-500/10 transition"
+                          >
+                            {t("header", "logout")}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </ScrollArea>
+                </SheetContent>
+              </Sheet>
+            </>
+          )}
+        </div>
+
         <div className="hidden md:flex items-center gap-3">
           {!isHydrated ? (
             <>
@@ -198,13 +356,13 @@ export default function HomeHeader() {
                 <>
                   <Link
                     href="/login"
-                    className="min-w-[70px] text-center rounded-lg px-3 py-2 font-semibold text-gray-700 hover:text-emerald-600 dark:text-gray-200 dark:hover:text-emerald-400 transition"
+                    className="min-w-[70px] text-center rounded-lg px-3 lg:px-4 py-2 text-sm lg:text-base font-semibold text-gray-700 hover:text-emerald-600 dark:text-gray-200 dark:hover:text-emerald-400 transition"
                   >
                     {t("header", "login")}
                   </Link>
                   <Link
                     href="/register"
-                    className="min-w-[100px] text-center rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white shadow hover:bg-emerald-400 transition"
+                    className="min-w-[100px] text-center rounded-lg bg-emerald-500 px-4 lg:px-5 py-2 text-sm lg:text-base font-bold text-white shadow hover:bg-emerald-400 transition"
                   >
                     {t("header", "getStarted")}
                   </Link>
@@ -213,13 +371,13 @@ export default function HomeHeader() {
                 <>
                   <Link
                     href="/profile/information"
-                    className="min-w-[70px] text-center rounded-lg bg-emerald-500 px-4 py-2 font-bold text-white shadow hover:bg-emerald-400 transition"
+                    className="min-w-[70px] text-center rounded-lg bg-emerald-500 px-4 lg:px-5 py-2 text-sm lg:text-base font-bold text-white shadow hover:bg-emerald-400 transition"
                   >
                     {t("header", "profile")}
                   </Link>
                   <button
                     onClick={onLogout}
-                    className="min-w-[70px] text-center rounded-lg px-3 py-2 font-semibold text-gray-700 hover:text-red-500 dark:text-gray-200 dark:hover:text-red-400 transition"
+                    className="min-w-[70px] text-center rounded-lg px-3 lg:px-4 py-2 text-sm lg:text-base font-semibold text-gray-700 hover:text-red-500 dark:text-gray-200 dark:hover:text-red-400 transition"
                   >
                     {t("header", "logout")}
                   </button>
