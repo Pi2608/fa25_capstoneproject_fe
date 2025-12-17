@@ -460,46 +460,6 @@ export default function StoryMapViewPage() {
     toast.info(`⏱️ Được cộng thêm ${event.additionalSeconds}s`);
   }, [startCountdown]);
 
-  const handleTimeExtended = useCallback((raw: any) => {
-    const sessionQuestionId = pick(raw, "sessionQuestionId", "SessionQuestionId");
-    const additionalSeconds = pick(raw, "additionalSeconds", "AdditionalSeconds");
-    const newTimeLimit = pick(raw, "newTimeLimit", "NewTimeLimit");
-
-    if (!sessionQuestionId) return;
-
-    if (!currentQuestion?.sessionQuestionId) return;
-    if (currentQuestion.sessionQuestionId !== sessionQuestionId) return;
-
-    const add = typeof additionalSeconds === "number" ? additionalSeconds : 0;
-
-    setTimeRemaining((prev) => (typeof prev === "number" ? prev + add : prev));
-
-    setCurrentQuestion((prev) => {
-      if (!prev || prev.sessionQuestionId !== sessionQuestionId) return prev;
-
-      const nextTimeLimit =
-        typeof newTimeLimit === "number"
-          ? newTimeLimit
-          : (prev.timeLimit ?? 0) + add;
-
-      return { ...prev, timeLimit: nextTimeLimit };
-    });
-
-    if (timerRef.current == null && viewStateRef.current === "question") {
-      timerRef.current = window.setInterval(() => {
-        setTimeRemaining((t) => {
-          if (t == null) return t;
-          if (t <= 1) {
-            if (timerRef.current) window.clearInterval(timerRef.current);
-            timerRef.current = null;
-            return 0;
-          }
-          return t - 1;
-        });
-      }, 1000);
-    }
-  }, [currentQuestion?.sessionQuestionId, viewState]);
-
   const handleQuestionResults = useCallback((event: QuestionResultsEvent) => {
     setQuestionResults(event);
     setViewState("results");
@@ -551,7 +511,6 @@ export default function StoryMapViewPage() {
       handleQuestionBroadcast,
       handleQuestionResults,
       handleQuestionTimeExtended,
-      handleTimeExtended,
       handleSessionEnded,
       handleMapLayerSync,
     ]
@@ -718,6 +677,7 @@ export default function StoryMapViewPage() {
       setAnswering(false);
     }
   };
+
 
   const handleContinueViewing = () => {
     setCurrentQuestion(null);

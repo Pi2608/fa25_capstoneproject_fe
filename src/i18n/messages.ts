@@ -582,6 +582,12 @@ export const messages = {
             errorSessionNotFound: "Không tìm thấy phiên học. Vui lòng kiểm tra mã PIN.",
             errorSessionEndedJoin: "Phiên học đã kết thúc.",
             errorGeneric: "Không thể tham gia phiên học. Vui lòng thử lại.",
+             errAlreadyJoined:
+    "Bạn đã tham gia session này rồi. Nếu bạn bị out do tắt tab, hãy mở lại tab cũ (hoặc dùng đúng trình duyệt đã join trước đó) để hệ thống tự vào lại.",
+  errSessionFull:
+    "Session đã đủ số lượng người tham gia. Vui lòng thử lại sau hoặc liên hệ giảng viên.",
+  errGeneric: "Có lỗi xảy ra. Vui lòng thử lại.",
+  errJoinFailed: "Không thể tham gia session. Vui lòng thử lại.",
         },
         blog: {
             breadcrumb: "Tài nguyên / Blog",
@@ -808,7 +814,7 @@ export const messages = {
             status_pending: "Đang xử lý",
             status_cancelled: "Đã huỷ",
             status_failed: "Thất bại",
-            
+
             // Payment history section
             payment_history_title: "Lịch sử thanh toán của bạn",
             payment_history_desc: "Tất cả các giao dịch thanh toán của bạn (bao gồm đang chờ xử lý)",
@@ -827,7 +833,7 @@ export const messages = {
             payment_history_pagination_total: "giao dịch",
             payment_history_btn_prev: "Trước",
             payment_history_btn_next: "Sau",
-            
+
             // Transaction detail modal
             modal_title: "Chi tiết giao dịch",
             modal_org_label: "Tổ chức:",
@@ -873,7 +879,7 @@ export const messages = {
             modal_btn_copy_id: "Sao chép mã giao dịch",
             modal_btn_continue_payment: "Tiếp tục thanh toán",
             modal_btn_close: "Đóng",
-            
+
             // Toast messages
             toast_receipt_downloaded: "Đã tải hoá đơn thành công",
             toast_receipt_failed: "Không thể tải hoá đơn. Vui lòng thử lại.",
@@ -919,6 +925,146 @@ export const messages = {
             tabs_plans: "Gói",
             tabs_billing: "Thanh toán",
             tabs_workspace: "Workspace",
+        },
+        storymap_view: {
+            default_student_name: "Học sinh",
+            err_missing_participant: "Không tìm thấy thông tin học viên. Vui lòng quay lại và tham gia lại bằng mã tiết học.",
+            err_load_session: "Không tải được thông tin tiết học.",
+            err_load_map: "Không tải được bản đồ.",
+            err_submit_answer: "Gửi đáp án thất bại. Vui lòng thử lại.",
+
+            toast_session_started: "Tiết học đã bắt đầu!",
+            toast_session_paused: "Tiết học đã tạm dừng",
+            toast_session_ended: "Tiết học đã kết thúc",
+            toast_new_question: "Câu hỏi mới! {points} điểm",
+            toast_time_extended: "⏱️ Được cộng thêm {seconds}s",
+            toast_view_results: "Xem kết quả câu hỏi!",
+            toast_layer_switched: "Bản đồ đã chuyển sang: {layer}",
+
+            toast_group_cannot_connect: "Không thể kết nối Hoạt động nhóm. Vui lòng đăng nhập lại rồi tham gia tiết học.",
+            toast_group_work_submitted: "Nhóm đã gửi bài thành công!",
+            toast_group_work_graded: "Bài nhóm đã được chấm điểm!",
+            toast_answer_submitted: "Đã gửi đáp án!",
+            toast_joined_group: "Đã tham gia nhóm!",
+            toast_join_group_failed: "Không tham gia được nhóm.",
+            toast_left_group: "Bạn đã rời khỏi nhóm.",
+            toast_leave_group_failed: "Không rời khỏi nhóm được.",
+            toast_group_work_sent: "Đã gửi bài nhóm!",
+            toast_group_work_send_failed: "Gửi bài nhóm thất bại.",
+            toast_left_session: "Bạn đã rời tiết học.",
+
+            error_screen_title: "Không thể tham gia tiết học",
+            error_screen_back_btn: "Quay lại trang tham gia",
+
+            waiting_title: "Chờ thầy cô bắt đầu nhé! 🎉",
+            waiting_desc: "Bạn đã vào lớp thành công rồi!",
+            waiting_session_code_label: "🔑 Mã lớp học",
+
+            conn_connected: "✓ Đã kết nối!",
+            conn_connected_teacher: "✓ Đã kết nối với thầy cô!",
+            conn_connecting: "Đang kết nối...",
+
+            hello_prefix: "Xin chào,",
+            ended_title: "Tuyệt vời! Bạn đã hoàn thành! 🌟",
+            ended_desc: "Cảm ơn bạn đã tham gia bài học hôm nay!",
+            leaderboard_title: "🏆 Bảng xếp hạng",
+            points_unit: "điểm",
+            ended_join_another_btn: "🚀 Tham gia lớp học khác",
+
+            sidebar_learning: "📖 Đang học",
+            sidebar_default_lesson_title: "Bài học hôm nay",
+            sidebar_session_code_label: "🔑 Mã lớp",
+            sidebar_now_viewing: "Đang xem:",
+            sidebar_playing: "▶ Đang phát",
+
+            segment_default_name: "Phần học",
+            segment_no_name: "Không có tên",
+
+            question_header_results: "📊 Kết quả",
+            question_header_question: "❓ Câu hỏi",
+            question_points: "⭐ {points} điểm",
+            question_points_plain: "{points} điểm",
+            question_time_left: "⏱ {seconds}s",
+            time_seconds_plain: "{seconds}s",
+            question_image_alt: "Hình câu hỏi",
+            option_no_content: "(Không có nội dung)",
+
+            short_answer_hint: "Gõ câu trả lời của bạn bên dưới:",
+            short_answer_placeholder: "Nhập câu trả lời...",
+
+            pin_hint_1: "Nhấp chuột lên bản đồ để chọn vị trí trả lời.",
+            pin_hint_2: "Bạn có thể đổi vị trí bằng cách click lại chỗ khác.",
+            pin_selected: "Đã chọn: lat {lat}, lng {lng}",
+            pin_not_selected: "Chưa chọn vị trí. Hãy click lên bản đồ ở bên phải để chọn.",
+
+            btn_sending: "⏳ Đang gửi...",
+            btn_submit_answer: "🚀 Gửi đáp án!",
+            submitted_title: "✅ Tuyệt vời! Đã gửi đáp án!",
+            submitted_desc: "Chờ thầy cô hiển thị kết quả nhé...",
+
+            correct_answer_title: "✅ Đáp án đúng",
+            results_list_title: "📋 Kết quả các bạn",
+            you_suffix: "👈 (Bạn)",
+            result_correct_points: "✓ +{points}",
+            result_wrong: "✗ Sai",
+            btn_continue_viewing: "▶ Tiếp tục xem bản đồ",
+
+            info_title: "📺 Thông tin",
+            info_desc: "Thầy cô đang điều khiển bản đồ. Hãy theo dõi màn hình chính nhé! 👀",
+            current_part_label: "📍 Phần đang học:",
+
+            btn_leaving: "Đang rời...",
+            btn_leave_session: "Rời tiết học",
+
+            overlay_answer_in_sidebar: "Trả lời câu hỏi ở sidebar bên trái →",
+
+            group_panel_title: "👥 Hoạt động nhóm",
+            group_joined_badge: "✓ Đã vào nhóm",
+            group_not_joined_badge: "Chưa vào nhóm",
+            group_choose_title: "📌 Chọn nhóm",
+            group_empty_text: "Giáo viên chưa tạo nhóm hoặc chưa cập nhật.",
+            group_fallback_name: "Nhóm {index}",
+
+            group_work_title: "✏️ Bài làm nhóm",
+            group_work_default_title: "Bài nộp nhóm",
+            group_work_title_placeholder: "Tiêu đề bài làm (tuỳ chọn)",
+            group_work_links_placeholder: "Link đính kèm (tuỳ chọn) — mỗi link 1 dòng hoặc cách nhau bằng dấu phẩy",
+            group_work_content_placeholder: "Viết nội dung bài làm nhóm tại đây...",
+            btn_submit_group_work: "📤 Gửi bài nhóm",
+
+            group_score_title: "🏅 Điểm nhóm",
+            group_score_score_label: "Điểm:",
+            group_score_feedback_label: "Nhận xét:",
+            group_score_graded_at_label: "Chấm lúc:",
+            group_score_hint: "Nhấn “Xem điểm” để tải điểm nhóm.",
+            not_graded: "Chưa chấm",
+            no_feedback: "Chưa có",
+            btn_loading: "⏳ Đang tải...",
+            btn_view_score: "🔎 Xem điểm",
+
+            group_chat_title: "💬 Chat nhóm",
+            group_chat_empty: "Tin nhắn nhóm sẽ hiển thị tại đây 📝",
+            group_chat_placeholder: "Nhắn tin cho nhóm...",
+            btn_send: "📩 Gửi",
+            btn_leave_group: "🚪 Rời nhóm hiện tại",
+
+            group_score_empty: "Chưa có bài nộp nhóm.",
+            group_score_load_failed: "Không tải được điểm nhóm.",
+            group_score_modal_title: "Điểm nhóm",
+
+            field_group_name: "groupName",
+            field_graded_at: "gradedAt",
+            field_score: "score",
+            field_feedback: "feedback",
+            field_title: "title",
+            field_content: "content",
+            field_attachment_urls: "attachmentUrls",
+            null: "null",
+
+            info_choose_option: "Vui lòng chọn một đáp án trước khi gửi.",
+            info_enter_short_answer: "Vui lòng nhập câu trả lời trước khi gửi.",
+            info_choose_location: "Vui lòng chọn vị trí trên bản đồ trước khi gửi.",
+            info_submitted_wait_results: "Đã gửi đáp án! Chờ giáo viên hiển thị kết quả...",
         },
         support: {
             eyebrow: "Hỗ trợ & Trợ giúp",
@@ -1519,7 +1665,7 @@ export const messages = {
             delete_dialog_cancel: "Hủy",
             delete_dialog_confirm_btn: "Xóa bản đồ",
             delete_dialog_deleting: "Đang xóa...",
-            
+
             // Create map dialog
             create_map_dialog_title: "Chọn loại bản đồ",
             create_map_normal_title: "Bản đồ thường",
@@ -1528,7 +1674,7 @@ export const messages = {
             create_map_storymap_desc: "Tạo storymap với timeline và segments để có thể tạo session học tập",
             create_map_dialog_cancel: "Hủy",
             create_map_dialog_create: "Tạo bản đồ",
-            
+
             // Toast messages
             delete_map_success: "Đã xóa bản đồ.",
             remove_map_success: "Đã gỡ bản đồ khỏi workspace.",
@@ -1548,7 +1694,7 @@ export const messages = {
             picker_empty_title: "Chưa có template nào",
             picker_empty_desc: "Bạn có thể tạo ở trang",
             picker_error_create: "Tạo map từ template thất bại",
-            
+
             // Form
             form_placeholder_name: "Tên template",
             form_choose_file: "Chọn file .geojson trước",
@@ -2419,13 +2565,13 @@ export const messages = {
             report_choose_reason: "Vui lòng chọn lý do báo cáo",
             report_success: "Đã gửi báo cáo thành công. Cảm ơn bạn đã phản hồi!",
             report_error: "Không thể gửi báo cáo",
-            
+
             // PublishButton
             publish_error: "Không thể publish map",
             unpublish_error: "Không thể unpublish map",
             archive_error: "Không thể archive map",
             restore_error: "Không thể restore map",
-            
+
             // EmbedCodeGenerator
             embed_prepare_error: "Không thể chuẩn bị map cho embed",
             embed_storymap_unsupported: "Story maps không thể được embed. Chỉ có map bình thường mới có thể embed.",
@@ -3932,6 +4078,12 @@ export const messages = {
             errorSessionNotFound: "Session not found. Please check the PIN.",
             errorSessionEndedJoin: "Session has ended.",
             errorGeneric: "Failed to join session. Please try again.",
+            errAlreadyJoined:
+    "You already joined this session. If you were disconnected after closing the tab, please reopen the same tab (or use the same browser you joined with) so the system can reconnect you automatically.",
+  errSessionFull:
+    "This session has reached the maximum number of participants. Please try again later or contact your teacher.",
+  errGeneric: "Something went wrong. Please try again.",
+  errJoinFailed: "Unable to join the session. Please try again.",
         },
         org_question_builder: {
             // Header
@@ -4074,6 +4226,146 @@ export const messages = {
             toast_delete_success: "Question deleted.",
             toast_delete_failed: "Could not delete the question.",
         },
+        storymap_view: {
+            default_student_name: "Student",
+            err_missing_participant: "Student info not found. Please go back and join again using the session code.",
+            err_load_session: "Failed to load session.",
+            err_load_map: "Failed to load map.",
+            err_submit_answer: "Failed to submit answer. Please try again.",
+
+            toast_session_started: "Session has started!",
+            toast_session_paused: "Session has been paused.",
+            toast_session_ended: "Session has ended.",
+            toast_new_question: "New question! {points} points",
+            toast_time_extended: "⏱️ Time extended by {seconds}s",
+            toast_view_results: "View question results!",
+            toast_layer_switched: "Base map switched to: {layer}",
+
+            toast_group_cannot_connect: "Cannot connect to Group Collaboration. Please log in again and re-join the session.",
+            toast_group_work_submitted: "Group work submitted successfully!",
+            toast_group_work_graded: "Group work has been graded!",
+            toast_answer_submitted: "Answer submitted!",
+            toast_joined_group: "Joined the group!",
+            toast_join_group_failed: "Failed to join the group.",
+            toast_left_group: "You left the group.",
+            toast_leave_group_failed: "Failed to leave the group.",
+            toast_group_work_sent: "Group work sent!",
+            toast_group_work_send_failed: "Failed to send group work.",
+            toast_left_session: "You left the session.",
+
+            error_screen_title: "Unable to join session",
+            error_screen_back_btn: "Back to join page",
+
+            waiting_title: "Waiting for the teacher to start! 🎉",
+            waiting_desc: "You have successfully joined the class!",
+            waiting_session_code_label: "🔑 Session code",
+
+            conn_connected: "✓ Connected!",
+            conn_connected_teacher: "✓ Connected to teacher!",
+            conn_connecting: "Connecting...",
+
+            hello_prefix: "Hello,",
+            ended_title: "Awesome! You’re done! 🌟",
+            ended_desc: "Thanks for joining today’s lesson!",
+            leaderboard_title: "🏆 Leaderboard",
+            points_unit: "pts",
+            ended_join_another_btn: "🚀 Join another class",
+
+            sidebar_learning: "📖 Learning",
+            sidebar_default_lesson_title: "Today’s lesson",
+            sidebar_session_code_label: "🔑 Code",
+            sidebar_now_viewing: "Now viewing:",
+            sidebar_playing: "▶ Playing",
+
+            segment_default_name: "Part",
+            segment_no_name: "No name",
+
+            question_header_results: "📊 Results",
+            question_header_question: "❓ Question",
+            question_points: "⭐ {points} points",
+            question_points_plain: "{points} points",
+            question_time_left: "⏱ {seconds}s",
+            time_seconds_plain: "{seconds}s",
+            question_image_alt: "Question image",
+            option_no_content: "(No content)",
+
+            short_answer_hint: "Type your answer below:",
+            short_answer_placeholder: "Enter your answer...",
+
+            pin_hint_1: "Click on the map to choose your answer location.",
+            pin_hint_2: "You can change it by clicking another place.",
+            pin_selected: "Selected: lat {lat}, lng {lng}",
+            pin_not_selected: "No location selected. Click on the map on the right to choose.",
+
+            btn_sending: "⏳ Sending...",
+            btn_submit_answer: "🚀 Submit answer!",
+            submitted_title: "✅ Great! Answer submitted!",
+            submitted_desc: "Please wait for the teacher to show results...",
+
+            correct_answer_title: "✅ Correct answer",
+            results_list_title: "📋 Class results",
+            you_suffix: "(You)",
+            result_correct_points: "✓ +{points}",
+            result_wrong: "✗ Wrong",
+            btn_continue_viewing: "▶ Continue viewing map",
+
+            info_title: "📺 Info",
+            info_desc: "Teacher is controlling the map. Please follow the main screen! 👀",
+            current_part_label: "📍 Current part:",
+
+            btn_leaving: "Leaving...",
+            btn_leave_session: "Leave session",
+
+            overlay_answer_in_sidebar: "Answer the question in the left sidebar →",
+
+            group_panel_title: "👥 Group activity",
+            group_joined_badge: "✓ Joined",
+            group_not_joined_badge: "Not joined",
+            group_choose_title: "📌 Choose group",
+            group_empty_text: "Teacher hasn’t created groups yet or hasn’t updated.",
+            group_fallback_name: "Group {index}",
+
+            group_work_title: "✏️ Group work",
+            group_work_default_title: "Group submission",
+            group_work_title_placeholder: "Work title (optional)",
+            group_work_links_placeholder: "Attachment links (optional) — one per line or separated by commas",
+            group_work_content_placeholder: "Write your group work here...",
+            btn_submit_group_work: "📤 Submit group work",
+
+            group_score_title: "🏅 Group score",
+            group_score_score_label: "Score:",
+            group_score_feedback_label: "Feedback:",
+            group_score_graded_at_label: "Graded at:",
+            group_score_hint: "Click “View score” to load your group score.",
+            not_graded: "Not graded",
+            no_feedback: "None",
+            btn_loading: "⏳ Loading...",
+            btn_view_score: "🔎 View score",
+
+            group_chat_title: "💬 Group chat",
+            group_chat_empty: "Group messages will appear here 📝",
+            group_chat_placeholder: "Message your group...",
+            btn_send: "📩 Send",
+            btn_leave_group: "🚪 Leave current group",
+
+            group_score_empty: "No group submission yet.",
+            group_score_load_failed: "Failed to load group score.",
+            group_score_modal_title: "Group score",
+
+            field_group_name: "groupName",
+            field_graded_at: "gradedAt",
+            field_score: "score",
+            field_feedback: "feedback",
+            field_title: "title",
+            field_content: "content",
+            field_attachment_urls: "attachmentUrls",
+            null: "null",
+
+            info_choose_option: "Please choose an option before submitting.",
+            info_enter_short_answer: "Please enter your answer before submitting.",
+            info_choose_location: "Please choose a location on the map before submitting.",
+            info_submitted_wait_results: "Answer submitted! Wait for the teacher to show results...",
+        },
         map_gallery: {
             breadcrumb: "Resources / Map Library",
             title: "Community Map Gallery",
@@ -4095,13 +4387,13 @@ export const messages = {
             report_choose_reason: "Please choose a reason for your report",
             report_success: "Report submitted successfully. Thank you for your feedback!",
             report_error: "Failed to submit report",
-            
+
             // PublishButton
             publish_error: "Failed to publish map",
             unpublish_error: "Failed to unpublish map",
             archive_error: "Failed to archive map",
             restore_error: "Failed to restore map",
-            
+
             // EmbedCodeGenerator
             embed_prepare_error: "Failed to prepare map for embed",
             embed_storymap_unsupported: "Story maps cannot be embedded. Only regular maps can be embedded.",
@@ -4261,7 +4553,7 @@ export const messages = {
 
             manage_err_has_active_sessions:
                 "Cannot delete map while it has active sessions. Please end or cancel all active sessions first.",
-            
+
             // Dialog text keys
             delete_dialog_title: "Delete map?",
             delete_dialog_confirm: "Are you sure you want to delete the map",
@@ -4955,7 +5247,7 @@ export const messages = {
             status_pending: "Pending",
             status_cancelled: "Cancelled",
             status_failed: "Failed",
-            
+
             // Payment history section
             payment_history_title: "Your payment history",
             payment_history_desc: "All your payment transactions (including pending)",
@@ -4974,7 +5266,7 @@ export const messages = {
             payment_history_pagination_total: "transactions",
             payment_history_btn_prev: "Previous",
             payment_history_btn_next: "Next",
-            
+
             // Transaction detail modal
             modal_title: "Transaction Details",
             modal_org_label: "Organization:",
@@ -5020,7 +5312,7 @@ export const messages = {
             modal_btn_copy_id: "Copy Transaction ID",
             modal_btn_continue_payment: "Continue Payment",
             modal_btn_close: "Close",
-            
+
             // Toast messages
             toast_receipt_downloaded: "Receipt downloaded successfully",
             toast_receipt_failed: "Failed to download receipt. Please try again.",
@@ -5608,7 +5900,7 @@ export const messages = {
             picker_empty_title: "No templates yet",
             picker_empty_desc: "You can create one on the",
             picker_error_create: "Failed to create map from template",
-            
+
             // Form
             form_placeholder_name: "Template name",
             form_choose_file: "Choose a .geojson file first",

@@ -619,8 +619,15 @@ export async function getSessionLeaderboard(
     SessionLeaderboardResponse | LeaderboardEntryDto[]
   >(`/sessions/${sessionId}/leaderboard${query}`);
 
+  const normalize = (arr: LeaderboardEntryDto[]) =>
+    arr.map((x) => ({
+      ...x,
+      score: x.score ?? x.totalScore ?? 0,
+      totalCorrect: x.totalCorrect ?? 0,
+    }));
+
   if (Array.isArray(res)) {
-    return res;
+    return normalize(res);
   }
 
   if (
@@ -628,7 +635,7 @@ export async function getSessionLeaderboard(
     typeof res === "object" &&
     Array.isArray((res as any).leaderboard)
   ) {
-    return (res as any).leaderboard as LeaderboardEntryDto[];
+    return normalize((res as any).leaderboard as LeaderboardEntryDto[]);
   }
 
   return [];

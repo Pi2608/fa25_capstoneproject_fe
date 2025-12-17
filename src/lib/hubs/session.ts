@@ -355,7 +355,6 @@ export function registerSessionEventHandlers(
     connection.on("SessionStatusChanged", handlers.onSessionStatusChanged);
   }
 
-  // ✅ Normalize participantId để không bị undefined nếu backend gửi SessionParticipantId
   if (handlers.onParticipantJoined) {
     connection.on("ParticipantJoined", (event: any) => {
       const participantId =
@@ -397,6 +396,7 @@ export function registerSessionEventHandlers(
   }
 
   if (handlers.onQuestionTimeExtended) {
+    connection.off("TimeExtended");
     connection.on("TimeExtended", (event: any) => {
       handlers.onQuestionTimeExtended?.({
         ...event,
