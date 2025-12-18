@@ -630,7 +630,7 @@ export default function StoryMapViewer({
       if (controlledPlaying && !playback.isPlaying) {
         playback.handlePlayPreview(controlledIndex);
       } else if (!controlledPlaying && playback.isPlaying) {
-        playback.handleStopPreview();
+        playback.handlePausePreview();
       }
     }
   }, [controlledPlaying, controlledIndex, playback.isPlaying, isControlledMode]);
