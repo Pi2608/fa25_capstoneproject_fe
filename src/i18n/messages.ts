@@ -64,6 +64,27 @@ export const messages = {
             quota_maps: "Bản đồ",
             quota_exports: "Xuất dữ liệu",
             quota_users: "Thành viên",
+
+            // Date/Time
+            from: "Từ",
+            to: "Đến",
+
+            // Loading states
+            loading_data: "Đang tải dữ liệu...",
+            no_data: "Không có dữ liệu",
+
+            // Search
+            search: "Tìm kiếm",
+            search_placeholder: "Tìm kiếm...",
+
+            // Actions
+            view: "Xem",
+            edit: "Sửa",
+            create: "Tạo mới",
+            save: "Lưu",
+            back: "Quay lại",
+            next: "Tiếp theo",
+            submit: "Gửi",
         },
         recents: {
             loading: "Đang tải…",
@@ -948,7 +969,61 @@ export const messages = {
             billing_exportFailed: "Không thể xuất giao dịch",
             billing_invoiceDownloaded: "Đã tải hóa đơn xuống",
             billing_invoiceFailed: "Không thể tải hóa đơn",
-            billing_loadFailed: "Không tải được lịch sử thanh toán"
+            billing_loadFailed: "Không tải được lịch sử thanh toán",
+
+            // Dashboard
+            total_users: "Tổng số người dùng",
+            active_today: "Hoạt động hôm nay",
+            new_signups: "Đăng ký mới",
+            errors_24h: "Lỗi (24h)",
+            monthly_stats_title: "Thống kê theo tháng (12 tháng gần nhất)",
+            organizations: "Tổ chức",
+            maps: "Bản đồ",
+            exports: "Xuất dữ liệu",
+            active_subscriptions: "Gói đăng ký đang hoạt động",
+
+            // Common admin labels
+            user_management: "Quản lý người dùng",
+            organization_management: "Quản lý tổ chức",
+            system_analytics: "Phân tích hệ thống",
+            revenue_analytics: "Phân tích doanh thu",
+
+            // User status
+            status_active: "Hoạt động",
+            status_suspended: "Đã khóa",
+            status_inactive: "Không hoạt động",
+            status_pending: "Chờ xác minh",
+
+            // Filters
+            all_roles: "Tất cả vai trò",
+            all_statuses: "Tất cả trạng thái",
+            filter_all: "Tất cả",
+
+            // Time ago
+            time_never_logged_in: "Chưa đăng nhập",
+            time_just_now: "vừa xong",
+            time_minutes_ago: "{count} phút trước",
+            time_hours_ago: "{count} giờ trước",
+            time_days_ago: "{count} ngày trước",
+
+            // User management messages
+            user_suspended_note: "\"Đã khóa\" sẽ chặn người dùng đăng nhập và sử dụng hệ thống.",
+
+            // Organization management
+            org_suspended_note: "\"Đã khóa\" sẽ tạm chặn quyền truy cập của toàn bộ thành viên trong tổ chức.",
+            org_reason_placeholder: "VD: Hoạt động bất thường, cần tạm ngưng để kiểm tra thanh toán.",
+            org_reason_note: "Lý do này sẽ được lưu trong lịch sử hoạt động quản trị.",
+            change_reason: "Lý do thay đổi",
+            new_status: "Trạng thái mới",
+            members: "Thành viên",
+            status: "Trạng thái",
+            saving: "Đang lưu...",
+            save_changes: "Lưu thay đổi",
+            deleting: "Đang xóa...",
+            delete_permanently: "Xóa vĩnh viễn",
+            cannot_load_orgs: "Không thể tải danh sách tổ chức.",
+            cannot_update_status: "Không thể cập nhật trạng thái tổ chức.",
+            cannot_delete_org: "Không thể xóa tổ chức. Vui lòng thử lại.",
         },
         settings: {
             tabs_members: "Thành viên",
@@ -1195,7 +1270,33 @@ export const messages = {
             delete_permission_hint: "Chỉ chủ sở hữu hoặc quản trị viên mới có thể xóa.",
             confirm_delete: "Xóa không gian làm việc",
 
-            prompt_new_workspace: "Nhập tên không gian làm việc mới:"
+            prompt_new_workspace: "Nhập tên không gian làm việc mới:",
+
+            // Additional toast messages for org/[orgId]/workspaces page
+            ws_create_success: "Tạo workspace thành công!",
+            ws_delete_success: "Xóa workspace thành công!",
+            ws_update_success: "Cập nhật workspace thành công!",
+            ws_name_required: "Vui lòng nhập tên workspace",
+            ws_not_found: "Không tìm thấy tổ chức.",
+
+            // Placeholders for org workspaces modal
+            ph_ws_name: "Enter workspace name",
+            ph_ws_desc: "Enter workspace description (optional)",
+
+            // Labels for org workspaces modal
+            ws_name_label: "Workspace Name *",
+            ws_description_label: "Description",
+
+            // Buttons for org workspaces modal
+            btn_ws_cancel: "Cancel",
+            btn_ws_create: "Create Workspace",
+            btn_ws_creating: "Creating...",
+            btn_ws_edit: "Save Changes",
+            btn_ws_editing: "Saving...",
+
+            // Modal titles for org workspaces
+            modal_ws_create_title: "Create New Workspace",
+            modal_ws_edit_title: "Edit Workspace"
         },
         orgSettings: {
             page_title: "Cài đặt tổ chức",
@@ -1574,7 +1675,14 @@ export const messages = {
             domain_label: "Domain email",
             email_label: "Email",
             col_email: "Email",
-            plan_basic: "Gói cơ bản"
+            plan_basic: "Gói cơ bản",
+
+            // Session join form
+            ph_session_code: "Mã tiết học (VD: 331809)",
+            ph_display_name: "Tên hiển thị của bạn",
+            ph_device_info: "Thông tin thiết bị (VD: Laptop phòng máy 01)",
+            btn_join_session: "Tham gia tiết học",
+            btn_joining_session: "Đang tham gia..."
         },
         devdocs: {
             hero_eyebrow: "NHÀ PHÁT TRIỂN",
@@ -3242,6 +3350,27 @@ export const messages = {
             quota_maps: "Maps",
             quota_exports: "Exports",
             quota_users: "Members",
+
+            // Date/Time
+            from: "From",
+            to: "To",
+
+            // Loading states
+            loading_data: "Loading data...",
+            no_data: "No data",
+
+            // Search
+            search: "Search",
+            search_placeholder: "Search...",
+
+            // Actions
+            view: "View",
+            edit: "Edit",
+            create: "Create",
+            save: "Save",
+            back: "Back",
+            next: "Next",
+            submit: "Submit",
         },
         settings_members: {
             unknown_member: "this member",
@@ -3909,7 +4038,14 @@ export const messages = {
             domain_label: "Email domain",
             email_label: "Email",
             col_email: "Email",
-            plan_basic: "Basic plan"
+            plan_basic: "Basic plan",
+
+            // Session join form
+            ph_session_code: "Session code (e.g., 331809)",
+            ph_display_name: "Your display name",
+            ph_device_info: "Device info (e.g., Lab 01 Laptop)",
+            btn_join_session: "Join session",
+            btn_joining_session: "Joining..."
         },
         org_question_banks: {
             // Header
@@ -5016,7 +5152,61 @@ export const messages = {
             billing_exportFailed: "Failed to export transactions",
             billing_invoiceDownloaded: "Invoice downloaded",
             billing_invoiceFailed: "Failed to download invoice",
-            billing_loadFailed: "Failed to load billing history"
+            billing_loadFailed: "Failed to load billing history",
+
+            // Dashboard
+            total_users: "Total Users",
+            active_today: "Active Today",
+            new_signups: "New Signups",
+            errors_24h: "Errors (24h)",
+            monthly_stats_title: "Monthly Statistics (Last 12 Months)",
+            organizations: "Organizations",
+            maps: "Maps",
+            exports: "Exports",
+            active_subscriptions: "Active Subscriptions",
+
+            // Common admin labels
+            user_management: "User Management",
+            organization_management: "Organization Management",
+            system_analytics: "System Analytics",
+            revenue_analytics: "Revenue Analytics",
+
+            // User status
+            status_active: "Active",
+            status_suspended: "Suspended",
+            status_inactive: "Inactive",
+            status_pending: "Pending Verification",
+
+            // Filters
+            all_roles: "All Roles",
+            all_statuses: "All Statuses",
+            filter_all: "All",
+
+            // Time ago
+            time_never_logged_in: "Never logged in",
+            time_just_now: "just now",
+            time_minutes_ago: "{count} minutes ago",
+            time_hours_ago: "{count} hours ago",
+            time_days_ago: "{count} days ago",
+
+            // User management messages
+            user_suspended_note: "\"Suspended\" will block users from logging in and using the system.",
+
+            // Organization management
+            org_suspended_note: "\"Suspended\" will temporarily block access for all members in the organization.",
+            org_reason_placeholder: "E.g., Unusual activity, need to suspend for payment verification.",
+            org_reason_note: "This reason will be saved in the administrative activity log.",
+            change_reason: "Reason for change",
+            new_status: "New status",
+            members: "Members",
+            status: "Status",
+            saving: "Saving...",
+            save_changes: "Save changes",
+            deleting: "Deleting...",
+            delete_permanently: "Delete permanently",
+            cannot_load_orgs: "Cannot load organization list.",
+            cannot_update_status: "Cannot update organization status.",
+            cannot_delete_org: "Cannot delete organization. Please try again.",
         },
         settings: {
             tabs_members: "Member",
@@ -5155,7 +5345,33 @@ export const messages = {
             delete_permission_hint: "Only owners or admins can delete.",
             confirm_delete: "Delete workspace",
 
-            prompt_new_workspace: "Enter a name for the new workspace:"
+            prompt_new_workspace: "Enter a name for the new workspace:",
+
+            // Additional toast messages for org/[orgId]/workspaces page
+            ws_create_success: "Workspace created successfully!",
+            ws_delete_success: "Workspace deleted successfully!",
+            ws_update_success: "Workspace updated successfully!",
+            ws_name_required: "Please enter workspace name",
+            ws_not_found: "Organization not found.",
+
+            // Placeholders for org workspaces modal
+            ph_ws_name: "Enter workspace name",
+            ph_ws_desc: "Enter workspace description (optional)",
+
+            // Labels for org workspaces modal
+            ws_name_label: "Workspace Name *",
+            ws_description_label: "Description",
+
+            // Buttons for org workspaces modal
+            btn_ws_cancel: "Cancel",
+            btn_ws_create: "Create Workspace",
+            btn_ws_creating: "Creating...",
+            btn_ws_edit: "Save Changes",
+            btn_ws_editing: "Saving...",
+
+            // Modal titles for org workspaces
+            modal_ws_create_title: "Create New Workspace",
+            modal_ws_edit_title: "Edit Workspace"
         },
         notifications: {
             title: "Notifications",

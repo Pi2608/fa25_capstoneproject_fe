@@ -12,6 +12,7 @@ import {
 import { useTheme } from "../layout";
 import { getThemeClasses } from "@/utils/theme-utils";
 import { useLoading } from "@/contexts/LoadingContext";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type Organization = {
   orgId: string;
@@ -33,11 +34,12 @@ export default function OrganizationsPage() {
   const { isDark } = useTheme();
   const loading = useLoading();
   const theme = getThemeClasses(isDark);
+  const { t } = useI18n();
   const [rows, setRows] = useState<Organization[]>([]);
   const [page, setPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [search, setSearch] = useState<string>("");
-  const [status, setStatus] = useState<"Tất cả" | OrgStatus>("Tất cả");
+  const [status, setStatus] = useState<string>("all");
 
   const [draft, setDraft] = useState<EditDraft | null>(null);
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -58,7 +60,7 @@ export default function OrganizationsPage() {
             page,
             pageSize: 10,
             search: search.trim() || undefined,
-            status: status === "Tất cả" ? undefined : status,
+            status: status === "all" ? undefined : (status as OrgStatus),
           });
 
         if (cancelled) return;
@@ -69,7 +71,7 @@ export default function OrganizationsPage() {
           const msg =
             e instanceof Error
               ? e.message
-              : "Không thể tải danh sách tổ chức.";
+              : t("admin", "cannot_load_orgs");
           loading.setLoadingMessage(msg);
         }
       } finally {
@@ -88,7 +90,7 @@ export default function OrganizationsPage() {
   };
 
   const onStatusChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    setStatus(e.target.value as "Tất cả" | OrgStatus);
+    setStatus(e.target.value);
     setPage(1);
   };
 
@@ -160,7 +162,7 @@ export default function OrganizationsPage() {
           x.orgId === orgId ? { ...x, status: prevStatus } : x
         )
       );
-      alert("Không thể cập nhật trạng thái tổ chức.");
+      alert(t("admin", "cannot_update_status"));
     } finally {
       setSubmitting(false);
     }
@@ -190,7 +192,7 @@ export default function OrganizationsPage() {
 
       setDeleteTarget(null);
     } catch {
-      alert("Không thể xóa tổ chức. Vui lòng thử lại.");
+      alert(t("admin", "cannot_delete_org"));
     } finally {
       setDeleting(false);
     }
@@ -213,9 +215,9 @@ export default function OrganizationsPage() {
               value={status}
               onChange={onStatusChange}
             >
-              <option value="Tất cả">Tất cả trạng thái</option>
-              <option value="Active">Hoạt động</option>
-              <option value="Suspended">Đã khóa</option>
+              <option value="all">{t("admin", "all_statuses")}</option>
+              <option value="Active">{t("admin", "status_active")}</option>
+              <option value="Suspended">{t("admin", "status_suspended")}</option>
             </select>
           </div>
         </div>
@@ -253,7 +255,7 @@ export default function OrganizationsPage() {
                       : "border-gray-200 bg-gray-50 text-gray-600"
                   }`}
                 >
-                  Thành viên
+                  {t("admin", "members")}
                 </th>
                 <th
                   className={`p-3 border-b text-left font-extrabold text-xs ${
@@ -262,7 +264,7 @@ export default function OrganizationsPage() {
                       : "border-gray-200 bg-gray-50 text-gray-600"
                   }`}
                 >
-                  Trạng thái
+                  {t("admin", "status")}
                 </th>
                 <th
                   className={`p-3 border-b text-left font-extrabold text-xs ${
@@ -325,11 +327,11 @@ export default function OrganizationsPage() {
                     >
                       {o.status === "Suspended" ? (
                         <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18">
-                          Đã khóa
+                          {t("admin", "status_suspended")}
                         </span>
                       ) : (
                         <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16">
-                          Hoạt động
+                          {t("admin", "status_active")}
                         </span>
                       )}
                     </td>
@@ -424,7 +426,7 @@ export default function OrganizationsPage() {
             <div className="space-y-6">
               <div className="space-y-2">
                 <label className={`block text-sm font-medium ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
-                  Trạng thái mới
+                  {t("admin", "new_status")}
                   <span className="text-red-500">*</span>
                 </label>
                 <div className="mt-1">
@@ -434,32 +436,31 @@ export default function OrganizationsPage() {
                     disabled={submitting}
                     onChange={onDraftStatusChange}
                   >
-                    <option value="Active">Hoạt động</option>
-                    <option value="Suspended">Đã khóa</option>
+                    <option value="Active">{t("admin", "status_active")}</option>
+                    <option value="Suspended">{t("admin", "status_suspended")}</option>
                   </select>
                 </div>
                 <div className={`${theme.textMuted} text-sm`}>
-                  "Đã khóa" sẽ tạm chặn quyền truy cập của toàn bộ thành viên
-                  trong tổ chức này.
+                  {t("admin", "org_suspended_note")}
                 </div>
               </div>
 
               <div className="space-y-2">
                 <label className={`block text-sm font-medium ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
-                  Lý do thay đổi
+                  {t("admin", "change_reason")}
                   <span className="text-red-500">*</span>
                 </label>
                 <div className="mt-1">
                   <textarea
                     className={`w-full px-4 py-2 rounded-lg border focus:outline-none focus:ring-2 transition-colors resize-y ${theme.input}`}
-                    placeholder="VD: Hoạt động bất thường, cần tạm ngưng để kiểm tra thanh toán."
+                    placeholder={t("admin", "org_reason_placeholder")}
                     value={draft.reason}
                     disabled={submitting}
                     onChange={onDraftReasonChange}
                   />
                 </div>
                 <div className={`${theme.textMuted} text-sm`}>
-                  Lý do này sẽ được lưu trong lịch sử hoạt động quản trị.
+                  {t("admin", "org_reason_note")}
                 </div>
               </div>
             </div>
@@ -470,14 +471,14 @@ export default function OrganizationsPage() {
                 disabled={submitting}
                 onClick={closeEditModal}
               >
-                Hủy
+                {t("common", "cancel")}
               </button>
               <button
                 className={`px-4 py-2 rounded-lg border transition-colors ${theme.button}`}
                 disabled={submitting}
                 onClick={submitUpdate}
               >
-                {submitting ? "Đang lưu..." : "Lưu thay đổi"}
+                {submitting ? t("admin", "saving") : t("admin", "save_changes")}
               </button>
             </div>
           </div>
@@ -517,7 +518,7 @@ export default function OrganizationsPage() {
                 disabled={deleting}
                 onClick={closeDeleteModal}
               >
-                Hủy
+                {t("common", "cancel")}
               </button>
 
               <button
@@ -525,7 +526,7 @@ export default function OrganizationsPage() {
                 disabled={deleting}
                 onClick={confirmDelete}
               >
-                {deleting ? "Đang xóa..." : "Xóa vĩnh viễn"}
+                {deleting ? t("admin", "deleting") : t("admin", "delete_permanently")}
               </button>
             </div>
           </div>
