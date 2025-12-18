@@ -2905,6 +2905,12 @@ export const messages = {
 
             success_export_created: "Đã tạo yêu cầu xuất bản đồ thành công!",
             success_export_approved: "Xuất bản đồ đã được phê duyệt! Bạn có thể tải xuống.",
+            // GeoJSON export messages
+            geojson_download_success: "GeoJSON đã được tải xuống tự động",
+            geojson_export_failed: "Lỗi xuất GeoJSON",
+            geojson_export_timeout: "Hết thời gian chờ xuất GeoJSON",
+            // Quota exceeded
+            quota_export_exceeded: "Đã đạt giới hạn xuất dữ liệu. Vui lòng nâng cấp gói hoặc liên hệ chủ sở hữu tổ chức.",
 
             status_pending: "Đang chờ xử lý...",
             status_processing: "Đang xử lý...",
@@ -3255,6 +3261,39 @@ export const messages = {
             zoneStyleCustomLabel: "Nhãn tùy chỉnh:",
             zoneStyleSave: "Lưu",
             zoneStyleSaving: "Đang lưu...",
+            // Segment deletion errors
+            segmentDeleteHasTransitions: "Không thể xóa segment khi đang được sử dụng trong timeline transitions. Vui lòng xóa các transition liên quan trước.",
+            segmentDeleteSuccess: "Đã xóa segment thành công",
+            segmentDeleteFailed: "Không thể xóa segment",
+            // Feature update
+            featureUpdateSuccess: "Đã cập nhật feature thành công",
+            featureUpdateFailed: "Không thể cập nhật feature",
+            // Segment save
+            segmentUpdateSuccess: "Đã cập nhật segment thành công",
+            segmentCreateSuccess: "Đã tạo segment thành công",
+            segmentSaveFailed: "Không thể lưu segment",
+            // Transition save
+            transitionEditNotSupported: "Chỉnh sửa transition chưa được hỗ trợ. Vui lòng xóa và tạo lại.",
+            transitionCreateSuccess: "Đã tạo transition thành công",
+            transitionSaveFailed: "Không thể lưu transition",
+            // Transition delete
+            transitionDeleteSuccess: "Đã xóa transition thành công",
+            transitionDeleteFailed: "Không thể xóa transition",
+            // Timeline reorder
+            timelineReorderSuccess: "Đã sắp xếp lại segments thành công",
+            timelineReorderFailed: "Không thể sắp xếp lại segments",
+            // Copy coordinates
+            coordinatesCopySuccess: "📍 Đã sao chép tọa độ vào clipboard!",
+            coordinatesCopyFailed: "❌ Không thể sao chép tọa độ",
+            // Zone/Feature operations
+            zoneDeleteConfirm: "Bạn có chắc chắn muốn xóa \"{name}\"?",
+            layerNotFound: "❌ Không tìm thấy layer",
+            featureNotFoundInLayer: "❌ Không tìm thấy feature trong layer",
+            zoneDeleteSuccess: "✅ Đã xóa zone thành công!",
+            zoneDeleteFailed: "❌ Không thể xóa zone",
+            zoneDeleteError: "❌ Lỗi khi xóa zone",
+            // Map save
+            mapSaveSuccess: "Đã lưu thông tin bản đồ và vị trí hiển thị.",
         },
         footer: {
             tagline: 'Xây dựng và chia sẻ bản đồ tương tác thật dễ dàng. Mạnh mẽ cho đội nhóm, đơn giản cho mọi người.',
@@ -3552,6 +3591,12 @@ export const messages = {
             // Success messages
             success_export_created: "Export request created successfully!",
             success_export_approved: "Map export has been approved! You can download it now.",
+            // GeoJSON export messages
+            geojson_download_success: "GeoJSON downloaded automatically",
+            geojson_export_failed: "GeoJSON export failed",
+            geojson_export_timeout: "GeoJSON export timeout",
+            // Quota exceeded
+            quota_export_exceeded: "Export quota limit reached. Please upgrade your plan or contact the organization owner.",
 
             // Status messages
             status_pending: "Pending...",
@@ -6556,6 +6601,39 @@ export const messages = {
             zoneStyleCustomLabel: "Custom Label:",
             zoneStyleSave: "Save",
             zoneStyleSaving: "Saving...",
+            // Segment deletion errors
+            segmentDeleteHasTransitions: "Cannot delete segment while it is being used in timeline transitions. Please delete related transitions first.",
+            segmentDeleteSuccess: "Segment deleted successfully",
+            segmentDeleteFailed: "Failed to delete segment",
+            // Feature update
+            featureUpdateSuccess: "Feature updated successfully",
+            featureUpdateFailed: "Failed to update feature",
+            // Segment save
+            segmentUpdateSuccess: "Segment updated successfully",
+            segmentCreateSuccess: "Segment created successfully",
+            segmentSaveFailed: "Failed to save segment",
+            // Transition save
+            transitionEditNotSupported: "Transition editing not yet supported. Please delete and recreate.",
+            transitionCreateSuccess: "Transition created successfully",
+            transitionSaveFailed: "Failed to save transition",
+            // Transition delete
+            transitionDeleteSuccess: "Transition deleted successfully",
+            transitionDeleteFailed: "Failed to delete transition",
+            // Timeline reorder
+            timelineReorderSuccess: "Segments reordered successfully",
+            timelineReorderFailed: "Failed to reorder segments",
+            // Copy coordinates
+            coordinatesCopySuccess: "📍 Coordinates copied to clipboard!",
+            coordinatesCopyFailed: "❌ Failed to copy coordinates",
+            // Zone/Feature operations
+            zoneDeleteConfirm: "Are you sure you want to delete \"{name}\"?",
+            layerNotFound: "❌ Layer not found",
+            featureNotFoundInLayer: "❌ Feature not found in layer",
+            zoneDeleteSuccess: "✅ Zone deleted successfully!",
+            zoneDeleteFailed: "❌ Failed to delete zone",
+            zoneDeleteError: "❌ Error deleting zone",
+            // Map save
+            mapSaveSuccess: "Map information and display position saved.",
         },
         footer: {
             tagline: 'Create and share interactive maps with ease. Powerful for teams, simple for everyone.',
