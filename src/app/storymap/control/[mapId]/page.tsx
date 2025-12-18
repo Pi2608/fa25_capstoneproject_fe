@@ -223,6 +223,7 @@ export default function StoryMapControlPage() {
       pointsEarned?: number;
       responseTimeSeconds?: number;
       submittedAt?: string;
+      distanceFromCorrect?: number;
     }>
   >([]);
 
@@ -1301,6 +1302,21 @@ export default function StoryMapControlPage() {
     }
   };
 
+  const getActiveQuestionType = () => {
+    if (currentQuestionIndex != null && questions[currentQuestionIndex]) {
+      return questions[currentQuestionIndex]?.questionType;
+    }
+
+    if (currentBroadcastSessionQuestionId) {
+      const q = questions.find(
+        (x) => x.sessionQuestionId === currentBroadcastSessionQuestionId
+      );
+      return q?.questionType;
+    }
+
+    return undefined;
+  };
+
   const loadStudentResponses = async () => {
     const sessionQuestionId = currentBroadcastSessionQuestionId;
     if (!sessionQuestionId) {
@@ -1311,6 +1327,27 @@ export default function StoryMapControlPage() {
     try {
       setRespLoading(true);
       setRespError(null);
+
+      const qType = getActiveQuestionType();
+
+      if (qType === "PIN_ON_MAP") {
+        const data = await getMapPinsData(sessionQuestionId);
+
+        const mapped = (data.pins || []).map((p) => ({
+          name: p.displayName || p.participantId,
+          answer: `${p.latitude}, ${p.longitude}`,
+          isCorrect: Boolean(p.isCorrect),
+          pointsEarned:
+            typeof p.pointsEarned === "number" ? p.pointsEarned : undefined,
+          distanceFromCorrect:
+            typeof p.distanceFromCorrect === "number"
+              ? p.distanceFromCorrect
+              : undefined,
+        }));
+
+        setRespItems(mapped);
+        return;
+      }
 
       const data = await getSessionQuestionResponses(sessionQuestionId);
 
@@ -1326,12 +1363,14 @@ export default function StoryMapControlPage() {
           name: a.displayName || a.participantId,
           answer,
           isCorrect: Boolean(a.isCorrect),
-          pointsEarned: typeof a.pointsEarned === "number" ? a.pointsEarned : undefined,
+          pointsEarned:
+            typeof a.pointsEarned === "number" ? a.pointsEarned : undefined,
           responseTimeSeconds:
-            typeof a.responseTimeSeconds === "number" ? a.responseTimeSeconds : undefined,
+            typeof a.responseTimeSeconds === "number"
+              ? a.responseTimeSeconds
+              : undefined,
           submittedAt: a.submittedAt,
         };
-
       });
 
       setRespItems(mapped);
@@ -1343,6 +1382,7 @@ export default function StoryMapControlPage() {
       setRespLoading(false);
     }
   };
+
 
   const handleCreateGroup = async (name: string, color?: string) => {
     if (!groupCollabConnection || !session?.sessionId) return;
@@ -1548,8 +1588,8 @@ export default function StoryMapControlPage() {
           </div>
 
           {/* RIGHT: Question control + question bank */}
-          <div className="w-[360px] border-l border-zinc-800 bg-zinc-950/95 flex flex-col">
-            <div className="flex-1 overflow-y-auto px-4 pb-4 pt-3 space-y-3">
+          <div className="w-[360px] border-l border-zinc-800 bg-zinc-950/95 flex flex-col min-h-0">
+            <div className="flex-1 min-h-0 px-4 pb-4 pt-3">
               <SessionQuestionPanel
                 session={session}
                 sessionQuestionBanks={sessionQuestionBanks}
@@ -1861,6 +1901,16 @@ export default function StoryMapControlPage() {
                             {it.responseTimeSeconds}s
                           </span>
                         )}
+                        {typeof it.distanceFromCorrect === "number" && (
+                          <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5">
+                            Khoảng cách:{" "}
+                            {it.distanceFromCorrect.toLocaleString(undefined, {
+                              maximumFractionDigits: 2,
+                            })}{" "}
+                            m
+                          </span>
+                        )}
+
                         {it.submittedAt && (
                           <span className="rounded-full border border-zinc-800 bg-zinc-900 px-2 py-0.5">
                             {new Date(it.submittedAt).toLocaleString()}

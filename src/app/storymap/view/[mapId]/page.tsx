@@ -99,6 +99,13 @@ export default function StoryMapViewPage() {
   const [isTeacherPlaying, setIsTeacherPlaying] = useState(false);
   const [hasReceivedSegmentSync, setHasReceivedSegmentSync] = useState(false);
   const [error, setError] = useState<string | null>(null);
+type SessionStatus = "WAITING" | "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "CANCELLED";
+
+const [sessionStatus, setSessionStatus] = useState<SessionStatus>("WAITING");
+const sessionStatusRef = useRef<SessionStatus>("WAITING");
+useEffect(() => {
+  sessionStatusRef.current = sessionStatus;
+}, [sessionStatus]);
 
   // Layer sync state - receives layer from teacher
   const [selectedLayer, setSelectedLayer] = useState<BaseKey>("osm");
