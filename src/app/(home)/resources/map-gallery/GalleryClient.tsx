@@ -340,11 +340,10 @@ export default function GalleryClient() {
             <button
               key={k}
               onClick={() => setTagKey(k)}
-              className={`gal-tag-btn rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                tagKey === k
+              className={`gal-tag-btn rounded-full px-3 py-1.5 text-xs font-medium transition ${tagKey === k
                   ? "bg-emerald-500 text-zinc-950"
                   : "border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:border-emerald-400/70"
-              }`}
+                }`}
               aria-pressed={tagKey === k}
             >
               {renderTagFilterLabel(k)}
@@ -442,11 +441,15 @@ export default function GalleryClient() {
 
                 <div className="mt-4 flex flex-wrap gap-3">
                   <Link
-                    href={`/maps/${m.mapId}`}
+                    href={{
+                      pathname: "/maps/publish",
+                      query: { mapId: m.mapId, view: "true" },
+                    }}
                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
                   >
                     {t("gallery.view_map")}
                   </Link>
+
                   <button
                     type="button"
                     onClick={() => handleDuplicate(m.id, m.mapId)}
@@ -478,11 +481,10 @@ export default function GalleryClient() {
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className={`rounded-xl px-3 py-2 text-sm ring-1 ${
-                  page <= 1
+                className={`rounded-xl px-3 py-2 text-sm ring-1 ${page <= 1
                     ? "cursor-not-allowed opacity-50 ring-white/10"
                     : "ring-white/15 hover:bg-white/5"
-                }`}
+                  }`}
               >
                 {t("gallery.prev")}
               </button>
@@ -494,11 +496,10 @@ export default function GalleryClient() {
                     <button
                       key={n}
                       onClick={() => setPage(n)}
-                      className={`h-9 w-9 rounded-lg text-sm ${
-                        page === n
+                      className={`h-9 w-9 rounded-lg text-sm ${page === n
                           ? "bg-emerald-500 text-zinc-950"
                           : "ring-1 ring-white/10 hover:bg-white/5"
-                      }`}
+                        }`}
                     >
                       {n}
                     </button>
@@ -512,11 +513,10 @@ export default function GalleryClient() {
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className={`rounded-xl px-3 py-2 text-sm ring-1 ${
-                  page >= totalPages
+                className={`rounded-xl px-3 py-2 text-sm ring-1 ${page >= totalPages
                     ? "cursor-not-allowed opacity-50 ring-white/10"
                     : "ring-white/15 hover:bg-white/5"
-                }`}
+                  }`}
               >
                 {t("gallery.next")}
               </button>
