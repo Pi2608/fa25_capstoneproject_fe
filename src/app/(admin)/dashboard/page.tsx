@@ -12,6 +12,7 @@ import {
 import { useTheme } from "../layout";
 import { getThemeClasses } from "@/utils/theme-utils";
 import { useRouter } from "next/navigation";
+import { useI18n } from "@/i18n/I18nProvider";
 import {
   LineChart,
   Line,
@@ -282,7 +283,7 @@ function buildSparkPath(points: RevenuePoint[], w = 720, h = 220): { d: string; 
   return { d, min, max };
 }
 
-function normalizeUsage(obj: Raw): UsageItem[] {
+function normalizeUsage(obj: Raw, t: (ns: string, key: string) => string): UsageItem[] {
   const items: UsageItem[] = [];
   if (!obj) return items;
 
@@ -297,11 +298,11 @@ function normalizeUsage(obj: Raw): UsageItem[] {
   const maps = pickNumber(obj, ["totalMaps", "TotalMaps", "total_maps", "maps", "mapCount"]);
   const exportsN = pickNumber(obj, ["totalExports", "TotalExports", "total_exports", "exports", "exportCount"]);
 
-  if (Number.isFinite(totalUsers) && totalUsers >= 0) items.push({ label: "Total Users", value: totalUsers.toLocaleString() });
-  if (Number.isFinite(totalOrgs) && totalOrgs >= 0) items.push({ label: "Organizations", value: totalOrgs.toLocaleString() });
-  if (Number.isFinite(maps) && maps >= 0) items.push({ label: "Maps", value: maps.toLocaleString() });
-  if (Number.isFinite(exportsN) && exportsN >= 0) items.push({ label: "Exports", value: exportsN.toLocaleString() });
-  if (Number.isFinite(totalSubscriptions) && totalSubscriptions >= 0) items.push({ label: "Active Subscriptions", value: totalSubscriptions.toLocaleString() });
+  if (Number.isFinite(totalUsers) && totalUsers >= 0) items.push({ label: t("admin", "total_users"), value: totalUsers.toLocaleString() });
+  if (Number.isFinite(totalOrgs) && totalOrgs >= 0) items.push({ label: t("admin", "organizations"), value: totalOrgs.toLocaleString() });
+  if (Number.isFinite(maps) && maps >= 0) items.push({ label: t("admin", "maps"), value: maps.toLocaleString() });
+  if (Number.isFinite(exportsN) && exportsN >= 0) items.push({ label: t("admin", "exports"), value: exportsN.toLocaleString() });
+  if (Number.isFinite(totalSubscriptions) && totalSubscriptions >= 0) items.push({ label: t("admin", "active_subscriptions"), value: totalSubscriptions.toLocaleString() });
 
   return items;
 }
@@ -310,6 +311,7 @@ export default function AdminDashboard(): JSX.Element {
   const router = useRouter();
   const { isDark } = useTheme();
   const theme = getThemeClasses(isDark);
+  const { t } = useI18n();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [topUsers, setTopUsers] = useState<TopUserRow[]>([]);
   const [topOrgs, setTopOrgs] = useState<TopOrgRow[]>([]);
@@ -420,7 +422,7 @@ export default function AdminDashboard(): JSX.Element {
 
         setTopOrgs(normOrgs);
 
-        setUsage(normalizeUsage(usageRes));
+        setUsage(normalizeUsage(usageRes, t));
       } catch (err) {
         console.error("Failed to load dashboard data:", err);
         setStats({
@@ -589,7 +591,7 @@ export default function AdminDashboard(): JSX.Element {
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
           <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
-            <span>Tổng số người dùng</span>
+            <span>{t("admin", "total_users")}</span>
           </div>
           <div className="text-2xl font-extrabold tracking-wide">
             {loading ? "…" : (stats?.totalUsers ?? 0).toLocaleString()}
@@ -600,7 +602,7 @@ export default function AdminDashboard(): JSX.Element {
         </div>
         <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
           <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
-            <span>Hoạt động hôm nay</span>
+            <span>{t("admin", "active_today")}</span>
           </div>
           <div className="text-2xl font-extrabold tracking-wide">
             {loading ? "…" : (stats?.activeToday ?? 0).toLocaleString()}
@@ -611,7 +613,7 @@ export default function AdminDashboard(): JSX.Element {
         </div>
         <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
           <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
-            <span>Đăng ký mới</span>
+            <span>{t("admin", "new_signups")}</span>
           </div>
           <div className="text-2xl font-extrabold tracking-wide">
             {loading ? "…" : (stats?.newSignups ?? 0).toLocaleString()}
@@ -622,7 +624,7 @@ export default function AdminDashboard(): JSX.Element {
         </div>
         <div className={`${theme.kpiCard} border rounded-xl p-3.5 shadow-sm grid gap-2`}>
           <div className={`flex items-center justify-between ${theme.textMuted} text-xs`}>
-            <span>Lỗi (24h)</span>
+            <span>{t("admin", "errors_24h")}</span>
           </div>
           <div className="text-2xl font-extrabold tracking-wide">
             {loading ? "…" : (stats?.errors24h ?? 0).toLocaleString()}
@@ -636,9 +638,9 @@ export default function AdminDashboard(): JSX.Element {
       {/* Monthly Analytics Chart */}
       <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3`}>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="m-0 text-base font-extrabold">Thống kê theo tháng (12 tháng gần nhất)</h3>
+          <h3 className="m-0 text-base font-extrabold">{t("admin", "monthly_stats_title")}</h3>
           <div className="flex items-center gap-2">
-            <label className="text-sm text-zinc-400">Từ</label>
+            <label className="text-sm text-zinc-400">{t("common", "from")}</label>
             <input
               type="month"
               value={monthlyStart.slice(0, 7)}
@@ -649,7 +651,7 @@ export default function AdminDashboard(): JSX.Element {
               className="px-2 py-1 rounded border border-zinc-600 bg-zinc-800 text-white text-sm"
               max={monthlyEnd.slice(0, 7)}
             />
-            <label className="text-sm text-zinc-400">Đến</label>
+            <label className="text-sm text-zinc-400">{t("common", "to")}</label>
             <input
               type="month"
               value={monthlyEnd.slice(0, 7)}
@@ -664,11 +666,11 @@ export default function AdminDashboard(): JSX.Element {
         </div>
         {monthlyLoading ? (
           <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
-            Đang tải dữ liệu...
+            {t("common", "loading_data")}
           </div>
         ) : monthlyData.length === 0 ? (
           <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
-            Không có dữ liệu
+            {t("common", "no_data")}
           </div>
         ) : (
           <div className="w-full h-[400px]">

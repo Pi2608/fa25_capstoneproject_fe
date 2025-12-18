@@ -8,6 +8,7 @@ import {
   adminDeleteUser,
 } from "@/lib/admin-api";
 import { useTheme } from "../layout";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type Role = "Admin" | "RegisteredUser" | "Member" | "User" | string;
 type BackendStatus =
@@ -37,11 +38,11 @@ type User = {
 
 const PAGE_SIZE = 10;
 
-function viStatus(st: BackendStatus) {
-  if (st === "Suspended") return "Đã khóa";
-  if (st === "Inactive") return "Không hoạt động";
-  if (st === "PendingVerification" || st === "Pending") return "Chờ xác minh";
-  return "Hoạt động";
+function viStatus(st: BackendStatus, t: (ns: string, key: string) => string) {
+  if (st === "Suspended") return t("admin", "status_suspended");
+  if (st === "Inactive") return t("admin", "status_inactive");
+  if (st === "PendingVerification" || st === "Pending") return t("admin", "status_pending");
+  return t("admin", "status_active");
 }
 
 function useDebounce<T>(value: T, delay = 350) {
@@ -53,29 +54,30 @@ function useDebounce<T>(value: T, delay = 350) {
   return v;
 }
 
-function timeAgoVi(iso?: string | null) {
+function timeAgoVi(iso?: string | null, t?: (ns: string, key: string, params?: Record<string, any>) => string) {
   if (!iso) return "–";
   if (iso === "0001-01-01T00:00:00" || iso.startsWith("0001-01-01")) {
-    return "Chưa đăng nhập";
+    return t ? t("admin", "time_never_logged_in") : "Chưa đăng nhập";
   }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "–";
   if (d.getTime() < 0) {
-    return "Chưa đăng nhập";
+    return t ? t("admin", "time_never_logged_in") : "Chưa đăng nhập";
   }
-  
+
   const diff = new Date().getTime() - d.getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1) return "vừa xong";
-  if (m < 60) return `${m} phút trước`;
+  if (m < 1) return t ? t("admin", "time_just_now") : "vừa xong";
+  if (m < 60) return t ? t("admin", "time_minutes_ago", { count: m }) : `${m} phút trước`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h} giờ trước`;
+  if (h < 24) return t ? t("admin", "time_hours_ago", { count: h }) : `${h} giờ trước`;
   const days = Math.floor(h / 24);
-  return `${days} ngày trước`;
+  return t ? t("admin", "time_days_ago", { count: days }) : `${days} ngày trước`;
 }
 
 export default function AccountsPage() {
   const { isDark } = useTheme();
+  const { t } = useI18n();
   const [rows, setRows] = useState<User[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -83,10 +85,8 @@ export default function AccountsPage() {
   const [q, setQ] = useState("");
   const debouncedQ = useDebounce(q);
 
-  const [roleFilter, setRoleFilter] = useState<"Tất cả" | Role>("Tất cả");
-  const [statusFilter, setStatusFilter] = useState<
-    "Tất cả" | "Hoạt động" | "Đã khóa" | "Không hoạt động" | "Chờ xác minh"
-  >("Tất cả");
+  const [roleFilter, setRoleFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -108,13 +108,13 @@ export default function AccountsPage() {
   const [submitting, setSubmitting] = useState(false);
 
   const serverStatus: BackendStatus | undefined =
-    statusFilter === "Tất cả"
+    statusFilter === "all"
       ? undefined
-      : statusFilter === "Đã khóa"
+      : statusFilter === "suspended"
       ? "Suspended"
-      : statusFilter === "Không hoạt động"
+      : statusFilter === "inactive"
       ? "Inactive"
-      : statusFilter === "Chờ xác minh"
+      : statusFilter === "pending"
       ? "PendingVerification"
       : "Active";
 
@@ -160,7 +160,7 @@ export default function AccountsPage() {
   }, [page, debouncedQ, serverStatus]);
 
   const filtered = useMemo(() => {
-    if (roleFilter === "Tất cả") return rows;
+    if (roleFilter === "all") return rows;
     return rows.filter((u) => u.role === roleFilter);
   }, [rows, roleFilter]);
 
@@ -319,11 +319,11 @@ export default function AccountsPage() {
               value={roleFilter}
               onChange={(e) => {
                 setPage(1);
-                setRoleFilter(e.target.value as Role | "Tất cả");
+                setRoleFilter(e.target.value);
               }}
-              aria-label="Lọc theo vai trò"
+              aria-label="Filter by role"
             >
-              <option value="Tất cả">Tất cả vai trò</option>
+              <option value="all">{t("admin", "all_roles")}</option>
               <option value="Admin">Admin</option>
               <option value="Member">Member</option>
               <option value="User">User</option>
@@ -335,23 +335,14 @@ export default function AccountsPage() {
                   : "border-gray-300 bg-white text-gray-900 focus:border-gray-400 focus:ring-gray-400"
               }`}
               value={statusFilter}
-              onChange={(e) =>
-                setStatusFilter(
-                  e.target.value as
-                    | "Tất cả"
-                    | "Hoạt động"
-                    | "Đã khóa"
-                    | "Không hoạt động"
-                    | "Chờ xác minh"
-                )
-              }
-              aria-label="Lọc theo trạng thái"
+              onChange={(e) => setStatusFilter(e.target.value)}
+              aria-label="Filter by status"
             >
-              <option value="Tất cả">Tất cả trạng thái</option>
-              <option value="Hoạt động">Hoạt động</option>
-              <option value="Đã khóa">Đã khóa</option>
-              <option value="Không hoạt động">Không hoạt động</option>
-              <option value="Chờ xác minh">Chờ xác minh</option>
+              <option value="all">{t("admin", "all_statuses")}</option>
+              <option value="active">{t("admin", "status_active")}</option>
+              <option value="suspended">{t("admin", "status_suspended")}</option>
+              <option value="inactive">{t("admin", "status_inactive")}</option>
+              <option value="pending">{t("admin", "status_pending")}</option>
             </select>
           </div>
         </div>
@@ -430,10 +421,10 @@ export default function AccountsPage() {
                         isDark ? "border-zinc-800" : "border-gray-200"
                       }`}>
                         {u.status === "Suspended" ? (
-                          <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18">Đã khóa</span>
+                          <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#b45309] bg-amber-500/18">{t("admin", "status_suspended")}</span>
                         ) : (
                           <span className="px-2 py-1 rounded-full text-xs font-extrabold text-[#166534] bg-green-500/16">
-                            {viStatus(u.status)}
+                            {viStatus(u.status, t)}
                           </span>
                         )}
                       </td>
@@ -551,12 +542,13 @@ export default function AccountsPage() {
                   </div>
                   <div>
                     <b>Trạng thái: </b>
-                    {viStatus(viewUser.status)}
+                    {viStatus(viewUser.status, t)}
                   </div>
                   <div>
                     <b>Lần hoạt động gần nhất: </b>
                     {timeAgoVi(
-                      viewUser.lastLoginAt || viewUser.createdAt
+                      viewUser.lastLoginAt || viewUser.createdAt,
+                      t
                     )}
                   </div>
                   <div>
@@ -643,12 +635,12 @@ export default function AccountsPage() {
                       )
                     }
                   >
-                    <option value="Active">Hoạt động</option>
-                    <option value="Suspended">Đã khóa</option>
+                    <option value="Active">{t("admin", "status_active")}</option>
+                    <option value="Suspended">{t("admin", "status_suspended")}</option>
                   </select>
                 </div>
                 <div className="text-zinc-500 text-xs">
-                  "Đã khóa" sẽ chặn người dùng đăng nhập và sử dụng hệ thống.
+                  {t("admin", "user_suspended_note")}
                 </div>
               </div>
 
