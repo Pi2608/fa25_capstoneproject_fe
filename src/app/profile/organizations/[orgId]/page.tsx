@@ -753,7 +753,7 @@ export default function OrgDetailPage() {
                 type="text"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                placeholder="Mã tiết học (VD: 331809)"
+                placeholder={t("org_detail", "ph_session_code")}
                 className={`rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${themeClasses.input}`}
               />
 
@@ -761,7 +761,7 @@ export default function OrgDetailPage() {
                 type="text"
                 value={joinName}
                 onChange={(e) => setJoinName(e.target.value)}
-                placeholder="Tên hiển thị của bạn"
+                placeholder={t("org_detail", "ph_display_name")}
                 className={`rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${themeClasses.input}`}
               />
 
@@ -769,7 +769,7 @@ export default function OrgDetailPage() {
                 type="text"
                 value={joinDevice}
                 onChange={(e) => setJoinDevice(e.target.value)}
-                placeholder="Thông tin thiết bị (VD: Laptop phòng máy 01)"
+                placeholder={t("org_detail", "ph_device_info")}
                 className={`rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/60 ${themeClasses.input}`}
               />
 
@@ -779,7 +779,7 @@ export default function OrgDetailPage() {
                 disabled={joinBusy}
                 className="mt-1 inline-flex items-center justify-center rounded-md bg-emerald-500 text-white font-semibold text-sm px-4 py-2 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                {joinBusy ? "Đang tham gia..." : "Tham gia tiết học"}
+                {joinBusy ? t("org_detail", "btn_joining_session") : t("org_detail", "btn_join_session")}
               </button>
             </div>
 

@@ -41,6 +41,7 @@ import { useToast } from "@/contexts/ToastContext";
 import html2canvas from "html2canvas";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useAuth } from "@/contexts/AuthContext";
+import { parseQuotaError } from "@/utils/parseQuotaError";
 import PublishButton from "@/components/map/PublishButton";
 import ZoomControls from "@/components/map/controls/ZoomControls";
 import { ZoneStyleEditor } from "@/components/map-editor-ui/ZoneStyleEditor";
@@ -134,7 +135,7 @@ export default function EditMapPage() {
   });
 
   // New VSCode-style UI state
-  const [leftSidebarView, setLeftSidebarView] = useState<"explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "library" | null>("explorer");
+  const [leftSidebarView, setLeftSidebarView] = useState<"search" | "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "library" | null>("explorer");
   const [isPropertiesPanelOpen, setIsPropertiesPanelOpen] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState<{
     type: "feature" | "layer" | "segment";
@@ -2345,96 +2346,6 @@ export default function EditMapPage() {
     };
   }, [debouncedIconVisibilityUpdate, isMapReady, mapId, updateIconVisibility]);
 
-  // Inject global CSS for POI markers
-  useEffect(() => {
-    const styleId = 'poi-marker-styles';
-    if (document.getElementById(styleId)) return;
-
-    const style = document.createElement('style');
-    style.id = styleId;
-    style.textContent = `
-      .poi-marker {
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        background: transparent !important;
-        border: none !important;
-      }
-      .poi-marker > div {
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        background: transparent !important;
-        border: none !important;
-        width: 100% !important;
-        height: 100% !important;
-      }
-      .poi-marker img {
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-      }
-      .poi-tooltip-modal {
-        scrollbar-width: thin;
-        scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
-      }
-      .poi-tooltip-modal::-webkit-scrollbar {
-        width: 6px;
-      }
-      .poi-tooltip-modal::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      .poi-tooltip-modal::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.3);
-        border-radius: 3px;
-      }
-      .poi-tooltip-modal::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.5);
-      }
-      .poi-tooltip-modal h1,
-      .poi-tooltip-modal h2,
-      .poi-tooltip-modal h3,
-      .poi-tooltip-modal h4,
-      .poi-tooltip-modal h5,
-      .poi-tooltip-modal h6 {
-        margin: 0 0 8px 0;
-        color: #ffffff;
-      }
-      .poi-tooltip-modal p {
-        margin: 0 0 8px 0;
-      }
-      .poi-tooltip-modal p:last-child {
-        margin-bottom: 0;
-      }
-      .poi-tooltip-modal ul,
-      .poi-tooltip-modal ol {
-        margin: 8px 0;
-        padding-left: 24px;
-      }
-      .poi-tooltip-modal * {
-        color: inherit !important;
-      }
-      .poi-tooltip-modal {
-        color: #ffffff !important;
-      }
-      .poi-tooltip-modal p,
-      .poi-tooltip-modal span,
-      .poi-tooltip-modal div,
-      .poi-tooltip-modal li {
-        color: #ffffff !important;
-      }
-    `;
-    document.head.appendChild(style);
-
-    return () => {
-      const existingStyle = document.getElementById(styleId);
-      if (existingStyle) {
-        existingStyle.remove();
-      }
-    };
-  }, []);
 
   // Layer feature click handler for highlighting
   useEffect(() => {
@@ -2571,9 +2482,9 @@ export default function EditMapPage() {
     const coordsText = formatCoordinates(contextMenu.feature);
     const success = await copyToClipboard(coordsText);
     if (success) {
-      showToast("success", "📍 Coordinates copied to clipboard!");
+      showToast("success", t('mapEditor', 'coordinatesCopySuccess'));
     } else {
-      showToast("error", "❌ Failed to copy coordinates");
+      showToast("error", t('mapEditor', 'coordinatesCopyFailed'));
     }
   }, [contextMenu.feature, showToast]);
 
@@ -2590,7 +2501,6 @@ export default function EditMapPage() {
     const featureIndex = findFeatureIndex(layerData, contextMenu.feature);
 
     if (featureIndex === -1) {
-      showToast("error", "❌ Feature not found in layer");
       return;
     }
 
@@ -2633,15 +2543,15 @@ export default function EditMapPage() {
 
   const handleDeleteZone = useCallback(async () => {
     if (!detail || !contextMenu.feature || !contextMenu.layerId) return;
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${getFeatureName(contextMenu.feature)}"?`
-    );
+    const featureName = getFeatureName(contextMenu.feature);
+    const confirmMessage = t('mapEditor', 'zoneDeleteConfirm').replace('{name}', featureName);
+    const confirmed = window.confirm(confirmMessage);
     if (!confirmed) return;
 
     const layerId = contextMenu.layerId;
     const targetLayer = detail.layers.find(l => l.id === layerId);
     if (!targetLayer) {
-      showToast("error", "❌ Layer not found");
+      showToast("error", t('mapEditor', 'layerNotFound'));
       return;
     }
 
@@ -2649,25 +2559,25 @@ export default function EditMapPage() {
       const layerData = targetLayer.layerData as FeatureCollection;
       const featureIndex = findFeatureIndex(layerData, contextMenu.feature);
       if (featureIndex === -1) {
-        showToast("error", "❌ Feature not found in layer");
+        showToast("error", t('mapEditor', 'featureNotFoundInLayer'));
         return;
       }
 
       const updatedGeoJSON = removeFeatureFromGeoJSON(layerData as FeatureCollection, featureIndex);
       const success = await updateLayerData(detail.id, layerId, updatedGeoJSON);
       if (success) {
-        showToast("success", "✅ Zone deleted successfully!");
+        showToast("success", t('mapEditor', 'zoneDeleteSuccess'));
         if (contextMenu.leafletLayer && mapRef.current) {
           mapRef.current.removeLayer(contextMenu.leafletLayer);
         }
         const updatedDetail = await getMapDetail(detail.id);
         setDetail(updatedDetail);
       } else {
-        showToast("error", "❌ Failed to delete zone");
+        showToast("error", t('mapEditor', 'zoneDeleteFailed'));
       }
     } catch (error) {
       console.error('Error deleting zone:', error);
-      showToast("error", "❌ Error deleting zone");
+      showToast("error", t('mapEditor', 'zoneDeleteError'));
     }
   }, [detail, contextMenu, showToast]);
 
@@ -2836,13 +2746,9 @@ export default function EditMapPage() {
             : f
         )
       );
-
-      // Note: Do NOT update selectedEntity here to avoid re-triggering auto-save loop
-      // The feature layer already has the updated style applied in real-time by FeatureStyleEditor
-
-      showToast("success", "Feature updated successfully");
+      showToast("success", t('mapEditor', 'featureUpdateSuccess'));
     } catch (error) {
-      showToast("error", "Failed to update feature");
+      showToast("error", t('mapEditor', 'featureUpdateFailed'));
     }
   }, [mapId, selectedEntity, showToast]);
 
@@ -2855,18 +2761,18 @@ export default function EditMapPage() {
       if (segmentId) {
         // Update existing segment
         await updateSegment(mapId, segmentId, data);
-        showToast("success", "Segment updated successfully");
+        showToast("success", t('mapEditor', 'segmentUpdateSuccess'));
       } else {
         // Create new segment
         await createSegment(mapId, data);
-        showToast("success", "Segment created successfully");
+        showToast("success", t('mapEditor', 'segmentCreateSuccess'));
       }
 
       // Reload segments with route animations
       const updatedSegments = await loadSegmentsWithRoutes(mapId);
       setSegments(updatedSegments);
     } catch (error) {
-      showToast("error", "Failed to save segment");
+      showToast("error", t('mapEditor', 'segmentSaveFailed'));
     }
   }, [mapId, showToast, loadSegmentsWithRoutes]);
 
@@ -2876,13 +2782,22 @@ export default function EditMapPage() {
 
     try {
       await deleteSegment(mapId, segmentId);
-      showToast("success", "Segment deleted successfully");
+      showToast("success", t('mapEditor', 'segmentDeleteSuccess'));
 
       // Reload segments with route animations
       const updatedSegments = await loadSegmentsWithRoutes(mapId);
       setSegments(updatedSegments);
-    } catch (error) {
-      showToast("error", "Failed to delete segment");
+    } catch (error: any) {
+      // Check if error is due to segment having transitions
+      const errorType = error?.type || error?.title || error?.response?.data?.type || error?.response?.data?.title || "";
+      const errorDetail = error?.detail || error?.message || error?.response?.data?.detail || error?.response?.data?.message || "";
+      
+      if (errorType === "Segment.HasTransitions" || 
+          (typeof errorDetail === "string" && errorDetail.toLowerCase().includes("transition"))) {
+        showToast("error", t('mapEditor', 'segmentDeleteHasTransitions'));
+      } else {
+        showToast("error", t('mapEditor', 'segmentDeleteFailed'));
+      }
     }
   }, [mapId, showToast, loadSegmentsWithRoutes]);
 
@@ -2894,19 +2809,19 @@ export default function EditMapPage() {
 
       if (transitionId) {
         // Update not supported by API - would need to delete and recreate
-        showToast("warning", "Transition editing not yet supported. Please delete and recreate.");
+        showToast("warning", t('mapEditor', 'transitionEditNotSupported'));
         return;
       } else {
         // Create new transition
         await createTimelineTransition(mapId, data);
-        showToast("success", "Transition created successfully");
+        showToast("success", t('mapEditor', 'transitionCreateSuccess'));
       }
 
       // Reload transitions
       const updatedTransitions = await getTimelineTransitions(mapId);
       setTransitions(updatedTransitions);
     } catch (error) {
-      showToast("error", "Failed to save transition");
+      showToast("error", t('mapEditor', 'transitionSaveFailed'));
     }
   }, [mapId, showToast]);
 
@@ -2916,13 +2831,13 @@ export default function EditMapPage() {
 
     try {
       await deleteTimelineTransition(mapId, transitionId);
-      showToast("success", "Transition deleted successfully");
+      showToast("success", t('mapEditor', 'transitionDeleteSuccess'));
 
       // Reload transitions
       const updatedTransitions = await getTimelineTransitions(mapId);
       setTransitions(updatedTransitions);
     } catch (error) {
-      showToast("error", "Failed to delete transition");
+      showToast("error", t('mapEditor', 'transitionDeleteFailed'));
     }
   }, [mapId, showToast]);
 
@@ -2947,9 +2862,9 @@ export default function EditMapPage() {
       try {
         await reorderSegments(mapId, newOrder.map((s) => s.segmentId));
         setSegments(newOrder);
-        showToast("success", "Segments reordered successfully");
+        showToast("success", t('mapEditor', 'timelineReorderSuccess'));
       } catch (error) {
-        showToast("error", "Failed to reorder segments");
+        showToast("error", t('mapEditor', 'timelineReorderFailed'));
       }
     },
     [mapId, transitions, showToast]
@@ -3232,7 +3147,7 @@ export default function EditMapPage() {
       };
 
       await updateMap(detail.id, body);
-      showToast("success", "Đã lưu thông tin bản đồ và vị trí hiển thị.");
+      showToast("success", t('mapEditor', 'mapSaveSuccess'));
     } catch (e) {
       showToast("error", e instanceof Error ? e.message : t('mapEditor.saveFailed'));
     } finally {
@@ -3859,7 +3774,7 @@ export default function EditMapPage() {
         if (response.status === "Approved" && response.fileUrl) {
           // Auto-download GeoJSON file
           window.open(response.fileUrl, '_blank');
-          showToast("success", lang === 'vi' ? 'GeoJSON đã được tải xuống tự động' : 'GeoJSON downloaded automatically');
+          showToast("success", t('export_embed', 'geojson_download_success'));
         } else if (response.status === "Processing" || response.status === "Pending") {
           // If still processing, poll a few times to get the final status
           let pollCount = 0;
@@ -3875,14 +3790,14 @@ export default function EditMapPage() {
                 clearInterval(pollInterval);
                 // Auto-download GeoJSON file
                 window.open(updatedExport.fileUrl, '_blank');
-                showToast("success", lang === 'vi' ? 'GeoJSON đã được tải xuống tự động' : 'GeoJSON downloaded automatically');
+                showToast("success", t('export_embed', 'geojson_download_success'));
               } else if (updatedExport.status === "Rejected" || updatedExport.status === "Failed") {
                 clearInterval(pollInterval);
                 const reason = updatedExport.rejectionReason || updatedExport.errorMessage || '';
-                showToast("error", `${lang === 'vi' ? 'Lỗi xuất GeoJSON' : 'GeoJSON export failed'}: ${reason}`);
+                showToast("error", `${t('export_embed', 'geojson_export_failed')}: ${reason}`);
               } else if (pollCount >= maxPolls) {
                 clearInterval(pollInterval);
-                showToast("warning", lang === 'vi' ? 'Hết thời gian chờ xuất GeoJSON' : 'GeoJSON export timeout');
+                showToast("warning", t('export_embed', 'geojson_export_timeout'));
               }
             } catch (error) {
               console.error("Error checking GeoJSON export status:", error);
@@ -3909,22 +3824,27 @@ export default function EditMapPage() {
     } catch (error) {
       console.error("Export failed:", error);
 
-      // Handle specific error types
-      if (error instanceof Error) {
-        const errorMessage = error.message;
+      // Check for quota exceeded errors using parseQuotaError
+      const quotaError = parseQuotaError(error);
+      if (quotaError) {
+        showToast("error", t('export_embed', 'quota_export_exceeded'));
+        return;
+      }
 
-        // Check for specific error types from the API
-        if (errorMessage.includes("Export.MembershipNotFound") || errorMessage.includes("membership not found")) {
-          showToast("error", t('export_embed', 'error_membership_not_found'));
-        } else if (errorMessage.includes("permission") || errorMessage.includes("forbidden")) {
-          showToast("error", t('export_embed', 'error_permission_denied'));
-        } else if (errorMessage.includes("format")) {
-          showToast("error", t('export_embed', 'error_invalid_format'));
-        } else {
-          showToast("error", errorMessage || t('export_embed', 'error_export_failed'));
-        }
+      // Handle specific error types
+      const errorMessage = 
+        (error instanceof Error ? error.message : "") ||
+        (error && typeof error === "object" && "message" in error ? String(error.message) : "") ||
+        "";
+
+      if (errorMessage.includes("Export.MembershipNotFound") || errorMessage.includes("membership not found")) {
+        showToast("error", t('export_embed', 'error_membership_not_found'));
+      } else if (errorMessage.includes("permission") || errorMessage.includes("forbidden")) {
+        showToast("error", t('export_embed', 'error_permission_denied'));
+      } else if (errorMessage.includes("format")) {
+        showToast("error", t('export_embed', 'error_invalid_format'));
       } else {
-        showToast("error", t('export_embed', 'error_export_failed'));
+        showToast("error", errorMessage || t('export_embed', 'error_export_failed'));
       }
     } finally {
       setIsExporting(false);

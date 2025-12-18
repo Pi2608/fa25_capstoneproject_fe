@@ -7,7 +7,7 @@ import { Workspace } from "@/types/workspace";
 import { formatDate } from "@/utils/formatUtils";
 import { getOrganizationById, OrganizationDetailDto } from "@/lib/api-organizations";
 import { createWorkspace, CreateWorkspaceRequest, deleteWorkspace, getWorkspacesByOrganization, updateWorkspace } from "@/lib/api-workspaces";
-import { TFunc } from "@/i18n/I18nProvider";
+import { useI18n, TFunc } from "@/i18n/I18nProvider";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name";
@@ -98,6 +98,7 @@ export default function WorkspacesPage() {
   const orgId = p?.orgId ?? "";
   const router = useRouter();
   const { showToast } = useToast();
+  const { t } = useI18n();
 
   const [org, setOrg] = useState<OrganizationDetailDto | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -179,7 +180,7 @@ export default function WorkspacesPage() {
       };
 
       await createWorkspace(req);
-      showToast("success", "Tạo workspace thành công!");
+      showToast("success", t("workspaces", "ws_create_success"));
       setCreateOpen(false);
       setNewWorkspaceName("");
       setNewWorkspaceDesc("");
@@ -189,7 +190,7 @@ export default function WorkspacesPage() {
     } finally {
       setCreateLoading(false);
     }
-  }, [orgId, newWorkspaceName, newWorkspaceDesc, showToast, loadData]);
+  }, [orgId, newWorkspaceName, newWorkspaceDesc, showToast, loadData, t]);
 
   const handleDeleteWorkspace = useCallback(async () => {
     if (!deleteOpen.workspaceId) return;
@@ -197,7 +198,7 @@ export default function WorkspacesPage() {
     setDeleteLoading(true);
     try {
       await deleteWorkspace(deleteOpen.workspaceId);
-      showToast("success", "Xóa workspace thành công!");
+      showToast("success", t("workspaces", "ws_delete_success"));
       setDeleteOpen({ open: false });
       await loadData();
     } catch (e) {
@@ -205,11 +206,11 @@ export default function WorkspacesPage() {
     } finally {
       setDeleteLoading(false);
     }
-  }, [deleteOpen.workspaceId, showToast, loadData]);
+  }, [deleteOpen.workspaceId, showToast, loadData, t]);
 
   const handleEditWorkspace = useCallback(async () => {
     if (!editOpen.workspaceId || !editOpen.workspaceName?.trim()) {
-      showToast("error", "Vui lòng nhập tên workspace");
+      showToast("error", t("workspaces", "ws_name_required"));
       return;
     }
 
@@ -219,7 +220,7 @@ export default function WorkspacesPage() {
         workspaceName: editOpen.workspaceName.trim(),
         description: editOpen.workspaceDesc?.trim() || undefined,
       });
-      showToast("success", "Cập nhật workspace thành công!");
+      showToast("success", t("workspaces", "ws_update_success"));
       setEditOpen({ open: false });
       await loadData();
     } catch (e) {
@@ -227,10 +228,10 @@ export default function WorkspacesPage() {
     } finally {
       setEditLoading(false);
     }
-  }, [editOpen, showToast, loadData]);
+  }, [editOpen, showToast, loadData, t]);
 
-  if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">Đang tải…</div>;
-  if (err || !org) return <div className="max-w-3xl px-4 text-red-400">{err ?? "Không tìm thấy tổ chức."}</div>;
+  if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">{t("workspaces", "loading")}</div>;
+  if (err || !org) return <div className="max-w-3xl px-4 text-red-400">{err ?? t("workspaces", "ws_not_found")}</div>;
 
   return (
     <div className="min-w-0 relative px-4">
@@ -448,25 +449,25 @@ export default function WorkspacesPage() {
       {createOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
-            <h2 className="text-xl font-semibold text-white mb-4">Create New Workspace</h2>
+            <h2 className="text-xl font-semibold text-white mb-4">{t("workspaces", "modal_ws_create_title")}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Workspace Name *</label>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">{t("workspaces", "ws_name_label")}</label>
                 <input
                   type="text"
                   value={newWorkspaceName}
                   onChange={(e) => setNewWorkspaceName(e.target.value)}
-                  placeholder="Enter workspace name"
+                  placeholder={t("workspaces", "ph_ws_name")}
                   className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Description</label>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">{t("workspaces", "ws_description_label")}</label>
                 <textarea
                   value={newWorkspaceDesc}
                   onChange={(e) => setNewWorkspaceDesc(e.target.value)}
-                  placeholder="Enter workspace description (optional)"
+                  placeholder={t("workspaces", "ph_ws_desc")}
                   rows={3}
                   className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
                 />
@@ -477,14 +478,14 @@ export default function WorkspacesPage() {
                 className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
                 onClick={() => setCreateOpen(false)}
               >
-                Cancel
+                {t("workspaces", "btn_ws_cancel")}
               </button>
               <button
                 onClick={() => void handleCreateWorkspace()}
                 disabled={createLoading || !newWorkspaceName.trim()}
                 className="px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
               >
-                {createLoading ? "Creating..." : "Create Workspace"}
+                {createLoading ? t("workspaces", "btn_ws_creating") : t("workspaces", "btn_ws_create")}
               </button>
             </div>
           </div>
@@ -495,25 +496,25 @@ export default function WorkspacesPage() {
       {editOpen.open && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
           <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
-            <h2 className="text-xl font-semibold text-white mb-4">Edit Workspace</h2>
+            <h2 className="text-xl font-semibold text-white mb-4">{t("workspaces", "modal_ws_edit_title")}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Workspace Name *</label>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">{t("workspaces", "ws_name_label")}</label>
                 <input
                   type="text"
                   value={editOpen.workspaceName || ""}
                   onChange={(e) => setEditOpen({ ...editOpen, workspaceName: e.target.value })}
-                  placeholder="Enter workspace name"
+                  placeholder={t("workspaces", "ph_ws_name")}
                   className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">Description</label>
+                <label className="block text-sm font-medium text-zinc-300 mb-2">{t("workspaces", "ws_description_label")}</label>
                 <textarea
                   value={editOpen.workspaceDesc || ""}
                   onChange={(e) => setEditOpen({ ...editOpen, workspaceDesc: e.target.value })}
-                  placeholder="Enter workspace description (optional)"
+                  placeholder={t("workspaces", "ph_ws_desc")}
                   rows={3}
                   className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
                 />
@@ -524,14 +525,14 @@ export default function WorkspacesPage() {
                 className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
                 onClick={() => setEditOpen({ open: false })}
               >
-                Cancel
+                {t("workspaces", "btn_ws_cancel")}
               </button>
               <button
                 onClick={() => void handleEditWorkspace()}
                 disabled={editLoading || !editOpen.workspaceName?.trim()}
                 className="px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
               >
-                {editLoading ? "Saving..." : "Save Changes"}
+                {editLoading ? t("workspaces", "btn_ws_editing") : t("workspaces", "btn_ws_edit")}
               </button>
             </div>
           </div>

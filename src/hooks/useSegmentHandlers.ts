@@ -131,7 +131,6 @@ export function useSegmentHandlers({
       setConfirmDelete(null);
     } catch (error) {
       console.error("Failed to delete segment:", error);
-      alert("Không thể xóa segment. Vui lòng thử lại.");
     }
   };
 

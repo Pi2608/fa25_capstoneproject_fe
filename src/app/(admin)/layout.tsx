@@ -196,19 +196,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
               : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
               }`}
-            onClick={() => router.push("/settings")}
-          >
-            <span className="flex-shrink-0 w-5 h-5 flex items-center justify-center">
-              <SettingsIcon />
-            </span>
-            <span className={`whitespace-nowrap transition-opacity ${open ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
-              }`}>Cài đặt</span>
-          </button>
-          <button
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors disabled:opacity-50 ${isDark
-              ? "text-zinc-400 hover:bg-zinc-800/50 hover:text-zinc-200"
-              : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
             onClick={onSignOut}
             disabled={signingOut}
             aria-busy={signingOut}
