@@ -32,6 +32,38 @@ export const messages = {
             error_description: "Đã xảy ra sự cố không mong muốn. Vui lòng thử lại sau.",
             error_try_again: "Thử lại",
             error_reset: "Đặt lại",
+
+            // Confirmation dialog
+            confirm_delete_title: "Xác nhận xóa {itemType}",
+            confirm_delete_message: "Hành động này không thể hoàn tác",
+            confirm_delete_named: "Bạn có chắc chắn muốn xóa {itemType} \"{itemName}\"?",
+            confirm_dialog_item: "mục này",
+            affected_items: "Các mục bị ảnh hưởng",
+            cannot_undo: "Hành động này không thể hoàn tác.",
+            deleting: "Đang xóa...",
+            delete: "Xóa",
+
+            // Entity types
+            entity_map: "bản đồ",
+            entity_workspace: "workspace",
+            entity_member: "thành viên",
+
+            // Related items
+            related_maps: "bản đồ",
+            related_members: "thành viên",
+
+            // Quota error messages
+            quota_exceeded_title: "Đã đạt giới hạn",
+            quota_limit_reached: "đã đạt giới hạn",
+            quota_usage_info: "Bạn đang sử dụng {current}/{limit} {type}",
+            quota_owner_message: "Bạn đã đạt giới hạn gói hiện tại. Vui lòng nâng cấp gói để tiếp tục sử dụng.",
+            quota_member_message: "Tổ chức đã đạt giới hạn. Vui lòng liên hệ chủ sở hữu để nâng cấp gói.",
+            upgrade_plan: "Nâng cấp gói",
+
+            // Quota types
+            quota_maps: "Bản đồ",
+            quota_exports: "Xuất dữ liệu",
+            quota_users: "Thành viên",
         },
         recents: {
             loading: "Đang tải…",
@@ -3178,6 +3210,38 @@ export const messages = {
             error_description: "An unexpected error occurred. Please try again later.",
             error_try_again: "Try Again",
             error_reset: "Reset",
+
+            // Confirmation dialog
+            confirm_delete_title: "Confirm delete {itemType}",
+            confirm_delete_message: "This action cannot be undone",
+            confirm_delete_named: "Are you sure you want to delete {itemType} \"{itemName}\"?",
+            confirm_dialog_item: "this item",
+            affected_items: "Affected items",
+            cannot_undo: "This action cannot be undone.",
+            deleting: "Deleting...",
+            delete: "Delete",
+
+            // Entity types
+            entity_map: "map",
+            entity_workspace: "workspace",
+            entity_member: "member",
+
+            // Related items
+            related_maps: "maps",
+            related_members: "members",
+
+            // Quota error messages
+            quota_exceeded_title: "Limit Reached",
+            quota_limit_reached: "limit reached",
+            quota_usage_info: "You are using {current}/{limit} {type}",
+            quota_owner_message: "You've reached your current plan limit. Please upgrade your plan to continue.",
+            quota_member_message: "Your organization has reached its limit. Please contact the owner to upgrade the plan.",
+            upgrade_plan: "Upgrade Plan",
+
+            // Quota types
+            quota_maps: "Maps",
+            quota_exports: "Exports",
+            quota_users: "Members",
         },
         settings_members: {
             unknown_member: "this member",

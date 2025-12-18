@@ -11,6 +11,7 @@ import { createDefaultMap, deleteMap, getMapDetail } from "@/lib/api-maps";
 import { getWorkspaceById, getWorkspaceMaps, removeMapFromWorkspace } from "@/lib/api-workspaces";
 import { useI18n, type TFunc } from "@/i18n/I18nProvider";
 import { getMe, Me } from "@/lib/api-auth";
+import { parseQuotaError } from "@/utils/parseQuotaError";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name" | "author";
@@ -166,28 +167,24 @@ export default function WorkspaceDetailPage() {
       setShowCreateMapDialog(false);
       router.push(`/maps/${created.mapId}`);
     } catch (e) {
-      // Parse the error
-      const apiError = parseApiError(e);
+      // Parse quota error using the helper function
+      const quotaError = parseQuotaError(e);
 
-      // Check if it's a quota exceeded error
-      if (apiError.type === "Map.QuotaExceeded" || apiError.title === "Map.QuotaExceeded") {
-        // Extract quota details from message
-        // Example: "Quota exceeded. You have 5/5 Maps used. Requested: 1"
-        const message = apiError.detail || apiError.message || "";
-        const match = message.match(/You have (\d+)\/(\d+) (\w+) used/);
-
-        const currentUsage = match ? parseInt(match[1], 10) : undefined;
-        const limit = match ? parseInt(match[2], 10) : undefined;
-        const quotaType = match ? match[3] : "Maps"; // "Maps"
-
+      if (quotaError) {
         // Close create map dialog, open quota exceeded modal
         setShowCreateMapDialog(false);
+        // Map quota type from parseQuotaError format to modal format
+        const quotaTypeMap: Record<"maps" | "exports" | "users", string> = {
+          maps: "Maps",
+          exports: "Exports",
+          users: "Users",
+        };
         setQuotaExceededModal({
           open: true,
-          quotaType,
-          currentUsage,
-          limit,
-          message,
+          quotaType: quotaTypeMap[quotaError.type] || "Maps",
+          currentUsage: quotaError.current,
+          limit: quotaError.limit,
+          message: quotaError.message,
         });
       } else {
         // Generic error handling for other errors
