@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { CreateLocationRequest, Location } from "@/lib/api-storymap";
+import { CreateLocationRequest, Location, Segment } from "@/lib/api-storymap";
 import { LocationType } from "@/types/location";
 import { Icon } from "@/components/map-editor-ui/Icon";
-import { AssetPickerDialog } from "@/components/map-editor-ui/AssetPickerDialog";
+import { IconLibraryView } from "@/components/map-editor-ui/IconLibraryView";
 import { UserAsset } from "@/lib/api-library";
 
 type TabType = "basic" | "icon" | "display" | "media";
@@ -18,6 +18,10 @@ interface LocationFormProps {
   isLoading?: boolean;
   onRepickLocation?: () => void;
   onCancelRepick?: () => void;
+  isStoryMap?: boolean;
+  segments?: Segment[];
+  mapId?: string;
+  onCreateLocationFromAsset?: (asset: UserAsset, segmentId: string) => void;
 }
 
 export function LocationForm({
@@ -29,6 +33,10 @@ export function LocationForm({
   isLoading = false,
   onRepickLocation,
   onCancelRepick,
+  isStoryMap = false,
+  segments = [],
+  mapId,
+  onCreateLocationFromAsset,
 }: LocationFormProps) {
   const [activeTab, setActiveTab] = useState<TabType>("basic");
   const [title, setTitle] = useState("");
@@ -44,6 +52,7 @@ export function LocationForm({
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [iconUrl, setIconUrl] = useState("");
+  const [iconType, setIconType] = useState(""); // For preset icons (e.g., "plane", "car")
   const [iconSize, setIconSize] = useState(32);
   const [audioUrl, setAudioUrl] = useState("");
   const [iconPreview, setIconPreview] = useState<string | null>(null);
@@ -51,9 +60,75 @@ export function LocationForm({
   const iconInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
 
-  // Asset Picker State
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerType, setPickerType] = useState<"image" | "audio">("image");
+  // Selected icon state
+  const [selectedIconKey, setSelectedIconKey] = useState<string>("");
+
+  // Helper function to get MDI icon from preset key
+  const getIconForKey = (key: string): string => {
+    const iconMap: Record<string, string> = {
+      // Travel & Movement
+      plane: "mdi:airplane",
+      car: "mdi:car",
+      bus: "mdi:bus",
+      train: "mdi:train",
+      ship: "mdi:ferry",
+      bike: "mdi:bike",
+      walk: "mdi:walk",
+      route: "mdi:routes",
+      from: "mdi:map-marker-radius",
+      to: "mdi:map-marker-check",
+      // Places & POI
+      home: "mdi:home-outline",
+      office: "mdi:office-building-outline",
+      school: "mdi:school-outline",
+      hospital: "mdi:hospital-building",
+      restaurant: "mdi:silverware-fork-knife",
+      coffee: "mdi:coffee-outline",
+      shop: "mdi:storefront-outline",
+      park: "mdi:tree-outline",
+      museum: "mdi:bank-outline",
+      hotel: "mdi:bed-outline",
+      // People & Events
+      person: "mdi:account",
+      group: "mdi:account-group",
+      info: "mdi:information-outline",
+      warning: "mdi:alert-outline",
+      danger: "mdi:alert-octagon-outline",
+      star: "mdi:star-outline",
+      photo: "mdi:image-outline",
+      camera: "mdi:camera-outline",
+      note: "mdi:note-text-outline",
+      chat: "mdi:chat-outline",
+      // Minerals & Resources
+      gold: "mdi:gold",
+      diamond: "mdi:diamond-stone",
+      crystal: "mdi:diamond",
+      oil: "mdi:oil",
+      coal: "mdi:cube-outline",
+      iron: "mdi:hammer-wrench",
+      copper: "mdi:lightning-bolt",
+      silver: "mdi:circle-outline",
+      gem: "mdi:sack",
+      mine: "mdi:pickaxe",
+      // History & Landmarks
+      mountain: "mdi:terrain",
+      river: "mdi:water",
+      lake: "mdi:water-circle",
+      forest: "mdi:tree",
+      desert: "mdi:weather-sunny",
+      volcano: "mdi:volcano",
+      island: "mdi:island",
+      beach: "mdi:beach",
+      castle: "mdi:castle",
+      temple: "mdi:temple-hindu",
+      monument: "mdi:monument",
+      tomb: "mdi:tombstone",
+      ruin: "mdi:castle",
+      battlefield: "mdi:sword",
+      "ancient-city": "mdi:city-variant",
+    };
+    return iconMap[key] || "mdi:map-marker";
+  };
 
   useEffect(() => {
     // Prioritize initialCoordinates over initialLocation.markerGeometry
@@ -79,7 +154,28 @@ export function LocationForm({
       setLocationType(initialLocation.locationType || "PointOfInterest");
       setIsVisible(initialLocation.isVisible !== false);
       setHighlightOnEnter(initialLocation.highlightOnEnter ?? false);
-      setIconUrl(initialLocation.iconUrl || "");
+
+      // Handle icon: priority iconType > iconUrl (mutual exclusivity)
+      const hasIconType = initialLocation.iconType && initialLocation.iconType.trim() !== "";
+      const hasIconUrl = initialLocation.iconUrl && initialLocation.iconUrl.trim() !== "";
+
+      if (hasIconType) {
+        // If has preset icon, use it and clear URL
+        setIconType(initialLocation.iconType || "");
+        setIconUrl(""); // Clear URL to maintain mutual exclusivity
+        setSelectedIconKey(initialLocation.iconType || "");
+      } else if (hasIconUrl) {
+        // If only has URL, use it
+        setIconType("");
+        setIconUrl(initialLocation.iconUrl || "");
+        setSelectedIconKey("");
+      } else {
+        // No icon
+        setIconType("");
+        setIconUrl("");
+        setSelectedIconKey("");
+      }
+
       setIconSize(initialLocation.iconSize || 32);
       setAudioUrl(initialLocation.audioUrl || "");
     }
@@ -91,6 +187,8 @@ export function LocationForm({
     if (file) {
       setIconFile(file);
       setIconUrl(""); // Clear URL when file is selected
+      setIconType(""); // Clear iconType when uploading custom file
+      setSelectedIconKey("");
       const reader = new FileReader();
       reader.onload = (e) => setIconPreview(e.target?.result as string);
       reader.readAsDataURL(file);
@@ -106,19 +204,24 @@ export function LocationForm({
     }
   };
 
-  const openAssetPicker = (type: "image" | "audio") => {
-    setPickerType(type);
-    setPickerOpen(true);
-  };
+  const handleIconSelect = (iconKey: string, iconUrl?: string) => {
+    setSelectedIconKey(iconKey);
 
-  const handleAssetSelect = (asset: UserAsset) => {
-    if (pickerType === "image") {
-      setIconUrl(asset.url);
-      setIconPreview(asset.url);
-      setIconFile(null); // Clear file if selecting from library
+    // Check if it's a preset icon (not an asset)
+    if (iconKey.startsWith("asset:")) {
+      // It's an uploaded asset, use iconUrl
+      if (iconUrl) {
+        setIconUrl(iconUrl);
+        setIconPreview(iconUrl);
+        setIconFile(null);
+        setIconType(""); // Clear iconType when using custom asset
+      }
     } else {
-      setAudioUrl(asset.url);
-      setAudioFile(null); // Clear file if selecting from library
+      // It's a preset icon, use iconType
+      setIconType(iconKey);
+      setIconUrl(""); // Clear iconUrl when using preset
+      setIconFile(null);
+      setIconPreview(null);
     }
   };
 
@@ -128,6 +231,29 @@ export function LocationForm({
 
     setSaving(true);
     try {
+      // Simplified logic: always send both iconType and iconUrl based on current state
+      const hasIconType = iconType.trim() !== "";
+      const hasIconFile = iconFile !== null;
+      const hasIconUrl = iconUrl.trim() !== "";
+
+      // Determine final values with clear mutual exclusivity
+      let finalIconType: string;
+      let finalIconUrl: string;
+
+      if (hasIconType) {
+        // Using preset icon → send iconType and clear iconUrl
+        finalIconType = iconType.trim();
+        finalIconUrl = ""; // Always clear iconUrl when using preset
+      } else if (hasIconFile || hasIconUrl) {
+        // Using custom icon → clear iconType and send iconUrl
+        finalIconType = ""; // Always clear iconType when using custom
+        finalIconUrl = iconUrl.trim();
+      } else {
+        // No icon → clear both (for delete case)
+        finalIconType = "";
+        finalIconUrl = "";
+      }
+
       const data: CreateLocationRequest = {
         segmentId: segmentId, // CRITICAL: Must include segmentId to maintain segment association
         title: title.trim(),
@@ -145,7 +271,9 @@ export function LocationForm({
         // Media fields
         iconFile: iconFile || undefined,
         audioFile: audioFile || undefined,
-        iconUrl: iconUrl.trim() || undefined,
+        // Always send both to ensure proper clearing
+        iconType: finalIconType,
+        iconUrl: finalIconUrl,
         iconSize: iconSize,
         audioUrl: audioUrl.trim() || undefined,
       };
@@ -296,8 +424,35 @@ export function LocationForm({
             <div className="space-y-2">
               <label className="block text-xs text-zinc-400">Ảnh đại diện (Icon)</label>
 
+              {/* Preset Icon Preview */}
+              {iconType && !iconFile && (
+                <div className="flex items-center gap-2 p-2 bg-emerald-900/20 rounded text-xs border border-emerald-700/50">
+                  <div className="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center">
+                    <Icon icon={getIconForKey(iconType)} className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-emerald-300 text-xs font-medium">Preset Icon: {iconType}</div>
+                    <div className="text-emerald-500 text-[10px]">Icon từ thư viện</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIconType("");
+                      setIconUrl("");
+                      setIconFile(null);
+                      setIconPreview(null);
+                      setSelectedIconKey("");
+                    }}
+                    className="px-2 py-1 text-[10px] bg-red-600/80 hover:bg-red-600 text-white rounded transition-colors"
+                    title="Xóa icon"
+                  >
+                    <Icon icon="mdi:trash-can-outline" className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+
               {/* Current Icon Preview */}
-              {(iconPreview || iconUrl) && !iconFile && (
+              {(iconPreview || iconUrl) && !iconFile && !iconType && (
                 <div className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded text-xs border border-zinc-700">
                   <img
                     src={iconPreview || iconUrl}
@@ -315,9 +470,11 @@ export function LocationForm({
                   <button
                     type="button"
                     onClick={() => {
+                      setIconType("");
                       setIconUrl("");
                       setIconFile(null);
                       setIconPreview(null);
+                      setSelectedIconKey("");
                     }}
                     className="px-2 py-1 text-[10px] bg-red-600/80 hover:bg-red-600 text-white rounded transition-colors"
                     title="Xóa icon"
@@ -340,20 +497,11 @@ export function LocationForm({
                   type="button"
                   onClick={() => iconInputRef.current?.click()}
                   disabled={saving}
-                  className="flex-1 px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
+                  className="w-full px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
                 >
                   {iconUrl || iconPreview ? "Thay đổi" : "Upload ảnh"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => openAssetPicker("image")}
-                  disabled={saving}
-                  className="px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
-                  title="Chọn từ Library"
-                >
-                  <Icon icon="mdi:folder-image" className="w-3.5 h-3.5" />
-                  Library
-                </button>
+                
               </div>
 
               {/* New Upload Preview */}
@@ -366,7 +514,13 @@ export function LocationForm({
                   <span className="text-[10px] text-emerald-400">Mới</span>
                   <button
                     type="button"
-                    onClick={() => { setIconFile(null); setIconPreview(null); }}
+                    onClick={() => {
+                      setIconType("");
+                      setIconUrl("");
+                      setIconFile(null);
+                      setIconPreview(null);
+                      setSelectedIconKey("");
+                    }}
                     className="p-1 hover:bg-zinc-700 rounded"
                   >
                     <Icon icon="mdi:close" className="w-3 h-3 text-zinc-400" />
@@ -378,7 +532,13 @@ export function LocationForm({
               <input
                 type="url"
                 value={iconUrl}
-                onChange={(e) => { setIconUrl(e.target.value); setIconFile(null); setIconPreview(null); }}
+                onChange={(e) => {
+                  setIconUrl(e.target.value);
+                  setIconFile(null);
+                  setIconPreview(null);
+                  setIconType(""); // Clear iconType when using custom URL
+                  setSelectedIconKey("");
+                }}
                 className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
                 placeholder="https://example.com/icon.png"
                 disabled={saving}
@@ -414,19 +574,9 @@ export function LocationForm({
                   type="button"
                   onClick={() => audioInputRef.current?.click()}
                   disabled={saving}
-                  className="flex-1 px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
+                  className="w-full px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
                 >
                   Upload audio
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openAssetPicker("audio")}
-                  disabled={saving}
-                  className="px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
-                  title="Chọn từ Library"
-                >
-                  <Icon icon="mdi:folder-music" className="w-3.5 h-3.5" />
-                  Library
                 </button>
               </div>
               {audioFile && (
@@ -456,14 +606,23 @@ export function LocationForm({
             {/* Icon Selection Section - Merged from previous Icon tab */}
             <div className="space-y-2 pt-2 border-t border-zinc-700/50">
               <label className="block text-xs text-zinc-400 mb-1">Chọn icon</label>
-              <div className="text-xs text-zinc-500">
-                Icon selection sẽ được cập nhật sau
-              </div>
+               {/* Icon Library - Embedded */}
+                <div className="border-t border-zinc-800 pt-3 -mx-3">
+                  <div className="max-h-96 overflow-y-auto">
+                    <IconLibraryView
+                      currentMap={undefined}
+                      mapId={mapId}
+                      isStoryMap={false}
+                      segments={[]}
+                      onSelectIcon={handleIconSelect}
+                      selectedIconKey={selectedIconKey}
+                    />
+                  </div>
+                </div>
             </div>
+            
           </div>
         )}
-
-        {/* Display Tab */}
 
         {/* Display Tab */}
         {activeTab === "display" && (
@@ -510,14 +669,6 @@ export function LocationForm({
           </button>
         </div>
       </form>
-
-      <AssetPickerDialog
-        open={pickerOpen}
-        onClose={() => setPickerOpen(false)}
-        onSelect={handleAssetSelect}
-        initialTab={pickerType}
-        title={pickerType === "image" ? "Chọn Icon từ Library" : "Chọn Audio từ Library"}
-      />
     </div>
   );
 }

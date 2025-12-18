@@ -1,19 +1,39 @@
 import { useState, useEffect, useRef } from "react";
 import { Icon } from "./Icon";
 import { UserAsset, getUserAssets, uploadUserAsset, deleteUserAsset } from "@/lib/api-library";
+import { Segment } from "@/lib/api-storymap";
 
 interface LibraryViewProps {
     onSelectAsset?: (asset: UserAsset) => void;
     initialTab?: "image" | "audio";
+    isStoryMap?: boolean;
+    segments?: Segment[];
+    mapId?: string;
+    onCreateLocationFromAsset?: (asset: UserAsset, segmentId: string) => void;
 }
 
-export function LibraryView({ onSelectAsset, initialTab = "image" }: LibraryViewProps) {
+export function LibraryView({
+    onSelectAsset,
+    initialTab = "image",
+    isStoryMap = false,
+    segments = [],
+    mapId,
+    onCreateLocationFromAsset
+}: LibraryViewProps) {
     const [activeTab, setActiveTab] = useState<"image" | "audio">(initialTab);
     const [assets, setAssets] = useState<UserAsset[]>([]);
     const [loading, setLoading] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [selectedSegmentId, setSelectedSegmentId] = useState<string>("");
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Auto-select first segment if available
+    useEffect(() => {
+        if (isStoryMap && segments.length > 0 && !selectedSegmentId) {
+            setSelectedSegmentId(segments[0].segmentId);
+        }
+    }, [isStoryMap, segments, selectedSegmentId]);
 
     useEffect(() => {
         loadAssets();
@@ -125,6 +145,7 @@ export function LibraryView({ onSelectAsset, initialTab = "image" }: LibraryView
                 </button>
             </div>
 
+
             {/* Grid */}
             <div className="flex-1 overflow-y-auto p-4">
                 {loading ? (
@@ -165,6 +186,29 @@ export function LibraryView({ onSelectAsset, initialTab = "image" }: LibraryView
                                         {(asset.size / 1024).toFixed(1)} KB
                                     </div>
                                 </div>
+
+                                {/* Create Location Button (for images only) */}
+                                {asset.type === "image" && onCreateLocationFromAsset && (
+                                    <div className="p-2 border-t border-zinc-700">
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+
+                                                // For StoryMap, require segment selection
+                                                if (isStoryMap && !selectedSegmentId) {
+                                                    alert("Vui lòng chọn Segment trước khi tạo Location");
+                                                    return;
+                                                }
+
+                                                onCreateLocationFromAsset(asset, selectedSegmentId);
+                                            }}
+                                            className="w-full px-2 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-medium rounded transition-colors flex items-center justify-center gap-1"
+                                        >
+                                            <Icon icon="mdi:map-marker-plus" className="w-3 h-3" />
+                                            <span>Create Location</span>
+                                        </button>
+                                    </div>
+                                )}
 
                                 {/* Actions Overlay */}
                                 <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">

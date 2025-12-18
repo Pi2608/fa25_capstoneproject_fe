@@ -2016,6 +2016,9 @@ export default function EditMapPage() {
   useEffect(() => {
     let isPlacingIcon = false;
     let currentIconKey: string | null = null;
+    let currentIconUrl: string | undefined = undefined;
+    let currentSegmentId: string | undefined = undefined;
+    let currentIsStoryMap = false;
     let clickHandler: ((e: LeafletMouseEvent) => void) | null = null;
     let contextMenuHandler: ((e: LeafletMouseEvent) => void) | null = null;
 
@@ -2040,8 +2043,11 @@ export default function EditMapPage() {
     };
 
     const handleStartPlacement = (ev: Event) => {
-      const custom = ev as CustomEvent<{ iconKey: string }>;
+      const custom = ev as CustomEvent<{ iconKey: string; iconUrl?: string; segmentId?: string; isStoryMap?: boolean }>;
       const iconKey = custom.detail?.iconKey;
+      const iconUrl = custom.detail?.iconUrl;
+      const segmentId = custom.detail?.segmentId;
+      const isStoryMapMode = custom.detail?.isStoryMap ?? false;
       const map = mapRef.current;
 
       if (!map || !iconKey) return;
@@ -2050,6 +2056,9 @@ export default function EditMapPage() {
 
       isPlacingIcon = true;
       currentIconKey = iconKey;
+      currentIconUrl = iconUrl;
+      currentSegmentId = segmentId;
+      currentIsStoryMap = isStoryMapMode;
 
       const mapContainer = map.getContainer();
       mapContainer.style.cursor = "crosshair";
@@ -2153,19 +2162,40 @@ export default function EditMapPage() {
               coordinates: [e.latlng.lng, e.latlng.lat],
             });
 
-            const locationData = {
+            // Determine if this is an uploaded asset or preset icon
+            const isAsset = currentIconKey.startsWith("asset:");
+
+            const locationData: any = {
               title: iconLabel,
               locationType: "Custom" as LocationType,
               markerGeometry,
-              iconType: emoji,
               displayOrder: 0,
               isVisible: true,
               showTooltip: false,
               openPopupOnClick: false,
             };
 
+            // Add icon fields based on type
+            if (isAsset && currentIconUrl) {
+              // Uploaded asset - use iconUrl
+              locationData.iconUrl = currentIconUrl;
+            } else {
+              // Preset icon - use iconType
+              locationData.iconType = currentIconKey;
+            }
 
-            const createdLocation = await createMapLocation(currentMapId, locationData);
+            let createdLocation;
+
+            // Use appropriate API based on map type
+            if (currentIsStoryMap && currentSegmentId) {
+              // StoryMap: use createLocation from api-storymap
+              const { createLocation } = await import("@/lib/api-storymap");
+              locationData.highlightOnEnter = false; // Required field for StoryMap
+              createdLocation = await createLocation(currentMapId, currentSegmentId, locationData);
+            } else {
+              // Regular map: use createMapLocation
+              createdLocation = await createMapLocation(currentMapId, locationData);
+            }
 
             // Dispatch event to refresh segments
             if (createdLocation.segmentId) {
@@ -2174,27 +2204,29 @@ export default function EditMapPage() {
               }));
             }
 
-            // Update marker metadata with locationId from API response
-            const apiMarkerId = `icon-${createdLocation.locationId}`;
+            // Auto-stop placement after creating one location
+            stopPlacement();
+
+            // Remove temporary marker - let usePoiMarkers render the real POI marker
             const currentMarkerId = Array.from(iconMarkersRef.current.entries()).find(
               ([_, m]) => m === marker
             )?.[0];
 
-            if (currentMarkerId && currentMarkerId !== apiMarkerId) {
-              // Move marker to new ID with locationId
-              const existingMarker = iconMarkersRef.current.get(currentMarkerId);
-              const existingMetadata = iconMetadataRef.current.get(currentMarkerId);
-
-              if (existingMarker && existingMetadata) {
-                iconMarkersRef.current.set(apiMarkerId, existingMarker);
-                iconMetadataRef.current.set(apiMarkerId, existingMetadata);
-                iconMarkersRef.current.delete(currentMarkerId);
-                iconMetadataRef.current.delete(currentMarkerId);
+            if (marker && iconLayerGroupRef.current) {
+              try {
+                iconLayerGroupRef.current.removeLayer(marker);
+              } catch (err) {
+                // Marker might not be in layer group, try removing from map directly
+                try {
+                  map.removeLayer(marker);
+                } catch { }
               }
             }
 
-            // Store locationId on marker for deletion
-            (marker as any)._locationId = createdLocation.locationId;
+            if (currentMarkerId) {
+              iconMarkersRef.current.delete(currentMarkerId);
+              iconMetadataRef.current.delete(currentMarkerId);
+            }
           } catch (err) {
             console.error("[Icon] ❌ Failed to create location via API:", err);
           }
@@ -4687,10 +4719,25 @@ export default function EditMapPage() {
           transform: translateZ(0); /* Force hardware acceleration */
           backface-visibility: hidden; /* Reduce repaints */
         }
-        
+
         .custom-marker-icon:hover,
         .custom-default-marker:hover {
           transform: translateZ(0) scale(1.1);
+        }
+
+        /* Hide any text labels from icon markers */
+        .custom-marker-icon::before,
+        .custom-marker-icon::after,
+        .icon-marker::before,
+        .icon-marker::after {
+          content: none !important;
+          display: none !important;
+        }
+
+        /* Ensure no text is rendered in marker */
+        .custom-marker-icon > *:not(div),
+        .icon-marker > *:not(div) {
+          display: none !important;
         }
 
         /* Optimize icon rendering - reduce repaints */
