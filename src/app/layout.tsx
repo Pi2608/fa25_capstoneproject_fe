@@ -9,6 +9,7 @@ import { I18nProvider } from "@/i18n/I18nProvider";
 import type { Lang } from "@/i18n/messages";
 import { LoadingProvider } from "@/contexts/LoadingContext";
 import { LeafletStylesBoundary } from "@/components/layout/LeafletStylesBoundary";
+import { ZoneHighlightStyles } from "@/components/layout/ZoneHighlightStyles";
 
 const manrope = Manrope({
   subsets: ["latin", "vietnamese"],
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <I18nProvider initialLang={initialLang}>
                 <LoadingProvider>
                   <LeafletStylesBoundary />
+                  <ZoneHighlightStyles />
                   {children}
                   <ToastContainer />
                 </LoadingProvider>

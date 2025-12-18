@@ -214,6 +214,19 @@ export function TimelineWorkspace({
           zoomLevel={zoomLevel}
           currentTime={currentTime}
           isPlaying={isPlaying}
+          segments={segments}
+          onRouteClick={(route, segmentId) => {
+            // Dispatch event to show route form in LeftSidebarToolbox
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(new CustomEvent('editRoute', {
+                detail: {
+                  route,
+                  segmentId,
+                  mapId
+                }
+              }));
+            }
+          }}
         />
         <TimelineTrack
           segments={segments}

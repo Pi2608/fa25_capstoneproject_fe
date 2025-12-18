@@ -6,6 +6,7 @@
 import type { Segment, Location, FrontendTransitionType } from "@/lib/api-storymap";
 import type L from "leaflet";
 import { applyLayerStyle, type ExtendedLayer } from "@/utils/mapUtils";
+import { applyZoneHighlight, applyLayerHighlight, type HighlightOptions } from "@/utils/zoneHighlightEffects";
 
 type LeafletInstance = typeof import("leaflet");
 
@@ -65,6 +66,8 @@ export interface RenderSegmentOptions {
   cameraAnimationDurationMs?: number;
   skipCameraState?: boolean;
   disableTwoPhaseFly?: boolean;
+  highlightZones?: HighlightOptions;
+  highlightLayers?: HighlightOptions;
 }
 
 export interface RenderResult {
@@ -150,6 +153,12 @@ export async function renderSegmentZones(
           geoJsonLayer.setStyle({ opacity: 0, fillOpacity: 0 });
         } catch {}
       }
+
+      // Apply highlight effect if enabled
+      if (options?.highlightZones?.enabled) {
+        applyZoneHighlight(geoJsonLayer, options.highlightZones);
+      }
+
       layers.push(geoJsonLayer);
 
       const layerBounds = geoJsonLayer.getBounds();
@@ -833,12 +842,17 @@ export async function renderSegmentLayers(
             }
 
             geoJsonLayer.addTo(map);
-            
+
             // Apply entry animation (will be restored by cross-fade)
             if (options?.transitionType && options.transitionType !== 'Jump') {
               try {
                 geoJsonLayer.setStyle({ opacity: 0, fillOpacity: 0 });
               } catch {}
+            }
+
+            // Apply highlight effect if enabled
+            if (options?.highlightLayers?.enabled) {
+              applyLayerHighlight(geoJsonLayer, options.highlightLayers);
             }
 
             layers.push(geoJsonLayer);
