@@ -10,6 +10,7 @@ import { getOrganizationById, OrganizationDetailDto } from "@/lib/api-organizati
 import { createDefaultMap, deleteMap, getMapDetail } from "@/lib/api-maps";
 import { getWorkspaceById, getWorkspaceMaps, removeMapFromWorkspace } from "@/lib/api-workspaces";
 import { useI18n, type TFunc } from "@/i18n/I18nProvider";
+import { getMe, Me } from "@/lib/api-auth";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name" | "author";
@@ -125,6 +126,36 @@ export default function WorkspaceDetailPage() {
   const [showCreateMapDialog, setShowCreateMapDialog] = useState(false);
   const [mapType, setMapType] = useState<"normal" | "storymap">("normal");
 
+  // Quota exceeded modal state
+  const [quotaExceededModal, setQuotaExceededModal] = useState<{
+    open: boolean;
+    quotaType?: string; // "Maps"
+    currentUsage?: number; // 5
+    limit?: number; // 5
+    message?: string; // Full message from backend
+  }>({ open: false });
+
+  // Check if current user is the organization owner
+  const [currentUser, setCurrentUser] = useState<Me | null>(null);
+
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      try {
+        const user = await getMe();
+        setCurrentUser(user);
+      } catch {
+        setCurrentUser(null);
+      }
+    };
+    void loadCurrentUser();
+  }, []);
+
+  // Determine if user is owner
+  const isOrgOwner = useMemo(() => {
+    if (!org || !currentUser) return false;
+    return org.ownerUserId === currentUser.id;
+  }, [org, currentUser]);
+
   const handleCreateMap = useCallback(async () => {
     try {
       const created = await createDefaultMap({
@@ -135,7 +166,33 @@ export default function WorkspaceDetailPage() {
       setShowCreateMapDialog(false);
       router.push(`/maps/${created.mapId}`);
     } catch (e) {
-      showToast("error", safeMessage(e, t("workspace_detail.request_failed")));
+      // Parse the error
+      const apiError = parseApiError(e);
+
+      // Check if it's a quota exceeded error
+      if (apiError.type === "Map.QuotaExceeded" || apiError.title === "Map.QuotaExceeded") {
+        // Extract quota details from message
+        // Example: "Quota exceeded. You have 5/5 Maps used. Requested: 1"
+        const message = apiError.detail || apiError.message || "";
+        const match = message.match(/You have (\d+)\/(\d+) (\w+) used/);
+
+        const currentUsage = match ? parseInt(match[1], 10) : undefined;
+        const limit = match ? parseInt(match[2], 10) : undefined;
+        const quotaType = match ? match[3] : "Maps"; // "Maps"
+
+        // Close create map dialog, open quota exceeded modal
+        setShowCreateMapDialog(false);
+        setQuotaExceededModal({
+          open: true,
+          quotaType,
+          currentUsage,
+          limit,
+          message,
+        });
+      } else {
+        // Generic error handling for other errors
+        showToast("error", safeMessage(e, t("workspace_detail.request_failed")));
+      }
     }
   }, [router, showToast, workspaceId, mapType, t]);
 
@@ -649,6 +706,86 @@ export default function WorkspaceDetailPage() {
                   {t("workspace_detail.create_map_dialog_create")}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quota Exceeded Modal */}
+      {quotaExceededModal.open && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm">
+          <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
+            {/* Icon */}
+            <div className="mb-4 flex justify-center">
+              <div className="rounded-full bg-orange-500/10 p-3">
+                <svg className="h-8 w-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Title */}
+            <h2 className="text-xl font-semibold text-white mb-2 text-center">
+              {t("workspace_detail.quota_exceeded_title")}
+            </h2>
+
+            {/* Usage Info */}
+            <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4 mb-4">
+              <div className="text-sm text-orange-200 text-center">
+                <div className="font-semibold mb-1">
+                  {quotaExceededModal.currentUsage ?? "?"} / {quotaExceededModal.limit ?? "?"} {quotaExceededModal.quotaType ?? "Maps"} {t("workspace_detail.quota_used")}
+                </div>
+                <div className="text-xs text-orange-300/80">
+                  {t("workspace_detail.quota_reached_limit")}
+                </div>
+              </div>
+            </div>
+
+            {/* Message based on owner status */}
+            <div className="text-sm text-zinc-300 mb-6 text-center">
+              {isOrgOwner ? (
+                <p>
+                  {t("workspace_detail.quota_owner_message")}
+                </p>
+              ) : (
+                <p>
+                  {t("workspace_detail.quota_member_message")}
+                </p>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col gap-3">
+              {isOrgOwner ? (
+                <>
+                  {/* Upgrade Plan Button (Owner Only) */}
+                  <button
+                    onClick={() => {
+                      setQuotaExceededModal({ open: false });
+                      router.push(`/profile/settings/plans?orgId=${orgId}`);
+                    }}
+                    className="w-full px-4 py-3 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-400 transition-colors"
+                  >
+                    {t("workspace_detail.quota_upgrade_btn")}
+                  </button>
+                  <button
+                    onClick={() => setQuotaExceededModal({ open: false })}
+                    className="w-full px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-zinc-300"
+                  >
+                    {t("workspace_detail.quota_close_btn")}
+                  </button>
+                </>
+              ) : (
+                <>
+                  {/* Contact Owner Button (Member Only) */}
+                  <button
+                    onClick={() => setQuotaExceededModal({ open: false })}
+                    className="w-full px-4 py-3 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-zinc-300"
+                  >
+                    {t("workspace_detail.quota_close_btn")}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

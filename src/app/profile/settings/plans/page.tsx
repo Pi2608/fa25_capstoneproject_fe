@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { getMe, type Me } from "@/lib/api-auth";
 import { useTheme } from "next-themes";
 import { getThemeClasses } from "@/utils/theme-utils";
+import { useSearchParams } from "next/navigation";
 import {
     getPlans,
     getMyMembership,
@@ -454,6 +455,8 @@ const PaymentMethodPopup: React.FC<PaymentMethodPopupProps> = ({
 export default function TrangGoiThanhVien() {
     const { resolvedTheme, theme } = useTheme();
     const { t } = useI18n();
+    const searchParams = useSearchParams();
+    const preselectedOrgId = searchParams?.get('orgId');
     const currentTheme = (resolvedTheme ?? theme ?? "light") as
         | "light"
         | "dark";
@@ -488,8 +491,12 @@ export default function TrangGoiThanhVien() {
                 const orgList = veMang(orgResRaw);
                 setOrgs(orgList);
                 setPlans(Array.isArray(planRes) ? planRes : []);
-                if (orgList.length > 0)
+                // Auto-select organization from URL or use first org
+                if (preselectedOrgId && orgList.some(o => o.orgId === preselectedOrgId)) {
+                    setOrgId(preselectedOrgId);
+                } else if (orgList.length > 0) {
                     setOrgId((orgList[0].orgId ?? "").toString());
+                }
             })
             .catch((e) =>
                 setBanner({
@@ -498,7 +505,7 @@ export default function TrangGoiThanhVien() {
                 })
             )
             .finally(() => setDangLoadTrang(false));
-    }, [t]);
+    }, [t, preselectedOrgId]);
 
     const vaiTro = useMemo(() => layVaiTro(orgs, orgId), [orgs, orgId]);
     const laOwner = vaiTro.toLowerCase() === "owner";

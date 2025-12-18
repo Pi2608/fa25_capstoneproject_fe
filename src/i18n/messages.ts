@@ -1678,6 +1678,15 @@ export const messages = {
             // Toast messages
             delete_map_success: "Đã xóa bản đồ.",
             remove_map_success: "Đã gỡ bản đồ khỏi workspace.",
+
+            // Quota exceeded modal
+            quota_exceeded_title: "Đã đạt giới hạn",
+            quota_used: "đã sử dụng",
+            quota_reached_limit: "Bạn không thể tạo thêm mục nào vào lúc này",
+            quota_owner_message: "Bạn đã đạt giới hạn gói hiện tại. Nâng cấp lên gói cao hơn để tạo thêm bản đồ và mở khóa tính năng bổ sung.",
+            quota_member_message: "Tổ chức của bạn đã đạt giới hạn gói. Vui lòng liên hệ chủ sở hữu tổ chức để nâng cấp gói.",
+            quota_upgrade_btn: "Nâng cấp gói",
+            quota_close_btn: "Đóng",
         },
         organization: {
             not_found_title: "Không tìm thấy tổ chức",
@@ -4618,6 +4627,15 @@ export const messages = {
             create_map_dialog_create: "Create map",
             delete_map_success: "Map deleted.",
             remove_map_success: "Removed map from workspace.",
+
+            // Quota exceeded modal
+            quota_exceeded_title: "Quota Limit Reached",
+            quota_used: "used",
+            quota_reached_limit: "You cannot create more items at this time",
+            quota_owner_message: "You've reached your plan's limit. Upgrade to a higher plan to create more maps and unlock additional features.",
+            quota_member_message: "Your organization has reached its plan limit. Please contact your organization owner to upgrade the plan.",
+            quota_upgrade_btn: "Upgrade Plan",
+            quota_close_btn: "Close",
         },
         support: {
             eyebrow: "Help & Support",
