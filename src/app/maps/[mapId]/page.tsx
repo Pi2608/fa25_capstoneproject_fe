@@ -41,6 +41,7 @@ import { useToast } from "@/contexts/ToastContext";
 import html2canvas from "html2canvas";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useAuth } from "@/contexts/AuthContext";
+import { parseQuotaError } from "@/utils/parseQuotaError";
 import PublishButton from "@/components/map/PublishButton";
 import ZoomControls from "@/components/map/controls/ZoomControls";
 import { ZoneStyleEditor } from "@/components/map-editor-ui/ZoneStyleEditor";
@@ -3909,22 +3910,29 @@ export default function EditMapPage() {
     } catch (error) {
       console.error("Export failed:", error);
 
-      // Handle specific error types
-      if (error instanceof Error) {
-        const errorMessage = error.message;
+      // Check for quota exceeded errors using parseQuotaError
+      const quotaError = parseQuotaError(error);
+      if (quotaError) {
+        showToast("error", lang === 'vi'
+          ? 'Đã đạt giới hạn xuất dữ liệu. Vui lòng nâng cấp gói hoặc liên hệ chủ sở hữu tổ chức.'
+          : 'Export quota limit reached. Please upgrade your plan or contact the organization owner.');
+        return;
+      }
 
-        // Check for specific error types from the API
-        if (errorMessage.includes("Export.MembershipNotFound") || errorMessage.includes("membership not found")) {
-          showToast("error", t('export_embed', 'error_membership_not_found'));
-        } else if (errorMessage.includes("permission") || errorMessage.includes("forbidden")) {
-          showToast("error", t('export_embed', 'error_permission_denied'));
-        } else if (errorMessage.includes("format")) {
-          showToast("error", t('export_embed', 'error_invalid_format'));
-        } else {
-          showToast("error", errorMessage || t('export_embed', 'error_export_failed'));
-        }
+      // Handle specific error types
+      const errorMessage = 
+        (error instanceof Error ? error.message : "") ||
+        (error && typeof error === "object" && "message" in error ? String(error.message) : "") ||
+        "";
+
+      if (errorMessage.includes("Export.MembershipNotFound") || errorMessage.includes("membership not found")) {
+        showToast("error", t('export_embed', 'error_membership_not_found'));
+      } else if (errorMessage.includes("permission") || errorMessage.includes("forbidden")) {
+        showToast("error", t('export_embed', 'error_permission_denied'));
+      } else if (errorMessage.includes("format")) {
+        showToast("error", t('export_embed', 'error_invalid_format'));
       } else {
-        showToast("error", t('export_embed', 'error_export_failed'));
+        showToast("error", errorMessage || t('export_embed', 'error_export_failed'));
       }
     } finally {
       setIsExporting(false);

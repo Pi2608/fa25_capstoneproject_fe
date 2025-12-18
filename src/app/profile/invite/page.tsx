@@ -13,6 +13,8 @@ import { useI18n } from "@/i18n/I18nProvider";
 import type { KeysOf, Namespaces } from "@/i18n/messages";
 import { useTheme } from "next-themes";
 import { getThemeClasses } from "@/utils/theme-utils";
+import { parseQuotaError } from "@/utils/parseQuotaError";
+import { useToast } from "@/contexts/ToastContext";
 
 function fmtDate(iso?: string) {
   if (!iso) return "—";
@@ -38,11 +40,28 @@ function toApiError(err: unknown): ApiLikeError {
       detail: typeof r.detail === "string" ? r.detail : undefined,
     };
   }
+  // Handle string errors (shouldn't happen with our apiFetch, but just in case)
+  if (typeof err === "string") {
+    try {
+      const parsed = JSON.parse(err);
+      if (typeof parsed === "object" && parsed !== null) {
+        const r = parsed as Record<string, unknown>;
+        return {
+          status: typeof r.status === "number" ? r.status : undefined,
+          message: typeof r.message === "string" ? r.message : undefined,
+          detail: typeof r.detail === "string" ? r.detail : undefined,
+        };
+      }
+    } catch {
+      return { message: err };
+    }
+  }
   return {};
 }
 
 export default function MyInvitationsPage() {
   const { t } = useI18n();
+  const { showToast } = useToast();
   const tPath = t as unknown as (
     path: `${Namespaces}.${string}`,
     vars?: Record<string, string | number>
@@ -58,6 +77,7 @@ export default function MyInvitationsPage() {
   const [err, setErr] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastType, setToastType] = useState<"success" | "error">("success");
 
   async function load() {
     try {
@@ -93,19 +113,90 @@ export default function MyInvitationsPage() {
     try {
       const body: AcceptInviteOrganizationReqDto = { invitationId };
       await acceptInvite(body);
-      setToast(tr("toast_accept_ok"));
+      showToast("success", tr("toast_accept_ok"));
       await load();
       if (typeof window !== "undefined")
         window.dispatchEvent(new Event("invitations-changed"));
     } catch (e: unknown) {
+      // Extract error object first to get detail field directly
+      const errorObj = e as any;
+      
+      // Check for quota errors first using parseQuotaError
+      const quotaError = parseQuotaError(e);
+      if (quotaError) {
+        // Extract detail directly from error object (most reliable source)
+        // The error from apiFetch has: { status, message, type, title, detail }
+        // We want the detail field, not the message field
+        let errorDetail = "";
+        
+        // Try to extract detail field - ensure it's a string, not an object
+        if (errorObj?.detail && typeof errorObj.detail === "string" && errorObj.detail.trim()) {
+          const detailStr = errorObj.detail.trim();
+          // Check if it looks like JSON (starts with {) - if so, reject it
+          if (!detailStr.startsWith("{")) {
+            errorDetail = detailStr;
+          }
+        } else if (quotaError.message && typeof quotaError.message === "string" && quotaError.message.trim()) {
+          const msgStr = quotaError.message.trim();
+          // Check if it looks like JSON (starts with {) - if so, reject it
+          if (!msgStr.startsWith("{")) {
+            errorDetail = msgStr;
+          }
+        }
+        
+        // If we couldn't extract detail or it looks like JSON, use fixed fallback message
+        // NEVER show the whole API response - always use a clean string
+        const finalMessage = errorDetail || 
+          "Organization has reached its member limit. Please contact the organization owner to upgrade the plan.";
+        
+        showToast("error", finalMessage);
+        await load();
+        if (typeof window !== "undefined")
+          window.dispatchEvent(new Event("invitations-changed"));
+        return;
+      }
+
+      // Check for already accepted error (status 409 with InvitationAlreadyAccepted type)
+      const errorType = (typeof errorObj?.type === "string" ? errorObj.type : "") || 
+                       (typeof errorObj?.title === "string" ? errorObj.title : "") || "";
       const errObj = toApiError(e);
-      if ((errObj.status ?? 0) === 409) {
-        setToast(tr("toast_already_accepted"));
+      
+      if ((errObj.status ?? 0) === 409 && errorType.includes("InvitationAlreadyAccepted")) {
+        showToast("error", tr("toast_already_accepted"));
         await load();
         if (typeof window !== "undefined")
           window.dispatchEvent(new Event("invitations-changed"));
       } else {
-        alert(errObj.detail ?? errObj.message ?? tr("accept_failed"));
+        // Show other errors as toast - extract detail field directly
+        // If extraction fails, use fallback message (NEVER show whole object)
+        let errorDetail = "";
+        
+        // Try to extract detail/message - ensure it's a string, not JSON
+        if (typeof errorObj?.detail === "string" && errorObj.detail.trim()) {
+          const detailStr = errorObj.detail.trim();
+          if (!detailStr.startsWith("{")) {
+            errorDetail = detailStr;
+          }
+        } else if (typeof errorObj?.message === "string" && errorObj.message.trim()) {
+          const msgStr = errorObj.message.trim();
+          if (!msgStr.startsWith("{")) {
+            errorDetail = msgStr;
+          }
+        } else if (typeof errObj.detail === "string" && errObj.detail.trim()) {
+          const detailStr = errObj.detail.trim();
+          if (!detailStr.startsWith("{")) {
+            errorDetail = detailStr;
+          }
+        } else if (typeof errObj.message === "string" && errObj.message.trim()) {
+          const msgStr = errObj.message.trim();
+          if (!msgStr.startsWith("{")) {
+            errorDetail = msgStr;
+          }
+        }
+        
+        // Always use fallback if extraction failed or looks like JSON
+        const finalMessage = errorDetail || tr("accept_failed");
+        showToast("error", finalMessage);
       }
     } finally {
       setBusyId(null);
@@ -117,7 +208,7 @@ export default function MyInvitationsPage() {
     try {
       const body: RejectInviteOrganizationReqDto = { invitationId };
       await rejectInvite(body);
-      setToast(tr("toast_reject_ok"));
+      showToast("success", tr("toast_reject_ok"));
       await load();
       if (typeof window !== "undefined")
         window.dispatchEvent(new Event("invitations-changed"));
@@ -156,7 +247,11 @@ export default function MyInvitationsPage() {
       </div>
 
       {toast && (
-        <div className={`rounded-lg border px-3 py-2 text-sm ${isDark ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+        <div className={`rounded-lg border px-3 py-2 text-sm ${
+          toastType === "error" 
+            ? (isDark ? "border-red-400/30 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-800")
+            : (isDark ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-800")
+        }`}>
           {toast}
         </div>
       )}

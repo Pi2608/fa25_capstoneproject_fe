@@ -3,6 +3,9 @@ export type ApiMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 export interface ApiErrorShape {
   status: number;
   message: string;
+  type?: string;
+  title?: string;
+  detail?: string;
 }
 
 const ACCESS_TOKEN_KEY = "token";
@@ -157,7 +160,32 @@ export async function apiFetch<T>(
 
   if (!response.ok) {
     const message = normalizeErrorMessage(response, rawText);
-    throw { status: response.status, message } as ApiErrorShape;
+    
+    // Try to parse the full error object from JSON response
+    let errorData: Partial<ApiErrorShape> = { status: response.status, message };
+    
+    if (rawText) {
+      try {
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const parsed = parseJson<Record<string, unknown>>(rawText);
+          if (parsed) {
+            // Preserve type, title, and detail from the API response
+            if (typeof parsed.type === "string") errorData.type = parsed.type;
+            if (typeof parsed.title === "string") errorData.title = parsed.title;
+            if (typeof parsed.detail === "string") errorData.detail = parsed.detail;
+            // Keep message as fallback if detail exists
+            if (parsed.detail && typeof parsed.detail === "string") {
+              errorData.message = parsed.detail;
+            }
+          }
+        }
+      } catch {
+        // If parsing fails, use the normalized message
+      }
+    }
+    
+    throw errorData as ApiErrorShape;
   }
 
   if (!rawText) {

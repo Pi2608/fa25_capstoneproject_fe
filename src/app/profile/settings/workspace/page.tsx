@@ -17,6 +17,8 @@ import { formatDateTime } from "@/utils/formatUtils";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useTheme } from "next-themes";
 import { getThemeClasses } from "@/utils/theme-utils";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useConfirmDialog } from "@/hooks/useConfirmDialog";
 
 type Role = "Owner" | "Admin" | "Member" | "Viewer" | string;
 
@@ -26,6 +28,7 @@ export default function WorkspacePage() {
   const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
   const isDark = currentTheme === "dark";
   const themeClasses = getThemeClasses(isDark);
+  const { dialogState, closeDialog, confirmDelete } = useConfirmDialog();
 
   const [orgs, setOrgs] = useState<MyOrganizationDto[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
@@ -150,20 +153,36 @@ export default function WorkspacePage() {
     }
   };
 
-  const onDeleteWorkspace = async () => {
+  const onDeleteWorkspace = () => {
     if (!canManage || !wsDetail || !selectedOrgId) return;
-    if (!confirm(`${t("workspaces.confirm_delete")} "${wsDetail.workspaceName}"?`)) return;
-    setBusy(true);
-    try {
-      await deleteWorkspace(wsDetail.workspaceId);
-      await loadWorkspaces(selectedOrgId);
-      setWsDetail(null);
-      setToast(t("workspaces.toast_deleted"));
-    } catch {
-      setToast(t("workspaces.toast_action_failed"));
-    } finally {
-      setBusy(false);
-    }
+
+    // Count related items (maps)
+    const mapsCount = maps.length;
+    const relatedItems = mapsCount > 0
+      ? [{ label: t("common.related_maps"), count: mapsCount }]
+      : undefined;
+
+    confirmDelete(
+      async () => {
+        if (!wsDetail || !selectedOrgId) return;
+        setBusy(true);
+        try {
+          await deleteWorkspace(wsDetail.workspaceId);
+          await loadWorkspaces(selectedOrgId);
+          setWsDetail(null);
+          setToast(t("workspaces.toast_deleted"));
+        } catch {
+          setToast(t("workspaces.toast_action_failed"));
+        } finally {
+          setBusy(false);
+        }
+      },
+      {
+        itemName: wsDetail.workspaceName,
+        itemType: t("common.entity_workspace"),
+        relatedItems,
+      }
+    );
   };
 
   return (
@@ -337,6 +356,16 @@ export default function WorkspacePage() {
           </div>
         </div>
       </div>
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={dialogState.isOpen}
+        onClose={closeDialog}
+        onConfirm={dialogState.onConfirm}
+        itemName={dialogState.itemName}
+        itemType={dialogState.itemType}
+        relatedItems={dialogState.relatedItems}
+      />
     </div>
   );
 }
