@@ -71,7 +71,7 @@ export default function SessionQuestionPanel({
   onToggleStudentAnswers,
 }: Props) {
   return (
-    <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3 space-y-3">
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-900/80 shadow-sm shadow-black/40 px-4 py-3 h-full min-h-0 flex flex-col">
       {/* HEADER QUESTION PANEL */}
       <div className="flex items-center justify-between">
         <div>
@@ -177,7 +177,7 @@ export default function SessionQuestionPanel({
           Session hiện tại chưa gắn bộ câu hỏi hoặc thông tin chưa được truyền sang.
         </div>
       ) : (
-        <div className="mt-2 space-y-2">
+        <div className="mt-2 flex-1 min-h-0 flex flex-col space-y-2">
           <div>
             <p className="text-sm font-semibold text-white">Danh sách câu hỏi</p>
           </div>
@@ -214,7 +214,7 @@ export default function SessionQuestionPanel({
             </div>
           )}
 
-          <div className="pt-2 border-t border-zinc-800 mt-2">
+          <div className="pt-2 border-t border-zinc-800 mt-2 flex-1 min-h-0 flex flex-col">
             <div className="flex items-center justify-between mb-1">
               <p className="text-[11px] uppercase tracking-[0.12em] text-zinc-500 font-medium">
                 Danh sách câu hỏi
@@ -231,7 +231,7 @@ export default function SessionQuestionPanel({
             ) : questions.length === 0 ? (
               <p className="text-[11px] text-zinc-500">Chưa có câu hỏi nào trong bộ này.</p>
             ) : (
-              <div className="max-h-52 overflow-y-auto space-y-2 mt-1">
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-2 mt-1 pr-1">
                 {questions.map((q, idx) => {
                   const isActive = idx === currentQuestionIndex;
 
