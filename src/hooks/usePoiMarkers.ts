@@ -3,6 +3,7 @@ import type L from "leaflet";
 import type { MapWithPM } from "@/types";
 import { getMapLocations } from "@/lib/api-storymap";
 import { MapLocation } from "@/lib/api-location";
+import { iconEmojiMap } from "@/constants/icons";
 
 interface UsePoiMarkersParams {
   mapId: string;
@@ -129,9 +130,14 @@ export function usePoiMarkers({
                 opacity: 1 !important;
               " alt="${poi.title}" /></div>`;
             } else {
-              // Use emoji or default
-              const iconContent =
-                (poi.iconType && poi.iconType.trim()) || defaultIcon;
+              // Use emoji or default - Map iconType key to emoji
+              let iconContent = defaultIcon;
+              if (poi.iconType && poi.iconType.trim()) {
+                // Check if it's already an emoji or if it's a key that needs mapping
+                const trimmedIconType = poi.iconType.trim();
+                // If it's a key in iconEmojiMap, use the emoji
+                iconContent = iconEmojiMap[trimmedIconType] || trimmedIconType || defaultIcon;
+              }
               iconHtml = `<div style="
                 display: flex !important;
                 align-items: center !important;

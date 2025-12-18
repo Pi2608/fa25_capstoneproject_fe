@@ -44,8 +44,10 @@ import {
   mapFromBackendTransitionType,
   mapToBackendTransitionType,
 } from "@/lib/api-storymap";
+import { iconEmojiMap } from "@/constants/icons";
 
 import { Icon } from "./Icon";
+import { IconLibraryView } from "./IconLibraryView";
 import { LibraryView } from "./LibraryView";
 
 interface LeftSidebarToolboxProps {
@@ -150,6 +152,10 @@ export function LeftSidebarToolbox({
   const [waitingForMapLocation, setWaitingForMapLocation] = useState(false);
   const [mapEditingLocation, setMapEditingLocation] = useState<Location | null>(null);
 
+  // State for library location creation
+  const [waitingForLibraryLocation, setWaitingForLibraryLocation] = useState(false);
+  const [selectedAssetForLocation, setSelectedAssetForLocation] = useState<{ asset: import("@/lib/api-library").UserAsset; segmentId: string } | null>(null);
+
   // Listen for editLocation event from TimelineTrack
   useEffect(() => {
     const handleEditLocation = (e: Event) => {
@@ -191,6 +197,16 @@ export function LeftSidebarToolbox({
       window.removeEventListener('editLocation', handleEditLocation);
     };
   }, [segments, activeView, onViewChange]);
+
+  // Stop icon placement when switching away from icons tab
+  useEffect(() => {
+    if (activeView !== "icons") {
+      // Dispatch event to stop icon placement
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("icon:stopPlacement"));
+      }
+    }
+  }, [activeView]);
 
   // Listen for editRoute event from TimelineTrack
   useEffect(() => {
@@ -310,6 +326,84 @@ export function LeftSidebarToolbox({
     };
   }, [currentMap, waitingForMapLocation]);
 
+  // Handle map click for library location creation
+  useEffect(() => {
+    if (!currentMap || !waitingForLibraryLocation || !selectedAssetForLocation) {
+      // Reset cursor when not waiting
+      if (currentMap && !waitingForLibraryLocation) {
+        const mapContainer = currentMap.getContainer();
+        if (mapContainer) {
+          mapContainer.style.cursor = '';
+          mapContainer.style.removeProperty('cursor');
+        }
+      }
+      return;
+    }
+
+    // Change cursor to crosshair when waiting for location
+    const mapContainer = currentMap.getContainer();
+    if (mapContainer) {
+      mapContainer.style.cursor = 'crosshair';
+      mapContainer.style.setProperty('cursor', 'crosshair', 'important');
+    }
+
+    const handleMapClick = async (e: any) => {
+      const { lat, lng } = e.latlng;
+      setWaitingForLibraryLocation(false);
+
+      // Reset cursor after picking location
+      if (mapContainer) {
+        mapContainer.style.cursor = '';
+        mapContainer.style.removeProperty('cursor');
+      }
+
+      // Create location with asset
+      try {
+        const { asset, segmentId } = selectedAssetForLocation;
+        const markerGeometry = JSON.stringify({
+          type: "Point",
+          coordinates: [lng, lat]
+        });
+
+        const locationData: CreateLocationRequest = {
+          title: asset.name.replace(/\.[^/.]+$/, ""), // Remove file extension
+          locationType: "PointOfInterest",
+          markerGeometry,
+          iconUrl: asset.url,
+          iconSize: 32,
+          highlightOnEnter: false,
+          displayOrder: 0,
+          isVisible: true,
+          showTooltip: true,
+          segmentId,
+        };
+
+        if (mapId) {
+          await createLocation(mapId, segmentId, locationData);
+          window.dispatchEvent(new CustomEvent("locationCreated", {
+            detail: { segmentId }
+          }));
+        }
+
+        setSelectedAssetForLocation(null);
+      } catch (error) {
+        console.error("Failed to create location from asset:", error);
+        alert("Không thể tạo location. Vui lòng thử lại.");
+      }
+    };
+
+    currentMap.on('click', handleMapClick);
+
+    return () => {
+      currentMap.off('click', handleMapClick);
+      // Reset cursor when unmounting
+      if (mapContainer) {
+        mapContainer.style.cursor = '';
+        mapContainer.style.removeProperty('cursor');
+      }
+    };
+  }, [currentMap, waitingForLibraryLocation, selectedAssetForLocation, mapId]);
+
   useEffect(() => {
     if (panelRef.current) {
       gsap.to(panelRef.current, {
@@ -424,6 +518,26 @@ export function LeftSidebarToolbox({
       alert("Không thể lưu location. Vui lòng thử lại.");
     }
   }, [editingSegment, editingLocation, onAddLocation, mapId]);
+
+  // Handler for creating location from library asset
+  const handleCreateLocationFromAsset = useCallback((asset: import("@/lib/api-library").UserAsset, segmentId: string) => {
+    setSelectedAssetForLocation({ asset, segmentId });
+    setWaitingForLibraryLocation(true);
+
+    // Show instruction to user
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('showMapInstruction', {
+        detail: { message: 'Click on the map to place the location marker' }
+      }));
+    }
+  }, []);
+
+  const handleCreateLocationFromIcon = useCallback((iconKey: string, segmentId: string) => {
+    // This handler is for preset icons from IconLibraryView
+    // The icon placement logic is already handled by the icon:startPlacement event
+    // We just need to track that we're in icon placement mode if needed
+    console.log('Creating location from icon:', iconKey, 'for segment:', segmentId);
+  }, []);
 
   const handleAddZone = useCallback(async (data: CreateSegmentZoneRequest) => {
     if (!editingSegment?.segmentId) return;
@@ -720,9 +834,24 @@ export function LeftSidebarToolbox({
                 onSave={handleSaveTransitionForm}
               />
             )}
-            {activeView === "icons" && <IconLibraryView currentMap={currentMap} mapId={mapId} />}
+            {activeView === "icons" && (
+              <IconLibraryView
+                currentMap={currentMap}
+                mapId={mapId}
+                isStoryMap={isStoryMap}
+                segments={segments}
+                onCreateLocationFromAsset={handleCreateLocationFromIcon}
+              />
+            )}
 
-            {activeView === "library" && <LibraryView />}
+            {activeView === "library" && (
+              <LibraryView
+                isStoryMap={isStoryMap}
+                segments={segments}
+                mapId={mapId}
+                onCreateLocationFromAsset={handleCreateLocationFromAsset}
+              />
+            )}
 
             {/* Map Locations View - list mode (when isStoryMap = false) */}
             {activeView === "locations" && !isStoryMap && mapLocationFormMode === "list" && (
@@ -825,6 +954,9 @@ export function LeftSidebarToolbox({
                 }}
                 initialCoordinates={mapLocationCoordinates}
                 initialLocation={mapEditingLocation as any}
+                isStoryMap={false}
+                segments={[]}
+                mapId={mapId}
               />
             )}
 
@@ -871,6 +1003,10 @@ export function LeftSidebarToolbox({
                 }}
                 initialCoordinates={pickedCoordinates}
                 initialLocation={editingLocation}
+                isStoryMap={isStoryMap}
+                segments={segments}
+                mapId={mapId}
+                onCreateLocationFromAsset={handleCreateLocationFromAsset}
               />
             )}
 
@@ -2171,7 +2307,16 @@ export function SegmentItemsList({
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
-                      <Icon icon="mdi:map-marker" className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                      {/* Show actual icon or default marker */}
+                      {location.iconUrl ? (
+                        <img src={location.iconUrl} alt="" className="w-3 h-3 object-contain flex-shrink-0" />
+                      ) : location.iconType ? (
+                        <span className="text-sm flex-shrink-0">
+                          {iconEmojiMap[location.iconType] || location.iconType || "📍"}
+                        </span>
+                      ) : (
+                        <Icon icon="mdi:map-marker" className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                      )}
                       <span className="text-xs font-medium text-white truncate">
                         {location.title || "Unnamed Location"}
                       </span>
@@ -3094,177 +3239,6 @@ function TransitionFormView({
   );
 }
 
-function IconLibraryView({ currentMap, mapId }: { currentMap?: any; mapId?: string }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  const startIconPlacement = (iconKey: string) => {
-    if (typeof window === "undefined") return;
-    window.dispatchEvent(
-      new CustomEvent("icon:startPlacement", {
-        detail: { iconKey },
-      })
-    );
-  };
-
-  const stopIconPlacement = () => {
-    if (typeof window === "undefined") return;
-    window.dispatchEvent(new CustomEvent("icon:stopPlacement"));
-  };
-
-  const categories: {
-    title: string;
-    items: { id: string; icon: string; label: string }[];
-  }[] = [
-      {
-        title: "Travel & Movement",
-        items: [
-          { id: "plane", icon: "mdi:airplane", label: "Plane" },
-          { id: "car", icon: "mdi:car", label: "Car" },
-          { id: "bus", icon: "mdi:bus", label: "Bus" },
-          { id: "train", icon: "mdi:train", label: "Train" },
-          { id: "ship", icon: "mdi:ferry", label: "Ship" },
-          { id: "bike", icon: "mdi:bike", label: "Bike" },
-          { id: "walk", icon: "mdi:walk", label: "Walk" },
-          { id: "route", icon: "mdi:routes", label: "Route" },
-          { id: "from", icon: "mdi:map-marker-radius", label: "From" },
-          { id: "to", icon: "mdi:map-marker-check", label: "To" },
-        ],
-      },
-      {
-        title: "Places & POI",
-        items: [
-          { id: "home", icon: "mdi:home-outline", label: "Home" },
-          { id: "office", icon: "mdi:office-building-outline", label: "Office" },
-          { id: "school", icon: "mdi:school-outline", label: "School" },
-          { id: "hospital", icon: "mdi:hospital-building", label: "Hospital" },
-          { id: "restaurant", icon: "mdi:silverware-fork-knife", label: "Food" },
-          { id: "coffee", icon: "mdi:coffee-outline", label: "Coffee" },
-          { id: "shop", icon: "mdi:storefront-outline", label: "Shop" },
-          { id: "park", icon: "mdi:tree-outline", label: "Park" },
-          { id: "museum", icon: "mdi:bank-outline", label: "Museum" },
-          { id: "hotel", icon: "mdi:bed-outline", label: "Hotel" },
-        ],
-      },
-      {
-        title: "People & Events",
-        items: [
-          { id: "person", icon: "mdi:account", label: "Person" },
-          { id: "group", icon: "mdi:account-group", label: "Group" },
-          { id: "info", icon: "mdi:information-outline", label: "Info" },
-          { id: "warning", icon: "mdi:alert-outline", label: "Warning" },
-          { id: "danger", icon: "mdi:alert-octagon-outline", label: "Danger" },
-          { id: "star", icon: "mdi:star-outline", label: "Highlight" },
-          { id: "photo", icon: "mdi:image-outline", label: "Photo spot" },
-          { id: "camera", icon: "mdi:camera-outline", label: "Camera" },
-          { id: "note", icon: "mdi:note-text-outline", label: "Note" },
-          { id: "chat", icon: "mdi:chat-outline", label: "Comment" },
-        ],
-      },
-      {
-        title: "Minerals & Resources",
-        items: [
-          { id: "gold", icon: "mdi:gold", label: "Gold" },
-          { id: "silver", icon: "mdi:silverware-variant", label: "Silver" },
-          { id: "coal", icon: "mdi:fire", label: "Coal" },
-          { id: "oil", icon: "mdi:oil-lamp", label: "Oil" },
-          { id: "gas", icon: "mdi:gas-station", label: "Natural Gas" },
-          { id: "iron", icon: "mdi:anvil", label: "Iron" },
-          { id: "copper", icon: "mdi:pickaxe", label: "Copper" },
-          { id: "diamond", icon: "mdi:gem", label: "Diamond" },
-          { id: "stone", icon: "mdi:cube-outline", label: "Stone" },
-          { id: "mining", icon: "mdi:pickaxe", label: "Mining" },
-        ],
-      },
-      {
-        title: "Industries",
-        items: [
-          { id: "factory", icon: "mdi:factory", label: "Factory" },
-          { id: "power-plant", icon: "mdi:lightning-bolt-outline", label: "Power Plant" },
-          { id: "refinery", icon: "mdi:barrel", label: "Refinery" },
-          { id: "warehouse", icon: "mdi:warehouse", label: "Warehouse" },
-          { id: "construction", icon: "mdi:hard-hat", label: "Construction" },
-          { id: "shipyard", icon: "mdi:ship", label: "Shipyard" },
-          { id: "airport", icon: "mdi:airport", label: "Airport" },
-          { id: "port", icon: "mdi:anchor", label: "Port" },
-          { id: "textile", icon: "mdi:tshirt-crew-outline", label: "Textile" },
-          { id: "agriculture", icon: "mdi:sprout", label: "Agriculture" },
-        ],
-      },
-      {
-        title: "Geography & History",
-        items: [
-          { id: "mountain", icon: "mdi:terrain", label: "Mountain" },
-          { id: "river", icon: "mdi:water", label: "River" },
-          { id: "lake", icon: "mdi:water-circle", label: "Lake" },
-          { id: "forest", icon: "mdi:tree", label: "Forest" },
-          { id: "desert", icon: "mdi:weather-sunny", label: "Desert" },
-          { id: "volcano", icon: "mdi:volcano", label: "Volcano" },
-          { id: "island", icon: "mdi:island", label: "Island" },
-          { id: "beach", icon: "mdi:beach", label: "Beach" },
-          { id: "castle", icon: "mdi:castle", label: "Castle" },
-          { id: "temple", icon: "mdi:temple-hindu", label: "Temple" },
-          { id: "monument", icon: "mdi:monument", label: "Monument" },
-          { id: "tomb", icon: "mdi:tombstone", label: "Tomb" },
-          { id: "ruin", icon: "mdi:castle", label: "Ruin" },
-          { id: "battlefield", icon: "mdi:sword", label: "Battlefield" },
-          { id: "ancient-city", icon: "mdi:city-variant", label: "Ancient City" },
-        ],
-      },
-    ];
-
-  return (
-    <div className="p-3 space-y-4 text-xs">
-      <div className="border-b border-zinc-800 pb-4">
-        <p className="text-zinc-400 text-[11px]">
-          Thư viện icon – hiện tại chỉ là UI chọn icon, chưa gắn logic tool hay map.
-        </p>
-      </div>
-
-        {categories.map((cat) => (
-        <div key={cat.title} className="space-y-2">
-          <h4 className="text-[11px] font-semibold text-zinc-300 uppercase tracking-wide">
-            {cat.title}
-          </h4>
-          <div className="grid grid-cols-5 gap-2">
-            {cat.items.map((item) => {
-              const isActive = selectedId === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setSelectedId((prev) => {
-                      const next = prev === item.id ? null : item.id;
-                      if (next) {
-                        startIconPlacement(next);
-                      } else {
-                        stopIconPlacement();
-                      }
-                      return next;
-                    });
-                  }}
-                  className={cn(
-                    "flex flex-col items-center justify-center gap-1 rounded-md border px-1 py-2 transition-all text-[10px]",
-                    isActive
-                      ? "border-emerald-500 bg-emerald-500/10 text-emerald-300"
-                      : "border-zinc-700 bg-zinc-800/60 text-zinc-300 hover:border-zinc-500 hover:bg-zinc-800"
-                  )}
-                  title={item.label}
-                >
-                  <Icon icon={item.icon} className="w-4 h-4" />
-                  <span className="truncate w-full text-center">
-                    {item.label}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-
 function getFeatureIcon(type: string): string {
   const typeMap: Record<string, string> = {
     marker: "mdi:map-marker",
@@ -3387,7 +3361,13 @@ function MapLocationsView({
                 onClick={() => handleLocationClick(location)}
                 title="Zoom to location"
               >
-                {location.iconType || "📍"}
+                {location.iconUrl ? (
+                  <img src={location.iconUrl} alt={location.title} className="w-6 h-6 object-contain" />
+                ) : location.iconType ? (
+                  iconEmojiMap[location.iconType] || location.iconType || "📍"
+                ) : (
+                  "📍"
+                )}
               </div>
 
               {/* Info */}
