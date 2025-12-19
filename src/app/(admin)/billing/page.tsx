@@ -1,12 +1,12 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import toast from "react-hot-toast";
 import { getAdminTransactions, AdminTransactionDto } from "@/lib/api-membership";
 import { useTheme } from "../layout";
 import { useI18n } from "@/i18n/I18nProvider";
 import { cn } from "@/lib/utils";
 import { getToken } from "@/lib/api-core";
+import { useToast } from "@/contexts/ToastContext";
 
 type Tx = {
   id: string;
@@ -25,6 +25,7 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"All" | Tx["status"]>("All");
+  const {showToast} = useToast();
 
   // Fetch transactions from API
   useEffect(() => {
@@ -61,7 +62,7 @@ export default function BillingPage() {
       setTxs(mappedTxs);
     } catch (error) {
       console.error("Failed to fetch transactions:", error);
-      toast.error(t("admin.billing_loadFailed"));
+      showToast("error",t("admin.billing_loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -146,10 +147,10 @@ export default function BillingPage() {
       link.click();
       document.body.removeChild(link);
 
-      toast.success(t("admin.billing_exportSuccess"));
+      showToast("success", t("admin.billing_exportSuccess"));
     } catch (error) {
       console.error("Export failed:", error);
-      toast.error(t("admin.billing_exportFailed"));
+      showToast("error", t("admin.billing_exportFailed"));
     }
   };
 
@@ -191,10 +192,10 @@ export default function BillingPage() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      toast.success(t("admin.billing_invoiceDownloaded"));
+      showToast("success", t("admin.billing_invoiceDownloaded"));
     } catch (error) {
       console.error("Failed to view invoice:", error);
-      toast.error(t("admin.billing_invoiceFailed"));
+      showToast("error", t("admin.billing_invoiceFailed"));
     }
   };
 
