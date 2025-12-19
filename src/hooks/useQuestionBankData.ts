@@ -12,7 +12,7 @@ import {
     getSessionsByQuestionBank,
     QuestionBankDto,
     QuestionDto,
-} from "@/lib/api-ques";
+} from "@/lib/api-session";
 
 function safeMessage(err: unknown, fallback: string): string {
     if (err instanceof Error) return err.message;

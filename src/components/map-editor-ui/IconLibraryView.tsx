@@ -42,8 +42,10 @@ export function IconLibraryView({
     const loadAssets = async () => {
       setLoadingAssets(true);
       try {
-        const data = await getUserAssets("image");
-        setUserAssets(data);
+        const res = await getUserAssets({ type: "image", page: 1, pageSize: 200 });
+
+        setUserAssets(res.assets ?? []);
+
       } catch (error) {
         console.error("Failed to load user assets:", error);
       } finally {
@@ -150,87 +152,87 @@ export function IconLibraryView({
     title: string;
     items: { id: string; icon: string; label: string }[];
   }[] = [
-    {
-      title: "Travel & Movement",
-      items: [
-        { id: "plane", icon: "mdi:airplane", label: "Plane" },
-        { id: "car", icon: "mdi:car", label: "Car" },
-        { id: "bus", icon: "mdi:bus", label: "Bus" },
-        { id: "train", icon: "mdi:train", label: "Train" },
-        { id: "ship", icon: "mdi:ferry", label: "Ship" },
-        { id: "bike", icon: "mdi:bike", label: "Bike" },
-        { id: "walk", icon: "mdi:walk", label: "Walk" },
-        { id: "route", icon: "mdi:routes", label: "Route" },
-        { id: "from", icon: "mdi:map-marker-radius", label: "From" },
-        { id: "to", icon: "mdi:map-marker-check", label: "To" },
-      ],
-    },
-    {
-      title: "Places & POI",
-      items: [
-        { id: "home", icon: "mdi:home-outline", label: "Home" },
-        { id: "office", icon: "mdi:office-building-outline", label: "Office" },
-        { id: "school", icon: "mdi:school-outline", label: "School" },
-        { id: "hospital", icon: "mdi:hospital-building", label: "Hospital" },
-        { id: "restaurant", icon: "mdi:silverware-fork-knife", label: "Food" },
-        { id: "coffee", icon: "mdi:coffee-outline", label: "Coffee" },
-        { id: "shop", icon: "mdi:storefront-outline", label: "Shop" },
-        { id: "park", icon: "mdi:tree-outline", label: "Park" },
-        { id: "museum", icon: "mdi:bank-outline", label: "Museum" },
-        { id: "hotel", icon: "mdi:bed-outline", label: "Hotel" },
-      ],
-    },
-    {
-      title: "People & Events",
-      items: [
-        { id: "person", icon: "mdi:account", label: "Person" },
-        { id: "group", icon: "mdi:account-group", label: "Group" },
-        { id: "info", icon: "mdi:information-outline", label: "Info" },
-        { id: "warning", icon: "mdi:alert-outline", label: "Warning" },
-        { id: "danger", icon: "mdi:alert-octagon-outline", label: "Danger" },
-        { id: "star", icon: "mdi:star-outline", label: "Highlight" },
-        { id: "photo", icon: "mdi:image-outline", label: "Photo spot" },
-        { id: "camera", icon: "mdi:camera-outline", label: "Camera" },
-        { id: "note", icon: "mdi:note-text-outline", label: "Note" },
-        { id: "chat", icon: "mdi:chat-outline", label: "Comment" },
-      ],
-    },
-    {
-      title: "Minerals & Resources",
-      items: [
-        { id: "gold", icon: "mdi:gold", label: "Gold" },
-        { id: "diamond", icon: "mdi:diamond-stone", label: "Diamond" },
-        { id: "crystal", icon: "mdi:diamond", label: "Crystal" },
-        { id: "oil", icon: "mdi:oil", label: "Oil" },
-        { id: "coal", icon: "mdi:cube-outline", label: "Coal" },
-        { id: "iron", icon: "mdi:hammer-wrench", label: "Iron" },
-        { id: "copper", icon: "mdi:lightning-bolt", label: "Copper" },
-        { id: "silver", icon: "mdi:circle-outline", label: "Silver" },
-        { id: "gem", icon: "mdi:sack", label: "Gem" },
-        { id: "mine", icon: "mdi:pickaxe", label: "Mine" },
-      ],
-    },
-    {
-      title: "History & Landmarks",
-      items: [
-        { id: "mountain", icon: "mdi:terrain", label: "Mountain" },
-        { id: "river", icon: "mdi:water", label: "River" },
-        { id: "lake", icon: "mdi:water-circle", label: "Lake" },
-        { id: "forest", icon: "mdi:tree", label: "Forest" },
-        { id: "desert", icon: "mdi:weather-sunny", label: "Desert" },
-        { id: "volcano", icon: "mdi:volcano", label: "Volcano" },
-        { id: "island", icon: "mdi:island", label: "Island" },
-        { id: "beach", icon: "mdi:beach", label: "Beach" },
-        { id: "castle", icon: "mdi:castle", label: "Castle" },
-        { id: "temple", icon: "mdi:temple-hindu", label: "Temple" },
-        { id: "monument", icon: "mdi:monument", label: "Monument" },
-        { id: "tomb", icon: "mdi:tombstone", label: "Tomb" },
-        { id: "ruin", icon: "mdi:castle", label: "Ruin" },
-        { id: "battlefield", icon: "mdi:sword", label: "Battlefield" },
-        { id: "ancient-city", icon: "mdi:city-variant", label: "Ancient City" },
-      ],
-    },
-  ];
+      {
+        title: "Travel & Movement",
+        items: [
+          { id: "plane", icon: "mdi:airplane", label: "Plane" },
+          { id: "car", icon: "mdi:car", label: "Car" },
+          { id: "bus", icon: "mdi:bus", label: "Bus" },
+          { id: "train", icon: "mdi:train", label: "Train" },
+          { id: "ship", icon: "mdi:ferry", label: "Ship" },
+          { id: "bike", icon: "mdi:bike", label: "Bike" },
+          { id: "walk", icon: "mdi:walk", label: "Walk" },
+          { id: "route", icon: "mdi:routes", label: "Route" },
+          { id: "from", icon: "mdi:map-marker-radius", label: "From" },
+          { id: "to", icon: "mdi:map-marker-check", label: "To" },
+        ],
+      },
+      {
+        title: "Places & POI",
+        items: [
+          { id: "home", icon: "mdi:home-outline", label: "Home" },
+          { id: "office", icon: "mdi:office-building-outline", label: "Office" },
+          { id: "school", icon: "mdi:school-outline", label: "School" },
+          { id: "hospital", icon: "mdi:hospital-building", label: "Hospital" },
+          { id: "restaurant", icon: "mdi:silverware-fork-knife", label: "Food" },
+          { id: "coffee", icon: "mdi:coffee-outline", label: "Coffee" },
+          { id: "shop", icon: "mdi:storefront-outline", label: "Shop" },
+          { id: "park", icon: "mdi:tree-outline", label: "Park" },
+          { id: "museum", icon: "mdi:bank-outline", label: "Museum" },
+          { id: "hotel", icon: "mdi:bed-outline", label: "Hotel" },
+        ],
+      },
+      {
+        title: "People & Events",
+        items: [
+          { id: "person", icon: "mdi:account", label: "Person" },
+          { id: "group", icon: "mdi:account-group", label: "Group" },
+          { id: "info", icon: "mdi:information-outline", label: "Info" },
+          { id: "warning", icon: "mdi:alert-outline", label: "Warning" },
+          { id: "danger", icon: "mdi:alert-octagon-outline", label: "Danger" },
+          { id: "star", icon: "mdi:star-outline", label: "Highlight" },
+          { id: "photo", icon: "mdi:image-outline", label: "Photo spot" },
+          { id: "camera", icon: "mdi:camera-outline", label: "Camera" },
+          { id: "note", icon: "mdi:note-text-outline", label: "Note" },
+          { id: "chat", icon: "mdi:chat-outline", label: "Comment" },
+        ],
+      },
+      {
+        title: "Minerals & Resources",
+        items: [
+          { id: "gold", icon: "mdi:gold", label: "Gold" },
+          { id: "diamond", icon: "mdi:diamond-stone", label: "Diamond" },
+          { id: "crystal", icon: "mdi:diamond", label: "Crystal" },
+          { id: "oil", icon: "mdi:oil", label: "Oil" },
+          { id: "coal", icon: "mdi:cube-outline", label: "Coal" },
+          { id: "iron", icon: "mdi:hammer-wrench", label: "Iron" },
+          { id: "copper", icon: "mdi:lightning-bolt", label: "Copper" },
+          { id: "silver", icon: "mdi:circle-outline", label: "Silver" },
+          { id: "gem", icon: "mdi:sack", label: "Gem" },
+          { id: "mine", icon: "mdi:pickaxe", label: "Mine" },
+        ],
+      },
+      {
+        title: "History & Landmarks",
+        items: [
+          { id: "mountain", icon: "mdi:terrain", label: "Mountain" },
+          { id: "river", icon: "mdi:water", label: "River" },
+          { id: "lake", icon: "mdi:water-circle", label: "Lake" },
+          { id: "forest", icon: "mdi:tree", label: "Forest" },
+          { id: "desert", icon: "mdi:weather-sunny", label: "Desert" },
+          { id: "volcano", icon: "mdi:volcano", label: "Volcano" },
+          { id: "island", icon: "mdi:island", label: "Island" },
+          { id: "beach", icon: "mdi:beach", label: "Beach" },
+          { id: "castle", icon: "mdi:castle", label: "Castle" },
+          { id: "temple", icon: "mdi:temple-hindu", label: "Temple" },
+          { id: "monument", icon: "mdi:monument", label: "Monument" },
+          { id: "tomb", icon: "mdi:tombstone", label: "Tomb" },
+          { id: "ruin", icon: "mdi:castle", label: "Ruin" },
+          { id: "battlefield", icon: "mdi:sword", label: "Battlefield" },
+          { id: "ancient-city", icon: "mdi:city-variant", label: "Ancient City" },
+        ],
+      },
+    ];
 
   return (
     <div className="p-3 space-y-4 text-xs">

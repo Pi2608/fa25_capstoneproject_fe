@@ -7,7 +7,7 @@ import {
   getSessionLeaderboard,
   type SessionDto,
   type LeaderboardEntryDto,
-} from "@/lib/api-ques";
+} from "@/lib/api-session";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 type HeaderMode = "light" | "dark";

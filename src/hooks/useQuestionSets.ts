@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { QuestionDto, QuestionOptionDto } from "@/lib/api-ques";
+import { QuestionDto, QuestionOptionDto } from "@/lib/api-session";
 
 export type QuestionType =
     | "MULTIPLE_CHOICE"

@@ -23,7 +23,7 @@ import {
   type SessionRunningQuestionDto,
   type LeaderboardEntryDto,
   type QuestionDto,
-} from "@/lib/api-ques";
+} from "@/lib/api-session";
 
 import {
   QuestionBroadcastEvent,
@@ -53,9 +53,10 @@ import {
   type GroupSubmissionGradedDto,
 } from "@/lib/hubs/groupCollaboration";
 
-import SessionQuestionPanel from "@/components/storymap/control/SessionQuestionPanel";
-import SessionCard from "@/components/storymap/control/SessionCard";
-import GroupSubmissionsCard from "@/components/storymap/control/GroupSubmissionsCard";
+import SessionQuestionPanel from "@/components/session/control/SessionQuestionPanel";
+import SessionCard from "@/components/session/control/SessionCard";
+import GroupSubmissionsCard from "@/components/session/control/GroupSubmissionsCard";
+import GuideModal from "@/components/session/control/GuideModal";
 
 import { toast } from "react-toastify";
 
@@ -158,6 +159,8 @@ export default function StoryMapControlPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isTeacherPlaying, setIsTeacherPlaying] = useState(false);
+
+  const [showGuideModal, setShowGuideModal] = useState(false);
 
   const [session, setSession] = useState<SessionDto | null>(null);
   const [changingStatus, setChangingStatus] = useState(false);
@@ -1488,9 +1491,26 @@ export default function StoryMapControlPage() {
             <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500 font-medium">
               Control Panel
             </p>
-            <h1 className="mt-1 text-lg font-semibold text-white truncate">
-              {mapDetail?.name || "Bản đồ chưa đặt tên"}
-            </h1>
+
+            <div className="mt-1 flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <h1 className="text-lg font-semibold text-white truncate">
+                  {mapDetail?.name || "Bản đồ chưa đặt tên"}
+                </h1>
+                {/* <p className="mt-0.5 text-[11px] text-zinc-400">
+                  Nhấn <b className="text-zinc-200">Hướng dẫn</b> để xem quy trình điều khiển session (Share → Start → Segments → Câu hỏi → Nhóm → End).
+                </p> */}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowGuideModal(true)}
+                className="shrink-0 rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-1.5 text-[11px] font-semibold text-zinc-200 hover:bg-zinc-800"
+              >
+                Hướng dẫn
+              </button>
+            </div>
+
 
             <div className="mt-3 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-[11px] text-zinc-400">
@@ -1672,6 +1692,17 @@ export default function StoryMapControlPage() {
           </div>
         </div>
       </div>
+
+      <GuideModal
+        open={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+        session={session}
+        origin={origin}
+        changingStatus={changingStatus}
+        onChangeStatus={handleChangeStatus}
+        onOpenShare={() => setShowShareModal(true)}
+      />
+
 
       {/* Session Share Modal */}
       {session &&

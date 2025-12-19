@@ -14,7 +14,7 @@ import {
   getMyQuestionBanks,
   getMyQuestionBanksByOrg,
   type QuestionBankDto,
-} from "@/lib/api-ques";
+} from "@/lib/api-session";
 import { getOrganizationById } from "@/lib/api-organizations";
 import {
   getProjectsByOrganization,
