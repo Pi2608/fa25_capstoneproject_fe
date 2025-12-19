@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PinInput } from "@/components/session/PinInput";
-import { joinSession, getSessionByCode } from "@/lib/api-ques";
+import { joinSession, getSessionByCode } from "@/lib/api-session";
 import { toast } from "react-toastify";
 import { useI18n } from "@/i18n/I18nProvider";
 

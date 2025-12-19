@@ -8,7 +8,7 @@ import {
   getSessionByCode,
   deleteSession,
   type SessionDto,
-} from "@/lib/api-ques";
+} from "@/lib/api-session";
 import { getMyOrganizations, type MyOrganizationDto } from "@/lib/api-organizations";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useI18n } from "@/i18n/I18nProvider";

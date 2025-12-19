@@ -16,7 +16,7 @@ import {
   QuestionDto,
   uploadQuestionImage,
   uploadQuestionAudio,
-} from "@/lib/api-ques";
+} from "@/lib/api-session";
 import { useQuestionBankData } from "@/hooks/useQuestionBankData";
 import {
   useQuestionSets,

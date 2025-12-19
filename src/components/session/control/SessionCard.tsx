@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import type { SessionDto } from "@/lib/api-ques";
+import type { SessionDto } from "@/lib/api-session";
 import type { BaseKey } from "@/types/common";
 import type { GroupSubmissionDto } from "@/lib/hubs/groupCollaboration";
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { QuestionBankDto } from "@/lib/api-ques";
+import { QuestionBankDto } from "@/lib/api-session";
 import { RowMenuState, resolveBankId } from "./question-bank-common";
 
 export function useRowMenu() {
