@@ -141,6 +141,19 @@ export function useSegmentPlayback({
         cameraAnimationDurationMs: opts?.cameraAnimationDurationMs,
         skipCameraState: opts?.skipCameraState,
         disableTwoPhaseFly: opts?.disableTwoPhaseFly,
+        // Enable highlight effects for zones and layers during playback
+        highlightZones: {
+          enabled: true,
+          color: undefined, // Use zone's own color
+          intensity: "medium",
+          pulseSpeed: 2000,
+        },
+        highlightLayers: {
+          enabled: true,
+          color: undefined, // Use layer feature's own color
+          intensity: "medium",
+          pulseSpeed: 2000,
+        },
       };
 
       // Render zones using shared function

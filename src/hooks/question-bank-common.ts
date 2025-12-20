@@ -1,4 +1,4 @@
-import { QuestionBankDto } from "@/lib/api-ques";
+import { QuestionBankDto } from "@/lib/api-session";
 
 // ============ TYPES ============
 export type QuestionBankFormState = {

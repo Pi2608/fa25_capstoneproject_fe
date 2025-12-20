@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/contexts/ToastContext";
-import { QuestionBankDto } from "@/lib/api-ques";
+import { QuestionBankDto } from "@/lib/api-session";
 import { getWorkspaceMaps } from "@/lib/api-workspaces";
 import { MapOption, mapWorkspaceMapsToOptions } from "./question-bank-common";
 

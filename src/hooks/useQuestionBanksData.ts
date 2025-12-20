@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { OrganizationDetailDto, getOrganizationById } from "@/lib/api-organizations";
-import { QuestionBankDto, getMyQuestionBanksByOrg, getPublicQuestionBanksByOrg, getQuestionBank } from "@/lib/api-ques";
+import { QuestionBankDto, getMyQuestionBanksByOrg, getPublicQuestionBanksByOrg, getQuestionBank } from "@/lib/api-session";
 import { getProjectsByOrganization } from "@/lib/api-workspaces";
 import { Workspace } from "@/types/workspace";
 import { BankExtra, normalizeTags, resolveBankId, safeMessage } from "./question-bank-common";

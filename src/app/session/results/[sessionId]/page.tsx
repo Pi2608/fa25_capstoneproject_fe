@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Leaderboard } from "@/components/session/Leaderboard";
-import { getSession, getSessionLeaderboard } from "@/lib/api-ques";
+import { getSession, getSessionLeaderboard } from "@/lib/api-session";
 import type { LeaderboardEntry } from "@/types/session";
 
 export default function SessionResultsPage() {

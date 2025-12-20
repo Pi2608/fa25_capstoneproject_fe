@@ -1103,12 +1103,11 @@ export default function TrangGoiThanhVien() {
                                 const features = feats.length
                                     ? feats
                                     : [
-                                          t("plans.feature_max_orgs", {
+                                          t("plans.feature_max_maps", {
                                               value:
-                                                  (p.maxOrganizations ?? 0) <
-                                                  0
+                                                  (p.maxMapsPerMonth ?? 0) < 0
                                                       ? t("plans.unlimited")
-                                                      : p.maxOrganizations,
+                                                      : p.maxMapsPerMonth,
                                           }),
                                           t(
                                               "plans.feature_max_users_per_org",
@@ -1122,11 +1121,11 @@ export default function TrangGoiThanhVien() {
                                                           : p.maxUsersPerOrg,
                                               }
                                           ),
-                                          t("plans.feature_max_maps", {
+                                          t("plans.feature_max_exports", {
                                               value:
-                                                  (p.maxMapsPerMonth ?? 0) < 0
+                                                  (p.exportQuota ?? 0) < 0
                                                       ? t("plans.unlimited")
-                                                      : p.maxMapsPerMonth,
+                                                      : p.exportQuota,
                                           }),
                                       ];
 

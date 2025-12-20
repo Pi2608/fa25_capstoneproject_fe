@@ -20,7 +20,7 @@ import {
 } from "@/lib/api-organizations";
 import { CurrentMembershipDto, getMyMembership } from "@/lib/api-membership";
 import { getProjectsByOrganization, getAllWorkspaces } from "@/lib/api-workspaces";
-import { joinSession, getSession, type ParticipantDto } from "@/lib/api-ques";
+import { joinSession, getSession, type ParticipantDto } from "@/lib/api-session";
 import ManageWorkspaces from "@/components/workspace/ManageWorkspaces";
 import { useI18n } from "@/i18n/I18nProvider";
 import type { TFunc } from "@/i18n/I18nProvider"

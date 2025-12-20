@@ -782,6 +782,7 @@ export function LeftSidebarToolbox({
                   const segment = segments.find(s => s.segmentId === segmentId);
                   if (segment) {
                     setEditingSegment(segment);
+                    setEditingRoute(null); // CRITICAL: Reset editingRoute to null for new route
                     setShowRouteAnimationDialog(true);
                     setInlineFormMode("route");
                   }
@@ -812,7 +813,10 @@ export function LeftSidebarToolbox({
                 }}
                 onAddZone={() => setShowZoneDialog(true)}
                 onAddLayer={() => setShowLayerDialog(true)}
-                onAddRouteAnimation={() => setShowRouteAnimationDialog(true)}
+                onAddRouteAnimation={() => {
+                  setEditingRoute(null); // CRITICAL: Reset editingRoute to null for new route
+                  setShowRouteAnimationDialog(true);
+                }}
               />
             )}
 

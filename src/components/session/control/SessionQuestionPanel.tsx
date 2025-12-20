@@ -1,6 +1,6 @@
 "use client";
 
-import type { SessionDto, QuestionDto } from "@/lib/api-ques";
+import type { SessionDto, QuestionDto } from "@/lib/api-session";
 import type { QuestionResultsEvent } from "@/lib/hubs/session";
 
 type QuestionBankMeta = {

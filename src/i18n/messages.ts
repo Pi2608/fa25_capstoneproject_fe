@@ -1965,6 +1965,7 @@ export const messages = {
             feature_max_orgs: "Số tổ chức tối đa: {value}",
             feature_max_users_per_org: "Người dùng/tổ chức: {value}",
             feature_max_maps: "Bản đồ/tháng: {value}",
+            feature_max_exports: "Xuất dữ liệu/tháng: {value}",
 
             // Không có tổ chức
             no_orgs:
@@ -3118,6 +3119,7 @@ export const messages = {
             feature_max_orgs: "Số tổ chức tối đa",
             feature_max_users: "Người dùng/tổ chức",
             feature_max_maps: "Bản đồ/tháng",
+            feature_max_exports: "Xuất dữ liệu/tháng",
         },
         map_builder: {
             hero_pill: "Xây trực quan. Xuất bản nhanh.",
@@ -4787,6 +4789,7 @@ export const messages = {
             feature_max_orgs: "Max organizations: {value}",
             feature_max_users_per_org: "Users per organization: {value}",
             feature_max_maps: "Maps per month: {value}",
+            feature_max_exports: "Exports per month: {value}",
 
             // No organizations
             no_orgs:
@@ -6458,6 +6461,7 @@ export const messages = {
             feature_max_orgs: "Max organizations",
             feature_max_users: "Users per organization",
             feature_max_maps: "Maps per month",
+            feature_max_exports: "Exports per month",
         },
         map_builder: {
             hero_pill: "Build visually. Publish fast.",

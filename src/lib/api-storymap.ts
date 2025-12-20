@@ -394,6 +394,7 @@ export type CreateRouteAnimationRequest = {
   routePath: string; // GeoJSON LineString
   waypoints?: string; // JSON array of waypoints
   iconType: "car" | "walking" | "bike" | "plane" | "custom";
+  iconFile?: File; // Upload custom icon image
   iconUrl?: string;
   iconWidth?: number;
   iconHeight?: number;
@@ -932,10 +933,55 @@ export async function createRouteAnimation(
   segmentId: string,
   data: CreateRouteAnimationRequest
 ): Promise<RouteAnimation> {
-  return await postJson<CreateRouteAnimationRequest, RouteAnimation>(
-    `/storymaps/${mapId}/segments/${segmentId}/route-animations`,
-    { ...data, segmentId }
-  );
+  // Always use FormData because backend expects [FromForm]
+  const formData = new FormData();
+
+  // Required fields
+  formData.append('SegmentId', segmentId);
+  formData.append('FromLat', data.fromLat.toString());
+  formData.append('FromLng', data.fromLng.toString());
+  formData.append('ToLat', data.toLat.toString());
+  formData.append('ToLng', data.toLng.toString());
+  formData.append('RoutePath', data.routePath);
+  formData.append('IconType', data.iconType);
+  formData.append('DurationMs', data.durationMs.toString());
+
+  // Optional string fields
+  if (data.fromName) formData.append('FromName', data.fromName);
+  if (data.toName) formData.append('ToName', data.toName);
+  if (data.toLocationId) formData.append('ToLocationId', data.toLocationId);
+  if (data.waypoints) formData.append('Waypoints', data.waypoints);
+  if (data.routeColor) formData.append('RouteColor', data.routeColor);
+  if (data.visitedColor) formData.append('VisitedColor', data.visitedColor);
+  if (data.easing) formData.append('Easing', data.easing);
+  if (data.cameraStateBefore) formData.append('CameraStateBefore', data.cameraStateBefore);
+  if (data.cameraStateAfter) formData.append('CameraStateAfter', data.cameraStateAfter);
+
+  // Optional number fields (use != null to catch both null and undefined)
+  if (data.iconWidth != null) formData.append('IconWidth', data.iconWidth.toString());
+  if (data.iconHeight != null) formData.append('IconHeight', data.iconHeight.toString());
+  if (data.routeWidth != null) formData.append('RouteWidth', data.routeWidth.toString());
+  if (data.startDelayMs != null) formData.append('StartDelayMs', data.startDelayMs.toString());
+  if (data.zIndex != null) formData.append('ZIndex', data.zIndex.toString());
+  if (data.displayOrder != null) formData.append('DisplayOrder', data.displayOrder.toString());
+  if (data.startTimeMs != null) formData.append('StartTimeMs', data.startTimeMs.toString());
+  if (data.endTimeMs != null) formData.append('EndTimeMs', data.endTimeMs.toString());
+  if (data.locationInfoDisplayDurationMs != null) formData.append('LocationInfoDisplayDurationMs', data.locationInfoDisplayDurationMs.toString());
+  if (data.followCameraZoom != null) formData.append('FollowCameraZoom', data.followCameraZoom.toString());
+
+  // Optional boolean fields (use != null to catch both null and undefined)
+  if (data.autoPlay != null) formData.append('AutoPlay', data.autoPlay.toString());
+  if (data.loop != null) formData.append('Loop', data.loop.toString());
+  if (data.isVisible != null) formData.append('IsVisible', data.isVisible.toString());
+  if (data.showLocationInfoOnArrival != null) formData.append('ShowLocationInfoOnArrival', data.showLocationInfoOnArrival.toString());
+  if (data.followCamera != null) formData.append('FollowCamera', data.followCamera.toString());
+
+  // Media files
+  if (data.iconFile) formData.append('IconFile', data.iconFile);
+  if (data.iconUrl) formData.append('IconUrl', data.iconUrl);
+
+  const { postFormData } = await import('./api-core');
+  return await postFormData<RouteAnimation>(`/storymaps/${mapId}/segments/${segmentId}/route-animations`, formData);
 }
 
 export async function updateRouteAnimation(
@@ -944,10 +990,54 @@ export async function updateRouteAnimation(
   routeAnimationId: string,
   data: UpdateRouteAnimationRequest
 ): Promise<RouteAnimation> {
-  return await putJson<UpdateRouteAnimationRequest, RouteAnimation>(
-    `/storymaps/${mapId}/segments/${segmentId}/route-animations/${routeAnimationId}`,
-    data
-  );
+  // Always use FormData because backend expects [FromForm]
+  const formData = new FormData();
+
+  // Only append fields that are present (partial update - use != null to catch both null and undefined)
+  if (data.fromLat != null) formData.append('FromLat', data.fromLat.toString());
+  if (data.fromLng != null) formData.append('FromLng', data.fromLng.toString());
+  if (data.toLat != null) formData.append('ToLat', data.toLat.toString());
+  if (data.toLng != null) formData.append('ToLng', data.toLng.toString());
+  if (data.routePath) formData.append('RoutePath', data.routePath);
+  if (data.iconType) formData.append('IconType', data.iconType);
+  if (data.durationMs != null) formData.append('DurationMs', data.durationMs.toString());
+
+  // Optional string fields
+  if (data.fromName) formData.append('FromName', data.fromName);
+  if (data.toName) formData.append('ToName', data.toName);
+  if (data.toLocationId) formData.append('ToLocationId', data.toLocationId);
+  if (data.waypoints) formData.append('Waypoints', data.waypoints);
+  if (data.routeColor) formData.append('RouteColor', data.routeColor);
+  if (data.visitedColor) formData.append('VisitedColor', data.visitedColor);
+  if (data.easing) formData.append('Easing', data.easing);
+  if (data.cameraStateBefore) formData.append('CameraStateBefore', data.cameraStateBefore);
+  if (data.cameraStateAfter) formData.append('CameraStateAfter', data.cameraStateAfter);
+
+  // Optional number fields (use != null to catch both null and undefined)
+  if (data.iconWidth != null) formData.append('IconWidth', data.iconWidth.toString());
+  if (data.iconHeight != null) formData.append('IconHeight', data.iconHeight.toString());
+  if (data.routeWidth != null) formData.append('RouteWidth', data.routeWidth.toString());
+  if (data.startDelayMs != null) formData.append('StartDelayMs', data.startDelayMs.toString());
+  if (data.zIndex != null) formData.append('ZIndex', data.zIndex.toString());
+  if (data.displayOrder != null) formData.append('DisplayOrder', data.displayOrder.toString());
+  if (data.startTimeMs != null) formData.append('StartTimeMs', data.startTimeMs.toString());
+  if (data.endTimeMs != null) formData.append('EndTimeMs', data.endTimeMs.toString());
+  if (data.locationInfoDisplayDurationMs != null) formData.append('LocationInfoDisplayDurationMs', data.locationInfoDisplayDurationMs.toString());
+  if (data.followCameraZoom != null) formData.append('FollowCameraZoom', data.followCameraZoom.toString());
+
+  // Optional boolean fields (use != null to catch both null and undefined)
+  if (data.autoPlay != null) formData.append('AutoPlay', data.autoPlay.toString());
+  if (data.loop != null) formData.append('Loop', data.loop.toString());
+  if (data.isVisible != null) formData.append('IsVisible', data.isVisible.toString());
+  if (data.showLocationInfoOnArrival != null) formData.append('ShowLocationInfoOnArrival', data.showLocationInfoOnArrival.toString());
+  if (data.followCamera != null) formData.append('FollowCamera', data.followCamera.toString());
+
+  // Media files
+  if (data.iconFile) formData.append('IconFile', data.iconFile);
+  if (data.iconUrl) formData.append('IconUrl', data.iconUrl);
+
+  const { putFormData } = await import('./api-core');
+  return await putFormData<RouteAnimation>(`/storymaps/${mapId}/segments/${segmentId}/route-animations/${routeAnimationId}`, formData);
 }
 
 export async function deleteRouteAnimation(
