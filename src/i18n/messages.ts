@@ -635,12 +635,12 @@ export const messages = {
             errorSessionNotFound: "Không tìm thấy phiên học. Vui lòng kiểm tra mã PIN.",
             errorSessionEndedJoin: "Phiên học đã kết thúc.",
             errorGeneric: "Không thể tham gia phiên học. Vui lòng thử lại.",
-             errAlreadyJoined:
-    "Bạn đã tham gia session này rồi. Nếu bạn bị out do tắt tab, hãy mở lại tab cũ (hoặc dùng đúng trình duyệt đã join trước đó) để hệ thống tự vào lại.",
-  errSessionFull:
-    "Session đã đủ số lượng người tham gia. Vui lòng thử lại sau hoặc liên hệ giảng viên.",
-  errGeneric: "Có lỗi xảy ra. Vui lòng thử lại.",
-  errJoinFailed: "Không thể tham gia session. Vui lòng thử lại.",
+            errAlreadyJoined:
+                "Bạn đã tham gia session này rồi. Nếu bạn bị out do tắt tab, hãy mở lại tab cũ (hoặc dùng đúng trình duyệt đã join trước đó) để hệ thống tự vào lại.",
+            errSessionFull:
+                "Session đã đủ số lượng người tham gia. Vui lòng thử lại sau hoặc liên hệ giảng viên.",
+            errGeneric: "Có lỗi xảy ra. Vui lòng thử lại.",
+            errJoinFailed: "Không thể tham gia session. Vui lòng thử lại.",
         },
         blog: {
             breadcrumb: "Tài nguyên / Blog",
@@ -2065,6 +2065,8 @@ export const messages = {
             status_inactive: "Không hoạt động",
         },
         profilelayout: {
+            toast_warning_title: "Cảnh báo",
+            account_suspended_toast: "Bạn đã bị khóa tài khoản, hãy vào mục Trợ giúp để được hỗ trợ.",
             nav_home: "Trang chủ",
             nav_information: "Thông tin cá nhân",
             nav_recents: "Gần đây",
@@ -4383,11 +4385,11 @@ export const messages = {
             errorSessionEndedJoin: "Session has ended.",
             errorGeneric: "Failed to join session. Please try again.",
             errAlreadyJoined:
-    "You already joined this session. If you were disconnected after closing the tab, please reopen the same tab (or use the same browser you joined with) so the system can reconnect you automatically.",
-  errSessionFull:
-    "This session has reached the maximum number of participants. Please try again later or contact your teacher.",
-  errGeneric: "Something went wrong. Please try again.",
-  errJoinFailed: "Unable to join the session. Please try again.",
+                "You already joined this session. If you were disconnected after closing the tab, please reopen the same tab (or use the same browser you joined with) so the system can reconnect you automatically.",
+            errSessionFull:
+                "This session has reached the maximum number of participants. Please try again later or contact your teacher.",
+            errGeneric: "Something went wrong. Please try again.",
+            errJoinFailed: "Unable to join the session. Please try again.",
         },
         org_question_builder: {
             // Header
@@ -4970,6 +4972,8 @@ export const messages = {
             no_changes: "No changes.",
         },
         profilelayout: {
+            toast_warning_title: "Warning",
+            account_suspended_toast: "Your account has been suspended. Please go to Help for support.",
             nav_home: "Home",
             nav_information: "Personal information",
             nav_recents: "Recents",
