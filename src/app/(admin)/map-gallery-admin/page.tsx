@@ -10,6 +10,7 @@ import {
   type MapGalleryDetailResponse,
   type MapGalleryStatus,
 } from "@/lib/api-map-gallery";
+import { getMapDetail } from "@/lib/api-maps";
 import Loading from "@/app/loading";
 
 type StatusFilter = "all" | "pending" | "approved" | "rejected";
@@ -43,6 +44,7 @@ export default function MapGalleryAdminPage() {
   const [loadingList, setLoadingList] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [viewingMapId, setViewingMapId] = useState<string | null>(null);
 
   const [submissions, setSubmissions] = useState<MapGallerySummaryResponse[]>([]);
   const [selected, setSelected] = useState<MapGalleryDetailResponse | null>(null);
@@ -136,6 +138,26 @@ export default function MapGalleryAdminPage() {
       alert("Xoá submission thất bại.");
     } finally {
       setUpdating(false);
+    }
+  }
+
+  async function handleViewMap(mapId: string) {
+    try {
+      setViewingMapId(mapId);
+      const mapDetail = await getMapDetail(mapId);
+      const isStoryMap = mapDetail?.isStoryMap ?? false;
+
+      if (isStoryMap) {
+        window.open(`/storymap/${mapId}`, "_blank");
+      } else {
+        window.open(`/maps/publish?mapId=${mapId}&view=true`, "_blank");
+      }
+    } catch (err) {
+      console.error(err);
+      // Fallback: mở như storymap nếu không lấy được map detail
+      window.open(`/storymap/${mapId}`, "_blank");
+    } finally {
+      setViewingMapId(null);
     }
   }
 
@@ -238,10 +260,18 @@ export default function MapGalleryAdminPage() {
                     </td>
                     <td className="px-4 py-2 align-middle text-right space-x-2">
                       <button
+                        onClick={() => handleViewMap(s.mapId)}
+                        disabled={viewingMapId === s.mapId}
+                        className="rounded-md border border-sky-400 px-2 py-1 text-xs font-medium text-sky-600 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        title="Xem thử bản đồ"
+                      >
+                        {viewingMapId === s.mapId ? "..." : "Xem Map"}
+                      </button>
+                      <button
                         onClick={() => loadDetail(s.id)}
                         className="rounded-md border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-800 hover:bg-neutral-50"
                       >
-                        Xem
+                        Chi tiết
                       </button>
                       <button
                         onClick={() => handleDelete(s.id)}
@@ -364,6 +394,14 @@ export default function MapGalleryAdminPage() {
 
                 <div className="flex flex-wrap gap-3 pt-2">
                   <button
+                    onClick={() => handleViewMap(selected.mapId)}
+                    disabled={viewingMapId === selected.mapId}
+                    className="inline-flex items-center rounded-md bg-sky-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {viewingMapId === selected.mapId ? "Đang tải..." : "👁 Xem Map"}
+                  </button>
+
+                  <button
                     onClick={handleApprove}
                     disabled={updating || selected.status === "approved"}
                     className="inline-flex items-center rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
@@ -371,8 +409,8 @@ export default function MapGalleryAdminPage() {
                     {selected.status === "approved"
                       ? "Đã approved"
                       : updating
-                      ? <Loading />
-                      : "Approve"}
+                        ? <Loading />
+                        : "Approve"}
                   </button>
 
                   <button
