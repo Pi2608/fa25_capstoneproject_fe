@@ -8,6 +8,7 @@ import {
   adminGetRevenueAnalytics,
   adminGetSystemUsage,
   adminGetSystemAnalytics,
+  adminCountNewUsersLastNDays,
 } from "@/lib/admin-api";
 import { useTheme } from "../layout";
 import { getThemeClasses } from "@/utils/theme-utils";
@@ -216,7 +217,7 @@ function aggregateDailyRevenueToMonthly(points: RevenuePoint[]): MonthlyData[] {
     if (!p.date) return;
     const d = new Date(p.date);
     if (Number.isNaN(d.getTime())) return;
-    const month = d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    const month = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10); // "YYYY-MM-01"\
     const existing = monthMap.get(month) || { month, users: 0, revenue: 0, maps: 0, exports: 0 };
     existing.revenue += Number(p.value ?? 0);
     monthMap.set(month, existing);
@@ -232,11 +233,17 @@ function aggregateDailyRevenueToMonthly(points: RevenuePoint[]): MonthlyData[] {
   return monthly;
 }
 
-function dateInputValue(d: Date) {
-  const z = new Date(d);
-  z.setHours(0, 0, 0, 0);
-  return z.toISOString().slice(0, 10);
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
 }
+
+function dateInputValue(d: Date) {
+  const y = d.getFullYear();
+  const m = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  return `${y}-${m}-${day}`;
+}
+
 
 function addDays(d: Date, days: number) {
   const next = new Date(d);
@@ -326,9 +333,10 @@ export default function AdminDashboard(): JSX.Element {
   });
   const [revEnd, setRevEnd] = useState<string>(() => {
     const today = new Date();
-    const tomorrow = addDays(today, 1);
-    return dateInputValue(tomorrow);
+    today.setHours(0, 0, 0, 0);
+    return dateInputValue(today);
   });
+
   const [revenue, setRevenue] = useState<RevenuePoint[]>([]);
   const now = new Date();
   const defaultMonthlyEnd = dateInputValue(now);
@@ -346,16 +354,20 @@ export default function AdminDashboard(): JSX.Element {
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
   const [monthlyLoading, setMonthlyLoading] = useState<boolean>(true);
 
+  const [revenueLoading, setRevenueLoading] = useState<boolean>(true);
+
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
-        const [dashRes, users, orgs, usageRes] = await Promise.all([
+        const [dashRes, users, orgs, usageRes, newUsers7d] = await Promise.all([
           adminGetSystemDashboard<Raw>(),
           adminGetTopUsers<Raw>(8),
           adminGetTopOrganizations<Raw>(8),
           adminGetSystemUsage<Raw>(),
+          adminCountNewUsersLastNDays(7),
         ]);
+
         if (!mounted) return;
 
         const d: DashboardStats = {
@@ -363,7 +375,7 @@ export default function AdminDashboard(): JSX.Element {
           totalUsersChangePct: pickNumber(dashRes, ["totalUsersChangePct", "TotalUsersChangePct", "totalUsersChange", "TotalUsersChange", "total_users_change_pct"], 0),
           activeToday: pickNumber(dashRes, ["activeToday", "ActiveToday", "activeUsersToday", "active_today"], 0),
           activeTodayChangePct: pickNumber(dashRes, ["activeTodayChangePct", "ActiveTodayChangePct", "activeTodayChange", "ActiveTodayChange", "active_today_change_pct"], 0),
-          newSignups: pickNumber(dashRes, ["newSignups", "NewSignups", "newUsers", "new_signups"], 0),
+          newSignups: Number(newUsers7d ?? 0),
           newSignupsChangePct: pickNumber(dashRes, ["newSignupsChangePct", "NewSignupsChangePct", "newSignupsChange", "NewSignupsChange", "new_signups_change_pct"], 0),
           errors24h: pickNumber(dashRes, ["errors24h", "Errors24h", "errorCount24h", "errors_24h"], 0),
           errors24hChangePct: pickNumber(dashRes, ["errors24hChangePct", "Errors24hChangePct", "errors24hChange", "Errors24hChange", "errors_24h_change_pct"], 0),
@@ -371,7 +383,7 @@ export default function AdminDashboard(): JSX.Element {
         setStats(d);
 
         const normUsers: TopUserRow[] = (Array.isArray(users) ? users : []).map((u: Raw) => {
-          const id = pickString(u, ["id", "Id", "userId", "UserId"]);  // ✅ lấy userId
+          const id = pickString(u, ["id", "Id", "userId", "UserId"]);
 
           const userName = pickString(u, [
             "userName",
@@ -450,24 +462,28 @@ export default function AdminDashboard(): JSX.Element {
 
   useEffect(() => {
     let mounted = true;
-    const startDate = new Date(revStart);
-    let endDate = new Date(revEnd);
+    function parseYmdToUtc(ymd: string) {
+      return new Date(`${ymd}T00:00:00.000Z`);
+    }
+
+    const startDate = parseYmdToUtc(revStart);
+    let endDate = parseYmdToUtc(revEnd);
+
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
       return () => { };
     }
 
     // Enforce endDate >= startDate and endDate >= today
-    const today = dateInputValue(new Date());
+    // Enforce endDate >= startDate
     if (endDate < startDate) {
       endDate = addDays(startDate, 1);
       setRevEnd(dateInputValue(endDate));
     }
-    const minEnd = new Date(today);
-    if (endDate < minEnd) {
-      endDate = minEnd;
-      setRevEnd(dateInputValue(endDate));
-    }
-    adminGetRevenueAnalytics<unknown>(startDate, endDate)
+
+    const endExclusive = addDays(endDate, 1);
+
+    setRevenueLoading(true);
+    adminGetRevenueAnalytics<unknown>(startDate, endExclusive)
       .then((res) => {
         if (!mounted) return;
         const resObj = res as any;
@@ -475,7 +491,6 @@ export default function AdminDashboard(): JSX.Element {
         const normalized = normalizeRevenue(dailyRevenue);
         setRevenue(normalized);
 
-        // Extract summary stats
         if (resObj && typeof resObj === "object") {
           setRevenueStats({
             totalRevenue: pickNumber(resObj, ["totalRevenue", "TotalRevenue"], 0),
@@ -492,27 +507,39 @@ export default function AdminDashboard(): JSX.Element {
           setRevenue([]);
           setRevenueStats(null);
         }
+      })
+      .finally(() => {
+        if (mounted) setRevenueLoading(false);
       });
+
     return () => {
       mounted = false;
     };
   }, [revStart, revEnd]);
 
   // Load monthly data (users/maps/exports + revenue) with selectable range
+  // Load monthly data (users/maps/exports + revenue) with selectable range
   useEffect(() => {
     let mounted = true;
     setMonthlyLoading(true);
 
     const start = new Date(monthlyStart);
-    const end = new Date(monthlyEnd);
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    start.setHours(0, 0, 0, 0);
+
+    // endExclusive = first day of next month (include full end month)
+    const endExclusive = new Date(monthlyEnd);
+    endExclusive.setHours(0, 0, 0, 0);
+    endExclusive.setDate(1);
+    endExclusive.setMonth(endExclusive.getMonth() + 1);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(endExclusive.getTime())) {
       setMonthlyLoading(false);
       return () => { };
     }
 
     Promise.allSettled([
-      adminGetSystemAnalytics<Raw>(start, end),
-      adminGetRevenueAnalytics<Raw>(start, end),
+      adminGetSystemAnalytics<Raw>(start, endExclusive),
+      adminGetRevenueAnalytics<Raw>(start, endExclusive),
     ])
       .then((results) => {
         if (!mounted) return;
@@ -527,7 +554,8 @@ export default function AdminDashboard(): JSX.Element {
         let monthlyFromRevenue: MonthlyData[] = [];
         if (revenueRes) {
           const resObj = revenueRes as any;
-          const dailyRevenue = resObj?.dailyRevenue || resObj?.DailyRevenue || (Array.isArray(resObj) ? resObj : []);
+          const dailyRevenue =
+            resObj?.dailyRevenue || resObj?.DailyRevenue || (Array.isArray(resObj) ? resObj : []);
           const normalizedDaily = normalizeRevenue(dailyRevenue);
           monthlyFromRevenue = aggregateDailyRevenueToMonthly(normalizedDaily);
         }
@@ -554,17 +582,17 @@ export default function AdminDashboard(): JSX.Element {
       })
       .catch((err) => {
         console.error("Failed to load monthly analytics:", err);
-        if (mounted) {
-          setMonthlyData([]);
-        }
+        if (mounted) setMonthlyData([]);
       })
       .finally(() => {
         if (mounted) setMonthlyLoading(false);
       });
+
     return () => {
       mounted = false;
     };
   }, [monthlyStart, monthlyEnd]);
+
 
   const filteredTopUsers = useMemo(() => {
     if (!search.trim()) return topUsers;
@@ -746,11 +774,12 @@ export default function AdminDashboard(): JSX.Element {
               value={revEnd}
               onChange={(e) => setRevEnd(e.target.value)}
               className="px-2 py-1 rounded border border-zinc-600 bg-zinc-800 text-white text-sm"
-              min={dateInputValue(new Date())}
+              min={revStart}
+
             />
           </div>
         </div>
-        {monthlyLoading ? (
+        {revenueLoading ? (
           <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
             Đang tải dữ liệu...
           </div>
