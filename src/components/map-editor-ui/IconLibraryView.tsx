@@ -42,9 +42,8 @@ export function IconLibraryView({
     const loadAssets = async () => {
       setLoadingAssets(true);
       try {
-        const res = await getUserAssets({ type: "image", page: 1, pageSize: 200 });
-
-        setUserAssets(res.assets ?? []);
+        const res = await getUserAssets({ page: 1, pageSize: 200 });
+        setUserAssets((res.assets ?? []).filter((a) => a.type === "image"));
 
       } catch (error) {
         console.error("Failed to load user assets:", error);
@@ -334,12 +333,12 @@ export function IconLibraryView({
                     className="w-full h-full object-cover"
                     loading="lazy"
                   />
-                  <div className={cn(
+                  {/* <div className={cn(
                     "absolute inset-0 bg-black/50 transition-opacity flex items-center justify-center",
                     isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100"
                   )}>
                     <Icon icon="mdi:map-marker-plus" className="w-6 h-6 text-emerald-400" />
-                  </div>
+                  </div> */}
                 </button>
               );
             })}
