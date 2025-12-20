@@ -24,6 +24,7 @@ import { LocationInfoPanel } from "@/components/map-editor-ui/LocationInfoPanel"
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
 import SequentialRoutePlaybackWrapper from "@/components/storymap/SequentialRoutePlaybackWrapper";
+import { SharedMarkerProvider } from "@/contexts/SharedMarkerContext";
 
 import { getCustomMarkerIcon, getCustomDefaultIcon } from "@/constants/mapIcons";
 import { iconEmojiMap, iconLabelMap, labelToIconKeyMap } from "@/constants/icons";
@@ -3893,7 +3894,8 @@ export default function EditMapPage() {
   // Toggle export popup
 
   return (
-    <main className="relative h-screen w-screen overflow-hidden text-white">
+    <SharedMarkerProvider map={playbackMap} segments={segments}>
+      <main className="relative h-screen w-screen overflow-hidden text-white">
       <div className="absolute top-0 left-0 z-[3000] w-full pointer-events-none">
         <div className="pointer-events-auto bg-black/70 backdrop-blur-md ring-1 ring-white/15 shadow-xl py-1 px-3">
           <div className="grid grid-cols-3 place-items-stretch gap-2">
@@ -4686,6 +4688,7 @@ export default function EditMapPage() {
           onClose={() => setPoiTooltipModal({ isOpen: false })}
         />
       )}
-    </main>
+      </main>
+    </SharedMarkerProvider>
   );
 }

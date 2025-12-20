@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   CreateRouteAnimationRequest,
   getMapLocations,
@@ -41,9 +41,15 @@ export function RouteAnimationForm({
   const [useStraightLine, setUseStraightLine] = useState(true);
   const [routeDistance, setRouteDistance] = useState<number | null>(null); // meters
 
+  // Icon upload state
+  const [iconFile, setIconFile] = useState<File | null>(null);
+  const [iconUrl, setIconUrl] = useState("");
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
+  const iconInputRef = useRef<HTMLInputElement>(null);
+
   // Timing tab
   const [durationMs, setDurationMs] = useState(5000);
-  const [startTimeMs, setStartTimeMs] = useState<number | undefined>(undefined);
+  const [startTimeMs, setStartTimeMs] = useState<number>(0);
 
   // Style tab
   const [lineColor, setLineColor] = useState("#FF0000");
@@ -92,8 +98,9 @@ export function RouteAnimationForm({
       setFromLocationId(fromLocation?.locationId || initialRoute.toLocationId || "");
       setToLocationId(toLocation?.locationId || initialRoute.toLocationId || "");
       setIconType(initialRoute.iconType || "car");
+      setIconUrl(initialRoute.iconUrl || "");
       setDurationMs(initialRoute.durationMs || 5000);
-      setStartTimeMs(initialRoute.startTimeMs);
+      setStartTimeMs(initialRoute.startTimeMs ?? 0);
       setLineColor(initialRoute.routeColor || "#FF0000");
       setLineWidth(initialRoute.routeWidth || 3);
       
@@ -145,7 +152,7 @@ export function RouteAnimationForm({
       setToLocationId("");
       setIconType("car");
       setDurationMs(5000);
-      setStartTimeMs(undefined);
+      setStartTimeMs(0);
       setLineColor("#FF0000");
       setLineWidth(3);
       setRoutePath(null);
@@ -172,6 +179,18 @@ export function RouteAnimationForm({
       console.error("Failed to load locations:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Handle icon file upload
+  const handleIconFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setIconFile(file);
+      setIconUrl(""); // Clear URL when file is selected
+      const reader = new FileReader();
+      reader.onload = (e) => setIconPreview(e.target?.result as string);
+      reader.readAsDataURL(file);
     }
   };
 
@@ -336,10 +355,14 @@ export function RouteAnimationForm({
         toLocationId: toLocationId,
         routePath: finalRoutePath,
         iconType,
+        iconFile: iconFile || undefined,
+        iconUrl: iconUrl.trim() || undefined,
         routeColor: lineColor,
         routeWidth: lineWidth,
         durationMs,
         startTimeMs,
+        autoPlay: true,
+        followCamera: false,
         isVisible: true,
       };
       console.log("Submitting route animation data:", data);
@@ -548,10 +571,10 @@ export function RouteAnimationForm({
                   <label className="block text-xs text-zinc-400 mb-1">Thời gian bắt đầu (ms)</label>
                   <input
                     type="number"
-                    value={startTimeMs || ""}
-                    onChange={(e) => setStartTimeMs(e.target.value ? parseInt(e.target.value) : undefined)}
+                    value={startTimeMs}
+                    onChange={(e) => setStartTimeMs(e.target.value ? parseInt(e.target.value) : 0)}
                     className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
-                    placeholder="Để trống để tự động"
+                    placeholder="0 = bắt đầu cùng segment"
                     disabled={saving}
                   />
                 </div>
@@ -597,6 +620,87 @@ export function RouteAnimationForm({
                   />
                   <span className="text-xs text-zinc-300">Hiển thị markers</span>
                 </label>
+
+                {/* Custom Icon Upload */}
+                <div className="space-y-2 pt-2 border-t border-zinc-700/50">
+                  <label className="block text-xs text-zinc-400">Custom Icon (Tùy chỉnh icon di chuyển)</label>
+
+                  {/* Current Icon Preview */}
+                  {(iconPreview || iconUrl) && !iconFile && (
+                    <div className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded text-xs border border-zinc-700">
+                      <img
+                        src={iconPreview || iconUrl}
+                        alt="Current icon"
+                        className="w-10 h-10 rounded object-cover"
+                      />
+                      <div className="flex-1">
+                        <div className="text-zinc-300 text-xs">Icon hiện tại</div>
+                        {iconUrl && (
+                          <div className="text-zinc-500 text-[10px] truncate max-w-[180px]" title={iconUrl}>
+                            {iconUrl}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <input
+                      ref={iconInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleIconFileChange}
+                      className="hidden"
+                      disabled={saving}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => iconInputRef.current?.click()}
+                      disabled={saving}
+                      className="w-full px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
+                    >
+                      {iconUrl || iconPreview ? "Thay đổi" : "Upload icon"}
+                    </button>
+                  </div>
+
+                  {iconFile && (
+                    <div className="flex items-center gap-2 p-2 bg-emerald-900/20 rounded text-xs border border-emerald-700/50">
+                      {iconPreview && (
+                        <img src={iconPreview} alt="Preview" className="w-8 h-8 rounded object-cover" />
+                      )}
+                      <span className="flex-1 truncate text-emerald-300 font-medium">{iconFile.name}</span>
+                      <span className="text-[10px] text-emerald-400">Mới</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIconFile(null);
+                          setIconPreview(null);
+                        }}
+                        className="p-1 hover:bg-zinc-700 rounded"
+                      >
+                        <Icon icon="mdi:close" className="w-3 h-3 text-zinc-400" />
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="text-xs text-zinc-500">Nhập URL icon:</div>
+                  <input
+                    type="url"
+                    value={iconUrl}
+                    onChange={(e) => {
+                      setIconUrl(e.target.value);
+                      setIconFile(null);
+                      setIconPreview(null);
+                    }}
+                    className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                    placeholder="https://example.com/icon.png"
+                    disabled={saving}
+                  />
+
+                  <div className="text-[10px] text-zinc-500 italic">
+                    💡 Nhập URL hoặc upload file. Nếu để trống, sẽ dùng icon mặc định theo loại phương tiện.
+                  </div>
+                </div>
               </div>
             )}
           </>
