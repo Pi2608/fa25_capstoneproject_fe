@@ -42,8 +42,8 @@ export function LibraryView({
     const loadAssets = async () => {
         setLoading(true);
         try {
-            const res = await getUserAssets({ type: activeTab, page: 1, pageSize: 100 });
-            setAssets(res.assets ?? []);
+            const res = await getUserAssets({ page: 1, pageSize: 100 });
+            setAssets((res.assets ?? []).filter((a) => a.type === activeTab));
 
         } catch (error) {
             console.error("Failed to load assets:", error);
@@ -60,7 +60,7 @@ export function LibraryView({
         try {
             const newAsset = await uploadUserAsset(file, activeTab);
             setAssets((prev) => [newAsset, ...prev]);
-
+            await loadAssets();
         } catch (error) {
             console.error("Failed to upload asset:", error);
             alert("Upload failed. Please try again.");
@@ -190,7 +190,7 @@ export function LibraryView({
                                 </div>
 
                                 {/* Create Location Button (for images only) */}
-                                {asset.type === "image" && onCreateLocationFromAsset && (
+                                {/* {asset.type === "image" && onCreateLocationFromAsset && (
                                     <div className="p-2 border-t border-zinc-700">
                                         <button
                                             onClick={(e) => {
@@ -210,7 +210,7 @@ export function LibraryView({
                                             <span>Create Location</span>
                                         </button>
                                     </div>
-                                )}
+                                )} */}
 
                                 {/* Actions Overlay */}
                                 <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">

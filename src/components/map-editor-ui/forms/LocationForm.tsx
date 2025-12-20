@@ -5,7 +5,7 @@ import { CreateLocationRequest, Location, Segment } from "@/lib/api-storymap";
 import { LocationType } from "@/types/location";
 import { Icon } from "@/components/map-editor-ui/Icon";
 import { IconLibraryView } from "@/components/map-editor-ui/IconLibraryView";
-import { UserAsset } from "@/lib/api-library";
+import { UserAsset, getUserAssets } from "@/lib/api-library";
 
 type TabType = "basic" | "icon" | "display" | "media";
 
@@ -51,6 +51,13 @@ export function LocationForm({
   // Media state
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioAssets, setAudioAssets] = useState<UserAsset[]>([]);
+  const [audioAssetsLoading, setAudioAssetsLoading] = useState(false);
+  const [selectedAudioAssetId, setSelectedAudioAssetId] = useState<string>("");
+
+  // simple audio preview
+  const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
+
   const [iconUrl, setIconUrl] = useState("");
   const [iconType, setIconType] = useState(""); // For preset icons (e.g., "plane", "car")
   const [iconSize, setIconSize] = useState(32);
@@ -180,6 +187,33 @@ export function LocationForm({
       setAudioUrl(initialLocation.audioUrl || "");
     }
   }, [initialLocation, initialCoordinates]);
+
+  useEffect(() => {
+    if (activeTab !== "media") return;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setAudioAssetsLoading(true);
+
+        const res = await getUserAssets({ page: 1, pageSize: 200 });
+
+        const audios = (res.assets ?? []).filter((a) => a.type === "audio");
+
+        if (!cancelled) setAudioAssets(audios);
+      } catch (e) {
+        console.error("Failed to load audio assets", e);
+        if (!cancelled) setAudioAssets([]);
+      } finally {
+        if (!cancelled) setAudioAssetsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab]);
 
   // Handle icon file preview
   const handleIconFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -501,7 +535,7 @@ export function LocationForm({
                 >
                   {iconUrl || iconPreview ? "Thay đổi" : "Upload ảnh"}
                 </button>
-                
+
               </div>
 
               {/* New Upload Preview */}
@@ -561,6 +595,79 @@ export function LocationForm({
             {/* Audio Upload */}
             <div className="space-y-2">
               <label className="block text-xs text-zinc-400">Audio (phát khi click)</label>
+              {/* Audio assets from Library */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] text-zinc-500">Audio trong thư viện</div>
+
+                  {audioUrl && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAudioUrl("");
+                        setSelectedAudioAssetId("");
+                      }}
+                      className="text-[10px] px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
+                    >
+                      Bỏ chọn
+                    </button>
+                  )}
+                </div>
+
+                {audioAssetsLoading ? (
+                  <div className="text-xs text-zinc-500">Đang tải audio…</div>
+                ) : audioAssets.length === 0 ? (
+                  <div className="text-xs text-zinc-600">
+                    Chưa có audio trong Library.
+                  </div>
+                ) : (
+                  <div className="max-h-32 overflow-y-auto space-y-1">
+                    {audioAssets.map((a) => {
+                      const active = selectedAudioAssetId === a.id || audioUrl === a.url;
+
+                      return (
+                        <div
+                          key={a.id}
+                          className={`flex items-center gap-2 p-2 rounded border ${active ? "border-emerald-600/60 bg-emerald-600/10" : "border-zinc-700 bg-zinc-800/40"
+                            }`}
+                          title={a.name} // hover hiện tên file
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // chọn audio từ asset -> dùng URL, clear file upload
+                              setAudioUrl(a.url);
+                              setAudioFile(null);
+                              setSelectedAudioAssetId(a.id);
+                            }}
+                            className="flex-1 text-left"
+                          >
+                            <div className="text-xs text-zinc-200 truncate">{a.name}</div>
+                            <div className="text-[10px] text-zinc-500 truncate">{a.mimeType ?? "audio"}</div>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!audioPreviewRef.current) return;
+                              audioPreviewRef.current.src = a.url;
+                              audioPreviewRef.current.play().catch(() => { });
+                            }}
+                            className="px-2 py-1 text-[10px] rounded bg-zinc-800 hover:bg-zinc-700 text-white"
+                            title="Nghe thử"
+                          >
+                            Play
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* single hidden audio element for preview */}
+                <audio ref={audioPreviewRef} />
+              </div>
+
               <div className="flex gap-2">
                 <input
                   ref={audioInputRef}
@@ -606,21 +713,21 @@ export function LocationForm({
             {/* Icon Selection Section - Merged from previous Icon tab */}
             <div className="space-y-2 pt-2 border-t border-zinc-700/50">
               <label className="block text-xs text-zinc-400 mb-1">Chọn icon</label>
-               {/* Icon Library - Embedded */}
-                <div className="border-t border-zinc-800 pt-3 -mx-3">
-                  <div className="max-h-96 overflow-y-auto">
-                    <IconLibraryView
-                      currentMap={undefined}
-                      mapId={mapId}
-                      isStoryMap={false}
-                      segments={[]}
-                      onSelectIcon={handleIconSelect}
-                      selectedIconKey={selectedIconKey}
-                    />
-                  </div>
+              {/* Icon Library - Embedded */}
+              <div className="border-t border-zinc-800 pt-3 -mx-3">
+                <div className="max-h-96 overflow-y-auto">
+                  <IconLibraryView
+                    currentMap={undefined}
+                    mapId={mapId}
+                    isStoryMap={false}
+                    segments={[]}
+                    onSelectIcon={handleIconSelect}
+                    selectedIconKey={selectedIconKey}
+                  />
                 </div>
+              </div>
             </div>
-            
+
           </div>
         )}
 
