@@ -233,11 +233,17 @@ function aggregateDailyRevenueToMonthly(points: RevenuePoint[]): MonthlyData[] {
   return monthly;
 }
 
-function dateInputValue(d: Date) {
-  const z = new Date(d);
-  z.setHours(0, 0, 0, 0);
-  return z.toISOString().slice(0, 10);
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
 }
+
+function dateInputValue(d: Date) {
+  const y = d.getFullYear();
+  const m = pad2(d.getMonth() + 1);
+  const day = pad2(d.getDate());
+  return `${y}-${m}-${day}`;
+}
+
 
 function addDays(d: Date, days: number) {
   const next = new Date(d);
@@ -327,9 +333,10 @@ export default function AdminDashboard(): JSX.Element {
   });
   const [revEnd, setRevEnd] = useState<string>(() => {
     const today = new Date();
-    const tomorrow = addDays(today, 1);
-    return dateInputValue(tomorrow);
+    today.setHours(0, 0, 0, 0);
+    return dateInputValue(today);
   });
+
   const [revenue, setRevenue] = useState<RevenuePoint[]>([]);
   const now = new Date();
   const defaultMonthlyEnd = dateInputValue(now);
@@ -346,6 +353,8 @@ export default function AdminDashboard(): JSX.Element {
   } | null>(null);
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
   const [monthlyLoading, setMonthlyLoading] = useState<boolean>(true);
+
+  const [revenueLoading, setRevenueLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let mounted = true;
@@ -453,24 +462,28 @@ export default function AdminDashboard(): JSX.Element {
 
   useEffect(() => {
     let mounted = true;
-    const startDate = new Date(revStart);
-    let endDate = new Date(revEnd);
+    function parseYmdToUtc(ymd: string) {
+      return new Date(`${ymd}T00:00:00.000Z`);
+    }
+
+    const startDate = parseYmdToUtc(revStart);
+    let endDate = parseYmdToUtc(revEnd);
+
     if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
       return () => { };
     }
 
     // Enforce endDate >= startDate and endDate >= today
-    const today = dateInputValue(new Date());
+    // Enforce endDate >= startDate
     if (endDate < startDate) {
       endDate = addDays(startDate, 1);
       setRevEnd(dateInputValue(endDate));
     }
-    const minEnd = new Date(today);
-    if (endDate < minEnd) {
-      endDate = minEnd;
-      setRevEnd(dateInputValue(endDate));
-    }
-    adminGetRevenueAnalytics<unknown>(startDate, endDate)
+
+    const endExclusive = addDays(endDate, 1);
+
+    setRevenueLoading(true);
+    adminGetRevenueAnalytics<unknown>(startDate, endExclusive)
       .then((res) => {
         if (!mounted) return;
         const resObj = res as any;
@@ -478,7 +491,6 @@ export default function AdminDashboard(): JSX.Element {
         const normalized = normalizeRevenue(dailyRevenue);
         setRevenue(normalized);
 
-        // Extract summary stats
         if (resObj && typeof resObj === "object") {
           setRevenueStats({
             totalRevenue: pickNumber(resObj, ["totalRevenue", "TotalRevenue"], 0),
@@ -495,7 +507,11 @@ export default function AdminDashboard(): JSX.Element {
           setRevenue([]);
           setRevenueStats(null);
         }
+      })
+      .finally(() => {
+        if (mounted) setRevenueLoading(false);
       });
+
     return () => {
       mounted = false;
     };
@@ -758,11 +774,12 @@ export default function AdminDashboard(): JSX.Element {
               value={revEnd}
               onChange={(e) => setRevEnd(e.target.value)}
               className="px-2 py-1 rounded border border-zinc-600 bg-zinc-800 text-white text-sm"
-              min={dateInputValue(new Date())}
+              min={revStart}
+
             />
           </div>
         </div>
-        {monthlyLoading ? (
+        {revenueLoading ? (
           <div className={`h-[400px] flex items-center justify-center ${theme.textMuted}`}>
             Đang tải dữ liệu...
           </div>
