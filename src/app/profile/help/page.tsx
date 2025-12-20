@@ -19,11 +19,11 @@ import {
     type SupportTicketStatus,
 } from "@/lib/api-support";
 import { useSupportTicketHub } from "@/lib/hubs/support-tickets";
-import type { 
-    SupportTicketMessage as SignalRMessage, 
+import type {
+    SupportTicketMessage as SignalRMessage,
     TicketReplyEvent,
     TicketStatusChangedEvent,
-    TicketClosedEvent 
+    TicketClosedEvent
 } from "@/lib/hubs/support-tickets";
 
 function formatDateTime(iso?: string | null): string {
@@ -128,25 +128,49 @@ export default function HelpPage() {
     }, [selectedId]);
 
     const handleTicketReply = useCallback((event: TicketReplyEvent) => {
-        setTickets(prev => 
-            prev.map(t => 
-                t.ticketId === event.ticketId 
-                    ? { ...t, message: event.message } 
+        setTickets(prev =>
+            prev.map(t =>
+                t.ticketId === event.ticketId
+                    ? { ...t, message: event.message }
                     : t
             )
         );
-    }, []);
+
+        // IMPORTANT: update detail conversation
+        if (event.ticketId === selectedId) {
+            setSelectedTicket(prev => {
+                if (!prev) return prev;
+
+                const newMsg: SupportTicketMessage = {
+                    messageId: Date.now(),
+                    message: event.message,
+                    isFromUser: false,
+                    createdAt: event.createdAt,
+                };
+
+                const existed = (prev.messages || []).some(
+                    m => m.message === newMsg.message && m.createdAt === newMsg.createdAt
+                );
+                if (existed) return prev;
+
+                return {
+                    ...prev,
+                    messages: [...(prev.messages || []), newMsg],
+                };
+            });
+        }
+    }, [selectedId]);
 
     const handleTicketStatusChanged = useCallback((event: TicketStatusChangedEvent) => {
         if (event.ticketId === selectedId) {
-            setSelectedTicket(prev => 
+            setSelectedTicket(prev =>
                 prev ? { ...prev, status: event.status as SupportTicketStatus } : prev
             );
         }
-        setTickets(prev => 
-            prev.map(t => 
-                t.ticketId === event.ticketId 
-                    ? { ...t, status: event.status as SupportTicketStatus } 
+        setTickets(prev =>
+            prev.map(t =>
+                t.ticketId === event.ticketId
+                    ? { ...t, status: event.status as SupportTicketStatus }
                     : t
             )
         );
@@ -154,14 +178,14 @@ export default function HelpPage() {
 
     const handleTicketClosed = useCallback((event: TicketClosedEvent) => {
         if (event.ticketId === selectedId) {
-            setSelectedTicket(prev => 
+            setSelectedTicket(prev =>
                 prev ? { ...prev, status: "closed" } : prev
             );
         }
-        setTickets(prev => 
-            prev.map(t => 
-                t.ticketId === event.ticketId 
-                    ? { ...t, status: "closed" } 
+        setTickets(prev =>
+            prev.map(t =>
+                t.ticketId === event.ticketId
+                    ? { ...t, status: "closed" }
                     : t
             )
         );
@@ -322,8 +346,8 @@ export default function HelpPage() {
         }
     }
 
-    const canRespond = selectedTicket && 
-        selectedTicket.status !== "closed" && 
+    const canRespond = selectedTicket &&
+        selectedTicket.status !== "closed" &&
         selectedTicket.status !== "resolved";
 
     return (
@@ -343,11 +367,10 @@ export default function HelpPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
-                        isConnected 
-                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" 
+                    <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${isConnected
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                             : "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
-                    }`}>
+                        }`}>
                         {isConnected ? (
                             <><Wifi className="h-3 w-3" /> Real-time</>
                         ) : (
@@ -366,11 +389,10 @@ export default function HelpPage() {
             </div>
 
             {error && (
-                <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${
-                    isDark 
-                        ? "border-red-400/40 bg-red-500/10 text-red-200" 
+                <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${isDark
+                        ? "border-red-400/40 bg-red-500/10 text-red-200"
                         : "border-red-400/40 bg-red-50 text-red-700"
-                }`}>
+                    }`}>
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                     <p>{error}</p>
                 </div>
@@ -538,21 +560,20 @@ export default function HelpPage() {
                                             <p className={`text-xs font-medium ${themeClasses.textMuted}`}>
                                                 Cuộc trò chuyện ({selectedTicket.messages?.length || 0})
                                             </p>
-                                            
+
                                             {selectedTicket.messages && selectedTicket.messages.length > 0 ? (
                                                 <div className="space-y-3">
                                                     {selectedTicket.messages.map((msg: SupportTicketMessage) => (
                                                         <div
                                                             key={msg.messageId}
-                                                            className={`rounded-xl px-4 py-3 text-sm ${
-                                                                msg.isFromUser
+                                                            className={`rounded-xl px-4 py-3 text-sm ${msg.isFromUser
                                                                     ? isDark
                                                                         ? "bg-blue-500/10 text-blue-200 border border-blue-400/30 ml-8"
                                                                         : "bg-blue-50 text-blue-900 border border-blue-200 ml-8"
                                                                     : isDark
                                                                         ? "bg-white/5 text-zinc-100 mr-8"
                                                                         : "bg-zinc-50 text-zinc-800 mr-8"
-                                                            }`}
+                                                                }`}
                                                         >
                                                             <p className="leading-relaxed">{msg.message || "—"}</p>
                                                             <p className={`text-xs mt-2 ${isDark ? "text-zinc-400" : "text-zinc-500"}`}>

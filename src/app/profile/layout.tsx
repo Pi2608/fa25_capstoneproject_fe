@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getJson } from "@/lib/api-core";
 import { getPlans, type Plan, getMyMembership } from "@/lib/api-membership";
 import { getMyOrganizations, type MyOrganizationDto, getMyInvitations } from "@/lib/api-organizations";
 import { useAuthStatus } from "@/contexts/useAuthStatus";
@@ -58,7 +59,10 @@ function NavItem({
 
   return (
     <Link href={href} aria-current={active ? "page" : undefined}>
-      <Button variant="ghost" className={`w-full justify-between px-2.5 lg:px-3 py-2 h-8 lg:h-9 transition-colors ${activeCls}`}>
+      <Button
+        variant="ghost"
+        className={`w-full justify-between px-2.5 lg:px-3 py-2 h-8 lg:h-9 transition-colors ${activeCls}`}
+      >
         <span className="flex items-center gap-1.5 lg:gap-2 truncate">
           <Icon className="h-3.5 w-3.5 lg:h-4 lg:w-4 opacity-90" />
           <span className="truncate text-xs lg:text-sm">{label}</span>
@@ -105,6 +109,7 @@ function ThemeToggle() {
 function ProfileLayoutContent({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const pathname = usePathname() || "";
+  const router = useRouter();
   const { isLoggedIn } = useAuthStatus();
   const { resolvedTheme, theme } = useTheme();
   const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
@@ -121,10 +126,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
       ? "min-h-screen text-zinc-100 bg-gradient-to-b from-[#0b0f0e] via-emerald-900/10 to-[#0b0f0e]"
       : "min-h-screen text-zinc-900 bg-gradient-to-b from-emerald-100 via-white to-emerald-50";
 
-  const isFullScreenMap = useMemo(
-    () => /\/profile\/organizations\/[^/]+\/maps\/new\/?$/.test(pathname),
-    [pathname]
-  );
+  const isFullScreenMap = useMemo(() => /\/profile\/organizations\/[^/]+\/maps\/new\/?$/.test(pathname), [pathname]);
 
   const plansRef = useRef<Plan[] | null>(null);
 
@@ -134,6 +136,15 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
   const [orgsErr, setOrgsErr] = useState<string | null>(null);
   const [invitationCount, setInvitationCount] = useState<number>(0);
   const [orgPlanLabels, setOrgPlanLabels] = useState<Record<string, string>>({});
+
+  type MeResponse = {
+    user?: {
+      accountStatus?: string;
+    };
+  };
+
+  const [accountStatus, setAccountStatus] = useState<string | null>(null);
+  const isSuspended = accountStatus === "Suspended";
 
   useEffect(() => {
     let alive = true;
@@ -155,6 +166,21 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
         setPlanLabel(t("profilelayout.plan_free"));
         setPlanStatus("active");
         return null;
+      }
+    };
+
+    const loadMe = async () => {
+      if (!isLoggedIn) {
+        setAccountStatus(null);
+        return;
+      }
+      try {
+        const me = await getJson<MeResponse>("/user/me");
+        if (!alive) return;
+        setAccountStatus(me?.user?.accountStatus ?? null);
+      } catch {
+        if (!alive) return;
+        setAccountStatus(null);
       }
     };
 
@@ -208,9 +234,12 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
             const membership = (await getMyMembership(org.orgId)) as MyMembership;
             if (!alive) return;
             if (membership && plansData) {
-              const found = plansData.find((p) => (p as unknown as { planId: number }).planId === membership.planId);
+              const found = plansData.find(
+                (p) => (p as unknown as { planId: number }).planId === membership.planId
+              );
               if (found) {
-                const name = (found as unknown as { planName?: string; name?: string }).planName ?? (found as any).name;
+                const name =
+                  (found as unknown as { planName?: string; name?: string }).planName ?? (found as any).name;
                 planLabelsMap[org.orgId] = name ?? "";
               } else {
                 planLabelsMap[org.orgId] = "";
@@ -239,10 +268,12 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
       }
     };
 
+    loadMe();
     loadPlans().then((ps) => loadOrgs(ps));
     loadInvitations();
 
     const onAuthChanged = () => {
+      loadMe();
       loadPlans().then((ps) => loadOrgs(ps));
       loadInvitations();
     };
@@ -265,6 +296,13 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn]); // Remove 't' from dependencies to prevent re-renders when translation function reference changes
+
+  // If account is suspended, force user to stay on Help only
+  useEffect(() => {
+    if (isSuspended && pathname !== "/profile/help") {
+      router.replace("/profile/help");
+    }
+  }, [isSuspended, pathname, router]);
 
   const commonNav = [
     { href: "/", label: t("profilelayout.nav_home"), icon: Home },
@@ -296,11 +334,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
   }
 
   return (
-    <main
-      suppressHydrationWarning
-      key={mounted ? currentTheme : "initial"}
-      className={mainClass}
-    >
+    <main suppressHydrationWarning key={mounted ? currentTheme : "initial"} className={mainClass}>
       <div className="flex min-h-screen">
         <aside className="hidden md:flex md:flex-col w-64 lg:w-72 fixed left-0 top-0 h-screen z-20 border-r bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="flex-1 min-h-0 overflow-hidden p-3 lg:p-4 flex flex-col gap-3 lg:gap-4">
@@ -314,113 +348,134 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
 
             <ScrollArea className="flex-1 min-h-0">
               <div className="px-1 space-y-1">
-                {commonNav.map((n) => (
+                {isSuspended ? (
                   <NavItem
-                    key={n.href}
-                    href={n.href}
-                    label={n.label}
-                    icon={n.icon}
-                    active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
-                    right={
-                      n.href === "/profile/notifications" && unread > 0 ? (
-                        <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
-                          {unread > 99 ? "99+" : unread}
-                        </Badge>
-                      ) : n.href === "/profile/invite" && invitationCount > 0 ? (
-                        <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
-                          {invitationCount > 99 ? "99+" : invitationCount}
-                        </Badge>
-                      ) : undefined
-                    }
+                    href="/profile/help"
+                    label={t("profilelayout.help")}
+                    icon={HelpCircle}
+                    active={pathname === "/profile/help"}
                   />
-                ))}
-              </div>
-
-              <div className="px-1 mt-5">
-                <div suppressHydrationWarning className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}>{t("profilelayout.orgs_title")}</div>
-
-                <NavItem
-                  href="/register/organization"
-                  label={t("profilelayout.create_org")}
-                  icon={PlusCircle}
-                  active={pathname === "/register/organization"}
-                />
-
-                {orgs === null && (
-                  <div className="space-y-2 py-2">
-                    <div className="h-8 rounded-md bg-muted animate-pulse" />
-                    <div className="h-8 rounded-md bg-muted animate-pulse" />
-                  </div>
-                )}
-
-                {orgsErr && (
-                  <div className="px-3 py-2 text-xs rounded-md border bg-destructive/10 text-destructive">{orgsErr}</div>
-                )}
-
-                {orgs && !orgsErr && orgs.length === 0 && (
-                  <div className={`px-3 py-2 text-xs rounded-md border ${themeClasses.tableBorder} ${themeClasses.textMuted}`}>
-                    {t("profilelayout.no_orgs")}
-                  </div>
-                )}
-
-                {(orgs ?? []).slice(0, 5).map((o) => {
-                  const planLabel = orgPlanLabels[o.orgId];
-                  const isActive = pathname.startsWith(`/profile/organizations/${o.orgId}`)
-                  return (
+                ) : (
+                  commonNav.map((n) => (
                     <NavItem
-                      key={o.orgId}
-                      href={`/profile/organizations/${o.orgId}`}
-                      label={o.orgName}
-                      icon={Building2}
-                      active={isActive}
+                      key={n.href}
+                      href={n.href}
+                      label={n.label}
+                      icon={n.icon}
+                      active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
                       right={
-                        <Badge variant="secondary" className="text-[11px] font-semibold">
-                          <span className={`text-sm font-semibold ${isDark ? "text-emerald-300" : isActive ? "text-emerald-500" : "text-emerald-600"}`}>{planLabel}</span>
-                        </Badge>
+                        n.href === "/profile/notifications" && unread > 0 ? (
+                          <Badge
+                            variant="secondary"
+                            className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center"
+                          >
+                            {unread > 99 ? "99+" : unread}
+                          </Badge>
+                        ) : n.href === "/profile/invite" && invitationCount > 0 ? (
+                          <Badge
+                            variant="secondary"
+                            className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center"
+                          >
+                            {invitationCount > 99 ? "99+" : invitationCount}
+                          </Badge>
+                        ) : undefined
                       }
                     />
-                  );
-                })}
-
-                {(orgs ?? []).length > 5 && (
-                  <NavItem
-                    href="/organizations"
-                    label={t("profilelayout.view_all_orgs")}
-                    icon={Building2}
-                    active={pathname === "/organizations"}
-                  />
+                  ))
                 )}
-
-                <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} />
-
-                <div className="h-3" />
               </div>
+
+              {!isSuspended && (
+                <div className="px-1 mt-5">
+                  <div
+                    suppressHydrationWarning
+                    className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}
+                  >
+                    {t("profilelayout.orgs_title")}
+                  </div>
+
+                  <NavItem
+                    href="/register/organization"
+                    label={t("profilelayout.create_org")}
+                    icon={PlusCircle}
+                    active={pathname === "/register/organization"}
+                  />
+
+                  {orgs === null && (
+                    <div className="space-y-2 py-2">
+                      <div className="h-8 rounded-md bg-muted animate-pulse" />
+                      <div className="h-8 rounded-md bg-muted animate-pulse" />
+                    </div>
+                  )}
+
+                  {orgsErr && (
+                    <div className="px-3 py-2 text-xs rounded-md border bg-destructive/10 text-destructive">
+                      {orgsErr}
+                    </div>
+                  )}
+
+                  {orgs && !orgsErr && orgs.length === 0 && (
+                    <div className={`px-3 py-2 text-xs rounded-md border ${themeClasses.tableBorder} ${themeClasses.textMuted}`}>
+                      {t("profilelayout.no_orgs")}
+                    </div>
+                  )}
+
+                  {(orgs ?? []).slice(0, 5).map((o) => {
+                    const planLabel = orgPlanLabels[o.orgId];
+                    const isActive = pathname.startsWith(`/profile/organizations/${o.orgId}`);
+                    return (
+                      <NavItem
+                        key={o.orgId}
+                        href={`/profile/organizations/${o.orgId}`}
+                        label={o.orgName}
+                        icon={Building2}
+                        active={isActive}
+                        right={
+                          <Badge variant="secondary" className="text-[11px] font-semibold">
+                            <span
+                              className={`text-sm font-semibold ${
+                                isDark ? "text-emerald-300" : isActive ? "text-emerald-500" : "text-emerald-600"
+                              }`}
+                            >
+                              {planLabel}
+                            </span>
+                          </Badge>
+                        }
+                      />
+                    );
+                  })}
+
+                  {(orgs ?? []).length > 5 && (
+                    <NavItem
+                      href="/organizations"
+                      label={t("profilelayout.view_all_orgs")}
+                      icon={Building2}
+                      active={pathname === "/organizations"}
+                    />
+                  )}
+
+                  <NavItem
+                    href="/profile/help"
+                    label={t("profilelayout.help")}
+                    icon={HelpCircle}
+                    active={pathname === "/profile/help"}
+                  />
+
+                  <div className="h-3" />
+                </div>
+              )}
             </ScrollArea>
 
             <Separator className="my-2" />
-            
-            <div className="space-y-3">
-              {/* <div className={`rounded-xl border p-3 ${themeClasses.tableBorder}`}>
-                <div className="flex items-center justify-between">
-                  <span className={`text-[12px] ${themeClasses.textMuted}`}>{t("profilelayout.current_plan")}</span>
-                  {planLabel ? (
-                    <div className="flex itemscenter gap-2">
-                      <span className={`text-sm font-semibold ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>{planLabel}</span>
-                      {planStatus === "active" && (
-                        <Badge variant="secondary" className="text-[11px] font-semibold">
-                          {t("profilelayout.active_status")}
-                        </Badge>
-                      )}
-                    </div>
-                  ) : (
-                    <span className={`text-[12px] ${themeClasses.textMuted}`}>—</span>
-                  )}
-                </div>
-              </div> */}
 
-              <Link href="/profile/settings/plans">
-                <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs lg:text-sm py-1.5 lg:py-2 h-8 lg:h-9">{t("profilelayout.select_plan")}</Button>
-              </Link>
+            <div className="space-y-3">
+              {!isSuspended && (
+                <Link href="/profile/settings/plans">
+                  <Button className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs lg:text-sm py-1.5 lg:py-2 h-8 lg:h-9">
+                    {t("profilelayout.select_plan")}
+                  </Button>
+                </Link>
+              )}
 
               <Link href="/login">
                 <Button variant="destructive" className="w-full text-xs lg:text-sm py-1.5 lg:py-2 h-8 lg:h-9">
@@ -437,7 +492,12 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-3">
               <Sheet>
                 <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-9 w-9 xs:h-10 xs:w-10" aria-label={t("profilelayout.open_menu")}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 xs:h-10 xs:w-10"
+                    aria-label={t("profilelayout.open_menu")}
+                  >
                     <Menu className="h-4.5 w-4.5 xs:h-5 xs:w-5" />
                   </Button>
                 </SheetTrigger>
@@ -454,59 +514,93 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
 
                     <ScrollArea className="flex-1 min-h-0 p-3">
                       <div className="px-1 space-y-1">
-                        {commonNav.map((n) => (
+                        {isSuspended ? (
                           <NavItem
-                            key={n.href}
-                            href={n.href}
-                            label={n.label}
-                            icon={n.icon}
-                            active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
-                            right={
-                              n.href === "/profile/notifications" && unread > 0 ? (
-                                <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
-                                  {unread > 99 ? "99+" : unread}
-                                </Badge>
-                              ) : n.href === "/profile/invite" && invitationCount > 0 ? (
-                                <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
-                                  {invitationCount > 99 ? "99+" : invitationCount}
-                                </Badge>
-                              ) : undefined
-                            }
+                            href="/profile/help"
+                            label={t("profilelayout.help")}
+                            icon={HelpCircle}
+                            active={pathname === "/profile/help"}
                           />
-                        ))}
-                      </div>
-
-                      <div className="px-1 mt-5">
-                        <div suppressHydrationWarning className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}>{t("profilelayout.orgs_title")}</div>
-
-                        <NavItem
-                          href="/register/organization"
-                          label={t("profilelayout.create_org")}
-                          icon={PlusCircle}
-                          active={pathname === "/register/organization"}
-                        />
-
-                        {(orgs ?? []).slice(0, 5).map((o) => {
-                          const planLabel = orgPlanLabels[o.orgId];
-                          // const displayLabel = planLabel ? `${o.orgName} - ${planLabel}` : o.orgName;
-                          return (
+                        ) : (
+                          commonNav.map((n) => (
                             <NavItem
-                              key={o.orgId}
-                              href={`/profile/organizations/${o.orgId}`}
-                              label={o.orgName}
-                              icon={Building2}
-                              active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
+                              key={n.href}
+                              href={n.href}
+                              label={n.label}
+                              icon={n.icon}
+                              active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
+                              right={
+                                n.href === "/profile/notifications" && unread > 0 ? (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center"
+                                  >
+                                    {unread > 99 ? "99+" : unread}
+                                  </Badge>
+                                ) : n.href === "/profile/invite" && invitationCount > 0 ? (
+                                  <Badge
+                                    variant="secondary"
+                                    className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center"
+                                  >
+                                    {invitationCount > 99 ? "99+" : invitationCount}
+                                  </Badge>
+                                ) : undefined
+                              }
                             />
-                          );
-                        })}
-
-                        <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} />
-                        <div className="h-3" />
+                          ))
+                        )}
                       </div>
+
+                      {!isSuspended && (
+                        <div className="px-1 mt-5">
+                          <div
+                            suppressHydrationWarning
+                            className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}
+                          >
+                            {t("profilelayout.orgs_title")}
+                          </div>
+
+                          <NavItem
+                            href="/register/organization"
+                            label={t("profilelayout.create_org")}
+                            icon={PlusCircle}
+                            active={pathname === "/register/organization"}
+                          />
+
+                          {(orgs ?? []).slice(0, 5).map((o) => {
+                            const planLabel = orgPlanLabels[o.orgId];
+                            return (
+                              <NavItem
+                                key={o.orgId}
+                                href={`/profile/organizations/${o.orgId}`}
+                                label={o.orgName}
+                                icon={Building2}
+                                active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
+                                right={
+                                  planLabel ? (
+                                    <Badge variant="secondary" className="text-[11px] font-semibold">
+                                      {planLabel}
+                                    </Badge>
+                                  ) : undefined
+                                }
+                              />
+                            );
+                          })}
+
+                          <NavItem
+                            href="/profile/help"
+                            label={t("profilelayout.help")}
+                            icon={HelpCircle}
+                            active={pathname === "/profile/help"}
+                          />
+                          <div className="h-3" />
+                        </div>
+                      )}
                     </ScrollArea>
                   </div>
                 </SheetContent>
               </Sheet>
+
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-md bg-emerald-500 shadow" />
                 <span className="text-base xs:text-lg font-semibold">IMOS</span>
@@ -515,26 +609,36 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
 
             <div className="flex items-center gap-2">
               <ThemeToggle />
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link href="/profile/notifications">
-                      <Button variant="outline" size="icon" className="relative h-9 w-9 xs:h-10 xs:w-10" aria-label={t("profilelayout.nav_notifications")}>
-                        <Bell className="h-4.5 w-4.5 xs:h-5 xs:w-5" />
-                        {unread > 0 && (
-                          <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-600 text-[11px] font-bold text-white px-1">
-                            {unread > 99 ? "99+" : unread}
-                          </span>
-                        )}
-                      </Button>
-                    </Link>
-                  </TooltipTrigger>
-                  <TooltipContent>{t("profilelayout.nav_notifications")}</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <Link href="/profile/select-plan" className="hidden sm:inline-flex">
-                <Button className="font-semibold text-sm px-3 h-9">{t("profilelayout.select_plan")}</Button>
-              </Link>
+              {!isSuspended && (
+                <>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link href="/profile/notifications">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="relative h-9 w-9 xs:h-10 xs:w-10"
+                            aria-label={t("profilelayout.nav_notifications")}
+                          >
+                            <Bell className="h-4.5 w-4.5 xs:h-5 xs:w-5" />
+                            {unread > 0 && (
+                              <span className="absolute -top-1 -right-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-emerald-600 text-[11px] font-bold text-white px-1">
+                                {unread > 99 ? "99+" : unread}
+                              </span>
+                            )}
+                          </Button>
+                        </Link>
+                      </TooltipTrigger>
+                      <TooltipContent>{t("profilelayout.nav_notifications")}</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <Link href="/profile/select-plan" className="hidden sm:inline-flex">
+                    <Button className="font-semibold text-sm px-3 h-9">{t("profilelayout.select_plan")}</Button>
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </header>
