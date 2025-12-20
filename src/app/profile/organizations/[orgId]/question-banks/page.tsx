@@ -14,7 +14,7 @@ import {
   updateQuestionBank,
   duplicateQuestionBank,
   type QuestionBankDto,
-} from "@/lib/api-ques";
+} from "@/lib/api-session";
 import type { Workspace } from "@/types/workspace";
 import {
   QuestionBankFormState,

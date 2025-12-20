@@ -33,7 +33,7 @@ export default function MapGalleryPage() {
             {t("map_gallery", "subtitle")}
           </p>
 
-          <div className="mt-6 flex flex-wrap gap-3">
+          {/* <div className="mt-6 flex flex-wrap gap-3">
             <Link
               href="#gallery"
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-medium text-zinc-950 transition hover:bg-emerald-400"
@@ -48,7 +48,7 @@ export default function MapGalleryPage() {
             >
               {t("map_gallery", "templates_btn")}
             </Link>
-          </div>
+          </div> */}
         </div>
 
         {/* Glow effects */}

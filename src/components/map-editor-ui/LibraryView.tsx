@@ -42,8 +42,9 @@ export function LibraryView({
     const loadAssets = async () => {
         setLoading(true);
         try {
-            const data = await getUserAssets(activeTab);
-            setAssets(data);
+            const res = await getUserAssets({ type: activeTab, page: 1, pageSize: 100 });
+            setAssets(res.assets ?? []);
+
         } catch (error) {
             console.error("Failed to load assets:", error);
         } finally {
@@ -58,7 +59,8 @@ export function LibraryView({
         setUploading(true);
         try {
             const newAsset = await uploadUserAsset(file, activeTab);
-            setAssets([newAsset, ...assets]);
+            setAssets((prev) => [newAsset, ...prev]);
+
         } catch (error) {
             console.error("Failed to upload asset:", error);
             alert("Upload failed. Please try again.");

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+
 import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { getSegments, type Segment } from "@/lib/api-storymap";
 import { getMapDetail } from "@/lib/api-maps";
@@ -13,7 +14,7 @@ import {
   leaveSession,
   type SessionDto,
   type LeaderboardEntryDto,
-} from "@/lib/api-ques";
+} from "@/lib/api-session";
 
 import { useSessionHub } from "@/hooks/useSessionHub";
 import {
@@ -46,6 +47,8 @@ import {
   type GroupSubmissionDto,
 } from "@/lib/hubs/groupCollaboration";
 import { getGroupsBySession, getGroupSubmissions } from "@/lib/api-groupCollaboration";
+
+import GuideModal from "@/components/session/view/GuideModal";
 
 import { toast } from "react-toastify";
 
@@ -99,13 +102,16 @@ export default function StoryMapViewPage() {
   const [isTeacherPlaying, setIsTeacherPlaying] = useState(false);
   const [hasReceivedSegmentSync, setHasReceivedSegmentSync] = useState(false);
   const [error, setError] = useState<string | null>(null);
-type SessionStatus = "WAITING" | "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "CANCELLED";
 
-const [sessionStatus, setSessionStatus] = useState<SessionStatus>("WAITING");
-const sessionStatusRef = useRef<SessionStatus>("WAITING");
-useEffect(() => {
-  sessionStatusRef.current = sessionStatus;
-}, [sessionStatus]);
+  const [showGuideModal, setShowGuideModal] = useState(false);
+
+  type SessionStatus = "WAITING" | "IN_PROGRESS" | "PAUSED" | "COMPLETED" | "CANCELLED";
+
+  const [sessionStatus, setSessionStatus] = useState<SessionStatus>("WAITING");
+  const sessionStatusRef = useRef<SessionStatus>("WAITING");
+  useEffect(() => {
+    sessionStatusRef.current = sessionStatus;
+  }, [sessionStatus]);
 
   // Layer sync state - receives layer from teacher
   const [selectedLayer, setSelectedLayer] = useState<BaseKey>("osm");
@@ -201,6 +207,7 @@ useEffect(() => {
       );
     }
   }, [sessionId, participantIdFromUrl]);
+
 
   useEffect(() => {
     if (!sessionId) return;
@@ -1049,6 +1056,16 @@ useEffect(() => {
             )}
           </div>
 
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowGuideModal(true)}
+              className="flex-1 rounded-xl border border-sky-200 bg-white px-3 py-2 text-sm font-bold text-sky-700 hover:bg-sky-50"
+            >
+              ❓ Hướng dẫn
+            </button>
+          </div>
+
           {/* Current segment indicator */}
           {currentSegment && currentIndex >= 0 && (
             <div className="mt-3 flex items-center gap-2 bg-amber-50 rounded-lg px-3 py-2 border border-amber-200">
@@ -1351,6 +1368,7 @@ useEffect(() => {
             onPinAnswerLocation={(lat: number, lng: number) => {
               setSelectedLocation({ latitude: lat, longitude: lng });
             }}
+
           />
 
         )}
@@ -1680,6 +1698,10 @@ useEffect(() => {
           </div>
         </div>
       )}
+      <GuideModal
+        open={showGuideModal}
+        onClose={() => setShowGuideModal(false)}
+      />
 
     </div>
   );

@@ -1,5 +1,5 @@
 import { useState, ChangeEvent } from "react";
-import { QuestionBankDto } from "@/lib/api-ques";
+import { QuestionBankDto } from "@/lib/api-session";
 import { Workspace } from "@/types/workspace";
 import { QuestionBankFormState, normalizeTags } from "./question-bank-common";
 
