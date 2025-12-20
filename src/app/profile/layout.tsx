@@ -423,7 +423,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
 
                 {(orgs ?? []).slice(0, 5).map((o) => {
                   const planLabel = orgPlanLabels[o.orgId];
-                  const isActive = pathname.startsWith(`/profile/organizations/${o.orgId}`)
+                  const isActive = pathname.startsWith(`/profile/organizations/${o.orgId}`);
                   return (
                     <NavItem
                       key={o.orgId}
@@ -564,6 +564,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                         <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} isDark={isDark} />
                         <div className="h-3" />
                       </div>
+                      )}
                     </ScrollArea>
                   </div>
                 </SheetContent>
