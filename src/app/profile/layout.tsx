@@ -305,7 +305,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
   }, [isSuspended, pathname, router]);
 
   const commonNav = [
-    { href: "/", label: t("profilelayout.nav_home"), icon: Home },
+    // { href: "/", label: t("profilelayout.nav_home"), icon: Home },
     { href: "/profile/information", label: t("profilelayout.nav_information"), icon: User },
     { href: "/profile/recents", label: t("profilelayout.nav_recents"), icon: Clock },
     { href: "/profile/drafts", label: t("profilelayout.nav_drafts"), icon: FileText },
@@ -339,10 +339,11 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
         <aside className="hidden md:flex md:flex-col w-64 lg:w-72 fixed left-0 top-0 h-screen z-20 border-r bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="flex-1 min-h-0 overflow-hidden p-3 lg:p-4 flex flex-col gap-3 lg:gap-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+              <Link href="/" className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 lg:h-3 lg:w-3 rounded-md bg-emerald-500 shadow" />
                 <span className="text-base lg:text-lg font-semibold">IMOS</span>
-              </div>
+              </Link>
+
               <ThemeToggle />
             </div>
 
@@ -433,9 +434,8 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                         right={
                           <Badge variant="secondary" className="text-[11px] font-semibold">
                             <span
-                              className={`text-sm font-semibold ${
-                                isDark ? "text-emerald-300" : isActive ? "text-emerald-500" : "text-emerald-600"
-                              }`}
+                              className={`text-sm font-semibold ${isDark ? "text-emerald-300" : isActive ? "text-emerald-500" : "text-emerald-600"
+                                }`}
                             >
                               {planLabel}
                             </span>
