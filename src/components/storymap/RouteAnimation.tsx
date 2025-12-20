@@ -61,6 +61,9 @@ export default function RouteAnimation({
   // CRITICAL FIX: Track if animation has completed to prevent restart
   const hasCompletedRef = useRef<boolean>(false);
 
+  // CRITICAL FIX: Track marker readiness with state so animation effect can re-run
+  const [isMarkerReady, setIsMarkerReady] = useState(false);
+
   // Camera follow optimization: smooth gimbal lock on icon
   const lastCameraUpdateRef = useRef<number>(0);
   const cameraUpdateThrottleMs = 16; // Update camera every ~16ms (60fps for smooth following)
@@ -79,6 +82,8 @@ export default function RouteAnimation({
   // Reset completion flag when route changes (new animation)
   useEffect(() => {
     hasCompletedRef.current = false;
+    // Note: Don't reset isMarkerReady here - marker stays initialized
+    // unless it's actually removed. isMarkerReady only resets on unmount.
   }, [routePath, fromLocation, toLocation]);
 
   // Create icon based on type
@@ -419,6 +424,7 @@ export default function RouteAnimation({
         if (isMapReady(map)) {
           marker.addTo(map);
           markerRef.current = marker;
+          setIsMarkerReady(true); // CRITICAL FIX: Signal that marker is ready
         } else {
           console.warn('Map became invalid before adding marker');
           if (fullRoute) {
@@ -466,7 +472,7 @@ export default function RouteAnimation({
       } catch (error) {
         console.warn('Error removing routeLineRef:', error);
       }
-      
+
       try {
         if (visitedLineRef.current) {
           visitedLineRef.current.remove();
@@ -475,11 +481,12 @@ export default function RouteAnimation({
       } catch (error) {
         console.warn('Error removing visitedLineRef:', error);
       }
-      
+
       try {
         if (markerRef.current) {
           markerRef.current.remove();
           markerRef.current = null;
+          setIsMarkerReady(false); // Reset marker ready state
         }
       } catch (error) {
         console.warn('Error removing markerRef:', error);
@@ -561,9 +568,10 @@ export default function RouteAnimation({
       return;
     }
 
-    // Wait for marker to be initialized
-    if (!markerRef.current) {
+    // CRITICAL FIX: Wait for marker to be initialized (use state instead of ref check)
+    if (!isMarkerReady || !markerRef.current) {
       // Marker will be initialized by the other useEffect, just return here
+      // Effect will re-run when isMarkerReady becomes true
       return;
     }
 
@@ -716,7 +724,7 @@ export default function RouteAnimation({
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [isPlaying, routePath, durationMs, fromLocation, onComplete, L, followCamera, followCameraZoom, map, onPositionUpdate]);
+  }, [isPlaying, isMarkerReady, routePath, durationMs, fromLocation, toLocation, onComplete, L, followCamera, followCameraZoom, map, onPositionUpdate]);
 
   return null; // This component doesn't render anything visible
 }

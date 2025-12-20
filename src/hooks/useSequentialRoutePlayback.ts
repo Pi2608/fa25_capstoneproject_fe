@@ -142,8 +142,6 @@ export function useSequentialRoutePlayback({
       }
 
       // CRITICAL FIX: Reset ALL states for new segment
-      console.log("[useSequentialRoutePlayback] New segment detected, resetting all states");
-
       // Reset refs
       cameraStateBeforeAppliedRef.current = false;
       allRoutesCompletedRef.current = false;
@@ -194,11 +192,9 @@ export function useSequentialRoutePlayback({
     // CRITICAL FIX: Prevent duplicate scheduler for same segment
     // Check timestamp first - if we already processed this segment, skip
     if (lastSchedulerSegmentTimeRef.current === segmentStartTime) {
-      console.log("[useSequentialRoutePlayback] Scheduler already running for this segment, skipping duplicate");
       return;
     }
 
-    console.log("[useSequentialRoutePlayback] Starting time-based scheduler for segment at t=", segmentStartTime);
     lastSchedulerSegmentTimeRef.current = segmentStartTime;
 
     const checkAndStartRoutes = () => {
@@ -235,8 +231,6 @@ export function useSequentialRoutePlayback({
               return prev;
             }
 
-            console.log(`[Route ${index}] Starting: t=${currentTime}ms, startTime=${startTime}ms, duration=${route.durationMs}ms`);
-
             // Apply cameraStateBefore if exists (side effect in setState is not ideal but needed here)
             if (route.cameraStateBefore && currentMap) {
               try {
@@ -262,7 +256,6 @@ export function useSequentialRoutePlayback({
             const state = prev.get(index);
             // Check latest state, not closure
             if (state?.isPlaying && !state.hasCompleted) {
-              console.log(`[Route ${index}] Stopping animation: t=${currentTime}ms, animationEndTime=${animationEndTime}ms`);
               const newMap = new Map(prev);
               newMap.set(index, { ...state, isPlaying: false });
               setStateVersion(v => v + 1); // Increment version when state changes
@@ -307,7 +300,6 @@ export function useSequentialRoutePlayback({
               }
 
               // Update state to mark as completed
-              console.log(`[Route ${index}] Completed: t=${currentTime}ms, endTime=${endTime}ms`);
               const newMap = new Map(prev);
               newMap.set(index, { isPlaying: false, hasStarted: true, hasCompleted: true });
               setStateVersion(v => v + 1); // Increment version when state changes
@@ -327,7 +319,6 @@ export function useSequentialRoutePlayback({
       // CRITICAL FIX: Only stop scheduler when ALL time-based routes are completed
       // Don't consider sequential routes in this check
       if (timeBasedRouteCount > 0 && timeBasedCompletedCount >= timeBasedRouteCount) {
-        console.log("[useSequentialRoutePlayback] All time-based routes completed, stopping scheduler");
         if (schedulerIntervalRef.current) {
           clearInterval(schedulerIntervalRef.current);
           schedulerIntervalRef.current = null;
@@ -342,7 +333,6 @@ export function useSequentialRoutePlayback({
     schedulerIntervalRef.current = setInterval(checkAndStartRoutes, 100);
 
     return () => {
-      console.log("[useSequentialRoutePlayback] Cleaning up time-based scheduler");
       if (schedulerIntervalRef.current) {
         clearInterval(schedulerIntervalRef.current);
         schedulerIntervalRef.current = null;
