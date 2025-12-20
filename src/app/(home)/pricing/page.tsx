@@ -405,15 +405,15 @@ export default function PricingPage() {
             const features = feats.length
               ? feats
               : [
-                  t("pricing", "feature_max_orgs") +
-                    ": " +
-                    ((plan.maxOrganizations ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxOrganizations),
-                  t("pricing", "feature_max_users") +
-                    ": " +
-                    ((plan.maxUsersPerOrg ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxUsersPerOrg),
                   t("pricing", "feature_max_maps") +
                     ": " +
                     ((plan.maxMapsPerMonth ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxMapsPerMonth),
+                  t("pricing", "feature_max_users") +
+                    ": " +
+                    ((plan.maxUsersPerOrg ?? 0) < 0 ? t("pricing", "unlimited") : plan.maxUsersPerOrg),
+                  t("pricing", "feature_max_exports") +
+                    ": " +
+                    ((plan.exportQuota ?? 0) < 0 ? t("pricing", "unlimited") : plan.exportQuota),
                 ];
 
             return (

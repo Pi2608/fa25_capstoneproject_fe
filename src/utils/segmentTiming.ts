@@ -8,41 +8,19 @@ export function calculateMaxRouteEndTime(routeAnimations: RouteAnimation[]): num
   let maxEndTime = 0;
 
   for (const route of routeAnimations) {
-    const startTime = route.startTimeMs ?? 0;
     let routeEndTime: number;
 
     if (route.endTimeMs !== undefined && route.endTimeMs !== null) {
-      // Use explicit endTimeMs if provided
+      // Priority 1: Use explicit endTimeMs if provided
       routeEndTime = route.endTimeMs;
-    } else if (route.startTimeMs !== undefined && route.startTimeMs !== null) {
-      // Time-based mode: just add duration to start time
+    } else if (route.startTimeMs != null) {
+      // Priority 2: Time-based mode (startTimeMs can be 0, meaning "start at t=0")
+      const startTime = route.startTimeMs; // Can be 0
       routeEndTime = startTime + route.durationMs;
     } else {
-      let totalTime = 0;
-
-      if (route.cameraStateBefore) {
-        totalTime += 1000; // cameraAnimationDurationMs from useSequentialRoutePlayback
-      }
-
-      // Start delay
-      if (route.startDelayMs && route.startDelayMs > 0) {
-        totalTime += route.startDelayMs;
-      }
-
-      // Route animation duration
-      totalTime += route.durationMs;
-
-      // Camera after animation (if exists)
-      if (route.cameraStateAfter) {
-        totalTime += 1000; // cameraAnimationDurationMs from useSequentialRoutePlayback
-      }
-
-      // Location popup display time (if enabled)
-      if (route.showLocationInfoOnArrival && route.locationInfoDisplayDurationMs) {
-        totalTime += route.locationInfoDisplayDurationMs;
-      }
-
-      routeEndTime = totalTime;
+      // Priority 3: Sequential mode (startTimeMs = null/undefined)
+      // Routes run in sync with segment, no offset
+      routeEndTime = route.durationMs;
     }
 
     maxEndTime = Math.max(maxEndTime, routeEndTime);
