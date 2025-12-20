@@ -56,6 +56,38 @@ export async function adminGetUsers<TUser = unknown>(
   };
 }
 
+export async function adminCountNewUsersLastNDays(days = 7): Promise<number> {
+  const now = new Date();
+  const start = new Date(now);
+  start.setDate(start.getDate() - (days - 1));
+  start.setHours(0, 0, 0, 0);
+
+  const pageSize = 200;
+  let page = 1;
+  let total = 0;
+
+  while (true) {
+    const res = await adminGetUsers<any>({ page, pageSize });
+
+    for (const u of res.items || []) {
+      const raw =
+        u?.createdAt ??
+        u?.CreatedAt ??
+        u?.created_at ??
+        u?.created ??
+        u?.createdDate;
+
+      const dt = raw ? new Date(String(raw)) : null;
+      if (dt && !Number.isNaN(dt.getTime()) && dt >= start && dt <= now) total += 1;
+    }
+
+    if (page >= (res.totalPages || 1)) break;
+    page += 1;
+  }
+
+  return total;
+}
+
 export function adminGetUserById<TUser = unknown>(userId: string) {
   return getJson<TUser>(`${ADMIN_BASE}/users/${userId}`);
 }

@@ -2,7 +2,7 @@
  * FAQ & AI Assistant API
  */
 
-import { getJson, apiFetch, postJson } from "./api-core";
+import { getJson, apiFetch, postJson, putJson } from "./api-core";
 
 // ===== FAQ =====
 export type FaqItem = {
@@ -55,8 +55,14 @@ export async function askAI(messages: AIMessage[]): Promise<string | null> {
 // ===== SUPPORT TICKET =====
 
 export const SUPPORT_TICKET_API_BASE = "/support-tickets";
+const ADMIN_BASE = "/api/admin";
 
-export type SupportTicketStatus = "open" | "inprogress" | "waitingforcustomer" | "resolved" | "closed";
+export type SupportTicketStatus =
+  | "open"
+  | "inprogress"
+  | "waitingforcustomer"
+  | "resolved"
+  | "closed";
 
 export type CreateSupportTicketRequest = {
   subject: string;
@@ -71,10 +77,6 @@ export type CreateSupportTicketResponse = {
 
 export type ResponseSupportTicketRequest = {
   response: string;
-};
-
-export type ReplySupportTicketRequest = {
-  reply: string;
 };
 
 export type SupportTicketMessage = {
@@ -110,52 +112,183 @@ export type ResponseSupportTicketResponse = {
   message: string;
 };
 
-export type ReplySupportTicketResponse = {
-  ticketId: number;
-  message: string;
-};
-
 export type CloseSupportTicketResponse = {
   ticketId: number;
   message: string;
 };
-// User create support ticket
-export async function createSupportTicket(request: CreateSupportTicketRequest): Promise<CreateSupportTicketResponse> {
-  const res = await postJson<CreateSupportTicketRequest, CreateSupportTicketResponse>(SUPPORT_TICKET_API_BASE, request);
-  return res;
+
+// ===== helpers =====
+
+function normalizeStatus(input: unknown): SupportTicketStatus {
+  const s = String(input ?? "").trim().toLowerCase();
+  if (!s) return "open";
+  if (s === "open") return "open";
+  if (s === "closed") return "closed";
+  if (s === "resolved") return "resolved";
+  if (s === "inprogress" || s === "in_progress" || s === "in-progress") return "inprogress";
+  if (
+    s === "waitingforcustomer" ||
+    s === "waiting_for_customer" ||
+    s === "waiting-for-customer"
+  ) {
+    return "waitingforcustomer";
+  }
+  return "open";
 }
-//User get support tickets
-export async function getSupportTickets(page: number = 1, pageSize: number = 20): Promise<SupportTicketListResponse> {
-  const res = await getJson<SupportTicketListResponse>(`${SUPPORT_TICKET_API_BASE}?page=${page}&pageSize=${pageSize}`);
-  return res;
+
+function normalizePriority(input: unknown): string {
+  const p = String(input ?? "").trim().toLowerCase();
+  if (p === "cao") return "high";
+  return p;
 }
-//User get support ticket by id
+
+// ===== USER APIs =====
+
+export async function createSupportTicket(
+  request: CreateSupportTicketRequest
+): Promise<CreateSupportTicketResponse> {
+  return postJson<CreateSupportTicketRequest, CreateSupportTicketResponse>(
+    SUPPORT_TICKET_API_BASE,
+    request
+  );
+}
+
+export async function getSupportTickets(
+  page: number = 1,
+  pageSize: number = 20
+): Promise<SupportTicketListResponse> {
+  return getJson<SupportTicketListResponse>(
+    `${SUPPORT_TICKET_API_BASE}?page=${page}&pageSize=${pageSize}`
+  );
+}
+
 export async function getSupportTicketById(ticketId: number): Promise<SupportTicket> {
-  const res = await getJson<SupportTicket>(`${SUPPORT_TICKET_API_BASE}/${ticketId}`);
-  return res;
+  return getJson<SupportTicket>(`${SUPPORT_TICKET_API_BASE}/${ticketId}`);
 }
-//User response to support ticket
-export async function responseToSupportTicket(ticketId: number, request: ResponseSupportTicketRequest): Promise<ResponseSupportTicketResponse> {
-  const res = await postJson<ResponseSupportTicketRequest, ResponseSupportTicketResponse>(`${SUPPORT_TICKET_API_BASE}/${ticketId}/response`, request);
-  return res;
+
+export async function responseToSupportTicket(
+  ticketId: number,
+  request: ResponseSupportTicketRequest
+): Promise<ResponseSupportTicketResponse> {
+  return postJson<ResponseSupportTicketRequest, ResponseSupportTicketResponse>(
+    `${SUPPORT_TICKET_API_BASE}/${ticketId}/response`,
+    request
+  );
 }
-//Admin get support tickets
-export async function getSupportTicketsByAdmin(page: number, pageSize: number): Promise<SupportTicketListResponse> {
-  const res = await getJson<SupportTicketListResponse>(`${SUPPORT_TICKET_API_BASE}/admin?page=${page}&pageSize=${pageSize}`);
-  return res;
+
+// ===== ADMIN DTOs (backend) =====
+
+type AdminTicketDto = {
+  ticketId: number;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  category?: string;
+  userId?: string;
+  userName?: string | null;
+  userEmail?: string | null;
+  assignedToUserId?: string | null;
+  assignedToName?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  resolvedAt?: string | null;
+  messageCount?: number;
+  lastMessage?: string | null;
+};
+
+type AdminTicketListDto = {
+  tickets: AdminTicketDto[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+// ===== ADMIN APIs =====
+
+export async function getSupportTicketsByAdmin(
+  page: number = 1,
+  pageSize: number = 20
+): Promise<SupportTicketListResponse> {
+  const res = await getJson<AdminTicketListDto>(
+    `${ADMIN_BASE}/support-tickets?page=${page}&pageSize=${pageSize}`
+  );
+
+  return {
+    tickets: (res.tickets ?? []).map((t) => ({
+      ticketId: t.ticketId,
+      userEmail: t.userEmail ?? "",
+      userName: t.userName ?? "",
+      subject: t.title ?? "",
+      message: t.description ?? "",
+      status: normalizeStatus(t.status),
+      priority: normalizePriority(t.priority),
+      createdAt: t.createdAt,
+      resolvedAt: t.resolvedAt ?? null,
+      messages: [],
+    })),
+    totalCount: Number(res.totalCount ?? 0),
+    page: Number(res.page ?? page),
+    pageSize: Number(res.pageSize ?? pageSize),
+    totalPages: Number(res.totalPages ?? 1),
+  };
 }
-//Admin get support ticket by id
+
 export async function getSupportTicketByIdByAdmin(ticketId: number): Promise<SupportTicket> {
-  const res = await getJson<SupportTicket>(`${SUPPORT_TICKET_API_BASE}/admin/${ticketId}`);
-  return res;
+  const t = await getJson<AdminTicketDto>(`${ADMIN_BASE}/support-tickets/${ticketId}`);
+
+  return {
+    ticketId: t.ticketId,
+    userEmail: t.userEmail ?? "",
+    userName: t.userName ?? "",
+    subject: t.title ?? "",
+    message: t.description ?? "",
+    status: normalizeStatus(t.status),
+    priority: normalizePriority(t.priority),
+    createdAt: t.createdAt,
+    resolvedAt: t.resolvedAt ?? null,
+    messages: [],
+  };
 }
-//Admin reply to support ticket
-export async function replyToSupportTicket(ticketId: number, request: ReplySupportTicketRequest): Promise<ReplySupportTicketResponse> {
-  const res = await postJson<ReplySupportTicketRequest, ReplySupportTicketResponse>(`${SUPPORT_TICKET_API_BASE}/admin/${ticketId}/reply`, request);
-  return res;
+
+export type AdminUpdateSupportTicketRequest = {
+  ticketId: number;
+  status?: string;
+  priority?: string;
+  assignedToUserId?: string | null;
+  response?: string;
+};
+
+export type AdminUpdateSupportTicketResponse = {
+  ticketId: number;
+  message: string;
+};
+
+export async function updateSupportTicketByAdmin(
+  ticketId: number,
+  request: AdminUpdateSupportTicketRequest
+): Promise<AdminUpdateSupportTicketResponse> {
+  return putJson<AdminUpdateSupportTicketRequest, AdminUpdateSupportTicketResponse>(
+    `${ADMIN_BASE}/support-tickets/${ticketId}`,
+    request
+  );
 }
-//Admin close support ticket
-export async function closeSupportTicket(ticketId: number): Promise<CloseSupportTicketResponse> {
-  const res = await postJson<void, CloseSupportTicketResponse>(`${SUPPORT_TICKET_API_BASE}/admin/${ticketId}/close`, undefined);
-  return res;
+
+export async function replyToSupportTicket(
+  ticketId: number,
+  reply: string
+): Promise<AdminUpdateSupportTicketResponse> {
+  return updateSupportTicketByAdmin(ticketId, { ticketId, response: reply });
 }
+
+export async function closeSupportTicket(
+  ticketId: number,
+  resolution: string
+): Promise<CloseSupportTicketResponse> {
+  return postJson<{ resolution: string }, CloseSupportTicketResponse>(
+    `${ADMIN_BASE}/support-tickets/${ticketId}/close`,
+    { resolution }
+  );
+}
+
