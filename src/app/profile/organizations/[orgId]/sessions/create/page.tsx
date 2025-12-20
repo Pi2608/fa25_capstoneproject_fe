@@ -8,6 +8,8 @@ import {
   useState,
 } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 import { toast } from "react-toastify";
 import {
   createSession,
@@ -25,30 +27,6 @@ import { Workspace } from "@/types/workspace";
 import Loading from "@/app/loading";
 import { useI18n } from "@/i18n/I18nProvider";
 
-type HeaderMode = "light" | "dark";
-
-function useThemeMode(): HeaderMode {
-  const [mode, setMode] = useState<HeaderMode>("light");
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const html = document.documentElement;
-
-    const update = () => {
-      setMode(html.classList.contains("dark") ? "dark" : "light");
-    };
-
-    update();
-
-    const observer = new MutationObserver(update);
-    observer.observe(html, { attributes: true, attributeFilter: ["class"] });
-
-    return () => observer.disconnect();
-  }, []);
-
-  return mode;
-}
-
 export default function OrganizationCreateSessionPage() {
   const { t } = useI18n(); // t("sessionCreate", "key", params?)
 
@@ -57,7 +35,9 @@ export default function OrganizationCreateSessionPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const mode = useThemeMode();
+  const { resolvedTheme, theme } = useTheme();
+  const isDark = (resolvedTheme ?? theme ?? "light") === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const presetWorkspaceId = searchParams?.get("workspaceId") ?? "";
   const presetMapId = searchParams?.get("mapId") ?? "";
@@ -441,9 +421,9 @@ const fetchMapsForWorkspace = useCallback(
           <button
             type="button"
             onClick={() => router.push(`/profile/organizations/${orgId}`)}
-            className="px-3 py-1.5 rounded-lg border text-sm border-zinc-300 bg-white hover:bg-zinc-50 hover:border-zinc-400 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+            className={`px-3 py-1.5 rounded-lg border text-sm ${themeClasses.buttonOutline}`}
             style={{
-              color: mode === "dark" ? "#e5e7eb" : "#4b5563",
+              color: isDark ? "#e5e7eb" : "#4b5563",
             }}
           >
             {t("sessionCreate", "back")}
@@ -451,7 +431,7 @@ const fetchMapsForWorkspace = useCallback(
           <h1
             className="text-2xl font-semibold sm:text-3xl"
             style={{
-              color: mode === "dark" ? "#f9fafb" : "#047857",
+              color: isDark ? "#f9fafb" : "#047857",
             }}
           >
             {t("sessionCreate", "title")}
@@ -462,10 +442,10 @@ const fetchMapsForWorkspace = useCallback(
       <main className="mx-auto max-w-6xl p-6 pb-20">
         <form onSubmit={handleCreateSession} className="space-y-6">
           {/* STEP 1: WORKSPACE */}
-          <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+          <section className={`rounded-2xl border p-6 shadow-sm ${themeClasses.panel}`}>
             <div className="mb-4 flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                <h2 className={`text-lg font-semibold ${themeClasses.text}`}>
                   {t("sessionCreate", "step1_title")}
                 </h2>
                 <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -513,7 +493,7 @@ const fetchMapsForWorkspace = useCallback(
                           : "border-zinc-100 hover:border-emerald-200 dark:border-zinc-800 dark:hover:border-emerald-800"
                         }`}
                     >
-                      <div className="mb-1 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                      <div className={`mb-1 text-lg font-semibold ${themeClasses.text}`}>
                         {workspace.workspaceName}
                       </div>
                       <div className="mb-2 line-clamp-2 text-sm text-zinc-600 dark:text-zinc-400">
@@ -535,10 +515,10 @@ const fetchMapsForWorkspace = useCallback(
 
           {/* STEP 2: STORYMAP */}
           {selectedWorkspaceId && (
-            <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <section className={`rounded-2xl border p-6 shadow-sm ${themeClasses.panel}`}>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                  <h2 className={`text-lg font-semibold ${themeClasses.text}`}>
                     {t("sessionCreate", "step2_title")}
                   </h2>
                   {selectedWorkspace && (
@@ -557,7 +537,7 @@ const fetchMapsForWorkspace = useCallback(
                         `/profile/organizations/${orgId}/workspaces/${selectedWorkspaceId}`
                       )
                     }
-                    className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                    className={`rounded-lg border px-3 py-2 text-sm ${themeClasses.button}`}
                   >
                     {t("sessionCreate", "manage_workspaces_btn")}
                   </button>
@@ -616,7 +596,7 @@ const fetchMapsForWorkspace = useCallback(
                           }`}
                       >
                         {map.previewImage && (
-                          <div className="mb-3 overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700">
+                          <div className={`mb-3 overflow-hidden rounded-lg border ${themeClasses.tableBorder}`}>
                             <img
                               src={map.previewImage}
                               alt={map.name}
@@ -626,7 +606,7 @@ const fetchMapsForWorkspace = useCallback(
                         )}
 
                         <div className="mb-1 flex items-center justify-between gap-2">
-                          <div className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                          <div className={`text-lg font-semibold ${themeClasses.text}`}>
                             {map.name}
                           </div>
                           {map.status && (
@@ -659,10 +639,10 @@ const fetchMapsForWorkspace = useCallback(
           {selectedMapId && selectedMap && (
             <>
               {/* Question banks */}
-              <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <section className={`rounded-2xl border p-6 shadow-sm ${themeClasses.panel}`}>
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                    <h2 className={`text-lg font-semibold ${themeClasses.text}`}>
                       {t("sessionCreate", "qb_section_title")}
                     </h2>
                     <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -680,7 +660,7 @@ const fetchMapsForWorkspace = useCallback(
                     <button
                       type="button"
                       onClick={() => setSelectedQuestionBankIds([])}
-                      className="rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      className={`rounded-lg border px-3 py-2 text-sm ${themeClasses.button}`}
                     >
                       {t("sessionCreate", "qb_clear")}
                     </button>
@@ -750,7 +730,7 @@ const fetchMapsForWorkspace = useCallback(
                             }`}
                         >
                           <div className="mb-1 flex items-center justify-between gap-2">
-                            <div className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                            <div className={`text-base font-semibold ${themeClasses.text}`}>
                               {bank.bankName}
                             </div>
                             {isSelected && (
@@ -782,7 +762,7 @@ const fetchMapsForWorkspace = useCallback(
               </section>
 
               {/* STEP 3: SESSION INFO */}
-              <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <section className={`rounded-2xl border p-6 shadow-sm ${themeClasses.panel}`}>
                 <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                   {t("sessionCreate", "step3_title")}
                 </h2>
@@ -799,7 +779,7 @@ const fetchMapsForWorkspace = useCallback(
                         "sessionCreate",
                         "session_name_placeholder"
                       )}
-                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
+                      className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
                     />
                   </div>
                   <div>
@@ -814,7 +794,7 @@ const fetchMapsForWorkspace = useCallback(
                         "sessionCreate",
                         "session_desc_placeholder"
                       )}
-                      className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
+                      className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
                     />
                   </div>
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -827,7 +807,7 @@ const fetchMapsForWorkspace = useCallback(
                         onChange={(e) =>
                           setSessionType(e.target.value as "live" | "practice")
                         }
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
+                        className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
                       >
                         <option value="live">
                           {t("sessionCreate", "session_type_live")}
@@ -851,7 +831,7 @@ const fetchMapsForWorkspace = useCallback(
                           setMaxParticipants(parseInt(e.target.value) || 0)
                         }
                         min={0}
-                        className="w-full rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none focus:ring-2 focus:ring-emerald-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50"
+                        className={`w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
                       />
                     </div>
                   </div>
@@ -859,7 +839,7 @@ const fetchMapsForWorkspace = useCallback(
               </section>
 
               {/* STEP 4: SETTINGS */}
-              <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+              <section className={`rounded-2xl border p-6 shadow-sm ${themeClasses.panel}`}>
                 <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-100">
                   {t("sessionCreate", "step4_title")}
                 </h2>
@@ -968,7 +948,7 @@ const fetchMapsForWorkspace = useCallback(
                         className="mt-1 h-5 w-5 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
                       />
                       <div className="flex-1">
-                        <div className="font-medium text-zinc-900 dark:text-zinc-100">
+                        <div className={`font-medium ${themeClasses.text}`}>
                           {setting.label}
                         </div>
                         <div className="text-sm text-zinc-600 dark:text-zinc-400">
@@ -985,7 +965,7 @@ const fetchMapsForWorkspace = useCallback(
                 <button
                   type="button"
                   onClick={() => router.push(`/profile/organizations/${orgId}`)}
-                  className="rounded-lg border border-zinc-200 px-6 py-3 font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  className={`rounded-lg border px-6 py-3 font-medium ${themeClasses.button}`}
                 >
                   {t("sessionCreate", "cancel_btn")}
                 </button>

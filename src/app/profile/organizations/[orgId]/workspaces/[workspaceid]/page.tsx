@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import { useToast } from "@/contexts/ToastContext";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Workspace } from "@/types/workspace";
@@ -12,6 +13,7 @@ import { getWorkspaceById, getWorkspaceMaps, removeMapFromWorkspace } from "@/li
 import { useI18n, type TFunc } from "@/i18n/I18nProvider";
 import { getMe, Me } from "@/lib/api-auth";
 import { parseQuotaError } from "@/utils/parseQuotaError";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name" | "author";
@@ -104,6 +106,9 @@ export default function WorkspaceDetailPage() {
   const workspaceId = p?.workspaceid ?? "";
   const router = useRouter();
   const { showToast } = useToast();
+  const { resolvedTheme, theme } = useTheme();
+  const isDark = (resolvedTheme ?? theme ?? "light") === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const [org, setOrg] = useState<OrganizationDetailDto | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
@@ -337,15 +342,15 @@ export default function WorkspaceDetailPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => router.push(`/profile/organizations/${orgId}`)}
-            className="p-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+            className={`p-2 rounded-lg border text-sm ${themeClasses.buttonOutline}`}
             title={t("workspace_detail.back_to_list")}
           >
             ←
           </button>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-semibold">{workspace.workspaceName}</h1>
-            <p className="text-sm text-zinc-400">{org.orgName}</p>
-            {workspace.description && <p className="text-sm text-zinc-500 mt-1">{workspace.description}</p>}
+            <h1 className={`text-2xl sm:text-3xl font-semibold ${themeClasses.text}`}>{workspace.workspaceName}</h1>
+            <p className={`text-sm ${themeClasses.textMuted}`}>{org.orgName}</p>
+            {workspace.description && <p className={`text-sm ${themeClasses.textMuted} mt-1`}>{workspace.description}</p>}
           </div>
         </div>
 
@@ -361,15 +366,15 @@ export default function WorkspaceDetailPage() {
 
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-white/10 overflow-hidden">
+          <div className={`flex rounded-lg border overflow-hidden ${isDark ? "border-zinc-700" : "border-gray-300"}`}>
             <button
-              className={`px-3 py-1.5 text-sm ${viewMode === "grid" ? "bg-white/10" : ""}`}
+              className={`px-3 py-1.5 text-sm ${viewMode === "grid" ? themeClasses.tabActive : themeClasses.tabInactive}`}
               onClick={() => setViewMode("grid")}
             >
               {t("workspace_detail.mode_grid")}
             </button>
             <button
-              className={`px-3 py-1.5 text-sm ${viewMode === "list" ? "bg-white/10" : ""}`}
+              className={`px-3 py-1.5 text-sm ${viewMode === "list" ? themeClasses.tabActive : themeClasses.tabInactive}`}
               onClick={() => setViewMode("list")}
             >
               {t("workspace_detail.mode_list")}
@@ -379,7 +384,7 @@ export default function WorkspaceDetailPage() {
 
         <div className="flex items-center gap-2">
           <select
-            className="rounded-md bg-zinc-800 border border-white/10 px-2 py-1 text-sm text-zinc-100"
+            className={`rounded-md px-2 py-1 text-sm ${themeClasses.selectDropdown}`}
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
             title={t("workspace_detail.sort_by")}
@@ -390,7 +395,7 @@ export default function WorkspaceDetailPage() {
             <option value="author">{t("workspace_detail.sort_author")}</option>
           </select>
           <button
-            className="p-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+            className={`p-2 rounded-lg border text-sm ${themeClasses.buttonOutline}`}
             onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
             title={sortOrder === "asc" ? t("workspace_detail.to_desc") : t("workspace_detail.to_asc")}
           >
@@ -414,34 +419,34 @@ export default function WorkspaceDetailPage() {
       {sortedMaps.length > 0 && viewMode === "grid" && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {sortedMaps.map((map) => (
-            <div key={map.id} className="group rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4">
-              <div className="h-32 w-full rounded-lg bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/5 mb-3 grid place-items-center text-zinc-400 text-xs">
+            <div key={map.id} className={`group rounded-xl border transition p-4 ${themeClasses.card}`}>
+              <div className={`h-32 w-full rounded-lg border mb-3 grid place-items-center text-xs ${themeClasses.cardThumbnail} ${themeClasses.iconMuted}`}>
                 <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
                 </svg>
               </div>
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold">{map.name || t("workspace_detail.unnamed")}</div>
-                  <div className="text-xs text-zinc-400">{map.createdAt ? formatDate(map.createdAt) : "—"}</div>
+                  <div className={`truncate font-semibold ${themeClasses.text}`}>{map.name || t("workspace_detail.unnamed")}</div>
+                  <div className={`text-xs ${themeClasses.textMuted}`}>{map.createdAt ? formatDate(map.createdAt) : "—"}</div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
                   <button
-                    className="p-1 rounded border border-white/10 bg-white/5 hover:bg-white/10 text-xs"
+                    className={`p-1 rounded border text-xs ${themeClasses.buttonGhost}`}
                     onClick={() => router.push(`/maps/${map.id}`)}
                     title={t("workspace_detail.edit")}
                   >
                     ✏️
                   </button>
                   <button
-                    className="p-1 rounded border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-xs text-orange-300"
+                    className="p-1 rounded border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-xs text-orange-600 dark:text-orange-300"
                     onClick={() => void handleRemoveMapFromWorkspace(map.id)}
                     title={t("workspace_detail.remove_from_ws")}
                   >
                     📤
                   </button>
                   <button
-                    className="p-1 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-xs text-red-300"
+                    className="p-1 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-xs text-red-600 dark:text-red-300"
                     onClick={() => {
                       setDeleteMapOpen({
                         open: true,
@@ -458,7 +463,7 @@ export default function WorkspaceDetailPage() {
               <div className="mt-3">
                 <button
                   onClick={() => router.push(`/maps/${map.id}`)}
-                  className="w-full px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                  className={`w-full px-3 py-2 rounded-lg border text-sm ${themeClasses.buttonOutline}`}
                 >
                   {t("workspace_detail.open_map")}
                 </button>
@@ -469,9 +474,9 @@ export default function WorkspaceDetailPage() {
       )}
 
       {sortedMaps.length > 0 && viewMode === "list" && (
-        <div className="rounded-xl border border-white/10 overflow-hidden">
+        <div className={`rounded-xl border overflow-hidden ${themeClasses.tableContainer}`}>
           <table className="w-full text-sm">
-            <thead className="bg-white/5 text-zinc-300">
+            <thead className={themeClasses.tableHeader}>
               <tr>
                 <th className="text-left px-3 py-2">{t("workspace_detail.col_name")}</th>
                 <th className="text-left px-3 py-2">{t("workspace_detail.col_author")}</th>
@@ -479,32 +484,32 @@ export default function WorkspaceDetailPage() {
                 <th className="px-3 py-2">{t("workspace_detail.col_actions")}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/10">
+            <tbody className={`divide-y ${themeClasses.tableCell}`}>
               {sortedMaps.map((map) => (
-                <tr key={map.id} className="hover:bg-white/5">
+                <tr key={map.id} className={themeClasses.tableRowHover}>
                   <td className="px-3 py-2">
-                    <button className="text-emerald-300 hover:underline" onClick={() => router.push(`/maps/${map.id}`)}>
+                    <button className={`hover:underline ${isDark ? "text-emerald-300" : "text-emerald-600"}`} onClick={() => router.push(`/maps/${map.id}`)}>
                       {map.name || t("workspace_detail.unnamed")}
                     </button>
                   </td>
-                  <td className="px-3 py-2 text-zinc-400">{map.ownerId || "—"}</td>
-                  <td className="px-3 py-2 text-zinc-400">{map.createdAt ? formatDate(map.createdAt) : "—"}</td>
+                  <td className={`px-3 py-2 ${themeClasses.textMuted}`}>{map.ownerId || "—"}</td>
+                  <td className={`px-3 py-2 ${themeClasses.textMuted}`}>{map.createdAt ? formatDate(map.createdAt) : "—"}</td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex gap-1 justify-end">
                       <button
-                        className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                        className={`text-xs px-2 py-1 rounded border ${themeClasses.buttonGhost}`}
                         onClick={() => router.push(`/maps/${map.id}`)}
                       >
                         {t("workspace_detail.edit")}
                       </button>
                       <button
-                        className="text-xs px-2 py-1 rounded border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-orange-300"
+                        className="text-xs px-2 py-1 rounded border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 dark:text-orange-300"
                         onClick={() => void handleRemoveMapFromWorkspace(map.id)}
                       >
                         {t("workspace_detail.remove")}
                       </button>
                       <button
-                        className="text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300"
+                        className="text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-300"
                         onClick={() => {
                           setDeleteMapOpen({
                             open: true,
@@ -613,16 +618,16 @@ export default function WorkspaceDetailPage() {
 
 
       {deleteMapOpen.open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
-          <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
-            <h2 className="text-xl font-semibold text-white mb-4">{t("workspace_detail.delete_dialog_title")}</h2>
-            <p className="text-sm text-zinc-300 mb-6">
+        <div className={`fixed inset-0 z-50 grid place-items-center ${themeClasses.dialogOverlay}`}>
+          <div className={`w-[32rem] max-w-[95vw] rounded-xl border p-6 shadow-2xl ${themeClasses.dialog}`}>
+            <h2 className={`text-xl font-semibold mb-4 ${themeClasses.text}`}>{t("workspace_detail.delete_dialog_title")}</h2>
+            <p className={`text-sm mb-6 ${themeClasses.textMuted}`}>
               {t("workspace_detail.delete_dialog_confirm")}{" "}
-              <span className="font-semibold text-white">"{deleteMapLabel}"</span>? {t("workspace_detail.delete_dialog_warning")}
+              <span className={`font-semibold ${themeClasses.text}`}>"{deleteMapLabel}"</span>? {t("workspace_detail.delete_dialog_warning")}
             </p>
             <div className="flex justify-end gap-2">
               <button
-                className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                className={`px-4 py-2 rounded-lg border text-sm ${themeClasses.buttonOutline}`}
                 onClick={() => setDeleteMapOpen({ open: false })}
               >
                 {t("workspace_detail.delete_dialog_cancel")}
@@ -630,7 +635,7 @@ export default function WorkspaceDetailPage() {
               <button
                 onClick={() => void handleDeleteMap()}
                 disabled={deleteMapLoading}
-                className="px-4 py-2 rounded-lg bg-red-500 text-zinc-900 text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
+                className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
               >
                 {deleteMapLoading ? t("workspace_detail.delete_dialog_deleting") : t("workspace_detail.delete_dialog_confirm_btn")}
               </button>
@@ -641,28 +646,28 @@ export default function WorkspaceDetailPage() {
 
       {/* Create Map Dialog */}
       {showCreateMapDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-w-md w-full mx-4">
+        <div className={`fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm ${themeClasses.dialogOverlay}`}>
+          <div className={`rounded-lg shadow-xl max-w-md w-full mx-4 ${themeClasses.dialog}`}>
             <div className="p-6">
-              <h2 className="text-xl font-semibold text-white mb-4">{t("workspace_detail.create_map_dialog_title")}</h2>
+              <h2 className={`text-xl font-semibold mb-4 ${themeClasses.text}`}>{t("workspace_detail.create_map_dialog_title")}</h2>
               <div className="space-y-3 mb-6">
                 <button
                   onClick={() => setMapType("normal")}
                   className={`w-full text-left p-4 rounded-lg border-2 transition-all ${mapType === "normal"
                     ? "border-emerald-500 bg-emerald-500/10"
-                    : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                    : isDark ? "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600" : "border-gray-300 bg-gray-50 hover:border-gray-400"
                     }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${mapType === "normal" ? "border-emerald-500" : "border-zinc-600"
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${mapType === "normal" ? "border-emerald-500" : isDark ? "border-zinc-600" : "border-gray-400"
                       }`}>
                       {mapType === "normal" && (
                         <div className="w-3 h-3 rounded-full bg-emerald-500" />
                       )}
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold text-white mb-1">{t("workspace_detail.create_map_normal_title")}</div>
-                      <div className="text-sm text-zinc-400">{t("workspace_detail.create_map_normal_desc")}</div>
+                      <div className={`font-semibold mb-1 ${themeClasses.text}`}>{t("workspace_detail.create_map_normal_title")}</div>
+                      <div className={`text-sm ${themeClasses.textMuted}`}>{t("workspace_detail.create_map_normal_desc")}</div>
                     </div>
                   </div>
                 </button>
@@ -671,19 +676,19 @@ export default function WorkspaceDetailPage() {
                   onClick={() => setMapType("storymap")}
                   className={`w-full text-left p-4 rounded-lg border-2 transition-all ${mapType === "storymap"
                     ? "border-emerald-500 bg-emerald-500/10"
-                    : "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600"
+                    : isDark ? "border-zinc-700 bg-zinc-800/50 hover:border-zinc-600" : "border-gray-300 bg-gray-50 hover:border-gray-400"
                     }`}
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${mapType === "storymap" ? "border-emerald-500" : "border-zinc-600"
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${mapType === "storymap" ? "border-emerald-500" : isDark ? "border-zinc-600" : "border-gray-400"
                       }`}>
                       {mapType === "storymap" && (
                         <div className="w-3 h-3 rounded-full bg-emerald-500" />
                       )}
                     </div>
                     <div className="flex-1">
-                      <div className="font-semibold text-white mb-1">{t("workspace_detail.create_map_storymap_title")}</div>
-                      <div className="text-sm text-zinc-400">{t("workspace_detail.create_map_storymap_desc")}</div>
+                      <div className={`font-semibold mb-1 ${themeClasses.text}`}>{t("workspace_detail.create_map_storymap_title")}</div>
+                      <div className={`text-sm ${themeClasses.textMuted}`}>{t("workspace_detail.create_map_storymap_desc")}</div>
                     </div>
                   </div>
                 </button>
@@ -692,7 +697,7 @@ export default function WorkspaceDetailPage() {
               <div className="flex gap-3 justify-end">
                 <button
                   onClick={() => setShowCreateMapDialog(false)}
-                  className="px-4 py-2 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 transition-colors"
+                  className={`px-4 py-2 rounded-lg border transition-colors ${themeClasses.buttonOutline}`}
                 >
                   {t("workspace_detail.create_map_dialog_cancel")}
                 </button>
@@ -710,36 +715,36 @@ export default function WorkspaceDetailPage() {
 
       {/* Quota Exceeded Modal */}
       {quotaExceededModal.open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60 backdrop-blur-sm">
-          <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
+        <div className={`fixed inset-0 z-50 grid place-items-center backdrop-blur-sm ${themeClasses.dialogOverlay}`}>
+          <div className={`w-[32rem] max-w-[95vw] rounded-xl border p-6 shadow-2xl ${themeClasses.dialog}`}>
             {/* Icon */}
             <div className="mb-4 flex justify-center">
-              <div className="rounded-full bg-orange-500/10 p-3">
-                <svg className="h-8 w-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className={`rounded-full p-3 ${isDark ? "bg-orange-500/10" : "bg-orange-100"}`}>
+                <svg className="h-8 w-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
             </div>
 
             {/* Title */}
-            <h2 className="text-xl font-semibold text-white mb-2 text-center">
+            <h2 className={`text-xl font-semibold mb-2 text-center ${themeClasses.text}`}>
               {t("workspace_detail.quota_exceeded_title")}
             </h2>
 
             {/* Usage Info */}
-            <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-4 mb-4">
-              <div className="text-sm text-orange-200 text-center">
+            <div className={`rounded-lg p-4 mb-4 ${isDark ? "bg-orange-500/10 border border-orange-500/20" : "bg-orange-50 border border-orange-200"}`}>
+              <div className={`text-sm text-center ${isDark ? "text-orange-200" : "text-orange-700"}`}>
                 <div className="font-semibold mb-1">
                   {quotaExceededModal.currentUsage ?? "?"} / {quotaExceededModal.limit ?? "?"} {quotaExceededModal.quotaType ?? "Maps"} {t("workspace_detail.quota_used")}
                 </div>
-                <div className="text-xs text-orange-300/80">
+                <div className={`text-xs ${isDark ? "text-orange-300/80" : "text-orange-600"}`}>
                   {t("workspace_detail.quota_reached_limit")}
                 </div>
               </div>
             </div>
 
             {/* Message based on owner status */}
-            <div className="text-sm text-zinc-300 mb-6 text-center">
+            <div className={`text-sm mb-6 text-center ${themeClasses.textMuted}`}>
               {isOrgOwner ? (
                 <p>
                   {t("workspace_detail.quota_owner_message")}
@@ -767,7 +772,7 @@ export default function WorkspaceDetailPage() {
                   </button>
                   <button
                     onClick={() => setQuotaExceededModal({ open: false })}
-                    className="w-full px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-zinc-300"
+                    className={`w-full px-4 py-2 rounded-lg border text-sm transition-colors ${themeClasses.buttonOutline}`}
                   >
                     {t("workspace_detail.quota_close_btn")}
                   </button>
@@ -777,7 +782,7 @@ export default function WorkspaceDetailPage() {
                   {/* Contact Owner Button (Member Only) */}
                   <button
                     onClick={() => setQuotaExceededModal({ open: false })}
-                    className="w-full px-4 py-3 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm text-zinc-300"
+                    className={`w-full px-4 py-3 rounded-lg border text-sm transition-colors ${themeClasses.buttonOutline}`}
                   >
                     {t("workspace_detail.quota_close_btn")}
                   </button>

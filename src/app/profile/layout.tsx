@@ -45,26 +45,42 @@ function NavItem({
   icon: Icon,
   active,
   right,
+  isDark,
 }: {
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   active: boolean;
   right?: ReactNode;
+  isDark?: boolean;
 }) {
-  const activeCls = active
-    ? "relative bg-emerald-500/10 text-emerald-900 ring-1 ring-emerald-500/35 before:absolute before:left-0 before:top-1 before:bottom-1 before:w-1 before:rounded before:bg-emerald-500 dark:bg-emerald-500/15 dark:text-emerald-50"
-    : "hover:bg-muted/60 dark:hover:bg-white/10";
+  const baseClasses = "w-full flex items-center justify-between px-2.5 lg:px-3 py-2 h-8 lg:h-9 rounded-md transition-colors";
+
+  const bgCls = active
+    ? isDark
+      ? "relative bg-emerald-500/15 ring-1 ring-emerald-500/35 before:absolute before:left-0 before:top-1 before:bottom-1 before:w-1 before:rounded before:bg-emerald-500"
+      : "relative bg-emerald-500/10 ring-1 ring-emerald-500/35 before:absolute before:left-0 before:top-1 before:bottom-1 before:w-1 before:rounded before:bg-emerald-500"
+    : isDark
+      ? "hover:bg-white/10"
+      : "hover:bg-gray-100";
+
+  const textColorCls = active
+    ? isDark ? "text-white" : "text-emerald-900"
+    : isDark ? "text-zinc-100 group-hover:text-white" : "text-gray-700 group-hover:text-gray-900";
+
+  const iconColorCls = active
+    ? isDark ? "text-white" : "text-emerald-800"
+    : isDark ? "text-zinc-300 group-hover:text-white" : "text-gray-600 group-hover:text-gray-800";
 
   return (
-    <Link href={href} aria-current={active ? "page" : undefined}>
-      <Button variant="ghost" className={`w-full justify-between px-2.5 lg:px-3 py-2 h-8 lg:h-9 transition-colors ${activeCls}`}>
+    <Link href={href} aria-current={active ? "page" : undefined} className="group">
+      <div className={`${baseClasses} ${bgCls}`}>
         <span className="flex items-center gap-1.5 lg:gap-2 truncate">
-          <Icon className="h-3.5 w-3.5 lg:h-4 lg:w-4 opacity-90" />
-          <span className="truncate text-xs lg:text-sm">{label}</span>
+          <Icon className={`h-3.5 w-3.5 lg:h-4 lg:w-4 ${iconColorCls}`} />
+          <span className={`truncate text-xs lg:text-sm font-medium ${textColorCls}`}>{label}</span>
         </span>
         {right}
-      </Button>
+      </div>
     </Link>
   );
 }
@@ -116,10 +132,10 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
   useEffect(() => setMounted(true), []);
 
   const mainClass = !mounted
-    ? "min-h-screen text-zinc-900 bg-gradient-to-b from-emerald-100 via-white to-emerald-50"
+    ? "min-h-screen text-gray-900 bg-gradient-to-b from-slate-50 via-white to-slate-50"
     : isDark
       ? "min-h-screen text-zinc-100 bg-gradient-to-b from-[#0b0f0e] via-emerald-900/10 to-[#0b0f0e]"
-      : "min-h-screen text-zinc-900 bg-gradient-to-b from-emerald-100 via-white to-emerald-50";
+      : "min-h-screen text-gray-900 bg-gradient-to-b from-slate-50 via-white to-slate-50";
 
   const isFullScreenMap = useMemo(
     () => /\/profile\/organizations\/[^/]+\/maps\/new\/?$/.test(pathname),
@@ -302,7 +318,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
       className={mainClass}
     >
       <div className="flex min-h-screen">
-        <aside className="hidden md:flex md:flex-col w-64 lg:w-72 fixed left-0 top-0 h-screen z-20 border-r bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <aside className={`hidden md:flex md:flex-col w-64 lg:w-72 fixed left-0 top-0 h-screen z-20 border-r backdrop-blur ${isDark ? "bg-zinc-950/90 border-zinc-800" : "bg-white/95 border-gray-200"}`}>
           <div className="flex-1 min-h-0 overflow-hidden p-3 lg:p-4 flex flex-col gap-3 lg:gap-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -321,6 +337,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                     label={n.label}
                     icon={n.icon}
                     active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
+                    isDark={isDark}
                     right={
                       n.href === "/profile/notifications" && unread > 0 ? (
                         <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
@@ -344,6 +361,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                   label={t("profilelayout.create_org")}
                   icon={PlusCircle}
                   active={pathname === "/register/organization"}
+                  isDark={isDark}
                 />
 
                 {orgs === null && (
@@ -373,6 +391,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                       label={o.orgName}
                       icon={Building2}
                       active={isActive}
+                      isDark={isDark}
                       right={
                         <Badge variant="secondary" className="text-[11px] font-semibold">
                           <span className={`text-sm font-semibold ${isDark ? "text-emerald-300" : isActive ? "text-emerald-500" : "text-emerald-600"}`}>{planLabel}</span>
@@ -388,10 +407,11 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                     label={t("profilelayout.view_all_orgs")}
                     icon={Building2}
                     active={pathname === "/organizations"}
+                    isDark={isDark}
                   />
                 )}
 
-                <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} />
+                <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} isDark={isDark} />
 
                 <div className="h-3" />
               </div>
@@ -461,6 +481,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                             label={n.label}
                             icon={n.icon}
                             active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
+                            isDark={isDark}
                             right={
                               n.href === "/profile/notifications" && unread > 0 ? (
                                 <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
@@ -484,6 +505,7 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                           label={t("profilelayout.create_org")}
                           icon={PlusCircle}
                           active={pathname === "/register/organization"}
+                          isDark={isDark}
                         />
 
                         {(orgs ?? []).slice(0, 5).map((o) => {
@@ -496,11 +518,12 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                               label={o.orgName}
                               icon={Building2}
                               active={pathname.startsWith(`/profile/organizations/${o.orgId}`)}
+                              isDark={isDark}
                             />
                           );
                         })}
 
-                        <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} />
+                        <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} isDark={isDark} />
                         <div className="h-3" />
                       </div>
                     </ScrollArea>

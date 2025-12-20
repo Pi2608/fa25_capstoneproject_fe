@@ -640,13 +640,13 @@ export default function MembersPage() {
       )}
 
       {inviteOpen && (
-        <div className="mb-4 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-white/10 dark:bg-zinc-900/95">
+        <div className={`mb-4 rounded-xl border p-4 shadow-sm ${themeClasses.panel}`}>
           <div className="mb-2 flex items-center justify-between">
-            <div className="text-sm font-medium text-zinc-800 dark:text-zinc-200">
+            <div className={`text-sm font-medium ${themeClasses.text}`}>
               {t("settings_members.invite_member")}
             </div>
             <button
-              className="text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+              className={`${themeClasses.textMuted} hover:text-zinc-900 dark:hover:text-white`}
               onClick={() => setInviteOpen(false)}
               aria-label={t("common.close")}
             >
@@ -656,7 +656,7 @@ export default function MembersPage() {
 
           <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
             <div>
-              <label className="mb-1 block text-xs text-zinc-600 dark:text-zinc-400">
+              <label className={`mb-1 block text-xs ${themeClasses.textMuted}`}>
                 {t("settings_members.invite_emails_label")}
               </label>
               <input
@@ -664,7 +664,7 @@ export default function MembersPage() {
                 value={inviteInput}
                 onChange={(e) => setInviteInput(e.target.value)}
                 placeholder={t("settings_members.invite_placeholder")}
-                className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-800 shadow-sm placeholder:text-zinc-400 hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${themeClasses.input}`}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !inviteBusy) {
                     void handleInvite();
@@ -679,7 +679,7 @@ export default function MembersPage() {
                 onChange={(e) =>
                   setInviteRole(e.target.value as "Admin" | "Member" | "Viewer")
                 }
-                className="rounded-md border border-zinc-300 bg-white px-2 py-2 text-sm text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                className={`rounded-md border px-2 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${themeClasses.select}`}
                 title={t("settings_members.invite_role_title")}
               >
                 <option value="Admin">Admin</option>
@@ -698,7 +698,7 @@ export default function MembersPage() {
           </div>
 
           {inviteMsg && (
-            <div className="mt-2 text-xs text-zinc-700 dark:text-zinc-300">
+            <div className={`mt-2 text-xs ${themeClasses.text}`}>
               {inviteMsg}
             </div>
           )}
