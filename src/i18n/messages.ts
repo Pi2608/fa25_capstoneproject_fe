@@ -812,6 +812,7 @@ export const messages = {
             type_payment_success: "Thanh toán thành công",
             type_subscription_active: "Kích hoạt gói",
             type_transaction_pending: "Thanh toán đang chờ",
+            continue_payment: "Tiếp tục thanh toán",
         },
         profile: {
             header_title: "Thông tin cá nhân",
@@ -1891,6 +1892,7 @@ export const messages = {
             plan_price_per_month: "{name} - {price}/tháng",
             cancel: "Hủy",
             continue: "Tiếp tục",
+            continue_payment: "Tiếp tục thanh toán",
             security_note: "Mọi giao dịch đều được mã hóa và bảo mật.",
             choose_plan: "Chọn gói",
             upgrade_plan: "Nâng cấp",
@@ -2065,7 +2067,7 @@ export const messages = {
             status_inactive: "Không hoạt động",
         },
         profilelayout: {
-            toast_warning_title: "Cảnh báo",
+            account_suspended_title: "Tài khoản bị khóa",
             account_suspended_toast: "Bạn đã bị khóa tài khoản, hãy vào mục Trợ giúp để được hỗ trợ.",
             nav_home: "Trang chủ",
             nav_information: "Thông tin cá nhân",
@@ -4717,6 +4719,7 @@ export const messages = {
             plan_price_per_month: "{name} - {price}/month",
             cancel: "Cancel",
             continue: "Continue",
+            continue_payment: "Continue payment",
             security_note: "All transactions are encrypted and secured.",
             choose_plan: "Choose Plan",
             upgrade_plan: "Upgrade",
@@ -4972,7 +4975,7 @@ export const messages = {
             no_changes: "No changes.",
         },
         profilelayout: {
-            toast_warning_title: "Warning",
+            account_suspended_title: "Account suspended",
             account_suspended_toast: "Your account has been suspended. Please go to Help for support.",
             nav_home: "Home",
             nav_information: "Personal information",
@@ -5450,6 +5453,7 @@ export const messages = {
             type_payment_success: "Payment successful",
             type_subscription_active: "Subscription activated",
             type_transaction_pending: "Payment pending",
+            continue_payment: "Continue payment",
         },
         devdocs: {
             hero_eyebrow: "DEVELOPERS",

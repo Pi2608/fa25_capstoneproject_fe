@@ -968,9 +968,9 @@ export default function TrangGoiThanhVien() {
                         </div>
                         <button
                             onClick={() => handleRetryPayment(pendingRetryTransactionId)}
-                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-sm font-medium transition-colors"
+                            className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white rounded-md text-sm font-medium transition-colors"
                         >
-                            Tiếp tục thanh toán
+                            {t("plans.continue_payment")}
                         </button>
                     </div>
                 </div>

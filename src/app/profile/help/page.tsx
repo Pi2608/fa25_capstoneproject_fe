@@ -110,22 +110,34 @@ export default function HelpPage() {
     const [realtimeEnabled, setRealtimeEnabled] = useState(true);
 
     const handleNewMessage = useCallback((message: SignalRMessage) => {
-        if (message.ticketId === selectedId) {
-            setSelectedTicket(prev => {
-                if (!prev) return prev;
-                const newMessage: SupportTicketMessage = {
-                    messageId: message.messageId,
-                    message: message.message,
-                    isFromUser: message.isFromUser,
-                    createdAt: message.createdAt,
-                };
-                return {
-                    ...prev,
-                    messages: [...(prev.messages || []), newMessage],
-                };
-            });
-        }
+        setTickets(prev =>
+            prev.map(t =>
+                t.ticketId === message.ticketId ? { ...t, message: message.message } : t
+            )
+        );
+
+        if (message.ticketId !== selectedId) return;
+
+        setSelectedTicket(prev => {
+            if (!prev) return prev;
+
+            const existed = (prev.messages || []).some(m => m.messageId === message.messageId);
+            if (existed) return prev;
+
+            const newMessage: SupportTicketMessage = {
+                messageId: message.messageId,
+                message: message.message,
+                isFromUser: message.isFromUser,
+                createdAt: message.createdAt,
+            };
+
+            return {
+                ...prev,
+                messages: [...(prev.messages || []), newMessage],
+            };
+        });
     }, [selectedId]);
+
 
     const handleTicketReply = useCallback((event: TicketReplyEvent) => {
         setTickets(prev =>
@@ -141,17 +153,20 @@ export default function HelpPage() {
             setSelectedTicket(prev => {
                 if (!prev) return prev;
 
+                const replyKey = `admin|${event.createdAt}|${event.message}`;
+
+                const existed = (prev.messages || []).some(m => {
+                    const key = `${m.isFromUser ? "user" : "admin"}|${m.createdAt}|${m.message}`;
+                    return key === replyKey;
+                });
+                if (existed) return prev;
+
                 const newMsg: SupportTicketMessage = {
-                    messageId: Date.now(),
+                    messageId: -Math.abs(`${replyKey}`.split("").reduce((a, c) => a + c.charCodeAt(0), 0)),
                     message: event.message,
                     isFromUser: false,
                     createdAt: event.createdAt,
                 };
-
-                const existed = (prev.messages || []).some(
-                    m => m.message === newMsg.message && m.createdAt === newMsg.createdAt
-                );
-                if (existed) return prev;
 
                 return {
                     ...prev,
@@ -328,19 +343,42 @@ export default function HelpPage() {
 
     async function handleSendResponse() {
         if (!selectedId || !responseText.trim()) return;
+        const content = responseText.trim();
+
         setResponding(true);
         setError(null);
 
+        const optimisticId = Date.now();
+        const optimistic: SupportTicketMessage = {
+            messageId: optimisticId,
+            message: content,
+            isFromUser: true,
+            createdAt: new Date().toISOString(),
+        };
+
+        setSelectedTicket(prev => {
+            if (!prev) return prev;
+            const existed = (prev.messages || []).some(m => m.messageId === optimisticId);
+            if (existed) return prev;
+            return { ...prev, messages: [...(prev.messages || []), optimistic] };
+        });
+
+        setTickets(prev =>
+            prev.map(t => (t.ticketId === selectedId ? { ...t, message: content } : t))
+        );
+
         try {
-            await responseToSupportTicket(selectedId, {
-                response: responseText.trim(),
-            });
+            await responseToSupportTicket(selectedId, { response: content });
             setResponseText("");
-            // Reload ticket detail
-            const ticket = await getSupportTicketById(selectedId);
-            setSelectedTicket(ticket);
         } catch (err) {
             setError(safeMessage(err));
+            setSelectedTicket(prev => {
+                if (!prev) return prev;
+                return {
+                    ...prev,
+                    messages: (prev.messages || []).filter(m => m.messageId !== optimisticId),
+                };
+            });
         } finally {
             setResponding(false);
         }
@@ -368,8 +406,8 @@ export default function HelpPage() {
 
                 <div className="flex items-center gap-3">
                     <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${isConnected
-                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                            : "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
+                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                        : "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
                         }`}>
                         {isConnected ? (
                             <><Wifi className="h-3 w-3" /> Real-time</>
@@ -390,8 +428,8 @@ export default function HelpPage() {
 
             {error && (
                 <div className={`flex items-start gap-2 rounded-lg border px-3 py-2 text-sm ${isDark
-                        ? "border-red-400/40 bg-red-500/10 text-red-200"
-                        : "border-red-400/40 bg-red-50 text-red-700"
+                    ? "border-red-400/40 bg-red-500/10 text-red-200"
+                    : "border-red-400/40 bg-red-50 text-red-700"
                     }`}>
                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                     <p>{error}</p>
@@ -567,12 +605,12 @@ export default function HelpPage() {
                                                         <div
                                                             key={msg.messageId}
                                                             className={`rounded-xl px-4 py-3 text-sm ${msg.isFromUser
-                                                                    ? isDark
-                                                                        ? "bg-blue-500/10 text-blue-200 border border-blue-400/30 ml-8"
-                                                                        : "bg-blue-50 text-blue-900 border border-blue-200 ml-8"
-                                                                    : isDark
-                                                                        ? "bg-white/5 text-zinc-100 mr-8"
-                                                                        : "bg-zinc-50 text-zinc-800 mr-8"
+                                                                ? isDark
+                                                                    ? "bg-blue-500/10 text-blue-200 border border-blue-400/30 ml-8"
+                                                                    : "bg-blue-50 text-blue-900 border border-blue-200 ml-8"
+                                                                : isDark
+                                                                    ? "bg-white/5 text-zinc-100 mr-8"
+                                                                    : "bg-zinc-50 text-zinc-800 mr-8"
                                                                 }`}
                                                         >
                                                             <p className="leading-relaxed">{msg.message || "—"}</p>

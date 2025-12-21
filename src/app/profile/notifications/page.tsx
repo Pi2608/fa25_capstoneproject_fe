@@ -400,14 +400,10 @@ export default function NotificationsPage() {
                             )}
                             <Link
                               href={`/profile/settings/plans?transactionId=${meta.transactionId}`}
-                              className={`inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                                isDark
-                                  ? "bg-blue-600 hover:bg-blue-700 text-white"
-                                  : "bg-blue-600 hover:bg-blue-700 text-white"
-                              }`}
+                              className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-colors bg-emerald-500 hover:bg-emerald-400 text-white"
                               onClick={() => onMarkRead(n)}
                             >
-                              Tiếp tục thanh toán
+                              {tr("continue_payment")}
                             </Link>
                           </div>
                         );

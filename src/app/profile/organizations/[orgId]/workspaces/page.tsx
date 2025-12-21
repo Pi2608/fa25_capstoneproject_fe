@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useTheme } from "next-themes";
 import { useToast } from "@/contexts/ToastContext";
 import { Workspace } from "@/types/workspace";
 import { formatDate } from "@/utils/formatUtils";
 import { getOrganizationById, OrganizationDetailDto } from "@/lib/api-organizations";
 import { createWorkspace, CreateWorkspaceRequest, deleteWorkspace, getWorkspacesByOrganization, updateWorkspace } from "@/lib/api-workspaces";
 import { useI18n, TFunc } from "@/i18n/I18nProvider";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 type ViewMode = "grid" | "list";
 type SortKey = "recentlyModified" | "dateCreated" | "name";
@@ -99,6 +101,9 @@ export default function WorkspacesPage() {
   const router = useRouter();
   const { showToast } = useToast();
   const { t } = useI18n();
+  const { resolvedTheme, theme } = useTheme();
+  const isDark = (resolvedTheme ?? theme ?? "light") === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const [org, setOrg] = useState<OrganizationDetailDto | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -230,8 +235,8 @@ export default function WorkspacesPage() {
     }
   }, [editOpen, showToast, loadData, t]);
 
-  if (loading) return <div className="min-h-[60vh] animate-pulse text-zinc-400 px-4">{t("workspaces", "loading")}</div>;
-  if (err || !org) return <div className="max-w-3xl px-4 text-red-400">{err ?? t("workspaces", "ws_not_found")}</div>;
+  if (loading) return <div className={`min-h-[60vh] animate-pulse px-4 ${themeClasses.textMuted}`}>{t("workspaces", "loading")}</div>;
+  if (err || !org) return <div className="max-w-3xl px-4 text-red-500">{err ?? t("workspaces", "ws_not_found")}</div>;
 
   return (
     <div className="min-w-0 relative px-4">
@@ -239,15 +244,15 @@ export default function WorkspacesPage() {
       <div className="flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-2">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-semibold">Workspaces</h1>
-            <h4 className="text-sm text-zinc-400">{org.orgName}</h4>
+            <h1 className={`text-2xl sm:text-3xl font-semibold ${themeClasses.text}`}>Workspaces</h1>
+            <h4 className={`text-sm ${themeClasses.textMuted}`}>{org.orgName}</h4>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => setCreateOpen(true)}
-            className="px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
+            className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400"
           >
             New Workspace
           </button>
@@ -257,15 +262,15 @@ export default function WorkspacesPage() {
       {/* View Controls */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="flex rounded-lg border border-white/10 overflow-hidden">
+          <div className={`flex rounded-lg border overflow-hidden ${isDark ? "border-zinc-700" : "border-gray-300"}`}>
             <button
-              className={`px-3 py-1.5 text-sm ${viewMode === "grid" ? "bg-white/10" : ""}`}
+              className={`px-3 py-1.5 text-sm ${viewMode === "grid" ? themeClasses.tabActive : themeClasses.tabInactive} ${themeClasses.text}`}
               onClick={() => setViewMode("grid")}
             >
               Grid
             </button>
             <button
-              className={`px-3 py-1.5 text-sm ${viewMode === "list" ? "bg-white/10" : ""}`}
+              className={`px-3 py-1.5 text-sm ${viewMode === "list" ? themeClasses.tabActive : themeClasses.tabInactive} ${themeClasses.text}`}
               onClick={() => setViewMode("list")}
             >
               List
@@ -275,7 +280,7 @@ export default function WorkspacesPage() {
 
         <div className="flex items-center gap-2">
           <select
-            className="rounded-md bg-zinc-800 border border-white/10 px-2 py-1 text-sm text-zinc-100"
+            className={`rounded-md border px-2 py-1 text-sm ${themeClasses.selectDropdown}`}
             value={sortKey}
             onChange={(e) => setSortKey(e.target.value as SortKey)}
           >
@@ -284,7 +289,7 @@ export default function WorkspacesPage() {
             <option value="name">Name</option>
           </select>
           <button
-            className="p-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+            className={`p-2 rounded-lg border text-sm transition-colors ${themeClasses.buttonOutline}`}
             onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
           >
             {sortOrder === "asc" ? "↑" : "↓"}
@@ -294,17 +299,17 @@ export default function WorkspacesPage() {
 
       {/* Workspaces List */}
       {sortedWorkspaces.length === 0 && (
-        <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-zinc-800 flex items-center justify-center">
-            <svg className="w-8 h-8 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className={`rounded-xl border p-8 text-center ${themeClasses.card}`}>
+          <div className={`w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center ${isDark ? "bg-zinc-800" : "bg-gray-100"}`}>
+            <svg className={`w-8 h-8 ${themeClasses.iconMuted}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-zinc-200 mb-2">No workspaces yet</h3>
-          <p className="text-zinc-400 mb-4">Create your first workspace to organize your maps</p>
+          <h3 className={`text-lg font-semibold mb-2 ${themeClasses.text}`}>No workspaces yet</h3>
+          <p className={`mb-4 ${themeClasses.textMuted}`}>Create your first workspace to organize your maps</p>
           <button
             onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 font-semibold hover:bg-emerald-400"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-400"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -319,27 +324,27 @@ export default function WorkspacesPage() {
           {sortedWorkspaces.map((workspace) => (
             <div
               key={workspace.workspaceId}
-              className="group rounded-xl border border-white/10 bg-zinc-900/60 hover:bg-zinc-800/60 transition p-4"
+              className={`group rounded-xl border transition p-4 ${themeClasses.card}`}
             >
-              <div className="h-32 w-full rounded-lg bg-gradient-to-br from-zinc-800 to-zinc-900 border border-white/5 mb-3 grid place-items-center text-zinc-400 text-xs">
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className={`h-32 w-full rounded-lg border mb-3 grid place-items-center text-xs ${themeClasses.cardThumbnail}`}>
+                <svg className={`w-8 h-8 ${themeClasses.iconMuted}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                 </svg>
               </div>
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold">{workspace.workspaceName || "Untitled"}</div>
-                  <div className="text-xs text-zinc-400 truncate">
+                  <div className={`truncate font-semibold ${themeClasses.text}`}>{workspace.workspaceName || "Untitled"}</div>
+                  <div className={`text-xs truncate ${themeClasses.textMuted}`}>
                     {workspace.description ||
                       "No description"}
                   </div>
-                  <div className="text-xs text-zinc-500">
+                  <div className={`text-xs ${isDark ? "text-zinc-500" : "text-gray-400"}`}>
                     {workspace.createdAt ? formatDate(workspace.createdAt) : "—"}
                   </div>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
                   <button
-                    className="p-1 rounded border border-white/10 bg-white/5 hover:bg-white/10 text-xs"
+                    className={`p-1 rounded border text-xs ${themeClasses.buttonGhost}`}
                     onClick={() => {
                       setEditOpen({
                         open: true,
@@ -353,7 +358,7 @@ export default function WorkspacesPage() {
                     ✏️
                   </button>
                   <button
-                    className="p-1 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-xs text-red-300"
+                    className="p-1 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-xs text-red-400"
                     onClick={() => {
                       setDeleteOpen({
                         open: true,
@@ -370,7 +375,7 @@ export default function WorkspacesPage() {
               <div className="mt-3">
                 <button
                   onClick={() => router.push(`/profile/organizations/${orgId}/workspaces/${workspace.workspaceId}`)}
-                  className="w-full px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                  className={`w-full px-3 py-2 rounded-lg border text-sm transition-colors ${themeClasses.buttonOutline}`}
                 >
                   View Workspace
                 </button>
@@ -381,9 +386,9 @@ export default function WorkspacesPage() {
       )}
 
       {sortedWorkspaces.length > 0 && viewMode === "list" && (
-        <div className="rounded-xl border border-white/10 overflow-hidden">
+        <div className={`rounded-xl border overflow-hidden ${themeClasses.tableContainer}`}>
           <table className="w-full text-sm">
-            <thead className="bg-white/5 text-zinc-300">
+            <thead className={themeClasses.tableHeader}>
               <tr>
                 <th className="text-left px-3 py-2">Name</th>
                 <th className="text-left px-3 py-2">Description</th>
@@ -391,28 +396,28 @@ export default function WorkspacesPage() {
                 <th className="px-3 py-2">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/10">
+            <tbody className={`divide-y ${themeClasses.tableCell}`}>
               {sortedWorkspaces.map((workspace) => (
-                <tr key={workspace.workspaceId} className="hover:bg-white/5">
+                <tr key={workspace.workspaceId} className={themeClasses.tableRowHover}>
                   <td className="px-3 py-2">
                     <button
-                      className="text-emerald-300 hover:underline"
+                      className={`hover:underline ${isDark ? "text-emerald-300" : "text-emerald-600"}`}
                       onClick={() => router.push(`/profile/organizations/${orgId}/workspaces/${workspace.workspaceId}`)}
                     >
                       {workspace.workspaceName || "Untitled"}
                     </button>
                   </td>
-                  <td className="px-3 py-2 text-zinc-400">
+                  <td className={`px-3 py-2 ${themeClasses.textMuted}`}>
                     {workspace.description ||
                       "—"}
                   </td>
-                  <td className="px-3 py-2 text-zinc-400">
+                  <td className={`px-3 py-2 ${themeClasses.textMuted}`}>
                     {workspace.createdAt ? formatDate(workspace.createdAt) : "—"}
                   </td>
                   <td className="px-3 py-2 text-right">
                     <div className="flex gap-1 justify-end">
                       <button
-                        className="text-xs px-2 py-1 rounded border border-white/10 bg-white/5 hover:bg-white/10"
+                        className={`text-xs px-2 py-1 rounded border ${themeClasses.buttonGhost}`}
                         onClick={() => {
                           setEditOpen({
                             open: true,
@@ -425,7 +430,7 @@ export default function WorkspacesPage() {
                         Edit
                       </button>
                       <button
-                        className="text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-300"
+                        className="text-xs px-2 py-1 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-400"
                         onClick={() => {
                           setDeleteOpen({
                             open: true,
@@ -447,35 +452,35 @@ export default function WorkspacesPage() {
 
       {/* Create Workspace Modal */}
       {createOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
-          <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
-            <h2 className="text-xl font-semibold text-white mb-4">{t("workspaces", "modal_ws_create_title")}</h2>
+        <div className={`fixed inset-0 z-50 grid place-items-center backdrop-blur-sm ${themeClasses.dialogOverlay}`}>
+          <div className={`w-[32rem] max-w-[95vw] rounded-xl border p-6 shadow-2xl ${themeClasses.dialog}`}>
+            <h2 className={`text-xl font-semibold mb-4 ${themeClasses.text}`}>{t("workspaces", "modal_ws_create_title")}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">{t("workspaces", "ws_name_label")}</label>
+                <label className={`block text-sm font-medium mb-2 ${themeClasses.text}`}>{t("workspaces", "ws_name_label")}</label>
                 <input
                   type="text"
                   value={newWorkspaceName}
                   onChange={(e) => setNewWorkspaceName(e.target.value)}
                   placeholder={t("workspaces", "ph_ws_name")}
-                  className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
+                  className={`w-full rounded-md border px-3 py-2 text-sm ${themeClasses.input}`}
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">{t("workspaces", "ws_description_label")}</label>
+                <label className={`block text-sm font-medium mb-2 ${themeClasses.text}`}>{t("workspaces", "ws_description_label")}</label>
                 <textarea
                   value={newWorkspaceDesc}
                   onChange={(e) => setNewWorkspaceDesc(e.target.value)}
                   placeholder={t("workspaces", "ph_ws_desc")}
                   rows={3}
-                  className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
+                  className={`w-full rounded-md border px-3 py-2 text-sm ${themeClasses.input}`}
                 />
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button
-                className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                className={`px-4 py-2 rounded-lg border text-sm transition-colors ${themeClasses.buttonOutline}`}
                 onClick={() => setCreateOpen(false)}
               >
                 {t("workspaces", "btn_ws_cancel")}
@@ -483,7 +488,7 @@ export default function WorkspacesPage() {
               <button
                 onClick={() => void handleCreateWorkspace()}
                 disabled={createLoading || !newWorkspaceName.trim()}
-                className="px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
+                className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
               >
                 {createLoading ? t("workspaces", "btn_ws_creating") : t("workspaces", "btn_ws_create")}
               </button>
@@ -494,35 +499,35 @@ export default function WorkspacesPage() {
 
       {/* Edit Workspace Modal */}
       {editOpen.open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
-          <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
-            <h2 className="text-xl font-semibold text-white mb-4">{t("workspaces", "modal_ws_edit_title")}</h2>
+        <div className={`fixed inset-0 z-50 grid place-items-center backdrop-blur-sm ${themeClasses.dialogOverlay}`}>
+          <div className={`w-[32rem] max-w-[95vw] rounded-xl border p-6 shadow-2xl ${themeClasses.dialog}`}>
+            <h2 className={`text-xl font-semibold mb-4 ${themeClasses.text}`}>{t("workspaces", "modal_ws_edit_title")}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">{t("workspaces", "ws_name_label")}</label>
+                <label className={`block text-sm font-medium mb-2 ${themeClasses.text}`}>{t("workspaces", "ws_name_label")}</label>
                 <input
                   type="text"
                   value={editOpen.workspaceName || ""}
                   onChange={(e) => setEditOpen({ ...editOpen, workspaceName: e.target.value })}
                   placeholder={t("workspaces", "ph_ws_name")}
-                  className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
+                  className={`w-full rounded-md border px-3 py-2 text-sm ${themeClasses.input}`}
                   autoFocus
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-zinc-300 mb-2">{t("workspaces", "ws_description_label")}</label>
+                <label className={`block text-sm font-medium mb-2 ${themeClasses.text}`}>{t("workspaces", "ws_description_label")}</label>
                 <textarea
                   value={editOpen.workspaceDesc || ""}
                   onChange={(e) => setEditOpen({ ...editOpen, workspaceDesc: e.target.value })}
                   placeholder={t("workspaces", "ph_ws_desc")}
                   rows={3}
-                  className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
+                  className={`w-full rounded-md border px-3 py-2 text-sm ${themeClasses.input}`}
                 />
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-2">
               <button
-                className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                className={`px-4 py-2 rounded-lg border text-sm transition-colors ${themeClasses.buttonOutline}`}
                 onClick={() => setEditOpen({ open: false })}
               >
                 {t("workspaces", "btn_ws_cancel")}
@@ -530,7 +535,7 @@ export default function WorkspacesPage() {
               <button
                 onClick={() => void handleEditWorkspace()}
                 disabled={editLoading || !editOpen.workspaceName?.trim()}
-                className="px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
+                className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
               >
                 {editLoading ? t("workspaces", "btn_ws_editing") : t("workspaces", "btn_ws_edit")}
               </button>
@@ -541,16 +546,16 @@ export default function WorkspacesPage() {
 
       {/* Delete Workspace Modal */}
       {deleteOpen.open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
-          <div className="w-[32rem] max-w-[95vw] rounded-xl border border-white/10 bg-zinc-900 p-6 shadow-2xl">
-            <h2 className="text-xl font-semibold text-white mb-4">Delete Workspace</h2>
-            <p className="text-sm text-zinc-300 mb-6">
-              Are you sure you want to delete the workspace <span className="font-semibold">{deleteOpen.workspaceName}</span>?
+        <div className={`fixed inset-0 z-50 grid place-items-center backdrop-blur-sm ${themeClasses.dialogOverlay}`}>
+          <div className={`w-[32rem] max-w-[95vw] rounded-xl border p-6 shadow-2xl ${themeClasses.dialog}`}>
+            <h2 className={`text-xl font-semibold mb-4 ${themeClasses.text}`}>Delete Workspace</h2>
+            <p className={`text-sm mb-6 ${themeClasses.textMuted}`}>
+              Are you sure you want to delete the workspace <span className={`font-semibold ${themeClasses.text}`}>{deleteOpen.workspaceName}</span>?
               This action cannot be undone and will remove all maps associated with this workspace.
             </p>
             <div className="flex justify-end gap-2">
               <button
-                className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                className={`px-4 py-2 rounded-lg border text-sm transition-colors ${themeClasses.buttonOutline}`}
                 onClick={() => setDeleteOpen({ open: false })}
               >
                 Cancel
@@ -558,7 +563,7 @@ export default function WorkspacesPage() {
               <button
                 onClick={() => void handleDeleteWorkspace()}
                 disabled={deleteLoading}
-                className="px-4 py-2 rounded-lg bg-red-500 text-zinc-900 text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
+                className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
               >
                 {deleteLoading ? "Deleting..." : "Delete Workspace"}
               </button>

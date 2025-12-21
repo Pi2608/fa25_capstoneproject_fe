@@ -40,6 +40,24 @@ export type TicketClosedEvent = {
   subject: string;
 };
 
+function isBenignSignalRError(err: unknown) {
+  const msg =
+    typeof err === "object" && err && "message" in err
+      ? String((err as any).message)
+      : String(err);
+
+  return (
+    msg.includes(
+      "Invocation canceled due to the underlying connection being closed"
+    ) ||
+    msg.includes("The connection was stopped during negotiation") ||
+    msg.includes("Failed to complete negotiation") ||
+    msg.includes(
+      "Cannot send data if the connection is not in the 'Connected' State"
+    )
+  );
+}
+
 export function createSupportTicketConnection(
   apiBaseUrl: string,
   token?: string | null,
@@ -52,19 +70,17 @@ export function createSupportTicketConnection(
     return null;
   }
 
+  // ✅ Không có token + không cho guest => khỏi tạo connection luôn
+  if (!token && !options?.allowGuest) {
+    return null;
+  }
+
   const url = `${apiBaseUrl}/hubs/support-tickets`;
   const builder = new signalR.HubConnectionBuilder()
     .withUrl(url, {
       accessTokenFactory: () => {
-        if (!token) {
-          if (!options?.allowGuest) {
-            console.warn("[SignalR SupportTicket] No token provided");
-          }
-          return "";
-        }
-        if (token.startsWith("Bearer ")) {
-          return token.substring(7);
-        }
+        if (!token) return "";
+        if (token.startsWith("Bearer ")) return token.substring(7);
         return token;
       },
       withCredentials: false,
@@ -89,16 +105,11 @@ export async function startConnection(
   connection: signalR.HubConnection
 ): Promise<void> {
   try {
-    if (connection.state === signalR.HubConnectionState.Connected) {
-      return;
-    }
-    if (connection.state !== signalR.HubConnectionState.Disconnected) {
-      console.warn(
-        "[SignalR SupportTicket] Connection not in disconnected state:",
-        connection.state
-      );
-      return;
-    }
+    if (connection.state === signalR.HubConnectionState.Connected) return;
+
+    // Chỉ start khi Disconnected
+    if (connection.state !== signalR.HubConnectionState.Disconnected) return;
+
     await connection.start();
   } catch (error) {
     console.error("[SignalR SupportTicket] Failed to start connection:", error);
@@ -115,10 +126,13 @@ export async function joinTicketRoom(
       await connection.invoke("JoinTicketRoom", ticketId);
     }
   } catch (error) {
-    console.error(
-      "[SignalR SupportTicket] Failed to join ticket room:",
-      error
-    );
+    // ✅ lỗi cancel khi đang stop là bình thường
+    if (!isBenignSignalRError(error)) {
+      console.error(
+        "[SignalR SupportTicket] Failed to join ticket room:",
+        error
+      );
+    }
   }
 }
 
@@ -131,22 +145,34 @@ export async function leaveTicketRoom(
       await connection.invoke("LeaveTicketRoom", ticketId);
     }
   } catch (error) {
-    console.error(
-      "[SignalR SupportTicket] Failed to leave ticket room:",
-      error
-    );
+    // ✅ lỗi cancel khi đang stop là bình thường
+    if (!isBenignSignalRError(error)) {
+      console.error(
+        "[SignalR SupportTicket] Failed to leave ticket room:",
+        error
+      );
+    }
   }
 }
 
 export async function stopConnection(
   connection: signalR.HubConnection
 ): Promise<void> {
+  // ✅ Stop an toàn
+  if (
+    connection.state === signalR.HubConnectionState.Disconnected ||
+    connection.state === signalR.HubConnectionState.Disconnecting
+  ) {
+    return;
+  }
+
   try {
-    if (connection.state !== signalR.HubConnectionState.Disconnected) {
-      await connection.stop();
-    }
+    await connection.stop();
   } catch (error) {
-    console.error("[SignalR SupportTicket] Failed to stop connection:", error);
+    // ✅ lỗi “Invocation canceled…” là expected khi stop/unmount
+    if (!isBenignSignalRError(error)) {
+      console.error("[SignalR SupportTicket] Failed to stop connection:", error);
+    }
   }
 }
 
@@ -184,18 +210,24 @@ export function useSupportTicketHub(
       return;
     }
 
-    let token: string | null = null;
-    if (typeof window !== "undefined") {
-      token = localStorage.getItem("token");
-    }
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
 
     const connection = createSupportTicketConnection(apiBaseUrl, token, {
       allowGuest: false,
     });
 
-    if (!connection) return;
+    // ✅ Không có token => không connect => không có stop error
+    if (!connection) {
+      setIsConnected(false);
+      return;
+    }
 
     connectionRef.current = connection;
+
+    connection.onclose(() => {
+      setIsConnected(false);
+    });
 
     connection.on("NewMessage", (message: SupportTicketMessage) => {
       handlersRef.current.onNewMessage?.(message);
@@ -222,11 +254,12 @@ export function useSupportTicketHub(
     });
 
     startConnection(connection)
-      .then(() => {
+      .then(async () => {
         setIsConnected(true);
+
         if (options?.ticketId) {
           currentTicketIdRef.current = options.ticketId;
-          joinTicketRoom(connection, options.ticketId);
+          await joinTicketRoom(connection, options.ticketId);
         }
       })
       .catch((err) => {
@@ -235,11 +268,17 @@ export function useSupportTicketHub(
       });
 
     return () => {
-      if (currentTicketIdRef.current && connection) {
-        leaveTicketRoom(connection, currentTicketIdRef.current);
-      }
-      stopConnection(connection);
-      setIsConnected(false);
+      // ✅ cleanup phải await Leave trước rồi mới Stop
+      void (async () => {
+        const tid = currentTicketIdRef.current;
+
+        if (tid && connection) {
+          await leaveTicketRoom(connection, tid);
+        }
+
+        await stopConnection(connection);
+        setIsConnected(false);
+      })();
     };
   }, [options?.enabled]);
 
@@ -247,20 +286,22 @@ export function useSupportTicketHub(
     const connection = connectionRef.current;
     if (!connection || !isConnected) return;
 
-    const newTicketId = options?.ticketId;
+    const newTicketId = options?.ticketId ?? null;
     const oldTicketId = currentTicketIdRef.current;
 
     if (oldTicketId === newTicketId) return;
 
-    if (oldTicketId !== null) {
-      leaveTicketRoom(connection, oldTicketId);
-    }
+    void (async () => {
+      if (oldTicketId !== null) {
+        await leaveTicketRoom(connection, oldTicketId);
+      }
 
-    if (newTicketId !== null && newTicketId !== undefined) {
-      joinTicketRoom(connection, newTicketId);
-    }
+      if (newTicketId !== null) {
+        await joinTicketRoom(connection, newTicketId);
+      }
 
-    currentTicketIdRef.current = newTicketId ?? null;
+      currentTicketIdRef.current = newTicketId;
+    })();
   }, [options?.ticketId, isConnected]);
 
   return {
@@ -268,4 +309,3 @@ export function useSupportTicketHub(
     isConnected,
   };
 }
-
