@@ -428,7 +428,7 @@ export default function OrgSettingsPage() {
                   )}
                   <div>
                     {t("orgSettings.quota_remaining_label")}{" "}
-                    {quotaResult.remaining}
+                    {quotaResult.remainingQuota}
                   </div>
                 </div>
               )}
