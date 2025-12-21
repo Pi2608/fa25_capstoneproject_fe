@@ -189,6 +189,16 @@ export const messages = {
             deleteConfirm: "Xóa vĩnh viễn",
             deleting: "Đang xóa...",
             creatingFromTemplate: "Đang tạo map từ mẫu...",
+
+            // Map Gallery section
+            sectionMapGallery: "Thư viện bản đồ",
+            galleryLoadError: "Không tải được thư viện bản đồ.",
+            gallerySearchPlaceholder: "Tìm theo tag...",
+            galleryNoMaps: "Không tìm thấy bản đồ nào trong thư viện.",
+            galleryDuplicateSuccess: "Đã sao chép bản đồ thành công vào Bản đồ của bạn.",
+            galleryDuplicateError: "Không thể sao chép bản đồ từ thư viện.",
+            galleryDuplicateButton: "Sao chép vào Bản đồ của bạn",
+            galleryDuplicating: "Đang sao chép...",
         },
         settings_members: {
             unknown_member: "thành viên này",
@@ -1453,8 +1463,18 @@ export const messages = {
 
             // Row menu
             menu_edit: "Sửa thông tin",
+            menu_publish: "Công khai",
+            menu_unpublish: "Hủy công khai",
             menu_delete: "Xóa",
             menu_deleting: "Đang xóa...",
+
+            // Search
+            search_by_tag_placeholder: "Tìm kiếm theo tag...",
+
+            // Toast for publish/unpublish
+            toast_publish_success: "Đã công khai bộ câu hỏi thành công",
+            toast_unpublish_success: "Đã hủy công khai bộ câu hỏi thành công",
+            toast_toggle_public_error: "Không thể cập nhật trạng thái công khai",
 
             // Empty state
             empty_state_my_title: "Chưa có bộ câu hỏi nào",
@@ -1751,7 +1771,8 @@ export const messages = {
         },
         workspace_detail: {
             delete_map_title: "Xoá bản đồ",
-            delete_map_desc: "Bạn có chắc chắn muốn xoá bản đồ “{name}”? Hành động này không thể hoàn tác.",
+            delete_map_desc: "Bạn có chắc chắn muốn xoá bản đồ \"{name}\"? Hành động này không thể hoàn tác.",
+            delete_map_fallback_name: "bản đồ này",
             cancel: "Hủy",
             deleting: "Đang xoá...",
             delete_map_cta: "Xoá bản đồ",
@@ -3309,6 +3330,29 @@ export const messages = {
             zoneDeleteError: "❌ Lỗi khi xóa zone",
             // Map save
             mapSaveSuccess: "Đã lưu thông tin bản đồ và vị trí hiển thị.",
+            mapNotReady: "Bản đồ chưa sẵn sàng",
+            // Icon operations
+            deleteIcon: "Xóa icon",
+            // Feature operations
+            featureNoId: "Không thể cập nhật feature: Không có feature ID",
+            // Timeline operations
+            error_reorder_segments: "Không thể sắp xếp lại segments",
+            error_invalid_drop: "Không thể kéo {itemType} vào track {trackType}",
+            confirm_move_title: "Di chuyển {itemType}?",
+            confirm_move_message: "Bạn có chắc chắn muốn di chuyển {itemType} này sang segment \"{segmentName}\"?",
+            error_move_item: "Không thể di chuyển {itemType}",
+            confirm_delete_route: "Xóa route này?",
+            error_delete_route: "Không thể xóa route",
+            success_delete_route: "Đã xóa route thành công",
+            confirm_delete_location: "Xóa location này?",
+            error_delete_location: "Không thể xóa location",
+            success_delete_location: "Đã xóa location thành công",
+            confirm_remove_zone: "Xóa zone này?",
+            error_remove_zone: "Không thể xóa zone",
+            success_remove_zone: "Đã xóa zone thành công",
+            confirm_remove_layer: "Xóa layer này?",
+            error_remove_layer: "Không thể xóa layer",
+            success_remove_layer: "Đã xóa layer thành công",
         },
         footer: {
             tagline: 'Xây dựng và chia sẻ bản đồ tương tác thật dễ dàng. Mạnh mẽ cho đội nhóm, đơn giản cho mọi người.',
@@ -4183,8 +4227,18 @@ export const messages = {
 
             // Row menu
             menu_edit: "Edit info",
+            menu_publish: "Publish",
+            menu_unpublish: "Unpublish",
             menu_delete: "Delete",
             menu_deleting: "Deleting...",
+
+            // Search
+            search_by_tag_placeholder: "Search by tag...",
+
+            // Toast for publish/unpublish
+            toast_publish_success: "Question bank published successfully",
+            toast_unpublish_success: "Question bank unpublished successfully",
+            toast_toggle_public_error: "Could not update public status",
 
             // Empty state
             empty_state_my_title: "No Question Banks Yet",
@@ -5631,6 +5685,16 @@ export const messages = {
             deleteConfirm: "Delete permanently",
             deleting: "Deleting...",
             creatingFromTemplate: "Creating map from template...",
+
+            // Map Gallery section
+            sectionMapGallery: "Map Gallery",
+            galleryLoadError: "Failed to load map gallery.",
+            gallerySearchPlaceholder: "Search by tag...",
+            galleryNoMaps: "No maps found in gallery.",
+            galleryDuplicateSuccess: "Map successfully copied to Your Maps.",
+            galleryDuplicateError: "Could not duplicate map from gallery.",
+            galleryDuplicateButton: "Copy to Your Maps",
+            galleryDuplicating: "Duplicating...",
         },
         billing: {
             title: "Organization billing management",
@@ -6663,6 +6727,29 @@ export const messages = {
             zoneDeleteError: "❌ Error deleting zone",
             // Map save
             mapSaveSuccess: "Map information and display position saved.",
+            mapNotReady: "Map is not ready",
+            // Icon operations
+            deleteIcon: "Delete icon",
+            // Feature operations
+            featureNoId: "Cannot update feature: No feature ID",
+            // Timeline operations
+            error_reorder_segments: "Failed to reorder segments",
+            error_invalid_drop: "Cannot drop {itemType} into {trackType} track",
+            confirm_move_title: "Move {itemType}?",
+            confirm_move_message: "Are you sure you want to move this {itemType} to segment \"{segmentName}\"?",
+            error_move_item: "Failed to move {itemType}",
+            confirm_delete_route: "Delete this route?",
+            error_delete_route: "Failed to delete route",
+            success_delete_route: "Route deleted successfully",
+            confirm_delete_location: "Delete this location?",
+            error_delete_location: "Failed to delete location",
+            success_delete_location: "Location deleted successfully",
+            confirm_remove_zone: "Remove this zone?",
+            error_remove_zone: "Failed to remove zone",
+            success_remove_zone: "Zone removed successfully",
+            confirm_remove_layer: "Remove this layer?",
+            error_remove_layer: "Failed to remove layer",
+            success_remove_layer: "Layer removed successfully",
         },
         footer: {
             tagline: 'Create and share interactive maps with ease. Powerful for teams, simple for everyone.',

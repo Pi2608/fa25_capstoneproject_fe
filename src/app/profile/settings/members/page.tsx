@@ -18,6 +18,7 @@ import {
   MyOrganizationDto,
 } from "@/lib/api-organizations";
 import { getMe, Me } from "@/lib/api-auth";
+import { getMyMembership, getPlanById } from "@/lib/api-membership";
 
 type MemberRow = {
   memberId: string;
@@ -32,7 +33,7 @@ type MemberRow = {
 
 function StatPill({ text }: { text: string }) {
   return (
-    <span className="inline-flex items-center rounded-full px-3 py-1 text-xs bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/30">
+    <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/30">
       {text}
     </span>
   );
@@ -279,6 +280,7 @@ export default function MembersPage() {
   const [rowBusy, setRowBusy] = useState<Record<string, boolean>>({});
   const [pageError, setPageError] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
+  const [maxMembers, setMaxMembers] = useState<number>(25);
 
   const [inviteOpen, setInviteOpen] = useState(false);
   const [transferTarget, setTransferTarget] = useState<MemberRow | null>(null);
@@ -288,14 +290,6 @@ export default function MembersPage() {
   const [inviteRole, setInviteRole] = useState<"Admin" | "Member" | "Viewer">("Member");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
-
-  const editorsCount = useMemo(
-    () =>
-      members.filter((m) =>
-        ["admin", "editor"].includes(String(m.license).toLowerCase())
-      ).length,
-    [members]
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -378,8 +372,27 @@ export default function MembersPage() {
   useEffect(() => {
     if (selectedOrgId) {
       void loadMembers(selectedOrgId);
+
+      // Fetch membership and plan details to get max members limit
+      getMyMembership(selectedOrgId)
+        .then((membership) => {
+          if (membership?.planId) {
+            return getPlanById(membership.planId);
+          }
+          return null;
+        })
+        .then((plan) => {
+          if (plan?.maxUsersPerOrg) {
+            setMaxMembers(plan.maxUsersPerOrg);
+          }
+        })
+        .catch(() => {
+          // Keep default value if fetch fails
+          setMaxMembers(25);
+        });
     } else {
       setMembers([]);
+      setMaxMembers(25);
     }
   }, [selectedOrgId, loadMembers]);
 
@@ -587,13 +600,7 @@ export default function MembersPage() {
           <StatPill
             text={t("settings_members.stat_members", {
               count: members.length,
-              limit: 25,
-            })}
-          />
-          <StatPill
-            text={t("settings_members.stat_editors", {
-              count: editorsCount,
-              limit: 3,
+              limit: maxMembers,
             })}
           />
           <button

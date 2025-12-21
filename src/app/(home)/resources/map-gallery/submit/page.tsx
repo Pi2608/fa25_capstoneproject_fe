@@ -8,7 +8,7 @@ import {
   MapGalleryCategory,
   MapGalleryDetailResponse,
 } from "@/lib/api-map-gallery";
-import { getMyMaps, MapDto } from "@/lib/api-maps";
+import { getMyMaps, MapDto, publishMap } from "@/lib/api-maps";
 import { useToast } from "@/contexts/ToastContext";
 
 
@@ -216,6 +216,14 @@ export default function MapGallerySubmitPage() {
 
     setSubmitting(true);
     try {
+      // Check if map is published, if not, publish it first
+      const currentMap = maps.find((m) => m.id === selectedMapId);
+      if (currentMap && currentMap.status !== "published") {
+        showToast("info", "Đang publish bản đồ...");
+        await publishMap(selectedMapId);
+        showToast("success", "Bản đồ đã được publish thành công.");
+      }
+
       if (existingSubmission) {
         await updateMyGallerySubmission(existingSubmission.id, {
           mapName: trimmedName,

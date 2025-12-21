@@ -40,7 +40,7 @@ export function TimelineRuler({
   const totalWidth = totalDuration * pixelsPerSecond;
 
   return (
-    <div className="flex flex-col overflow-x-hidden">
+    <div className="flex flex-col">
       {/* Time Ruler */}
       <div className="h-8 bg-zinc-900/50 border-b border-zinc-800 relative">
         <div

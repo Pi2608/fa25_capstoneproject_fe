@@ -65,6 +65,7 @@ interface LeftSidebarToolboxProps {
   currentMap?: any;
   mapId?: string; // Required for adding locations, zones, and layers
   layerVisibility?: Record<string, boolean>; // Track layer visibility state
+  isPlaying?: boolean; // Disable modify actions when timeline is playing
 
   onSelectFeature: (feature: FeatureData) => void;
   onSelectLayer: (layer: LayerDTO) => void;
@@ -107,6 +108,7 @@ export function LeftSidebarToolbox({
   currentMap,
   mapId,
   layerVisibility,
+  isPlaying = false,
   onSelectFeature,
   onSelectLayer,
   onBaseLayerChange,
@@ -721,7 +723,7 @@ export function LeftSidebarToolbox({
           </div>
 
           {/* Panel Content */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto scrollbar-dark">
             {activeView === "explorer" && (
               <ExplorerView
                 features={features}
@@ -743,6 +745,7 @@ export function LeftSidebarToolbox({
             {activeView === "segments" && segmentFormMode === "list" && inlineFormMode === "list" && (
               <SegmentsView
                 segments={segments}
+                isPlaying={isPlaying}
                 onSegmentClick={onSegmentClick}
                 onAddSegment={handleAddSegment}
                 onEditSegment={handleEditSegment}
@@ -1634,7 +1637,7 @@ function ExplorerView({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 space-y-3">
+      <div className="flex-1 overflow-y-auto scrollbar-dark p-2 space-y-3">
 
         {/* Base Layer Selection */}
         <div className="space-y-2">
@@ -1901,6 +1904,7 @@ function ExplorerView({
 
 function SegmentsView({
   segments,
+  isPlaying,
   onSegmentClick,
   onAddSegment,
   onEditSegment,
@@ -1912,6 +1916,7 @@ function SegmentsView({
   mapId,
 }: {
   segments: Segment[];
+  isPlaying?: boolean;
   onSegmentClick: (segmentId: string) => void;
   onAddSegment: () => void;
   onEditSegment: (segment: Segment) => void;
@@ -1960,7 +1965,7 @@ function SegmentsView({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2">
+      <div className="flex-1 overflow-y-auto scrollbar-dark p-2">
         {filteredSegments.length === 0 ? (
           <div className="px-2 py-8 text-center">
             <Icon icon="mdi:filmstrip-off" className="w-12 h-12 mx-auto mb-2 text-zinc-600" />
@@ -1990,23 +1995,39 @@ function SegmentsView({
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            onEditSegment(segment);
+                            if (!isPlaying) {
+                              onEditSegment(segment);
+                            }
                           }}
-                          className="p-1 hover:bg-zinc-700 rounded"
-                          title="Edit segment"
+                          disabled={isPlaying}
+                          className={cn(
+                            "p-1 rounded",
+                            isPlaying
+                              ? "opacity-50 cursor-not-allowed"
+                              : "hover:bg-zinc-700"
+                          )}
+                          title={isPlaying ? "Cannot edit while playing" : "Edit segment"}
                         >
-                          <Icon icon="mdi:pencil" className="w-3.5 h-3.5 text-blue-400" />
+                          <Icon icon="mdi:pencil" className={cn("w-3.5 h-3.5", isPlaying ? "text-zinc-600" : "text-blue-400")} />
                         </button>
                         {onDeleteSegment && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleDeleteSegment(segment.segmentId, segment.name);
+                              if (!isPlaying) {
+                                handleDeleteSegment(segment.segmentId, segment.name);
+                              }
                             }}
-                            className="p-1 hover:bg-zinc-700 rounded"
-                            title="Delete segment"
+                            disabled={isPlaying}
+                            className={cn(
+                              "p-1 rounded",
+                              isPlaying
+                                ? "opacity-50 cursor-not-allowed"
+                                : "hover:bg-zinc-700"
+                            )}
+                            title={isPlaying ? "Cannot delete while playing" : "Delete segment"}
                           >
-                            <Icon icon="mdi:delete-outline" className="w-3.5 h-3.5 text-red-400" />
+                            <Icon icon="mdi:delete-outline" className={cn("w-3.5 h-3.5", isPlaying ? "text-zinc-600" : "text-red-400")} />
                           </button>
                         )}
                       </div>
@@ -2292,7 +2313,7 @@ export function SegmentItemsList({
   const layers = segment.layers || [];
 
   return (
-    <div className="p-3 space-y-3 overflow-y-auto">
+    <div className="p-3 space-y-3 overflow-y-auto scrollbar-dark">
       {/* Locations */}
       {locations.length > 0 && (
         <div>
@@ -3541,7 +3562,7 @@ function MapZonesView({ mapId }: { mapId?: string }) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto scrollbar-dark">
         {loading ? (
           <div className="p-4 text-center">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-2"></div>
@@ -3755,7 +3776,7 @@ function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: an
       </div>
 
       {/* Results List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto scrollbar-dark">
         {zones.length === 0 ? (
           <div className="p-8 text-center text-zinc-500 text-xs">
             <Icon icon="mdi:map-search" className="w-12 h-12 mx-auto mb-3 opacity-50" />

@@ -44,11 +44,12 @@ export function TimelineWorkspace({
   onPlaySingleSegment,
   onRefreshSegments,
 }: TimelineWorkspaceProps) {
-  const [height, setHeight] = useState(200); // Default height
+  const [height, setHeight] = useState(280); // Default height - increased to show all tracks
   const [zoomLevel, setZoomLevel] = useState(1); // 1 = 100%
   const [isResizing, setIsResizing] = useState(false);
 
   const workspaceRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // FIXED: Calculate total duration including route animations
   // Use calculateTotalTimelineDuration helper to account for routes that extend beyond segment duration
@@ -208,37 +209,43 @@ export function TimelineWorkspace({
       </div>
 
       {/* Timeline Content */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden h-[calc(100%-48px)]">
-        <TimelineRuler
-          totalDuration={totalDuration}
-          zoomLevel={zoomLevel}
-          currentTime={currentTime}
-          isPlaying={isPlaying}
-          segments={segments}
-          onRouteClick={(route, segmentId) => {
-            // Dispatch event to show route form in LeftSidebarToolbox
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent('editRoute', {
-                detail: {
-                  route,
-                  segmentId,
-                  mapId
-                }
-              }));
-            }
-          }}
-        />
-        <TimelineTrack
-          segments={segments}
-          transitions={transitions}
-          activeSegmentId={activeSegmentId}
-          zoomLevel={zoomLevel}
-          mapId={mapId}
-          onReorder={onReorder}
-          onSegmentClick={onSegmentClick}
-          onPlaySingleSegment={onPlaySingleSegment}
-          onRefreshSegments={onRefreshSegments}
-        />
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-x-auto overflow-y-auto scrollbar-dark h-[calc(100%-48px)]"
+      >
+        <div className="min-w-max">
+          <TimelineRuler
+            totalDuration={totalDuration}
+            zoomLevel={zoomLevel}
+            currentTime={currentTime}
+            isPlaying={isPlaying}
+            segments={segments}
+            onRouteClick={(route, segmentId) => {
+              // Dispatch event to show route form in LeftSidebarToolbox
+              if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('editRoute', {
+                  detail: {
+                    route,
+                    segmentId,
+                    mapId
+                  }
+                }));
+              }
+            }}
+          />
+          <TimelineTrack
+            segments={segments}
+            transitions={transitions}
+            activeSegmentId={activeSegmentId}
+            zoomLevel={zoomLevel}
+            mapId={mapId}
+            isPlaying={isPlaying}
+            onReorder={onReorder}
+            onSegmentClick={onSegmentClick}
+            onPlaySingleSegment={onPlaySingleSegment}
+            onRefreshSegments={onRefreshSegments}
+          />
+        </div>
       </div>
     </div>
   );

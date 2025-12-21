@@ -1,6 +1,13 @@
 "use client";
 
-import { Fragment, useMemo, useState, useEffect, useRef, useCallback } from "react";
+import {
+  Fragment,
+  useMemo,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -24,9 +31,55 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "../Icon";
 import { cn } from "@/lib/utils";
-import type { Segment, TimelineTransition, RouteAnimation, Location, SegmentZone, SegmentLayer } from "@/lib/api-storymap";
-import { getRouteAnimationsBySegment, deleteRouteAnimation, deleteLocation, deleteSegmentZone, detachLayerFromSegment, reorderSegments, moveLocationToSegment, moveZoneToSegment, moveLayerToSegment, moveRouteToSegment } from "@/lib/api-storymap";
+import type {
+  Segment,
+  TimelineTransition,
+  RouteAnimation,
+  Location,
+  SegmentZone,
+  SegmentLayer,
+} from "@/lib/api-storymap";
+import {
+  getRouteAnimationsBySegment,
+  deleteRouteAnimation,
+  deleteLocation,
+  deleteSegmentZone,
+  detachLayerFromSegment,
+  reorderSegments,
+  moveLocationToSegment,
+  moveZoneToSegment,
+  moveLayerToSegment,
+  moveRouteToSegment,
+} from "@/lib/api-storymap";
+import ConfirmDialog from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/contexts/ToastContext";
+import { useI18n } from "@/i18n/I18nProvider";
+import { createContext, useContext } from "react";
 
+// Timeline Context to share toast and i18n across child components
+interface TimelineContextValue {
+  showToast: (
+    type: "success" | "error" | "warning" | "info",
+    message: string,
+  ) => void;
+  t: (namespace: string, key: string, params?: Record<string, any>) => string;
+  openConfirmDialog: (config: {
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+    itemName?: string;
+  }) => void;
+}
+
+const TimelineContext = createContext<TimelineContextValue | null>(null);
+
+function useTimeline() {
+  const context = useContext(TimelineContext);
+  if (!context) {
+    throw new Error("useTimeline must be used within TimelineContext.Provider");
+  }
+  return context;
+}
 
 interface TimelineTrackProps {
   segments: Segment[];
@@ -35,6 +88,7 @@ interface TimelineTrackProps {
   zoomLevel: number;
   mapId?: string;
   currentMap?: any;
+  isPlaying?: boolean;
   onReorder: (newOrder: Segment[]) => void;
   onSegmentClick: (segmentId: string) => void;
   onPlaySingleSegment?: (segmentId: string) => void;
@@ -52,6 +106,7 @@ export function TimelineTrack({
   zoomLevel,
   mapId,
   currentMap,
+  isPlaying = false,
   onReorder,
   onSegmentClick,
   onPlaySingleSegment,
@@ -61,22 +116,75 @@ export function TimelineTrack({
   onAddRouteAnimation,
   onRefreshSegments,
 }: TimelineTrackProps) {
+  const { showToast } = useToast();
+  const { t } = useI18n();
+  // Disable drag sensors when playing
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: isPlaying ? { distance: Number.MAX_SAFE_INTEGER } : { distance: 0 },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
+    }),
   );
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [draggedItem, setDraggedItem] = useState<{ type: string; id: string; segmentId: string } | null>(null);
+  const [draggedItem, setDraggedItem] = useState<{
+    type: string;
+    id: string;
+    segmentId: string;
+  } | null>(null);
   const [isMoving, setIsMoving] = useState(false);
-  const [movingItem, setMovingItem] = useState<{ type: string; name: string } | null>(null);
+  const [movingItem, setMovingItem] = useState<{
+    type: string;
+    name: string;
+  } | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void | Promise<void>;
+    itemName?: string;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
+  const openConfirmDialog = useCallback(
+    (config: {
+      title: string;
+      message: string;
+      onConfirm: () => void | Promise<void>;
+      itemName?: string;
+    }) => {
+      setConfirmDialog({
+        isOpen: true,
+        ...config,
+      });
+    },
+    [],
+  );
+
+  const timelineContextValue: TimelineContextValue = useMemo(
+    () => ({
+      showToast,
+      t,
+      openConfirmDialog,
+    }),
+    [showToast, t, openConfirmDialog],
+  );
 
   const handleDragStart = (event: any) => {
+    // Prevent drag if playing
+    if (isPlaying) {
+      return;
+    }
+
     const itemId = event.active.id as string;
     setActiveId(itemId);
-    
+
     // Parse drag ID format: "{type}__|__{segmentId}__|__{itemId}"
     // Using __|__ as delimiter to avoid conflicts with GUID dashes
     const parts = itemId.split("__|__");
@@ -84,11 +192,11 @@ export function TimelineTrack({
       const type = parts[0];
       const segmentId = parts[1];
       const actualItemId = parts[2];
-      
-      setDraggedItem({ 
-        type: type as "location" | "zone" | "route" | "layer", 
-        id: actualItemId, 
-        segmentId 
+
+      setDraggedItem({
+        type: type as "location" | "zone" | "route" | "layer",
+        id: actualItemId,
+        segmentId,
       });
     }
   };
@@ -96,7 +204,7 @@ export function TimelineTrack({
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
-    
+
     if (!over) {
       setDraggedItem(null);
       return;
@@ -107,19 +215,23 @@ export function TimelineTrack({
 
     // Handle segment reordering
     if (activeId.startsWith("segment-") && overId.startsWith("segment-")) {
-      const oldIndex = segments.findIndex((s) => s.segmentId === activeId.replace("segment-", ""));
-      const newIndex = segments.findIndex((s) => s.segmentId === overId.replace("segment-", ""));
+      const oldIndex = segments.findIndex(
+        (s) => s.segmentId === activeId.replace("segment-", ""),
+      );
+      const newIndex = segments.findIndex(
+        (s) => s.segmentId === overId.replace("segment-", ""),
+      );
 
       if (oldIndex !== newIndex && mapId) {
-      const newOrder = arrayMove(segments, oldIndex, newIndex);
+        const newOrder = arrayMove(segments, oldIndex, newIndex);
         try {
           // Call API to reorder segments
-          const segmentIds = newOrder.map(s => s.segmentId);
+          const segmentIds = newOrder.map((s) => s.segmentId);
           await reorderSegments(mapId, segmentIds);
-      onReorder(newOrder);
+          onReorder(newOrder);
         } catch (error) {
           console.error("Failed to reorder segments:", error);
-          alert("Failed to reorder segments");
+          showToast("error", t("mapEditor", "error_reorder_segments"));
         }
       }
     }
@@ -127,945 +239,1288 @@ export function TimelineTrack({
     else if (draggedItem && overId.startsWith("drop-")) {
       // Parse drop zone: "drop-{trackType}__|__{segmentId}"
       const dropParts = overId.replace("drop-", "").split("__|__");
-      
+
       if (dropParts.length === 2) {
         const trackType = dropParts[0];
         const targetSegmentId = dropParts[1];
-        
+
         // Validate: only allow drop to same track type (handle zone/layer special case)
-        const isValidDrop = 
-          draggedItem.type === trackType || 
-          (trackType === "zone" && (draggedItem.type === "zone" || draggedItem.type === "layer"));
-        
+        const isValidDrop =
+          draggedItem.type === trackType ||
+          (trackType === "zone" &&
+            (draggedItem.type === "zone" || draggedItem.type === "layer"));
+
         if (!isValidDrop) {
-          alert(`Cannot drop ${draggedItem.type} into ${trackType} track. Please drop into the correct track.`);
+          showToast(
+            "error",
+            t("mapEditor", "error_invalid_drop", {
+              itemType: draggedItem.type,
+              trackType,
+            }),
+          );
           setDraggedItem(null);
           return;
         }
-        
-        if (draggedItem.segmentId && draggedItem.segmentId !== targetSegmentId && mapId) {
+
+        if (
+          draggedItem.segmentId &&
+          draggedItem.segmentId !== targetSegmentId &&
+          mapId
+        ) {
           // Move item to new segment
-          const targetSegment = segments.find(s => s.segmentId === targetSegmentId);
-          const confirmed = window.confirm(
-            `Move ${draggedItem.type} to segment "${targetSegment?.name || targetSegmentId}"?`
+          const targetSegment = segments.find(
+            (s) => s.segmentId === targetSegmentId,
           );
-          
-          if (confirmed) {
-            setIsMoving(true);
-            const itemName = draggedItem.type === "location" 
-              ? segments.find(s => s.segmentId === draggedItem.segmentId)?.locations?.find(l => l.locationId === draggedItem.id)?.title || "Location"
-              : draggedItem.type === "route"
-              ? segments.find(s => s.segmentId === draggedItem.segmentId)?.routeAnimations?.find(r => r.routeAnimationId === draggedItem.id)?.fromName || "Route"
-              : draggedItem.type === "zone"
-              ? segments.find(s => s.segmentId === draggedItem.segmentId)?.zones?.find(z => z.segmentZoneId === draggedItem.id)?.zone?.name || "Zone"
-              : segments.find(s => s.segmentId === draggedItem.segmentId)?.layers?.find(l => l.segmentLayerId === draggedItem.id)?.layer?.name || "Layer";
-            
-            setMovingItem({ type: draggedItem.type, name: itemName });
-            
-            try {
-              switch (draggedItem.type) {
-                case "location":
-                  await moveLocationToSegment(mapId, draggedItem.segmentId, draggedItem.id, targetSegmentId);
-                  break;
-                case "zone":
-                  await moveZoneToSegment(mapId, draggedItem.segmentId, draggedItem.id, targetSegmentId);
-                  break;
-                case "layer":
-                  await moveLayerToSegment(mapId, draggedItem.segmentId, draggedItem.id, targetSegmentId);
-                  break;
-                case "route":
-                  await moveRouteToSegment(mapId, draggedItem.segmentId, draggedItem.id, targetSegmentId);
-                  break;
+
+          // Open confirm dialog
+          setConfirmDialog({
+            isOpen: true,
+            title: t("mapEditor", "confirm_move_title", {
+              itemType: draggedItem.type,
+            }),
+            message: t("mapEditor", "confirm_move_message", {
+              itemType: draggedItem.type,
+              segmentName: targetSegment?.name || targetSegmentId,
+            }),
+            onConfirm: async () => {
+              setIsMoving(true);
+              const itemName =
+                draggedItem.type === "location"
+                  ? segments
+                      .find((s) => s.segmentId === draggedItem.segmentId)
+                      ?.locations?.find((l) => l.locationId === draggedItem.id)
+                      ?.title || "Location"
+                  : draggedItem.type === "route"
+                    ? segments
+                        .find((s) => s.segmentId === draggedItem.segmentId)
+                        ?.routeAnimations?.find(
+                          (r) => r.routeAnimationId === draggedItem.id,
+                        )?.fromName || "Route"
+                    : draggedItem.type === "zone"
+                      ? segments
+                          .find((s) => s.segmentId === draggedItem.segmentId)
+                          ?.zones?.find(
+                            (z) => z.segmentZoneId === draggedItem.id,
+                          )?.zone?.name || "Zone"
+                      : segments
+                          .find((s) => s.segmentId === draggedItem.segmentId)
+                          ?.layers?.find(
+                            (l) => l.segmentLayerId === draggedItem.id,
+                          )?.layer?.name || "Layer";
+
+              setMovingItem({ type: draggedItem.type, name: itemName });
+
+              try {
+                switch (draggedItem.type) {
+                  case "location":
+                    await moveLocationToSegment(
+                      mapId,
+                      draggedItem.segmentId,
+                      draggedItem.id,
+                      targetSegmentId,
+                    );
+                    break;
+                  case "zone":
+                    await moveZoneToSegment(
+                      mapId,
+                      draggedItem.segmentId,
+                      draggedItem.id,
+                      targetSegmentId,
+                    );
+                    break;
+                  case "layer":
+                    await moveLayerToSegment(
+                      mapId,
+                      draggedItem.segmentId,
+                      draggedItem.id,
+                      targetSegmentId,
+                    );
+                    break;
+                  case "route":
+                    await moveRouteToSegment(
+                      mapId,
+                      draggedItem.segmentId,
+                      draggedItem.id,
+                      targetSegmentId,
+                    );
+                    break;
+                }
+
+                // Refresh segments without page reload
+                if (onRefreshSegments) {
+                  // Add a delay to ensure backend has fully processed the move
+                  await new Promise((resolve) => setTimeout(resolve, 300));
+                  await onRefreshSegments();
+                }
+              } catch (error) {
+                console.error(`Failed to move ${draggedItem.type}:`, error);
+                showToast(
+                  "error",
+                  t("mapEditor", "error_move_item", {
+                    itemType: draggedItem.type,
+                  }),
+                );
+              } finally {
+                setIsMoving(false);
+                setMovingItem(null);
+                setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
               }
-              
-              // Refresh segments without page reload
-              if (onRefreshSegments) {
-                // Add a delay to ensure backend has fully processed the move
-                await new Promise(resolve => setTimeout(resolve, 300));
-                await onRefreshSegments();
-              }
-            } catch (error) {
-              console.error(`Failed to move ${draggedItem.type}:`, error);
-              alert(`Failed to move ${draggedItem.type}. Please try again.`);
-            } finally {
-              setIsMoving(false);
-              setMovingItem(null);
-            }
-          }
+            },
+          });
         }
       }
     }
-    
+
     setDraggedItem(null);
   };
 
   const pixelsPerSecond = zoomLevel * 50;
-  const totalWidth = useMemo(() => {
-    const totalDuration = segments.reduce((sum, seg) => sum + seg.durationMs, 0) / 1000;
-    return totalDuration * pixelsPerSecond;
-  }, [segments, pixelsPerSecond]);
+    const totalWidth = useMemo(() => {
+      const totalDuration =
+        segments.reduce((sum, seg) => sum + seg.durationMs, 0) / 1000;
+      return totalDuration * pixelsPerSecond;
+    }, [segments, pixelsPerSecond]);
 
-  const findTransition = (fromSegmentId: string, toSegmentId: string) => {
-    return transitions.find(
-      (t) => t.fromSegmentId === fromSegmentId && t.toSegmentId === toSegmentId
-    );
-  };
+    const findTransition = (fromSegmentId: string, toSegmentId: string) => {
+      return transitions.find(
+        (t) =>
+          t.fromSegmentId === fromSegmentId && t.toSegmentId === toSegmentId,
+      );
+    };
 
-  if (segments.length === 0) {
+    if (segments.length === 0) {
+      return (
+        <div className="h-full flex items-center justify-center text-zinc-500 text-sm">
+          <div className="text-center">
+            <Icon
+              icon="mdi:filmstrip-box-multiple"
+              className="w-12 h-12 mx-auto mb-2 opacity-50"
+            />
+            <p>No segments yet</p>
+            <p className="text-xs text-zinc-600 mt-1">
+              Add segments from the left sidebar
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="h-full flex items-center justify-center text-zinc-500 text-sm">
-        <div className="text-center">
-          <Icon icon="mdi:filmstrip-box-multiple" className="w-12 h-12 mx-auto mb-2 opacity-50" />
-          <p>No segments yet</p>
-          <p className="text-xs text-zinc-600 mt-1">
-            Add segments from the left sidebar
-          </p>
+      <TimelineContext.Provider value={timelineContextValue}>
+        {/* Loading Overlay */}
+        {isMoving && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[3000] flex items-center justify-center">
+            <div className="bg-zinc-900/95 border border-zinc-700 rounded-lg px-6 py-4 shadow-2xl flex flex-col items-center gap-3">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-500"></div>
+              <div className="text-sm text-zinc-200 font-medium">
+                Moving {movingItem?.type || "item"}...
+              </div>
+              {movingItem?.name && (
+                <div className="text-xs text-zinc-400">"{movingItem.name}"</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext
+            items={segments.map((s) => `segment-${s.segmentId}`)}
+            strategy={horizontalListSortingStrategy}
+          >
+            <div className="h-full flex flex-col bg-zinc-950/50">
+              {/* Track Headers - Video Editor Style */}
+              <div className="flex-shrink-0 border-b border-zinc-800/80 bg-zinc-900/80">
+                <div
+                  className="flex items-center"
+                  style={{ minWidth: `${totalWidth + 200}px` }}
+                >
+                  <div className="w-[200px] flex-shrink-0 p-2 border-r border-zinc-800/80 bg-zinc-950/50">
+                    <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
+                      Timeline
+                    </div>
+                  </div>
+                  <div
+                    className="flex-1 flex items-start p-2 gap-1"
+                    style={{ minWidth: `${totalWidth}px` }}
+                  >
+                    {segments.map((segment, index) => (
+                      <Fragment key={segment.segmentId}>
+                        <SortableSegmentHeader
+                          segment={segment}
+                          pixelsPerSecond={pixelsPerSecond}
+                          onPlaySegment={onPlaySingleSegment}
+                        />
+                        {index < segments.length - 1 && (
+                          <div className="w-0.5 flex-shrink-0 bg-zinc-800/50" />
+                        )}
+                      </Fragment>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tracks Container */}
+              <div className="flex-1 overflow-y-auto scrollbar-dark">
+                <div
+                  className="flex flex-col"
+                  style={{ minWidth: `${totalWidth + 200}px` }}
+                >
+                  {/* Track 1: Routes */}
+                  <TimelineTrackRow
+                    trackLabel="Routes"
+                    trackIcon="mdi:routes"
+                    trackColor="orange"
+                    trackType="route"
+                    segments={segments}
+                    activeSegmentId={activeSegmentId}
+                    zoomLevel={zoomLevel}
+                    pixelsPerSecond={pixelsPerSecond}
+                    mapId={mapId}
+                    currentMap={currentMap}
+                    onSegmentClick={onSegmentClick}
+                    onAddItem={onAddRouteAnimation}
+                    renderItems={(segment) => (
+                      <RouteTrackItems
+                        segment={segment}
+                        mapId={mapId || ""}
+                        currentMap={currentMap}
+                        isPlaying={isPlaying}
+                      />
+                    )}
+                  />
+
+                  {/* Track 2: Locations */}
+                  <TimelineTrackRow
+                    trackLabel="Locations"
+                    trackIcon="mdi:map-marker"
+                    trackColor="emerald"
+                    trackType="location"
+                    segments={segments}
+                    activeSegmentId={activeSegmentId}
+                    zoomLevel={zoomLevel}
+                    pixelsPerSecond={pixelsPerSecond}
+                    mapId={mapId}
+                    currentMap={currentMap}
+                    onSegmentClick={onSegmentClick}
+                    onAddItem={onAddLocation}
+                    renderItems={(segment) => (
+                      <LocationTrackItems
+                        segment={segment}
+                        mapId={mapId || ""}
+                        currentMap={currentMap}
+                        isPlaying={isPlaying}
+                      />
+                    )}
+                  />
+
+                  {/* Track 3: Zones & Layers */}
+                  <TimelineTrackRow
+                    trackLabel="Zones & Layers"
+                    trackIcon="mdi:layers-triple"
+                    trackColor="blue"
+                    trackType="zone"
+                    segments={segments}
+                    activeSegmentId={activeSegmentId}
+                    zoomLevel={zoomLevel}
+                    pixelsPerSecond={pixelsPerSecond}
+                    mapId={mapId}
+                    currentMap={currentMap}
+                    onSegmentClick={onSegmentClick}
+                    onAddItem={onAddZone}
+                    renderItems={(segment) => (
+                      <ZoneLayerTrackItems
+                        segment={segment}
+                        mapId={mapId || ""}
+                        currentMap={currentMap}
+                        isPlaying={isPlaying}
+                        onAddZone={onAddZone}
+                        onAddLayer={onAddLayer}
+                      />
+                    )}
+                  />
+                </div>
+              </div>
+            </div>
+          </SortableContext>
+        </DndContext>
+
+        {/* Confirm Dialog - Render via Portal to show at screen center */}
+        {typeof window !== "undefined" &&
+          createPortal(
+            <ConfirmDialog
+              isOpen={confirmDialog.isOpen}
+              onClose={() =>
+                setConfirmDialog((prev) => ({ ...prev, isOpen: false }))
+              }
+              onConfirm={confirmDialog.onConfirm}
+              title={confirmDialog.title}
+              message={confirmDialog.message}
+              itemName={confirmDialog.itemName}
+            />,
+            document.body,
+          )}
+      </TimelineContext.Provider>
+    );
+  }
+
+  interface TimelineTrackRowProps {
+    trackLabel: string;
+    trackIcon: string;
+    trackColor: "orange" | "emerald" | "blue" | "purple";
+    trackType: "route" | "location" | "zone" | "layer";
+    segments: Segment[];
+    activeSegmentId: string | null;
+    zoomLevel: number;
+    pixelsPerSecond: number;
+    mapId?: string;
+    currentMap?: any;
+    onSegmentClick: (segmentId: string) => void;
+    onAddItem?: (segmentId: string) => void;
+    renderItems: (segment: Segment) => React.ReactNode;
+  }
+
+  function TimelineTrackRow({
+    trackLabel,
+    trackIcon,
+    trackColor,
+    trackType,
+    segments,
+    activeSegmentId,
+    zoomLevel,
+    pixelsPerSecond,
+    mapId,
+    currentMap,
+    onSegmentClick,
+    onAddItem,
+    renderItems,
+  }: TimelineTrackRowProps) {
+    const colorClasses = {
+      orange: {
+        bg: "bg-orange-500/15",
+        border: "border-orange-500/40",
+        text: "text-orange-300",
+        icon: "text-orange-400",
+        hover: "hover:bg-orange-500/25 hover:border-orange-500/60",
+      },
+      emerald: {
+        bg: "bg-emerald-500/15",
+        border: "border-emerald-500/40",
+        text: "text-emerald-300",
+        icon: "text-emerald-400",
+        hover: "hover:bg-emerald-500/25 hover:border-emerald-500/60",
+      },
+      blue: {
+        bg: "bg-blue-500/15",
+        border: "border-blue-500/40",
+        text: "text-blue-300",
+        icon: "text-blue-400",
+        hover: "hover:bg-blue-500/25 hover:border-blue-500/60",
+      },
+      purple: {
+        bg: "bg-purple-500/15",
+        border: "border-purple-500/40",
+        text: "text-purple-300",
+        icon: "text-purple-400",
+        hover: "hover:bg-purple-500/25 hover:border-purple-500/60",
+      },
+    };
+
+    const colors = colorClasses[trackColor];
+
+    return (
+      <div className="border-b border-zinc-800/50 hover:bg-zinc-900/30 transition-colors">
+        <div className="flex items-stretch min-h-[72px]">
+          {/* Track Header - Video Editor Style */}
+          <div className="w-[200px] flex-shrink-0 p-2 border-r border-zinc-800/80 bg-zinc-950/50 flex items-center gap-2">
+            <div
+              className={cn(
+                "w-6 h-6 rounded flex items-center justify-center",
+                colors.bg,
+                colors.border,
+                "border",
+              )}
+            >
+              <Icon
+                icon={trackIcon}
+                className={cn("w-3.5 h-3.5", colors.icon)}
+              />
+            </div>
+            <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+              {trackLabel}
+            </span>
+          </div>
+
+          {/* Track Content */}
+          <div className="flex-1 flex items-center p-1.5 gap-1 bg-zinc-900/20">
+            {segments.map((segment, index) => {
+              const width = Math.max(
+                (segment.durationMs / 1000) * pixelsPerSecond,
+                60,
+              );
+              const isActive = segment.segmentId === activeSegmentId;
+
+              return (
+                <Fragment key={segment.segmentId}>
+                  <DroppableSegmentArea
+                    segmentId={segment.segmentId}
+                    trackType={trackType}
+                    width={width}
+                    isActive={isActive}
+                    trackColor={trackColor}
+                    colors={colors}
+                    onSegmentClick={onSegmentClick}
+                    onAddItem={isActive ? onAddItem : undefined}
+                    trackLabel={trackLabel}
+                  >
+                    {renderItems(segment)}
+                  </DroppableSegmentArea>
+
+                  {/* Transition Indicator */}
+                  {index < segments.length - 1 && (
+                    <div className="w-0.5 flex-shrink-0 bg-zinc-800/50" />
+                  )}
+                </Fragment>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <>
-      {/* Loading Overlay */}
-      {isMoving && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[3000] flex items-center justify-center">
-          <div className="bg-zinc-900/95 border border-zinc-700 rounded-lg px-6 py-4 shadow-2xl flex flex-col items-center gap-3">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-emerald-500"></div>
-            <div className="text-sm text-zinc-200 font-medium">
-              Moving {movingItem?.type || "item"}...
-            </div>
-            {movingItem?.name && (
-              <div className="text-xs text-zinc-400">
-                "{movingItem.name}"
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-      
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-        disabled={isMoving}
-      >
-      <SortableContext
-        items={segments.map((s) => `segment-${s.segmentId}`)}
-        strategy={horizontalListSortingStrategy}
-      >
-        <div className="h-full flex flex-col overflow-hidden bg-zinc-950/50">
-          {/* Track Headers - Video Editor Style */}
-          <div className="flex-shrink-0 border-b border-zinc-800/80 bg-zinc-900/80">
-            <div className="flex items-center" style={{ minWidth: `${totalWidth + 200}px` }}>
-              <div className="w-[200px] flex-shrink-0 p-2 border-r border-zinc-800/80 bg-zinc-950/50">
-                <div className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-                  Timeline
-                </div>
-              </div>
-              <div className="flex-1 flex items-start p-2 gap-1" style={{ minWidth: `${totalWidth}px` }}>
-          {segments.map((segment, index) => (
-            <Fragment key={segment.segmentId}>
-                    <SortableSegmentHeader
-                segment={segment}
-                      pixelsPerSecond={pixelsPerSecond}
-                      onPlaySegment={onPlaySingleSegment}
-                    />
-                    {index < segments.length - 1 && (
-                      <div className="w-0.5 flex-shrink-0 bg-zinc-800/50" />
-                    )}
-                  </Fragment>
-                ))}
-              </div>
-            </div>
-          </div>
+  function RouteTrackItems({
+    segment,
+    mapId,
+    currentMap,
+    isPlaying,
+  }: {
+    segment: Segment;
+    mapId: string;
+    currentMap?: any;
+    isPlaying?: boolean;
+  }) {
+    const timelineContext = useTimeline();
+    // Use routes from prop if available, otherwise load from API
+    const [routeAnimations, setRouteAnimations] = useState<RouteAnimation[]>(
+      segment.routeAnimations || [],
+    );
+    const [isLoading, setIsLoading] = useState(false);
 
-          {/* Tracks Container */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="flex flex-col" style={{ minWidth: `${totalWidth + 200}px` }}>
-              {/* Track 1: Routes */}
-              <TimelineTrackRow
-                trackLabel="Routes"
-                trackIcon="mdi:routes"
-                trackColor="orange"
-                trackType="route"
-                segments={segments}
-                activeSegmentId={activeSegmentId}
-                zoomLevel={zoomLevel}
-                pixelsPerSecond={pixelsPerSecond}
-                mapId={mapId}
-                currentMap={currentMap}
-                onSegmentClick={onSegmentClick}
-                onAddItem={onAddRouteAnimation}
-                renderItems={(segment) => (
-                  <RouteTrackItems
-                    segment={segment}
-                    mapId={mapId || ""}
-                    currentMap={currentMap}
-                  />
-                )}
-              />
+    const loadRoutes = useCallback(async () => {
+      setIsLoading(true);
+      try {
+        const routes = await getRouteAnimationsBySegment(
+          mapId,
+          segment.segmentId,
+        );
+        setRouteAnimations(routes || []);
+      } catch (e) {
+        console.error("Failed to load routes:", e);
+      } finally {
+        setIsLoading(false);
+      }
+    }, [mapId, segment.segmentId]);
 
-              {/* Track 2: Locations */}
-              <TimelineTrackRow
-                trackLabel="Locations"
-                trackIcon="mdi:map-marker"
-                trackColor="emerald"
-                trackType="location"
-                segments={segments}
-                activeSegmentId={activeSegmentId}
-                zoomLevel={zoomLevel}
-                pixelsPerSecond={pixelsPerSecond}
-                mapId={mapId}
-                currentMap={currentMap}
-                onSegmentClick={onSegmentClick}
-                onAddItem={onAddLocation}
-                renderItems={(segment) => (
-                  <LocationTrackItems
-                    segment={segment}
-                    mapId={mapId || ""}
-                    currentMap={currentMap}
-                  />
-                )}
-              />
-
-              {/* Track 3: Zones & Layers */}
-              <TimelineTrackRow
-                trackLabel="Zones & Layers"
-                trackIcon="mdi:layers-triple"
-                trackColor="blue"
-                trackType="zone"
-                segments={segments}
-                activeSegmentId={activeSegmentId}
-                zoomLevel={zoomLevel}
-                pixelsPerSecond={pixelsPerSecond}
-                mapId={mapId}
-                currentMap={currentMap}
-                onSegmentClick={onSegmentClick}
-                onAddItem={onAddZone}
-                renderItems={(segment) => (
-                  <ZoneLayerTrackItems
-                    segment={segment}
-                    mapId={mapId || ""}
-                    currentMap={currentMap}
-                    onAddZone={onAddZone}
-                    onAddLayer={onAddLayer}
-                  />
-                )}
-              />
-            </div>
-          </div>
-        </div>
-      </SortableContext>
-    </DndContext>
-    </>
-  );
-}
-
-interface TimelineTrackRowProps {
-  trackLabel: string;
-  trackIcon: string;
-  trackColor: "orange" | "emerald" | "blue" | "purple";
-  trackType: "route" | "location" | "zone" | "layer";
-  segments: Segment[];
-  activeSegmentId: string | null;
-  zoomLevel: number;
-  pixelsPerSecond: number;
-  mapId?: string;
-  currentMap?: any;
-  onSegmentClick: (segmentId: string) => void;
-  onAddItem?: (segmentId: string) => void;
-  renderItems: (segment: Segment) => React.ReactNode;
-}
-
-function TimelineTrackRow({
-  trackLabel,
-  trackIcon,
-  trackColor,
-  trackType,
-  segments,
-  activeSegmentId,
-  zoomLevel,
-  pixelsPerSecond,
-  mapId,
-  currentMap,
-  onSegmentClick,
-  onAddItem,
-  renderItems,
-}: TimelineTrackRowProps) {
-  const colorClasses = {
-    orange: {
-      bg: "bg-orange-500/15",
-      border: "border-orange-500/40",
-      text: "text-orange-300",
-      icon: "text-orange-400",
-      hover: "hover:bg-orange-500/25 hover:border-orange-500/60",
-    },
-    emerald: {
-      bg: "bg-emerald-500/15",
-      border: "border-emerald-500/40",
-      text: "text-emerald-300",
-      icon: "text-emerald-400",
-      hover: "hover:bg-emerald-500/25 hover:border-emerald-500/60",
-    },
-    blue: {
-      bg: "bg-blue-500/15",
-      border: "border-blue-500/40",
-      text: "text-blue-300",
-      icon: "text-blue-400",
-      hover: "hover:bg-blue-500/25 hover:border-blue-500/60",
-    },
-    purple: {
-      bg: "bg-purple-500/15",
-      border: "border-purple-500/40",
-      text: "text-purple-300",
-      icon: "text-purple-400",
-      hover: "hover:bg-purple-500/25 hover:border-purple-500/60",
-    },
-  };
-
-  const colors = colorClasses[trackColor];
-
-  return (
-    <div className="border-b border-zinc-800/50 hover:bg-zinc-900/30 transition-colors">
-      <div className="flex items-stretch min-h-[72px]">
-        {/* Track Header - Video Editor Style */}
-        <div className="w-[200px] flex-shrink-0 p-2 border-r border-zinc-800/80 bg-zinc-950/50 flex items-center gap-2">
-          <div className={cn("w-6 h-6 rounded flex items-center justify-center", colors.bg, colors.border, "border")}>
-            <Icon icon={trackIcon} className={cn("w-3.5 h-3.5", colors.icon)} />
-          </div>
-          <span className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">{trackLabel}</span>
-        </div>
-
-        {/* Track Content */}
-        <div className="flex-1 flex items-center p-1.5 gap-1 bg-zinc-900/20">
-          {segments.map((segment, index) => {
-            const width = Math.max((segment.durationMs / 1000) * pixelsPerSecond, 60);
-            const isActive = segment.segmentId === activeSegmentId;
-            
-            return (
-              <Fragment key={segment.segmentId}>
-                <DroppableSegmentArea
-                  segmentId={segment.segmentId}
-                  trackType={trackType}
-                  width={width}
-                  isActive={isActive}
-                  trackColor={trackColor}
-                  colors={colors}
-                  onSegmentClick={onSegmentClick}
-                  onAddItem={isActive ? onAddItem : undefined}
-                  trackLabel={trackLabel}
-                >
-                  {renderItems(segment)}
-                </DroppableSegmentArea>
-
-                {/* Transition Indicator */}
-                {index < segments.length - 1 && (
-                  <div className="w-0.5 flex-shrink-0 bg-zinc-800/50" />
-                )}
-              </Fragment>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RouteTrackItems({ segment, mapId, currentMap }: { segment: Segment; mapId: string; currentMap?: any }) {
-  // Use routes from prop if available, otherwise load from API
-  const [routeAnimations, setRouteAnimations] = useState<RouteAnimation[]>(segment.routeAnimations || []);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const loadRoutes = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const routes = await getRouteAnimationsBySegment(mapId, segment.segmentId);
-      setRouteAnimations(routes || []);
-    } catch (e) {
-      console.error("Failed to load routes:", e);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [mapId, segment.segmentId]);
-
-  // Sync state with prop when segment.routeAnimations changes
-  useEffect(() => {
-    if (segment.routeAnimations && segment.routeAnimations.length >= 0) {
-      // Use routes from prop (already loaded in parent)
-      setRouteAnimations(segment.routeAnimations);
-    } else {
-      // Fallback: load from API if prop doesn't have routes
-      loadRoutes();
-    }
-  }, [segment.segmentId, segment.routeAnimations, loadRoutes]);
-
-  // Listen for route animation changed event to refresh routes
-  useEffect(() => {
-    const handleRouteAnimationChanged = (e: Event) => {
-      const customEvent = e as CustomEvent<{ segmentId: string }>;
-      if (customEvent.detail?.segmentId === segment.segmentId) {
-        // Refresh routes from API or wait for parent to reload segments
+    // Sync state with prop when segment.routeAnimations changes
+    useEffect(() => {
+      if (segment.routeAnimations && segment.routeAnimations.length >= 0) {
+        // Use routes from prop (already loaded in parent)
+        setRouteAnimations(segment.routeAnimations);
+      } else {
+        // Fallback: load from API if prop doesn't have routes
         loadRoutes();
       }
-    };
+    }, [segment.segmentId, segment.routeAnimations, loadRoutes]);
 
-    window.addEventListener('routeAnimationChanged', handleRouteAnimationChanged);
-    return () => {
-      window.removeEventListener('routeAnimationChanged', handleRouteAnimationChanged);
-    };
-  }, [segment.segmentId, loadRoutes]);
-
-  const handleDelete = async (routeId: string) => {
-    if (!confirm("Delete this route?")) return;
-    try {
-      await deleteRouteAnimation(mapId, segment.segmentId, routeId);
-      setRouteAnimations(prev => prev.filter(r => r.routeAnimationId !== routeId));
-    } catch (e) {
-      console.error("Failed to delete route:", e);
-      alert("Failed to delete route");
-    }
-  };
-
-  if (routeAnimations.length === 0) {
-    return <div className="text-[10px] text-zinc-500 px-2 italic">No routes</div>;
-  }
-
-  return (
-    <>
-      <div className="flex flex-wrap gap-1.5 p-1">
-        {routeAnimations.map((route, index) => (
-          <div
-            key={route.routeAnimationId || `route-${index}`}
-            className="group relative flex items-stretch rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all"
-          >
-            {/* Drag Handle - Only if route has valid ID */}
-            {route.routeAnimationId && (
-              <DraggableItem
-                id={route.routeAnimationId}
-                type="route"
-                segmentId={segment.segmentId}
-                className="cursor-grab active:cursor-grabbing hover:scale-105 transition-transform"
-              >
-                <div className="px-2 py-2 bg-orange-600/20 border-r border-orange-500/30 flex items-center justify-center hover:bg-orange-600/30 transition-colors">
-                  <Icon icon="mdi:drag-vertical" className="w-4 h-4 text-orange-400" />
-                </div>
-              </DraggableItem>
-            )}
-            
-            {/* No drag handle if no valid ID */}
-            {!route.routeAnimationId && (
-              <div className="px-2 py-2 bg-zinc-600/20 border-r border-zinc-500/30 flex items-center justify-center opacity-50 cursor-not-allowed">
-                <Icon icon="mdi:drag-vertical" className="w-4 h-4 text-zinc-500" />
-              </div>
-            )}
-
-            {/* Main Content */}
-            <div
-              className="px-3 py-2 bg-gradient-to-br from-orange-600/25 via-orange-500/15 to-orange-600/10 backdrop-blur-sm flex items-center gap-2 min-w-[120px] cursor-pointer hover:from-orange-600/35 hover:via-orange-500/25 hover:to-orange-600/20 transition-all"
-              onClick={(e) => {
-                e.stopPropagation();
-                // Dispatch event to show form in LeftSidebarToolbox
-                if (typeof window !== 'undefined') {
-                  window.dispatchEvent(new CustomEvent('editRoute', {
-                    detail: { 
-                      route,
-                      segmentId: segment.segmentId,
-                      mapId
-                    }
-                  }));
-                }
-              }}
-              title={`${route.fromName || "Start"} → ${route.toName || "End"} - Click to edit`}
-            >
-              <div className="w-6 h-6 rounded-full bg-orange-500/30 flex items-center justify-center flex-shrink-0">
-                <Icon icon="mdi:routes" className="w-4 h-4 text-orange-300" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-semibold text-orange-50 truncate">
-                  {route.fromName || "Start"} → {route.toName || "End"}
-                </div>
-                <div className="text-[9px] text-orange-300/70">
-                  {(route.durationMs / 1000).toFixed(1)}s
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-stretch bg-orange-950/40 border-l border-orange-500/30">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Dispatch event to show form in LeftSidebarToolbox
-                  if (typeof window !== 'undefined') {
-                    window.dispatchEvent(new CustomEvent('editRoute', {
-                      detail: { 
-                        route,
-                        segmentId: segment.segmentId,
-                        mapId
-                      }
-                    }));
-                  }
-                }}
-                className="px-2.5 hover:bg-orange-500/30 text-orange-300 hover:text-white transition-all flex items-center justify-center group/btn"
-                title="Edit route"
-              >
-                <Icon icon="mdi:pencil" className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-              </button>
-              <div className="w-px bg-orange-500/20" />
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDelete(route.routeAnimationId);
-                }}
-                className="px-2.5 hover:bg-red-500/30 text-orange-300 hover:text-red-300 transition-all flex items-center justify-center group/btn"
-                title="Delete route"
-              >
-                <Icon icon="mdi:delete" className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
-
-function LocationTrackItems({ segment, mapId, currentMap }: { segment: Segment; mapId: string; currentMap?: any }) {
-  const locations = segment.locations || [];
-  const [isDragging, setIsDragging] = useState(false);
-
-  const handleDelete = async (locationId: string) => {
-    if (!confirm("Delete this location?")) return;
-    try {
-      await deleteLocation(mapId, segment.segmentId, locationId);
-      // Dispatch event to refresh segments
-      window.dispatchEvent(new CustomEvent("locationDeleted", {
-        detail: { segmentId: segment.segmentId }
-      }));
-    } catch (e) {
-      console.error("Failed to delete location:", e);
-      alert("Failed to delete location");
-    }
-  };
-
-  const handleEdit = (location: Location) => {
-    // Dispatch event to trigger edit mode in LeftSidebarToolbox
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('editLocation', {
-        detail: { 
-          location,
-          segmentId: segment.segmentId,
-          mapId
+    // Listen for route animation changed event to refresh routes
+    useEffect(() => {
+      const handleRouteAnimationChanged = (e: Event) => {
+        const customEvent = e as CustomEvent<{ segmentId: string }>;
+        if (customEvent.detail?.segmentId === segment.segmentId) {
+          // Refresh routes from API or wait for parent to reload segments
+          loadRoutes();
         }
-      }));
+      };
+
+      window.addEventListener(
+        "routeAnimationChanged",
+        handleRouteAnimationChanged,
+      );
+      return () => {
+        window.removeEventListener(
+          "routeAnimationChanged",
+          handleRouteAnimationChanged,
+        );
+      };
+    }, [segment.segmentId, loadRoutes]);
+
+    const handleDelete = async (routeId: string) => {
+      if (!timelineContext) return;
+
+      timelineContext.openConfirmDialog({
+        title: timelineContext.t("mapEditor", "confirm_delete_route"),
+        message: "",
+        onConfirm: async () => {
+          try {
+            await deleteRouteAnimation(mapId, segment.segmentId, routeId);
+            setRouteAnimations((prev) =>
+              prev.filter((r) => r.routeAnimationId !== routeId),
+            );
+            timelineContext.showToast(
+              "success",
+              timelineContext.t("mapEditor", "success_delete_route"),
+            );
+          } catch (e) {
+            console.error("Failed to delete route:", e);
+            timelineContext.showToast(
+              "error",
+              timelineContext.t("mapEditor", "error_delete_route"),
+            );
+          }
+        },
+      });
+    };
+
+    if (routeAnimations.length === 0) {
+      return (
+        <div className="text-[10px] text-zinc-500 px-2 italic">No routes</div>
+      );
     }
-  };
 
-
-  if (locations.length === 0) {
-    return <div className="text-[10px] text-zinc-500 px-2 italic">No locations</div>;
-  }
-
-  return (
-    <>
-      <div className="flex flex-wrap gap-1.5 p-1">
-        {locations.map((location, index) => {
-          const locationId = location.locationId;
-          
-          return (
+    return (
+      <>
+        <div className="flex flex-wrap gap-1.5 p-1">
+          {routeAnimations.map((route, index) => (
             <div
-              key={locationId || `location-${index}`}
+              key={route.routeAnimationId || `route-${index}`}
               className="group relative flex items-stretch rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all"
             >
-              {/* Drag Handle - Only if location has valid ID */}
-              {locationId && (
+              {/* Drag Handle - Only if route has valid ID */}
+              {route.routeAnimationId && (
                 <DraggableItem
-                  id={locationId}
-                  type="location"
+                  id={route.routeAnimationId}
+                  type="route"
                   segmentId={segment.segmentId}
                   className="cursor-grab active:cursor-grabbing hover:scale-105 transition-transform"
                 >
-                  <div className="px-2 py-2 bg-emerald-600/20 border-r border-emerald-500/30 flex items-center justify-center hover:bg-emerald-600/30 transition-colors">
-                    <Icon icon="mdi:drag-vertical" className="w-4 h-4 text-emerald-400" />
+                  <div className="px-2 py-2 bg-orange-600/20 border-r border-orange-500/30 flex items-center justify-center hover:bg-orange-600/30 transition-colors">
+                    <Icon
+                      icon="mdi:drag-vertical"
+                      className="w-4 h-4 text-orange-400"
+                    />
                   </div>
                 </DraggableItem>
               )}
 
               {/* No drag handle if no valid ID */}
-              {!locationId && (
+              {!route.routeAnimationId && (
                 <div className="px-2 py-2 bg-zinc-600/20 border-r border-zinc-500/30 flex items-center justify-center opacity-50 cursor-not-allowed">
-                  <Icon icon="mdi:drag-vertical" className="w-4 h-4 text-zinc-500" />
+                  <Icon
+                    icon="mdi:drag-vertical"
+                    className="w-4 h-4 text-zinc-500"
+                  />
                 </div>
               )}
 
-            {/* Main Content */}
-            <div
-              className="px-3 py-2 bg-gradient-to-br from-emerald-600/25 via-emerald-500/15 to-emerald-600/10 backdrop-blur-sm flex items-center gap-2 min-w-[120px] cursor-pointer hover:from-emerald-600/35 hover:via-emerald-500/25 hover:to-emerald-600/20 transition-all group-hover:shadow-inner"
-              title={`${location.title || "Untitled"} - Click to edit`}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleEdit(location);
-              }}
-            >
-              <div className="w-6 h-6 rounded-full bg-emerald-500/30 flex items-center justify-center flex-shrink-0">
-                <Icon icon="mdi:map-marker" className="w-4 h-4 text-emerald-300" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[11px] font-semibold text-emerald-50 truncate">
-                  {location.title || "Untitled Location"}
+              {/* Main Content */}
+              <div
+                className="px-3 py-2 bg-gradient-to-br from-orange-600/25 via-orange-500/15 to-orange-600/10 backdrop-blur-sm flex items-center gap-2 min-w-[120px] cursor-pointer hover:from-orange-600/35 hover:via-orange-500/25 hover:to-orange-600/20 transition-all"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Dispatch event to show form in LeftSidebarToolbox
+                  if (typeof window !== "undefined") {
+                    window.dispatchEvent(
+                      new CustomEvent("editRoute", {
+                        detail: {
+                          route,
+                          segmentId: segment.segmentId,
+                          mapId,
+                        },
+                      }),
+                    );
+                  }
+                }}
+                title={`${route.fromName || "Start"} → ${route.toName || "End"} - Click to edit`}
+              >
+                <div className="w-6 h-6 rounded-full bg-orange-500/30 flex items-center justify-center flex-shrink-0">
+                  <Icon icon="mdi:routes" className="w-4 h-4 text-orange-300" />
                 </div>
-                {location.subtitle && (
-                  <div className="text-[9px] text-emerald-300/70 truncate">
-                    {location.subtitle}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] font-semibold text-orange-50 truncate">
+                    {route.fromName || "Start"} → {route.toName || "End"}
+                  </div>
+                  <div className="text-[9px] text-orange-300/70">
+                    {(route.durationMs / 1000).toFixed(1)}s
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-stretch bg-orange-950/40 border-l border-orange-500/30">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isPlaying) {
+                      // Dispatch event to show form in LeftSidebarToolbox
+                      if (typeof window !== "undefined") {
+                        window.dispatchEvent(
+                          new CustomEvent("editRoute", {
+                            detail: {
+                              route,
+                              segmentId: segment.segmentId,
+                              mapId,
+                            },
+                          }),
+                        );
+                      }
+                    }
+                  }}
+                  disabled={isPlaying}
+                  className={cn(
+                    "px-2.5 transition-all flex items-center justify-center group/btn",
+                    isPlaying
+                      ? "opacity-50 cursor-not-allowed text-zinc-600"
+                      : "hover:bg-orange-500/30 text-orange-300 hover:text-white"
+                  )}
+                  title={isPlaying ? "Cannot edit while playing" : "Edit route"}
+                >
+                  <Icon
+                    icon="mdi:pencil"
+                    className={cn(
+                      "w-4 h-4",
+                      !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                    )}
+                  />
+                </button>
+                <div className="w-px bg-orange-500/20" />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isPlaying) {
+                      handleDelete(route.routeAnimationId);
+                    }
+                  }}
+                  disabled={isPlaying}
+                  className={cn(
+                    "px-2.5 transition-all flex items-center justify-center group/btn",
+                    isPlaying
+                      ? "opacity-50 cursor-not-allowed text-zinc-600"
+                      : "hover:bg-red-500/30 text-orange-300 hover:text-red-300"
+                  )}
+                  title={isPlaying ? "Cannot delete while playing" : "Delete route"}
+                >
+                  <Icon
+                    icon="mdi:delete"
+                    className={cn(
+                      "w-4 h-4",
+                      !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                    )}
+                  />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
+  function LocationTrackItems({
+    segment,
+    mapId,
+    currentMap,
+    isPlaying,
+  }: {
+    segment: Segment;
+    mapId: string;
+    currentMap?: any;
+    isPlaying?: boolean;
+  }) {
+    const timelineContext = useTimeline();
+    const locations = segment.locations || [];
+    const [isDragging, setIsDragging] = useState(false);
+
+    const handleDelete = async (locationId: string) => {
+      if (!timelineContext) return;
+
+      timelineContext.openConfirmDialog({
+        title: timelineContext.t("mapEditor", "confirm_delete_location"),
+        message: "",
+        onConfirm: async () => {
+          try {
+            await deleteLocation(mapId, segment.segmentId, locationId);
+            // Dispatch event to refresh segments
+            window.dispatchEvent(
+              new CustomEvent("locationDeleted", {
+                detail: { segmentId: segment.segmentId },
+              }),
+            );
+            timelineContext.showToast(
+              "success",
+              timelineContext.t("mapEditor", "success_delete_location"),
+            );
+          } catch (e) {
+            console.error("Failed to delete location:", e);
+            timelineContext.showToast(
+              "error",
+              timelineContext.t("mapEditor", "error_delete_location"),
+            );
+          }
+        },
+      });
+    };
+
+    const handleEdit = (location: Location) => {
+      // Dispatch event to trigger edit mode in LeftSidebarToolbox
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("editLocation", {
+            detail: {
+              location,
+              segmentId: segment.segmentId,
+              mapId,
+            },
+          }),
+        );
+      }
+    };
+
+    if (locations.length === 0) {
+      return (
+        <div className="text-[10px] text-zinc-500 px-2 italic">
+          No locations
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <div className="flex flex-wrap gap-1.5 p-1">
+          {locations.map((location, index) => {
+            const locationId = location.locationId;
+
+            return (
+              <div
+                key={locationId || `location-${index}`}
+                className="group relative flex items-stretch rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all"
+              >
+                {/* Drag Handle - Only if location has valid ID */}
+                {locationId && (
+                  <DraggableItem
+                    id={locationId}
+                    type="location"
+                    segmentId={segment.segmentId}
+                    className="cursor-grab active:cursor-grabbing hover:scale-105 transition-transform"
+                  >
+                    <div className="px-2 py-2 bg-emerald-600/20 border-r border-emerald-500/30 flex items-center justify-center hover:bg-emerald-600/30 transition-colors">
+                      <Icon
+                        icon="mdi:drag-vertical"
+                        className="w-4 h-4 text-emerald-400"
+                      />
+                    </div>
+                  </DraggableItem>
+                )}
+
+                {/* No drag handle if no valid ID */}
+                {!locationId && (
+                  <div className="px-2 py-2 bg-zinc-600/20 border-r border-zinc-500/30 flex items-center justify-center opacity-50 cursor-not-allowed">
+                    <Icon
+                      icon="mdi:drag-vertical"
+                      className="w-4 h-4 text-zinc-500"
+                    />
                   </div>
                 )}
+
+                {/* Main Content */}
+                <div
+                  className="px-3 py-2 bg-gradient-to-br from-emerald-600/25 via-emerald-500/15 to-emerald-600/10 backdrop-blur-sm flex items-center gap-2 min-w-[120px] cursor-pointer hover:from-emerald-600/35 hover:via-emerald-500/25 hover:to-emerald-600/20 transition-all group-hover:shadow-inner"
+                  title={`${location.title || "Untitled"} - Click to edit`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleEdit(location);
+                  }}
+                >
+                  <div className="w-6 h-6 rounded-full bg-emerald-500/30 flex items-center justify-center flex-shrink-0">
+                    <Icon
+                      icon="mdi:map-marker"
+                      className="w-4 h-4 text-emerald-300"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[11px] font-semibold text-emerald-50 truncate">
+                      {location.title || "Untitled Location"}
+                    </div>
+                    {location.subtitle && (
+                      <div className="text-[9px] text-emerald-300/70 truncate">
+                        {location.subtitle}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-stretch bg-emerald-950/40 border-l border-emerald-500/30">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isPlaying) {
+                        handleEdit(location);
+                      }
+                    }}
+                    disabled={isPlaying}
+                    className={cn(
+                      "px-2.5 transition-all flex items-center justify-center group/btn",
+                      isPlaying
+                        ? "opacity-50 cursor-not-allowed text-zinc-600"
+                        : "hover:bg-emerald-500/30 text-emerald-300 hover:text-white"
+                    )}
+                    title={isPlaying ? "Cannot edit while playing" : "Edit location"}
+                  >
+                    <Icon
+                      icon="mdi:pencil"
+                      className={cn(
+                        "w-4 h-4",
+                        !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                      )}
+                    />
+                  </button>
+                  <div className="w-px bg-emerald-500/20" />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (!isPlaying) {
+                        handleDelete(locationId || "");
+                      }
+                    }}
+                    disabled={isPlaying}
+                    className={cn(
+                      "px-2.5 transition-all flex items-center justify-center group/btn",
+                      isPlaying
+                        ? "opacity-50 cursor-not-allowed text-zinc-600"
+                        : "hover:bg-red-500/30 text-emerald-300 hover:text-red-300"
+                    )}
+                    title={isPlaying ? "Cannot delete while playing" : "Delete location"}
+                  >
+                    <Icon
+                      icon="mdi:delete"
+                      className={cn(
+                        "w-4 h-4",
+                        !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                      )}
+                    />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </>
+    );
+  }
+
+  function ZoneLayerTrackItems({
+    segment,
+    mapId,
+    currentMap,
+    isPlaying,
+    onAddZone,
+    onAddLayer,
+  }: {
+    segment: Segment;
+    mapId: string;
+    currentMap?: any;
+    isPlaying?: boolean;
+    onAddZone?: (segmentId: string) => void;
+    onAddLayer?: (segmentId: string) => void;
+  }) {
+    const timelineContext = useTimeline();
+    const zones = segment.zones || [];
+    const layers = segment.layers || [];
+
+    const handleDeleteZone = async (zoneId: string) => {
+      if (!timelineContext) return;
+
+      timelineContext.openConfirmDialog({
+        title: timelineContext.t("mapEditor", "confirm_remove_zone"),
+        message: "",
+        onConfirm: async () => {
+          try {
+            await deleteSegmentZone(mapId, segment.segmentId, zoneId);
+            window.dispatchEvent(
+              new CustomEvent("zoneDeleted", {
+                detail: { segmentId: segment.segmentId },
+              }),
+            );
+            timelineContext.showToast(
+              "success",
+              timelineContext.t("mapEditor", "success_remove_zone"),
+            );
+          } catch (e) {
+            console.error("Failed to delete zone:", e);
+            timelineContext.showToast(
+              "error",
+              timelineContext.t("mapEditor", "error_remove_zone"),
+            );
+          }
+        },
+      });
+    };
+
+    const handleDeleteLayer = async (layerId: string) => {
+      if (!timelineContext) return;
+
+      timelineContext.openConfirmDialog({
+        title: timelineContext.t("mapEditor", "confirm_remove_layer"),
+        message: "",
+        onConfirm: async () => {
+          try {
+            await detachLayerFromSegment(mapId, segment.segmentId, layerId);
+            window.dispatchEvent(
+              new CustomEvent("layerDeleted", {
+                detail: { segmentId: segment.segmentId },
+              }),
+            );
+            timelineContext.showToast(
+              "success",
+              timelineContext.t("mapEditor", "success_remove_layer"),
+            );
+          } catch (e) {
+            console.error("Failed to delete layer:", e);
+            timelineContext.showToast(
+              "error",
+              timelineContext.t("mapEditor", "error_remove_layer"),
+            );
+          }
+        },
+      });
+    };
+
+    return (
+      <div className="flex flex-wrap gap-1.5 p-1">
+        {zones.map((zone, index) => (
+          <div
+            key={zone.segmentZoneId || `zone-${index}`}
+            className="group relative flex items-stretch rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all"
+          >
+            {/* Drag Handle */}
+            <DraggableItem
+              id={zone.segmentZoneId}
+              type="zone"
+              segmentId={segment.segmentId}
+              className="cursor-grab active:cursor-grabbing hover:scale-105 transition-transform"
+            >
+              <div className="px-2 py-2 bg-blue-600/20 border-r border-blue-500/30 flex items-center justify-center hover:bg-blue-600/30 transition-colors">
+                <Icon
+                  icon="mdi:drag-vertical"
+                  className="w-4 h-4 text-blue-400"
+                />
+              </div>
+            </DraggableItem>
+
+            {/* Main Content */}
+            <div className="px-3 py-2 bg-gradient-to-br from-blue-600/25 via-blue-500/15 to-blue-600/10 backdrop-blur-sm flex items-center gap-2 min-w-[120px]">
+              <div className="w-6 h-6 rounded-full bg-blue-500/30 flex items-center justify-center flex-shrink-0">
+                <Icon icon="mdi:shape" className="w-4 h-4 text-blue-300" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-semibold text-blue-50 truncate">
+                  {zone.zone?.name || "Zone"}
+                </div>
               </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="flex items-stretch bg-emerald-950/40 border-l border-emerald-500/30">
+            {/* Action Button */}
+            <div className="flex items-stretch bg-blue-950/40 border-l border-blue-500/30">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleEdit(location);
+                  if (!isPlaying) {
+                    handleDeleteZone(zone.segmentZoneId);
+                  }
                 }}
-                className="px-2.5 hover:bg-emerald-500/30 text-emerald-300 hover:text-white transition-all flex items-center justify-center group/btn"
-                title="Edit location"
+                disabled={isPlaying}
+                className={cn(
+                  "px-2.5 transition-all flex items-center justify-center group/btn",
+                  isPlaying
+                    ? "opacity-50 cursor-not-allowed text-zinc-600"
+                    : "hover:bg-red-500/30 text-blue-300 hover:text-red-300"
+                )}
+                title={isPlaying ? "Cannot delete while playing" : "Delete zone"}
               >
-                <Icon icon="mdi:pencil" className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                <Icon
+                  icon="mdi:delete"
+                  className={cn(
+                    "w-4 h-4",
+                    !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                  )}
+                />
               </button>
-              <div className="w-px bg-emerald-500/20" />
+            </div>
+          </div>
+        ))}
+
+        {layers.map((layer, index) => (
+          <div
+            key={layer.segmentLayerId || `layer-${index}`}
+            className="group relative flex items-stretch rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all"
+          >
+            {/* Drag Handle */}
+            <DraggableItem
+              id={layer.segmentLayerId}
+              type="layer"
+              segmentId={segment.segmentId}
+              className="cursor-grab active:cursor-grabbing hover:scale-105 transition-transform"
+            >
+              <div className="px-2 py-2 bg-purple-600/20 border-r border-purple-500/30 flex items-center justify-center hover:bg-purple-600/30 transition-colors">
+                <Icon
+                  icon="mdi:drag-vertical"
+                  className="w-4 h-4 text-purple-400"
+                />
+              </div>
+            </DraggableItem>
+
+            {/* Main Content */}
+            <div className="px-3 py-2 bg-gradient-to-br from-purple-600/25 via-purple-500/15 to-purple-600/10 backdrop-blur-sm flex items-center gap-2 min-w-[120px]">
+              <div className="w-6 h-6 rounded-full bg-purple-500/30 flex items-center justify-center flex-shrink-0">
+                <Icon icon="mdi:layers" className="w-4 h-4 text-purple-300" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[11px] font-semibold text-purple-50 truncate">
+                  {layer.layer?.layerName || "Layer"}
+                </div>
+              </div>
+            </div>
+
+            {/* Action Button */}
+            <div className="flex items-stretch bg-purple-950/40 border-l border-purple-500/30">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDelete(locationId || "");
+                  if (!isPlaying) {
+                    handleDeleteLayer(layer.segmentLayerId);
+                  }
                 }}
-                className="px-2.5 hover:bg-red-500/30 text-emerald-300 hover:text-red-300 transition-all flex items-center justify-center group/btn"
-                title="Delete location"
+                disabled={isPlaying}
+                className={cn(
+                  "px-2.5 transition-all flex items-center justify-center group/btn",
+                  isPlaying
+                    ? "opacity-50 cursor-not-allowed text-zinc-600"
+                    : "hover:bg-red-500/30 text-purple-300 hover:text-red-300"
+                )}
+                title={isPlaying ? "Cannot delete while playing" : "Delete layer"}
               >
-                <Icon icon="mdi:delete" className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                <Icon
+                  icon="mdi:delete"
+                  className={cn(
+                    "w-4 h-4",
+                    !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                  )}
+                />
               </button>
             </div>
           </div>
-        );
-        })}
+        ))}
+
+        {zones.length === 0 && layers.length === 0 && (
+          <div className="text-[10px] text-zinc-500 px-2 italic">
+            No zones or layers
+          </div>
+        )}
       </div>
+    );
+  }
 
-    </>
-  );
-}
+  // Sortable Segment Header Component
+  function SortableSegmentHeader({
+    segment,
+    pixelsPerSecond,
+    onPlaySegment,
+  }: {
+    segment: Segment;
+    pixelsPerSecond: number;
+    onPlaySegment?: (segmentId: string) => void;
+  }) {
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({
+      id: `segment-${segment.segmentId}`,
+    });
 
-function ZoneLayerTrackItems({
-  segment,
-  mapId,
-  currentMap,
-  onAddZone,
-  onAddLayer,
-}: {
-  segment: Segment;
-  mapId: string;
-  currentMap?: any;
-  onAddZone?: (segmentId: string) => void;
-  onAddLayer?: (segmentId: string) => void;
-}) {
-  const zones = segment.zones || [];
-  const layers = segment.layers || [];
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+      width: `${Math.max((segment.durationMs / 1000) * pixelsPerSecond, 60)}px`,
+    };
 
-  const handleDeleteZone = async (zoneId: string) => {
-    if (!confirm("Remove this zone?")) return;
-    try {
-      await deleteSegmentZone(mapId, segment.segmentId, zoneId);
-      window.dispatchEvent(new CustomEvent("zoneDeleted", {
-        detail: { segmentId: segment.segmentId }
-      }));
-    } catch (e) {
-      console.error("Failed to delete zone:", e);
-      alert("Failed to remove zone");
-    }
-  };
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className="flex-shrink-0 px-2 py-1 rounded bg-zinc-800/50 border border-zinc-700/50 hover:border-zinc-600/50 transition-colors group relative"
+      >
+        {/* Drag handle and content */}
+        <div className="cursor-move" {...attributes} {...listeners}>
+          <div className="flex items-center justify-center gap-1">
+            <Icon icon="mdi:drag" className="w-3 h-3 text-zinc-500" />
+            <div className="text-[10px] font-medium text-zinc-300 truncate text-center">
+              {segment.name}
+            </div>
+          </div>
+          <div className="text-[9px] text-zinc-500 text-center mt-0.5">
+            {(segment.durationMs / 1000).toFixed(1)}s
+          </div>
+        </div>
 
-  const handleDeleteLayer = async (layerId: string) => {
-    if (!confirm("Remove this layer?")) return;
-    try {
-      await detachLayerFromSegment(mapId, segment.segmentId, layerId);
-      window.dispatchEvent(new CustomEvent("layerDeleted", {
-        detail: { segmentId: segment.segmentId }
-      }));
-    } catch (e) {
-      console.error("Failed to delete layer:", e);
-      alert("Failed to remove layer");
-    }
-  };
-
-  return (
-    <div className="flex flex-wrap gap-1.5 p-1">
-      {zones.map((zone, index) => (
-        <div
-          key={zone.segmentZoneId || `zone-${index}`}
-          className="group relative flex items-stretch rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all"
-        >
-          {/* Drag Handle */}
-          <DraggableItem
-            id={zone.segmentZoneId}
-            type="zone"
-            segmentId={segment.segmentId}
-            className="cursor-grab active:cursor-grabbing hover:scale-105 transition-transform"
+        {/* Play button - appears on hover */}
+        {onPlaySegment && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onPlaySegment(segment.segmentId);
+            }}
+            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center shadow-lg z-10"
+            title={`Play ${segment.name}`}
           >
-            <div className="px-2 py-2 bg-blue-600/20 border-r border-blue-500/30 flex items-center justify-center hover:bg-blue-600/30 transition-colors">
-              <Icon icon="mdi:drag-vertical" className="w-4 h-4 text-blue-400" />
-            </div>
-          </DraggableItem>
+            <Icon icon="mdi:play" className="w-4 h-4 text-white" />
+          </button>
+        )}
+      </div>
+    );
+  }
 
-          {/* Main Content */}
-          <div className="px-3 py-2 bg-gradient-to-br from-blue-600/25 via-blue-500/15 to-blue-600/10 backdrop-blur-sm flex items-center gap-2 min-w-[120px]">
-            <div className="w-6 h-6 rounded-full bg-blue-500/30 flex items-center justify-center flex-shrink-0">
-              <Icon icon="mdi:shape" className="w-4 h-4 text-blue-300" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-semibold text-blue-50 truncate">
-                {zone.zone?.name || "Zone"}
-              </div>
-            </div>
-          </div>
+  // Droppable Segment Area Component
+  function DroppableSegmentArea({
+    segmentId,
+    trackType,
+    width,
+    isActive,
+    trackColor,
+    colors,
+    onSegmentClick,
+    onAddItem,
+    trackLabel,
+    children,
+  }: {
+    segmentId: string;
+    trackType: "route" | "location" | "zone" | "layer";
+    width: number;
+    isActive: boolean;
+    trackColor: "orange" | "emerald" | "blue" | "purple";
+    colors: any;
+    onSegmentClick: (segmentId: string) => void;
+    onAddItem?: (segmentId: string) => void;
+    trackLabel: string;
+    children: React.ReactNode;
+  }) {
+    // Use __|__ as delimiter to avoid conflicts with GUID dashes
+    const { setNodeRef, isOver } = useDroppable({
+      id: `drop-${trackType}__|__${segmentId}`,
+    });
 
-          {/* Action Button */}
-          <div className="flex items-stretch bg-blue-950/40 border-l border-blue-500/30">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteZone(zone.segmentZoneId);
-              }}
-              className="px-2.5 hover:bg-red-500/30 text-blue-300 hover:text-red-300 transition-all flex items-center justify-center group/btn"
-              title="Delete zone"
-            >
-              <Icon icon="mdi:delete" className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-            </button>
+    return (
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "flex-shrink-0 relative group h-full min-h-[56px] rounded border transition-all cursor-pointer",
+          isActive
+            ? "border-emerald-500/60 bg-emerald-500/10 shadow-lg shadow-emerald-500/20"
+            : cn("border-zinc-700/50 bg-zinc-800/40", colors.hover),
+          isOver &&
+            "border-emerald-500 bg-emerald-500/20 ring-2 ring-emerald-500/50",
+        )}
+        style={{ width: `${width}px`, minWidth: "60px" }}
+        onClick={() => onSegmentClick(segmentId)}
+      >
+        {/* Drop indicator */}
+        {isOver && (
+          <div className="absolute inset-0 border-2 border-dashed border-emerald-500 rounded flex items-center justify-center bg-emerald-500/10 z-20">
+            <span className="text-xs text-emerald-400 font-medium">
+              Drop here
+            </span>
           </div>
-        </div>
-      ))}
-      
-      {layers.map((layer, index) => (
-        <div
-          key={layer.segmentLayerId || `layer-${index}`}
-          className="group relative flex items-stretch rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-all"
-        >
-          {/* Drag Handle */}
-          <DraggableItem
-            id={layer.segmentLayerId}
-            type="layer"
-            segmentId={segment.segmentId}
-            className="cursor-grab active:cursor-grabbing hover:scale-105 transition-transform"
+        )}
+
+        {/* Add Button */}
+        {isActive && onAddItem && !isOver && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddItem(segmentId);
+            }}
+            className={cn(
+              "absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10",
+              "hover:bg-zinc-700/60 rounded backdrop-blur-sm",
+            )}
+            title={`Add ${trackLabel.toLowerCase()}`}
           >
-            <div className="px-2 py-2 bg-purple-600/20 border-r border-purple-500/30 flex items-center justify-center hover:bg-purple-600/30 transition-colors">
-              <Icon icon="mdi:drag-vertical" className="w-4 h-4 text-purple-400" />
-            </div>
-          </DraggableItem>
-
-          {/* Main Content */}
-          <div className="px-3 py-2 bg-gradient-to-br from-purple-600/25 via-purple-500/15 to-purple-600/10 backdrop-blur-sm flex items-center gap-2 min-w-[120px]">
-            <div className="w-6 h-6 rounded-full bg-purple-500/30 flex items-center justify-center flex-shrink-0">
-              <Icon icon="mdi:layers" className="w-4 h-4 text-purple-300" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-[11px] font-semibold text-purple-50 truncate">
-                {layer.layer?.layerName || "Layer"}
-              </div>
-            </div>
-          </div>
-
-          {/* Action Button */}
-          <div className="flex items-stretch bg-purple-950/40 border-l border-purple-500/30">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteLayer(layer.segmentLayerId);
-              }}
-              className="px-2.5 hover:bg-red-500/30 text-purple-300 hover:text-red-300 transition-all flex items-center justify-center group/btn"
-              title="Delete layer"
+            <div
+              className={cn(
+                "w-8 h-8 rounded-full flex items-center justify-center",
+                colors.bg,
+                colors.border,
+                "border-2",
+              )}
             >
-              <Icon icon="mdi:delete" className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
-            </button>
-          </div>
-        </div>
-      ))}
-      
-      {zones.length === 0 && layers.length === 0 && (
-        <div className="text-[10px] text-zinc-500 px-2 italic">No zones or layers</div>
-      )}
-    </div>
-  );
-}
+              <Icon icon="mdi:plus" className={cn("w-4 h-4", colors.icon)} />
+            </div>
+          </button>
+        )}
 
-// Sortable Segment Header Component
-function SortableSegmentHeader({
-  segment,
-  pixelsPerSecond,
-  onPlaySegment
-}: {
-  segment: Segment;
-  pixelsPerSecond: number;
-  onPlaySegment?: (segmentId: string) => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: `segment-${segment.segmentId}`,
-  });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    width: `${Math.max((segment.durationMs / 1000) * pixelsPerSecond, 60)}px`,
-  };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className="flex-shrink-0 px-2 py-1 rounded bg-zinc-800/50 border border-zinc-700/50 hover:border-zinc-600/50 transition-colors group relative"
-    >
-      {/* Drag handle and content */}
-      <div className="cursor-move" {...attributes} {...listeners}>
-        <div className="flex items-center justify-center gap-1">
-          <Icon icon="mdi:drag" className="w-3 h-3 text-zinc-500" />
-          <div className="text-[10px] font-medium text-zinc-300 truncate text-center">
-            {segment.name}
-          </div>
-        </div>
-        <div className="text-[9px] text-zinc-500 text-center mt-0.5">
-          {(segment.durationMs / 1000).toFixed(1)}s
+        {/* Items */}
+        <div className="p-1 h-full overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+          {children}
         </div>
       </div>
+    );
+  }
 
-      {/* Play button - appears on hover */}
-      {onPlaySegment && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onPlaySegment(segment.segmentId);
-          }}
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 rounded-full bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center shadow-lg z-10"
-          title={`Play ${segment.name}`}
-        >
-          <Icon icon="mdi:play" className="w-4 h-4 text-white" />
-        </button>
-      )}
-    </div>
-  );
-}
+  // Draggable Item Component
+  function DraggableItem({
+    id,
+    type,
+    segmentId,
+    children,
+    className,
+  }: {
+    id: string;
+    type: "location" | "zone" | "route" | "layer";
+    segmentId: string;
+    children: React.ReactNode;
+    className?: string;
+  }) {
+    // Use __|__ as delimiter to avoid conflicts with GUID dashes
+    const { attributes, listeners, setNodeRef, transform, isDragging } =
+      useDraggable({
+        id: `${type}__|__${segmentId}__|__${id}`,
+      });
 
-// Droppable Segment Area Component
-function DroppableSegmentArea({
-  segmentId,
-  trackType,
-  width,
-  isActive,
-  trackColor,
-  colors,
-  onSegmentClick,
-  onAddItem,
-  trackLabel,
-  children,
-}: {
-  segmentId: string;
-  trackType: "route" | "location" | "zone" | "layer";
-  width: number;
-  isActive: boolean;
-  trackColor: "orange" | "emerald" | "blue" | "purple";
-  colors: any;
-  onSegmentClick: (segmentId: string) => void;
-  onAddItem?: (segmentId: string) => void;
-  trackLabel: string;
-  children: React.ReactNode;
-}) {
-  // Use __|__ as delimiter to avoid conflicts with GUID dashes
-  const { setNodeRef, isOver } = useDroppable({
-    id: `drop-${trackType}__|__${segmentId}`,
-  });
+    const style = transform
+      ? {
+          transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+          opacity: isDragging ? 0.5 : 1,
+        }
+      : { opacity: isDragging ? 0.5 : 1 };
 
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        "flex-shrink-0 relative group h-full min-h-[56px] rounded border transition-all cursor-pointer",
-        isActive
-          ? "border-emerald-500/60 bg-emerald-500/10 shadow-lg shadow-emerald-500/20"
-          : cn("border-zinc-700/50 bg-zinc-800/40", colors.hover),
-        isOver && "border-emerald-500 bg-emerald-500/20 ring-2 ring-emerald-500/50"
-      )}
-      style={{ width: `${width}px`, minWidth: "60px" }}
-      onClick={() => onSegmentClick(segmentId)}
-    >
-      {/* Drop indicator */}
-      {isOver && (
-        <div className="absolute inset-0 border-2 border-dashed border-emerald-500 rounded flex items-center justify-center bg-emerald-500/10 z-20">
-          <span className="text-xs text-emerald-400 font-medium">Drop here</span>
-        </div>
-      )}
-
-      {/* Add Button */}
-      {isActive && onAddItem && !isOver && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onAddItem(segmentId);
-          }}
-          className={cn(
-            "absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10",
-            "hover:bg-zinc-700/60 rounded backdrop-blur-sm"
-          )}
-          title={`Add ${trackLabel.toLowerCase()}`}
-        >
-          <div className={cn("w-8 h-8 rounded-full flex items-center justify-center", colors.bg, colors.border, "border-2")}>
-            <Icon icon="mdi:plus" className={cn("w-4 h-4", colors.icon)} />
-          </div>
-        </button>
-      )}
-
-      {/* Items */}
-      <div className="p-1 h-full overflow-x-auto overflow-y-hidden">
+    return (
+      <div
+        ref={setNodeRef}
+        style={style}
+        className={cn("cursor-move", className)}
+        {...listeners}
+        {...attributes}
+      >
         {children}
       </div>
-    </div>
-  );
-}
-
-// Draggable Item Component
-function DraggableItem({
-  id,
-  type,
-  segmentId,
-  children,
-  className,
-}: {
-  id: string;
-  type: "location" | "zone" | "route" | "layer";
-  segmentId: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  // Use __|__ as delimiter to avoid conflicts with GUID dashes
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: `${type}__|__${segmentId}__|__${id}`,
-  });
-
-  const style = transform
-    ? {
-        transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
-        opacity: isDragging ? 0.5 : 1,
-      }
-    : { opacity: isDragging ? 0.5 : 1 };
-
-  return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      className={cn("cursor-move", className)}
-      {...listeners}
-      {...attributes}
-    >
-      {children}
-    </div>
-  );
-}
+    );
+  }
