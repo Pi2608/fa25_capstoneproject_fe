@@ -1300,6 +1300,10 @@ export const messages = {
             modal_ws_edit_title: "Edit Workspace"
         },
         orgSettings: {
+            org_members_section_title: "Thành viên tổ chức",
+            billing_next_billing_date_label: "Ngày thanh toán tiếp theo",
+            billing_payment_method_label: "Phương thức thanh toán",
+            monthly_cost_label: "Chi phí hàng tháng",
             page_title: "Cài đặt tổ chức",
             owner_only_badge: "Chỉ Owner",
             back_button: "Quay lại",
@@ -2451,9 +2455,14 @@ export const messages = {
             search_by_map_id_desc: "Dán Map ID để tải chi tiết gallery bằng API công khai.",
             search_by_map_id_placeholder: "Map ID...",
             search_by_map_id_button: "Tải chi tiết theo Map ID",
-
+            liked: "Đã thích!",
+            unliked: "Đã bỏ thích",
+            error_like: "Không thể like map",
+            error_like_unauthorized: "Vui lòng đăng nhập để like",
+  
             // Buttons
             button_details: "Chi tiết",
+
         },
         developers: {
             title: "Nhà phát triển",
@@ -3876,6 +3885,10 @@ export const messages = {
             quota_failed: "Quota check failed."
         },
         orgSettings: {
+            org_members_section_title: "Members",
+            billing_next_billing_date_label: "Next billing date:",
+            billing_payment_method_label: "Payment method:",
+            monthly_cost_label: "Monthly cost:",
             page_title: "Organization settings",
             owner_only_badge: "Owner only",
             back_button: "Back",
@@ -6042,6 +6055,10 @@ export const messages = {
             search_by_map_id_desc: "Paste a Map ID to load its gallery detail using public API.",
             search_by_map_id_placeholder: "Map ID...",
             search_by_map_id_button: "Load detail by Map ID",
+            liked: "Liked",
+            unliked: "Unliked",
+            error_like: "Cannot like map",
+            error_like_unauthorized: "Please log in to like",
 
             // Buttons
             button_details: "Details",

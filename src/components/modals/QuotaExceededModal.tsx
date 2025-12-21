@@ -61,7 +61,7 @@ export default function QuotaExceededModal({
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
-              className="text-amber-600 dark:text-amber-400"
+              className="text-amber-600 tracking-tight"
             >
               <path d="M10.29 3.86L1.82 18a1 1 0 00.86 1.5h18.64a1 1 0 00.86-1.5L13.71 3.86a1 1 0 00-1.72 0z" />
               <path d="M12 9v4" />
@@ -100,7 +100,7 @@ export default function QuotaExceededModal({
         <div className="px-6 py-4">
           {current !== undefined && limit !== undefined && (
             <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-500/10 rounded-lg border border-amber-200 dark:border-amber-500/30">
-              <p className="text-sm text-amber-800 dark:text-amber-300">
+              <p className="text-sm text-amber-800 tracking-tight">
                 {t("common.quota_usage_info", {
                   current,
                   limit,

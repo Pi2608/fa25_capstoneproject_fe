@@ -381,8 +381,18 @@ function getLast7DaysRange(): { startDate: string; endDate: string } {
   return { startDate, endDate };
 }
 
-export async function adminGetAnalytics(): Promise<AdminAnalytics> {
-  const { startDate, endDate } = getLast7DaysRange();
+export async function adminGetAnalytics(customStartDate?: Date, customEndDate?: Date): Promise<AdminAnalytics> {
+  let startDate: string;
+  let endDate: string;
+
+  if (customStartDate && customEndDate) {
+    startDate = customStartDate.toISOString();
+    endDate = customEndDate.toISOString();
+  } else {
+    const range = getLast7DaysRange();
+    startDate = range.startDate;
+    endDate = range.endDate;
+  }
 
   const query = new URLSearchParams({
     startDate,

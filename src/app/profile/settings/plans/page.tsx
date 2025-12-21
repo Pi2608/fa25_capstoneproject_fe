@@ -682,6 +682,7 @@ export default function TrangGoiThanhVien() {
                 transactionId,
                 paymentId: paymentId ?? "",
                 orderCode: orderCode ?? "",
+                reason: "User cancelled payment",
             };
 
             cancelPayment(req)
@@ -959,10 +960,10 @@ export default function TrangGoiThanhVien() {
                 <div className="mt-4 mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                            <p className="text-sm font-medium text-amber-800 tracking-tight">
                                 Bạn có thanh toán đang chờ xử lý
                             </p>
-                            <p className="text-xs text-amber-600 dark:text-amber-300 mt-1">
+                            <p className="text-xs text-amber-600 tracking-tight mt-1">
                                 Nhấn nút bên dưới để tiếp tục thanh toán
                             </p>
                         </div>

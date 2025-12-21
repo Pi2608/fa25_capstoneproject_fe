@@ -148,7 +148,7 @@ export default function MapReportsPage() {
           <div>
             <h3 className="m-0 text-base font-extrabold">Báo cáo vi phạm Maps</h3>
             {pendingCount > 0 && (
-              <p className="text-sm text-amber-600 dark:text-amber-400 mt-1">
+              <p className="text-sm text-amber-600 tracking-tight mt-1">
                 {pendingCount} báo cáo đang chờ xử lý
               </p>
             )}

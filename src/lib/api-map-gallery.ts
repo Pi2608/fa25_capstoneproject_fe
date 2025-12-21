@@ -220,3 +220,13 @@ export async function duplicateMapFromGallery(
   const url = `/map-gallery/maps/${encodeURIComponent(galleryId)}/duplicate`;
   return postJson<MapGalleryDuplicateRequest, MapGalleryDuplicateResponse>(url, payload);
 }
+
+export async function incrementGalleryMapView(galleryId: string): Promise<void> {
+  const url = `/map-gallery/maps/${encodeURIComponent(galleryId)}/view`;
+  await postJson(url, {});
+}
+
+export async function toggleGalleryMapLike(galleryId: string): Promise<{ success: boolean; isLiked: boolean }> {
+  const url = `/map-gallery/maps/${encodeURIComponent(galleryId)}/like`;
+  return postJson(url, {});
+}

@@ -87,7 +87,7 @@ export default function EmbedCodeGenerator({
   if (isStoryMap) {
     return (
       <div className={`p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg ${className}`}>
-        <p className="text-sm text-amber-800 dark:text-amber-200">
+        <p className="text-sm text-amber-800 tracking-tight">
           {t("map_components", "embed_storymap_unsupported")}
         </p>
       </div>
@@ -124,7 +124,7 @@ export default function EmbedCodeGenerator({
   if (!isReady) {
     return (
       <div className={`p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg ${className}`}>
-        <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
+        <p className="text-sm text-amber-800 tracking-tight mb-2">
           {t("map_components", "embed_not_ready")}
         </p>
         <Button
