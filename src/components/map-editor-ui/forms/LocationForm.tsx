@@ -6,8 +6,9 @@ import { LocationType } from "@/types/location";
 import { Icon } from "@/components/map-editor-ui/Icon";
 import { IconLibraryView } from "@/components/map-editor-ui/IconLibraryView";
 import { UserAsset, getUserAssets } from "@/lib/api-library";
+import { useParams } from "next/navigation";
 
-type TabType = "basic" | "icon" | "display" | "media";
+type TabType = "basic" | "icon" | "display";
 
 interface LocationFormProps {
   segmentId?: string;
@@ -38,11 +39,16 @@ export function LocationForm({
   mapId,
   onCreateLocationFromAsset,
 }: LocationFormProps) {
+  const params = useParams() as { mapId?: string };
+  const mapIdFromUrl = params?.mapId;
+
   const [activeTab, setActiveTab] = useState<TabType>("basic");
+
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
   const [tooltipContent, setTooltipContent] = useState("");
-  const [locationType, setLocationType] = useState<LocationType>("PointOfInterest");
+  const [locationType, setLocationType] =
+    useState<LocationType>("PointOfInterest");
   const [coordinates, setCoordinates] = useState<[number, number] | null>(null);
   const [isVisible, setIsVisible] = useState(true);
   const [highlightOnEnter, setHighlightOnEnter] = useState(false);
@@ -326,7 +332,6 @@ export function LocationForm({
 
   return (
     <div className="p-3 space-y-3 border-b border-zinc-800">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <h4 className="text-sm font-semibold text-white">
           {initialLocation ? "Chỉnh sửa Location" : "Thêm Location/POI"}
@@ -340,7 +345,6 @@ export function LocationForm({
         </button>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 border-b border-zinc-800">
         {tabs.map((tab) => (
           <button
@@ -358,13 +362,13 @@ export function LocationForm({
         ))}
       </div>
 
-      {/* Form Content */}
       <form onSubmit={handleSubmit} className="space-y-3">
-        {/* Basic Tab */}
         {activeTab === "basic" && (
           <div className="space-y-2">
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Tên địa điểm *</label>
+              <label className="block text-xs text-zinc-400 mb-1">
+                Tên địa điểm *
+              </label>
               <input
                 type="text"
                 value={title}
@@ -375,6 +379,7 @@ export function LocationForm({
                 disabled={saving}
               />
             </div>
+
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Phụ đề</label>
               <input
@@ -386,6 +391,7 @@ export function LocationForm({
                 disabled={saving}
               />
             </div>
+
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Risk Text</label>
               <textarea
@@ -397,11 +403,16 @@ export function LocationForm({
                 disabled={saving}
               />
             </div>
+
             <div>
-              <label className="block text-xs text-zinc-400 mb-1">Loại địa điểm</label>
+              <label className="block text-xs text-zinc-400 mb-1">
+                Loại địa điểm
+              </label>
               <select
                 value={locationType}
-                onChange={(e) => setLocationType(e.target.value as LocationType)}
+                onChange={(e) =>
+                  setLocationType(e.target.value as LocationType)
+                }
                 className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
                 disabled={saving}
               >
@@ -411,6 +422,7 @@ export function LocationForm({
                 <option value="Event">Event</option>
               </select>
             </div>
+
             <div className="space-y-1.5">
               <label className="block text-xs text-zinc-400 mb-1">Tọa độ</label>
               {coordinates ? (
@@ -731,7 +743,6 @@ export function LocationForm({
           </div>
         )}
 
-        {/* Display Tab */}
         {activeTab === "display" && (
           <div className="space-y-2">
             <label className="flex items-center gap-2 cursor-pointer">
@@ -742,7 +753,9 @@ export function LocationForm({
                 className="w-4 h-4 rounded"
                 disabled={saving}
               />
-              <span className="text-xs text-zinc-300">Hiển thị trên bản đồ</span>
+              <span className="text-xs text-zinc-300">
+                Hiển thị trên bản đồ
+              </span>
             </label>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -752,12 +765,13 @@ export function LocationForm({
                 className="w-4 h-4 rounded"
                 disabled={saving}
               />
-              <span className="text-xs text-zinc-300">Highlight khi vào segment</span>
+              <span className="text-xs text-zinc-300">
+                Highlight khi vào segment
+              </span>
             </label>
           </div>
         )}
 
-        {/* Buttons */}
         <div className="flex gap-2 pt-2 border-t border-zinc-800">
           <button
             type="button"

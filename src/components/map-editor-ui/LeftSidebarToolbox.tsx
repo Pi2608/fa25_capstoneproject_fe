@@ -618,12 +618,12 @@ export function LeftSidebarToolbox({
                 isActive={activeView === "locations"}
                 onClick={() => handleIconClick("locations")}
               />
-              <IconButton
+              {/* <IconButton
                 icon="mdi:vector-polygon"
                 label="Zones"
                 isActive={activeView === "zones"}
                 onClick={() => handleIconClick("zones")}
-              />
+              /> */}
               <IconButton
                 icon="mdi:map-search"
                 label="Search"
@@ -1646,15 +1646,15 @@ function ExplorerView({
           </h4>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { key: "osm" as BaseKey, label: "OSM", icon: "mdi:map-outline" },
+              // { key: "osm" as BaseKey, label: "OSM", icon: "mdi:map-outline" },
               { key: "sat" as BaseKey, label: "Satellite", icon: "mdi:satellite-variant" },
               { key: "dark" as BaseKey, label: "Dark", icon: "mdi:moon-waning-crescent" },
               { key: "positron" as BaseKey, label: "Light", icon: "mdi:brightness-7" },
               { key: "dark-matter" as BaseKey, label: "Dark Matter", icon: "mdi:weather-night" },
               { key: "terrain" as BaseKey, label: "Terrain", icon: "mdi:terrain" },
               { key: "toner" as BaseKey, label: "Toner", icon: "mdi:circle-outline" },
-              { key: "watercolor" as BaseKey, label: "Watercolor", icon: "mdi:palette" },
-              { key: "topo" as BaseKey, label: "Topo", icon: "mdi:map-marker-radius" },
+              // { key: "watercolor" as BaseKey, label: "Watercolor", icon: "mdi:palette" },
+              // { key: "topo" as BaseKey, label: "Topo", icon: "mdi:map-marker-radius" },
             ].map(({ key, label, icon }) => (
               <button
                 key={key}
