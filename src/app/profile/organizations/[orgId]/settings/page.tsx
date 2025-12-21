@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 import { useI18n } from "@/i18n/I18nProvider";
 import { getMe, type Me } from "@/lib/api-auth";
@@ -66,6 +68,9 @@ export default function OrgSettingsPage() {
   const params = useParams<{ orgId: string }>();
   const orgId = params.orgId;
   const { t } = useI18n();
+  const { resolvedTheme, theme } = useTheme();
+  const isDark = (resolvedTheme ?? theme ?? "light") === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const [me, setMe] = useState<Me | null>(null);
   const [members, setMembers] =
@@ -179,7 +184,7 @@ export default function OrgSettingsPage() {
           <div className="flex items-center gap-2">
             <Link
               href={`/profile/organizations/${orgId}`}
-              className="px-3 py-2 rounded-lg ring-1 ring-zinc-200 bg-white text-sm text-zinc-800 shadow-sm hover:bg-zinc-50 dark:bg-transparent dark:text-zinc-200 dark:ring-white/10 dark:hover:bg-white/5"
+              className={`px-3 py-2 rounded-lg text-sm shadow-sm ${themeClasses.buttonOutline}`}
             >
               {t("orgSettings.back_button")}
             </Link>

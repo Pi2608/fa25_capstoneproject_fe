@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 import {
   getWorkspacesByOrganization,
   createWorkspace,
@@ -21,6 +23,9 @@ type Props = {
 
 export default function ManageWorkspaces({ orgId, canManage, onWorkspaceCreated, onWorkspaceDeleted }: Props) {
   const { t } = useI18n();
+  const { resolvedTheme, theme } = useTheme();
+  const isDark = (resolvedTheme ?? theme ?? "light") === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -142,20 +147,20 @@ export default function ManageWorkspaces({ orgId, canManage, onWorkspaceCreated,
     <div>
       <button
         onClick={() => setOpen(true)}
-        className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+        className={`px-3 py-2 rounded-lg border text-sm transition-colors ${themeClasses.buttonOutline}`}
       >
         {t("org_workspace.manage_ws")}
       </button>
 
       {open && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/60">
-          <div className="w-[56rem] max-w-[95vw] rounded-2xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
+        <div className={`fixed inset-0 z-50 grid place-items-center backdrop-blur-sm ${themeClasses.dialogOverlay}`}>
+          <div className={`w-[56rem] max-w-[95vw] rounded-2xl border p-5 shadow-2xl ${themeClasses.dialog}`}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">
+              <h2 className={`text-lg font-semibold ${themeClasses.text}`}>
                 {t("org_workspace.manage_title")}
               </h2>
               <button
-                className="text-zinc-400 hover:text-white"
+                className={`transition-colors ${themeClasses.textMuted} ${themeClasses.hover}`}
                 onClick={() => setOpen(false)}
               >
                 ✕
@@ -164,7 +169,7 @@ export default function ManageWorkspaces({ orgId, canManage, onWorkspaceCreated,
 
             <div className="mb-4 flex items-end gap-2">
               <div className="flex-1">
-                <label className="block text-xs text-zinc-400 mb-1">
+                <label className={`block text-xs mb-1 ${themeClasses.textMuted}`}>
                   {t("org_workspace.manage_name_label")}
                 </label>
                 <input
@@ -172,13 +177,13 @@ export default function ManageWorkspaces({ orgId, canManage, onWorkspaceCreated,
                   onChange={(e) => setCreateName(e.target.value)}
                   disabled={disabledActions}
                   placeholder={t("org_workspace.manage_name_placeholder")}
-                  className="w-full rounded-md bg-zinc-800 border border-white/10 px-3 py-2 text-sm text-zinc-100"
+                  className={`w-full rounded-md border px-3 py-2 text-sm ${themeClasses.input}`}
                 />
               </div>
               <button
                 onClick={() => void onCreate()}
                 disabled={creating || disabledActions}
-                className="px-3 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
+                className="px-3 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-60"
               >
                 {creating
                   ? t("org_workspace.manage_creating")
@@ -187,19 +192,19 @@ export default function ManageWorkspaces({ orgId, canManage, onWorkspaceCreated,
             </div>
 
             {err && (
-              <div className="mb-3 text-sm text-red-300">
+              <div className="mb-3 text-sm text-red-400">
                 {err}
               </div>
             )}
             {loading && (
-              <div className="mb-3 text-sm text-zinc-300">
+              <div className={`mb-3 text-sm ${themeClasses.textMuted}`}>
                 {t("org_workspace.manage_loading")}
               </div>
             )}
 
-            <div className="max-h-[46vh] overflow-auto rounded-lg border border-white/10">
+            <div className={`max-h-[46vh] overflow-auto rounded-lg border ${themeClasses.tableContainer}`}>
               <table className="w-full text-sm">
-                <thead className="bg-white/5 text-zinc-300">
+                <thead className={themeClasses.tableHeader}>
                   <tr>
                     <th className="text-left px-3 py-2 w-[38%]">
                       {t("org_workspace.manage_table_name")}
@@ -215,27 +220,27 @@ export default function ManageWorkspaces({ orgId, canManage, onWorkspaceCreated,
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className={`divide-y ${themeClasses.tableCell}`}>
                   {items.map((w) => (
                     <tr
                       key={w.workspaceId}
-                      className="border-t border-white/5"
+                      className={themeClasses.tableRowHover}
                     >
                       <td className="px-3 py-2">
                         {editId === w.workspaceId ? (
                           <input
                             value={editName}
                             onChange={(e) => setEditName(e.target.value)}
-                            className="w-full rounded-md bg-zinc-800 border border-white/10 px-2 py-1 text-sm text-zinc-100"
+                            className={`w-full rounded-md border px-2 py-1 text-sm ${themeClasses.input}`}
                           />
                         ) : (
-                          <div className="truncate text-zinc-100">
+                          <div className={`truncate ${themeClasses.text}`}>
                             {w.workspaceName}
                           </div>
                         )}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="truncate text-zinc-300">
+                        <div className={`truncate ${themeClasses.textMuted}`}>
                           {w.description ?? "—"}
                         </div>
                       </td>
@@ -252,7 +257,7 @@ export default function ManageWorkspaces({ orgId, canManage, onWorkspaceCreated,
                                   editBusyId === w.workspaceId ||
                                   disabledActions
                                 }
-                                className="px-2 py-1 rounded-md bg-emerald-500 text-zinc-900 text-xs font-semibold hover:bg-emerald-400 disabled:opacity-60"
+                                className="px-2 py-1 rounded-md bg-emerald-500 text-white text-xs font-semibold hover:bg-emerald-400 disabled:opacity-60"
                               >
                                 {editBusyId === w.workspaceId
                                   ? t("org_workspace.manage_saving")
@@ -263,7 +268,7 @@ export default function ManageWorkspaces({ orgId, canManage, onWorkspaceCreated,
                                   setEditId(null);
                                   setEditName("");
                                 }}
-                                className="px-2 py-1 rounded-md border border-white/10 bg-white/5 text-xs hover:bg-white/10"
+                                className={`px-2 py-1 rounded-md border text-xs transition-colors ${themeClasses.buttonOutline}`}
                               >
                                 {t("org_workspace.cancel")}
                               </button>
@@ -273,14 +278,14 @@ export default function ManageWorkspaces({ orgId, canManage, onWorkspaceCreated,
                               <button
                                 onClick={() => onStartRename(w)}
                                 disabled={disabledActions}
-                                className="px-2 py-1 rounded-md border border-white/10 bg-white/5 text-xs hover:bg-white/10 disabled:opacity-60"
+                                className={`px-2 py-1 rounded-md border text-xs transition-colors disabled:opacity-60 ${themeClasses.buttonGhost}`}
                               >
                                 {t("org_workspace.manage_rename")}
                               </button>
                               <button
                                 onClick={() => onAskDelete(w)}
                                 disabled={disabledActions}
-                                className="px-2 py-1 rounded-md border border-red-500/30 text-red-300 text-xs hover:bg-red-500/10 disabled:opacity-60"
+                                className="px-2 py-1 rounded-md border border-red-500/30 text-red-400 text-xs hover:bg-red-500/10 disabled:opacity-60"
                               >
                                 {t("org_workspace.manage_delete")}
                               </button>
