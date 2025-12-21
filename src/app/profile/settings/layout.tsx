@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { getMyOrganizations, type GetMyOrganizationsResDto } from "@/lib/api-organizations";
+import { useTheme } from "next-themes";
 
 type Tab = { href: string; i18nKey: string; ownerOnly?: boolean; label?: string };
 
@@ -22,11 +23,21 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const pathname = usePathname() || "";
   const router = useRouter();
+  const { resolvedTheme, theme } = useTheme();
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
+  const [mounted, setMounted] = useState(false);
   const [orgs, setOrgs] = useState<GetMyOrganizationsResDto["organizations"]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+
+  // Handle hydration
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
 
   // Get selected organization ID from URL or localStorage
   const getSelectedOrgId = () => {
@@ -110,7 +121,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
     }
   }, [pathname, userIsOwner, loading, selectedOrgId, router]);
 
-  if (loading) {
+  if (loading || !mounted) {
     return (
       <div className="mx-auto max-w-6xl">
         <div className="flex items-center justify-center h-32">
@@ -120,11 +131,30 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  const borderClass = isDark ? "border-white/10" : "border-zinc-200";
+
   return (
     <div className="mx-auto max-w-6xl">
-      <div className="flex items-center gap-6 border-b border-zinc-200 dark:border-white/10">
+      <div className={`flex items-center gap-6 border-b ${borderClass}`}>
         {TABS.map((tab) => {
           const active = isActive(tab.href);
+
+          const textClass = active
+            ? isDark
+              ? "font-semibold text-emerald-300"
+              : "font-semibold text-emerald-700"
+            : isDark
+              ? "text-zinc-400 hover:text-white"
+              : "text-zinc-600 hover:text-zinc-900";
+
+          const underlineClass = active
+            ? isDark
+              ? "absolute left-0 -bottom-[1px] h-0.5 w-full rounded-full bg-emerald-400"
+              : "absolute left-0 -bottom-[1px] h-0.5 w-full rounded-full bg-emerald-600"
+            : isDark
+              ? "absolute left-0 -bottom-[1px] h-0.5 w-0 rounded-full bg-transparent transition-all duration-200 group-hover:w-full group-hover:bg-white/30"
+              : "absolute left-0 -bottom-[1px] h-0.5 w-0 rounded-full bg-transparent transition-all duration-200 group-hover:w-full group-hover:bg-zinc-300/70";
+
           return (
             <Link
               key={tab.href}
@@ -132,23 +162,10 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
               aria-current={active ? "page" : undefined}
               className="group relative -mb-px px-1 pb-3 text-sm"
             >
-              <span
-                className={
-                  active
-                    ? "font-semibold text-emerald-700 dark:text-emerald-300"
-                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:group-hover:text-white"
-                }
-              >
+              <span className={textClass}>
                 {tab.label || (tab.i18nKey ? t(`settings.${tab.i18nKey}`) : "")}
               </span>
-              <span
-                aria-hidden
-                className={
-                  active
-                    ? "absolute left-0 -bottom-[1px] h-0.5 w-full rounded-full bg-emerald-600 dark:bg-emerald-400"
-                    : "absolute left-0 -bottom-[1px] h-0.5 w-0 rounded-full bg-transparent transition-all duration-200 group-hover:w-full group-hover:bg-zinc-300/70 dark:group-hover:bg-white/30"
-                }
-              />
+              <span aria-hidden className={underlineClass} />
             </Link>
           );
         })}

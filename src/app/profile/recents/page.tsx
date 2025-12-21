@@ -13,12 +13,16 @@ import {
   MapDto,
   updateMap,
   UpdateMapRequest,
+  getMapById,
 } from "@/lib/api-maps";
 import {
   getPublishedGalleryMaps,
   duplicateMapFromGallery,
   MapGallerySummaryResponse,
 } from "@/lib/api-map-gallery";
+import { getMyOrganizations, MyOrganizationDto } from "@/lib/api-organizations";
+import { getWorkspacesByOrganization } from "@/lib/api-workspaces";
+import type { Workspace } from "@/types/workspace";
 import { useTheme } from "next-themes";
 import { getThemeClasses } from "@/utils/theme-utils";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -211,6 +215,16 @@ export default function RecentsPage() {
     map: null,
   });
 
+  // Workspace Selector Popup State
+  const [showWorkspaceSelector, setShowWorkspaceSelector] = useState(false);
+  const [pendingDuplicate, setPendingDuplicate] = useState<{ galleryId: string; mapId: string; isStoryMap: boolean } | null>(null);
+  const [organizations, setOrganizations] = useState<MyOrganizationDto[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string>("");
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
+
   useEffect(() => {
     function onDown(e: MouseEvent) {
       const target = e.target as HTMLElement | null;
@@ -250,6 +264,7 @@ export default function RecentsPage() {
         ownerId: m.ownerId ?? null,
         ownerName: m.ownerName ?? null,
         isOwner: m.isOwner ?? true,
+        isStoryMap: m.isStoryMap ?? false,
         workspaceName: m.workspaceName ?? null,
         publishedAt: m.publishedAt ?? (m.status === "Published" || m.status === "published" ? m.createdAt : null),
         workspaceId: m.workspaceId ?? m.workspace_id ?? null,
@@ -278,15 +293,32 @@ export default function RecentsPage() {
       // Load all maps
       const data = await getPublishedGalleryMaps({});
 
+      // Fetch individual map details to get correct isStoryMap value
+      const mapsWithDetails = await Promise.all(
+        data.map(async (map) => {
+          try {
+            const mapDetail = await getMapById(map.mapId);
+            return {
+              ...map,
+              isStoryMap: mapDetail.isStoryMap,
+            };
+          } catch (error) {
+            // If fetching map details fails, keep original map data
+            console.error(`Failed to fetch details for map ${map.mapId}:`, error);
+            return map;
+          }
+        })
+      );
+
       // Filter by tag if search tag is provided
       if (gallerySearchTag.trim()) {
         const searchLower = gallerySearchTag.toLowerCase().trim();
-        const filtered = data.filter((map) =>
+        const filtered = mapsWithDetails.filter((map) =>
           map.tags?.some((tag) => tag.toLowerCase().includes(searchLower))
         );
         setGalleryMaps(filtered);
       } else {
-        setGalleryMaps(data);
+        setGalleryMaps(mapsWithDetails);
       }
     } catch (e) {
       setGalleryErr(e instanceof Error ? e.message : t("recents", "galleryLoadError"));
@@ -300,7 +332,37 @@ export default function RecentsPage() {
   }, [loadGalleryMaps]);
 
   // Duplicate map from gallery
-  const handleDuplicateFromGallery = async (galleryId: string) => {
+  const handleDuplicateFromGallery = async (galleryId: string, map: MapGallerySummaryResponse) => {
+    // Check if this is a story map
+    if (map.isStoryMap) {
+      // Story map requires workspace, show workspace selector
+      setPendingDuplicate({ galleryId, mapId: map.mapId, isStoryMap: true });
+      setShowWorkspaceSelector(true);
+
+      // Load organizations
+      setLoadingOrgs(true);
+      try {
+        const orgsRes = await getMyOrganizations();
+        const orgList = orgsRes.organizations || [];
+        setOrganizations(orgList);
+
+        if (orgList.length === 0) {
+          // No organizations, redirect to create organization
+          setShowWorkspaceSelector(false);
+          showToast("info", "You need to create an organization first to duplicate story maps");
+          router.push("/profile/organizations/new");
+          return;
+        }
+      } catch (error) {
+        showToast("error", "Failed to load organizations");
+        setShowWorkspaceSelector(false);
+      } finally {
+        setLoadingOrgs(false);
+      }
+      return;
+    }
+
+    // Normal map, duplicate directly
     setBusyKey(galleryId);
     setActionErr(null);
     try {
@@ -460,6 +522,85 @@ export default function RecentsPage() {
     [router, t]
   );
 
+  const handleViewMap = useCallback(
+    (map: PublishedMap) => {
+      if (map.isStoryMap) {
+        window.open(`/storymap/${map.id}`, "_blank");
+      } else {
+        window.open(`/maps/publish?mapId=${map.id}&view=true`, "_blank");
+      }
+    },
+    []
+  );
+
+  const handleViewGalleryMap = useCallback(
+    (map: MapGallerySummaryResponse) => {
+      if (map.isStoryMap) {
+        window.open(`/storymap/${map.mapId}`, "_blank");
+      } else {
+        window.open(`/maps/publish?mapId=${map.mapId}&view=true`, "_blank");
+      }
+    },
+    []
+  );
+
+  // Load workspaces when organization is selected
+  useEffect(() => {
+    if (!selectedOrgId) {
+      setWorkspaces([]);
+      setSelectedWorkspaceId("");
+      return;
+    }
+
+    const loadWorkspaces = async () => {
+      setLoadingWorkspaces(true);
+      try {
+        const ws = await getWorkspacesByOrganization(selectedOrgId);
+        setWorkspaces(ws || []);
+        setSelectedWorkspaceId("");
+      } catch (error) {
+        showToast("error", "Failed to load workspaces");
+        setWorkspaces([]);
+      } finally {
+        setLoadingWorkspaces(false);
+      }
+    };
+
+    loadWorkspaces();
+  }, [selectedOrgId, showToast]);
+
+  const handleConfirmDuplicate = async () => {
+    if (!pendingDuplicate || !selectedWorkspaceId) {
+      showToast("error", "Please select a workspace");
+      return;
+    }
+
+    setBusyKey(pendingDuplicate.galleryId);
+    setShowWorkspaceSelector(false);
+    try {
+      const result = await duplicateMapFromGallery(pendingDuplicate.galleryId, {
+        workspaceId: selectedWorkspaceId,
+      });
+      showToast("success", t("recents", "galleryDuplicateSuccess"));
+      router.push(`/maps/${result.mapId}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : t("recents", "galleryDuplicateError");
+      showToast("error", errorMessage);
+    } finally {
+      setBusyKey(null);
+      setPendingDuplicate(null);
+      setSelectedOrgId("");
+      setSelectedWorkspaceId("");
+    }
+  };
+
+  const handleCancelWorkspaceSelector = () => {
+    setShowWorkspaceSelector(false);
+    setPendingDuplicate(null);
+    setSelectedOrgId("");
+    setSelectedWorkspaceId("");
+  };
+
   if (loading) return <div suppressHydrationWarning className={`min-h-[60vh] animate-pulse px-4 ${themeClasses.textMuted}`}>{t("recents", "loading")}</div>;
   if (err) return <div suppressHydrationWarning className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"}`}>{err}</div>;
 
@@ -589,7 +730,15 @@ export default function RecentsPage() {
                   <div className={`truncate font-semibold ${isDark ? "text-zinc-50" : "text-gray-900"}`}>
                     {m.name || "Untitled"}
                   </div>
-                  <div className={`text-xs ${themeClasses.textMuted}`}>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${m.isStoryMap
+                      ? "border-purple-400/30 bg-purple-500/10 text-purple-300"
+                      : "border-blue-400/30 bg-blue-500/10 text-blue-300"
+                    }`}>
+                      {m.isStoryMap ? "Story Map" : "Normal Map - Bản đồ thường"}
+                    </span>
+                  </div>
+                  <div className={`text-xs mt-1 ${themeClasses.textMuted}`}>
                     {m.publishedAt
                       ? t("recents", "publishedDate", { date: new Date(m.publishedAt).toLocaleDateString() })
                       : m.createdAt
@@ -599,6 +748,12 @@ export default function RecentsPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 mt-auto">
+                  <button
+                    className={`w-full px-3 py-2 rounded-xl border text-sm ${themeClasses.button}`}
+                    onClick={() => handleViewMap(m)}
+                  >
+                    View Map
+                  </button>
                   <button
                     className={`w-full px-3 py-2 rounded-xl border text-sm ${themeClasses.button}`}
                     onClick={() => router.push(`/maps/${m.id}`)}
@@ -680,6 +835,12 @@ export default function RecentsPage() {
                           </div>
                         )}
 
+                        <button
+                          className={`text-xs px-2 py-1 rounded border ${themeClasses.button}`}
+                          onClick={() => handleViewMap(m)}
+                        >
+                          View Map
+                        </button>
                         <button
                           className={`text-xs px-2 py-1 rounded border ${themeClasses.button}`}
                           onClick={() => router.push(`/maps/${m.id}`)}
@@ -795,6 +956,14 @@ export default function RecentsPage() {
                   <div className={`truncate font-semibold ${isDark ? "text-zinc-50" : "text-gray-900"}`}>
                     {map.mapName || "Untitled Map"}
                   </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${map.isStoryMap
+                      ? "border-purple-400/30 bg-purple-500/10 text-purple-300"
+                      : "border-blue-400/30 bg-blue-500/10 text-blue-300"
+                    }`}>
+                      {map.isStoryMap ? "Story Map" : "Normal Map - Bản đồ thường"}
+                    </span>
+                  </div>
                   {map.description && (
                     <p className={`text-sm mt-1 line-clamp-2 ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
                       {map.description}
@@ -822,12 +991,20 @@ export default function RecentsPage() {
                 {/* Actions */}
                 <div className="flex flex-col gap-2 mt-auto">
                   <button
-                    className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
-                    onClick={() => handleDuplicateFromGallery(map.id)}
-                    disabled={busyKey === map.id}
+                    className={`w-full px-3 py-2 rounded-xl border text-sm ${themeClasses.button}`}
+                    onClick={() => handleViewGalleryMap(map)}
                   >
-                    {busyKey === map.id ? t("recents", "galleryDuplicating") : t("recents", "galleryDuplicateButton")}
+                    View Map
                   </button>
+                  {!map.isStoryMap && (
+                    <button
+                      className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
+                      onClick={() => handleDuplicateFromGallery(map.id, map)}
+                      disabled={busyKey === map.id}
+                    >
+                      {busyKey === map.id ? t("recents", "galleryDuplicating") : t("recents", "galleryDuplicateButton")}
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
@@ -962,6 +1139,91 @@ export default function RecentsPage() {
                 {edit.saving ? t("recents", "modalSaving") : t("recents", "modalSave")}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workspace Selector Popup */}
+      {showWorkspaceSelector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 ${themeClasses.panel}`}>
+            <h3 className={`text-xl font-semibold mb-2 ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
+              Select Workspace for Story Map
+            </h3>
+            <p className={`text-sm mb-4 ${themeClasses.textMuted}`}>
+              Story maps must be saved to a workspace. Please select an organization and workspace.
+            </p>
+
+            {loadingOrgs ? (
+              <div className={`text-center py-8 ${themeClasses.textMuted}`}>Loading organizations...</div>
+            ) : (
+              <div className="space-y-4">
+                {/* Organization Selector */}
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-zinc-200" : "text-gray-700"}`}>
+                    Organization
+                  </label>
+                  <select
+                    value={selectedOrgId}
+                    onChange={(e) => setSelectedOrgId(e.target.value)}
+                    className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none ${themeClasses.input}`}
+                  >
+                    <option value="">Select an organization...</option>
+                    {organizations.map((org) => (
+                      <option key={org.orgId} value={org.orgId}>
+                        {org.orgName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Workspace Selector */}
+                {selectedOrgId && (
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-zinc-200" : "text-gray-700"}`}>
+                      Workspace
+                    </label>
+                    {loadingWorkspaces ? (
+                      <div className={`text-sm py-2 ${themeClasses.textMuted}`}>Loading workspaces...</div>
+                    ) : workspaces.length === 0 ? (
+                      <div className={`text-sm py-2 ${themeClasses.textMuted}`}>
+                        No workspaces found in this organization.
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedWorkspaceId}
+                        onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+                        className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none ${themeClasses.input}`}
+                      >
+                        <option value="">Select a workspace...</option>
+                        {workspaces.map((ws) => (
+                          <option key={ws.workspaceId} value={ws.workspaceId}>
+                            {ws.workspaceName}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end gap-3 mt-6">
+                  <button
+                    onClick={handleCancelWorkspaceSelector}
+                    className={`px-4 py-2 rounded-xl border text-sm font-medium ${themeClasses.button}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmDuplicate}
+                    disabled={!selectedWorkspaceId}
+                    className="px-4 py-2 rounded-xl bg-emerald-500 text-sm font-semibold text-white hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Duplicate to Workspace
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

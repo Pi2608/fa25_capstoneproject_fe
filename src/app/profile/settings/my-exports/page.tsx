@@ -176,13 +176,13 @@ export default function MyExportsPage() {
           {t("my_exports", "header_title")}
         </h2>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex items-center rounded-full px-3 py-1 text-xs bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/30">
+          <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/30">
             {t("my_exports", "badge_total", { count: exports.length })}
           </span>
-          <span className="inline-flex items-center rounded-full px-3 py-1 text-xs bg-green-50 text-green-700 ring-1 ring-green-200 dark:bg-green-500/15 dark:text-green-300 dark:ring-green-400/30">
+          <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-green-100 text-green-800 ring-1 ring-green-300 dark:bg-green-500/15 dark:text-green-300 dark:ring-green-400/30">
             {t("my_exports", "badge_approved", { count: approvedCount })}
           </span>
-          <span className="inline-flex items-center rounded-full px-3 py-1 text-xs bg-yellow-50 text-yellow-700 ring-1 ring-yellow-200 dark:bg-yellow-500/15 dark:text-yellow-300 dark:ring-yellow-400/30">
+          <span className="inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 ring-1 ring-yellow-300 dark:bg-yellow-500/15 dark:text-yellow-300 dark:ring-yellow-400/30">
             {t("my_exports", "badge_pending", { count: pendingCount })}
           </span>
         </div>

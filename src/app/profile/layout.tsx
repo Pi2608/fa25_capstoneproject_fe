@@ -395,13 +395,13 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                         {t("profilelayout.orgs_title")}
                       </div>
 
-                    <NavItem
-                      href="/register/organization"
-                      label={t("profilelayout.create_org")}
-                      icon={PlusCircle}
-                      active={pathname === "/register/organization"}
-                      isDark={isDark}
-                    />
+                      <NavItem
+                        href="/register/organization"
+                        label={t("profilelayout.create_org")}
+                        icon={PlusCircle}
+                        active={pathname === "/register/organization"}
+                        isDark={isDark}
+                      />
 
                       {orgs === null && (
                         <div className="space-y-2 py-2">
@@ -422,45 +422,47 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
                         </div>
                       )}
 
-                    {(orgs ?? []).slice(0, 5).map((o) => {
-                      const planLabel = orgPlanLabels[o.orgId];
-                      const isActive = pathname.startsWith(`/profile/organizations/${o.orgId}`);
-                      return (
+                      {(orgs ?? []).slice(0, 5).map((o) => {
+                        const planLabel = orgPlanLabels[o.orgId];
+                        const isActive = pathname.startsWith(`/profile/organizations/${o.orgId}`);
+                        return (
+                          <NavItem
+                            key={o.orgId}
+                            href={`/profile/organizations/${o.orgId}`}
+                            label={o.orgName}
+                            icon={Building2}
+                            active={isActive}
+                            isDark={isDark}
+                            right={
+                              <Badge variant="secondary" className="text-[11px] font-semibold">
+                                <span className={`text-sm font-semibold ${isDark ? "text-emerald-300" : isActive ? "text-emerald-500" : "text-emerald-600"}`}>{planLabel}</span>
+                              </Badge>
+                            }
+                          />
+                        );
+                      })}
+
+                      {(orgs ?? []).length > 5 && (
                         <NavItem
-                          key={o.orgId}
-                          href={`/profile/organizations/${o.orgId}`}
-                          label={o.orgName}
+                          href="/organizations"
+                          label={t("profilelayout.view_all_orgs")}
                           icon={Building2}
-                          active={isActive}
+                          active={pathname === "/organizations"}
                           isDark={isDark}
-                          right={
-                            <Badge variant="secondary" className="text-[11px] font-semibold">
-                              <span className={`text-sm font-semibold ${isDark ? "text-emerald-300" : isActive ? "text-emerald-500" : "text-emerald-600"}`}>{planLabel}</span>
-                            </Badge>
-                          }
                         />
-                      );
-                    })}
+                      )}
 
-                    {(orgs ?? []).length > 5 && (
-                      <NavItem
-                        href="/organizations"
-                        label={t("profilelayout.view_all_orgs")}
-                        icon={Building2}
-                        active={pathname === "/organizations"}
-                        isDark={isDark}
-                      />
-                    )}
-
-                    <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} isDark={isDark} />
+                      <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} isDark={isDark} />
 
                       <div className="h-3" />
                     </div>
                   </>
                 )}
+                {isSuspended && 
+                  <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} isDark={isDark} />
+                }
               </ScrollArea>
 
-            <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} isDark={isDark} />
 
             <Separator className="my-2" />
 

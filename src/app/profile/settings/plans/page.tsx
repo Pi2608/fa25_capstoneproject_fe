@@ -1051,7 +1051,7 @@ export default function TrangGoiThanhVien() {
                                                 )}
                                             </span>
                                         </div>
-                                        <div>
+                                        {/* <div>
                                             {t(
                                                 "plans.auto_renew_label"
                                             )}{" "}
@@ -1060,11 +1060,11 @@ export default function TrangGoiThanhVien() {
                                                     ? t("plans.toggle_on")
                                                     : t("plans.toggle_off")}
                                             </span>
-                                        </div>
+                                        </div> */}
                                     </div>
                                 )}
                             </div>
-                            {currentPlanTier !== 1 && laOwner && (
+                            {/* {currentPlanTier !== 1 && laOwner && (
                                 <div className="flex gap-2">
                                     <button
                                         className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
@@ -1080,7 +1080,7 @@ export default function TrangGoiThanhVien() {
                                             : t("plans.renew_button")}
                                     </button>
                                 </div>
-                            )}
+                            )} */}
                         </div>
                     </div>
 
