@@ -284,7 +284,7 @@ export default function OrgSettingsPage() {
                 </div>
                 <Meter value={exportsQuota?.currentUsage ?? 0} max={exportsQuota?.limit ?? 0} />
               </div>
-              <div>
+              {/* <div>
                 <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400 mb-1">
                   <span>Tokens</span>
                   <span className="text-zinc-900 dark:text-zinc-300">
@@ -292,7 +292,7 @@ export default function OrgSettingsPage() {
                   </span>
                 </div>
                 <Meter value={tokensQuota?.currentUsage ?? 0} max={tokensQuota?.limit ?? 0} />
-              </div>
+              </div> */}
             </div>
           </Card>
 
