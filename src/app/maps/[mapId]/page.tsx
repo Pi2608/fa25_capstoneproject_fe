@@ -2262,7 +2262,7 @@ export default function EditMapPage() {
           white-space:nowrap;
         "
       >
-        Xóa icon
+        ${t('mapEditor', 'deleteIcon')}
       </button>
     </div>
   `;
@@ -2345,7 +2345,7 @@ export default function EditMapPage() {
       iconMarkersRef.current.clear();
       iconMetadataRef.current.clear();
     };
-  }, [debouncedIconVisibilityUpdate, isMapReady, mapId, updateIconVisibility]);
+  }, [debouncedIconVisibilityUpdate, isMapReady, mapId, updateIconVisibility, t]);
 
 
   // Layer feature click handler for highlighting
@@ -2702,7 +2702,7 @@ export default function EditMapPage() {
 
     const feature = selectedEntity.data as FeatureData;
     if (!feature.featureId) {
-      showToast("error", "Cannot update feature: No feature ID");
+      showToast("error", t('mapEditor', 'featureNoId'));
       return;
     }
 
@@ -2751,7 +2751,7 @@ export default function EditMapPage() {
     } catch (error) {
       showToast("error", t('mapEditor', 'featureUpdateFailed'));
     }
-  }, [mapId, selectedEntity, showToast]);
+  }, [mapId, selectedEntity, showToast, t]);
 
   // Save segment (create or update) - used by inline form
   const handleSaveSegment = useCallback(async (data: any, segmentId?: string) => {
@@ -3121,7 +3121,7 @@ export default function EditMapPage() {
 
     if (!mapRef.current) {
       console.warn("saveMap: mapRef.current is null");
-      showToast("error", "Bản đồ chưa sẵn sàng");
+      showToast("error", t('mapEditor', 'mapNotReady'));
       return;
     }
 
@@ -3154,7 +3154,7 @@ export default function EditMapPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [detail, name, baseKey, showToast]);
+  }, [detail, name, baseKey, showToast, t]);
 
   // Export map handler
   const handleExport = useCallback(async () => {

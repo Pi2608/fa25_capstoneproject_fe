@@ -65,11 +65,6 @@ export default function ConfirmDialog({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
-      <div
-        className="absolute inset-0 bg-black/60 dark:bg-black/70 backdrop-blur-sm"
-        onClick={isLoading ? undefined : onClose}
-      />
-
       {/* Modal */}
       <div className="relative w-full max-w-md mx-4 rounded-2xl border bg-white dark:bg-zinc-900 dark:border-zinc-700 shadow-2xl">
         {/* Header */}

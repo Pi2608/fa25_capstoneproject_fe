@@ -289,14 +289,6 @@ export default function MembersPage() {
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
 
-  const editorsCount = useMemo(
-    () =>
-      members.filter((m) =>
-        ["admin", "editor"].includes(String(m.license).toLowerCase())
-      ).length,
-    [members]
-  );
-
   useEffect(() => {
     let cancelled = false;
 
@@ -588,12 +580,6 @@ export default function MembersPage() {
             text={t("settings_members.stat_members", {
               count: members.length,
               limit: 25,
-            })}
-          />
-          <StatPill
-            text={t("settings_members.stat_editors", {
-              count: editorsCount,
-              limit: 3,
             })}
           />
           <button
