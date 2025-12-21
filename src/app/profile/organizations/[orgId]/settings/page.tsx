@@ -241,7 +241,7 @@ export default function OrgSettingsPage() {
                 <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
                   Chi phí hàng tháng:{" "}
                   <span className="text-zinc-900 dark:text-zinc-300">
-                    {sub?.totalMonthlyCost?.toLocaleString() ?? 0} VND
+                    {sub?.totalMonthlyCost?.toLocaleString() ?? 0} {billing?.recentTransactions?.[0]?.currency || "VND"}
                   </span>
                 </div>
               </div>
