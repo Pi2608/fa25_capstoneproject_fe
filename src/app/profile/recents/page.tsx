@@ -47,78 +47,78 @@ type Sample = {
   };
 };
 
-const SAMPLES: Sample[] = [
-  {
-    key: "reservoir-precip",
-    title: "Example: Reservoir Levels & Precipitation",
-    author: "Yen Nhi Dang",
-    lastViewed: "Last viewed 3 months ago",
-    blurb: "Combine reservoir level overlays with accumulated precipitation.",
-    preset: {
-      name: "Reservoir Levels & Precip",
-      baseMapProvider: "OSM",
-      initialLatitude: 15.95,
-      initialLongitude: 107.8,
-      initialZoom: 5,
-    },
-  },
-  {
-    key: "sandy-inundation",
-    title: "Example: Hurricane Sandy Inundation Zone",
-    author: "Yen Nhi Dang",
-    lastViewed: "Last viewed 3 months ago",
-    blurb: "Historic storm surge zones for quick risk illustration.",
-    preset: {
-      name: "Sandy Inundation Zone",
-      baseMapProvider: "OSM",
-      initialLatitude: 40.71,
-      initialLongitude: -74.0,
-      initialZoom: 10,
-    },
-  },
-  {
-    key: "bike-collisions",
-    title: "Example: City of Toronto Bike Collisions",
-    author: "Yen Nhi Dang",
-    lastViewed: "Last viewed 3 months ago",
-    blurb: "Point dataset for bicycle collision safety analysis.",
-    preset: {
-      name: "Toronto Bike Collisions",
-      baseMapProvider: "OSM",
-      initialLatitude: 43.65,
-      initialLongitude: -79.38,
-      initialZoom: 11,
-    },
-  },
-  {
-    key: "sales-territories",
-    title: "Example: Sales Territories",
-    author: "Yen Nhi Dang",
-    lastViewed: "Last viewed 3 months ago",
-    blurb: "Territory boundaries and regional assignments.",
-    preset: {
-      name: "Sales Territories",
-      baseMapProvider: "OSM",
-      initialLatitude: 39.5,
-      initialLongitude: -98.35,
-      initialZoom: 4,
-    },
-  },
-  {
-    key: "getting-started",
-    title: "Getting started with IMOS",
-    author: "Yen Nhi Dang",
-    lastViewed: "Last viewed 3 months ago",
-    blurb: "Onboarding sample with basic point and area layers.",
-    preset: {
-      name: "Getting Started",
-      baseMapProvider: "OSM",
-      initialLatitude: 21.03,
-      initialLongitude: 105.85,
-      initialZoom: 11,
-    },
-  },
-];
+// const SAMPLES: Sample[] = [
+//   {
+//     key: "reservoir-precip",
+//     title: "Example: Reservoir Levels & Precipitation",
+//     author: "Yen Nhi Dang",
+//     lastViewed: "Last viewed 3 months ago",
+//     blurb: "Combine reservoir level overlays with accumulated precipitation.",
+//     preset: {
+//       name: "Reservoir Levels & Precip",
+//       baseMapProvider: "OSM",
+//       initialLatitude: 15.95,
+//       initialLongitude: 107.8,
+//       initialZoom: 5,
+//     },
+//   },
+//   {
+//     key: "sandy-inundation",
+//     title: "Example: Hurricane Sandy Inundation Zone",
+//     author: "Yen Nhi Dang",
+//     lastViewed: "Last viewed 3 months ago",
+//     blurb: "Historic storm surge zones for quick risk illustration.",
+//     preset: {
+//       name: "Sandy Inundation Zone",
+//       baseMapProvider: "OSM",
+//       initialLatitude: 40.71,
+//       initialLongitude: -74.0,
+//       initialZoom: 10,
+//     },
+//   },
+//   {
+//     key: "bike-collisions",
+//     title: "Example: City of Toronto Bike Collisions",
+//     author: "Yen Nhi Dang",
+//     lastViewed: "Last viewed 3 months ago",
+//     blurb: "Point dataset for bicycle collision safety analysis.",
+//     preset: {
+//       name: "Toronto Bike Collisions",
+//       baseMapProvider: "OSM",
+//       initialLatitude: 43.65,
+//       initialLongitude: -79.38,
+//       initialZoom: 11,
+//     },
+//   },
+//   {
+//     key: "sales-territories",
+//     title: "Example: Sales Territories",
+//     author: "Yen Nhi Dang",
+//     lastViewed: "Last viewed 3 months ago",
+//     blurb: "Territory boundaries and regional assignments.",
+//     preset: {
+//       name: "Sales Territories",
+//       baseMapProvider: "OSM",
+//       initialLatitude: 39.5,
+//       initialLongitude: -98.35,
+//       initialZoom: 4,
+//     },
+//   },
+//   {
+//     key: "getting-started",
+//     title: "Getting started with IMOS",
+//     author: "Yen Nhi Dang",
+//     lastViewed: "Last viewed 3 months ago",
+//     blurb: "Onboarding sample with basic point and area layers.",
+//     preset: {
+//       name: "Getting Started",
+//       baseMapProvider: "OSM",
+//       initialLatitude: 21.03,
+//       initialLongitude: 105.85,
+//       initialZoom: 11,
+//     },
+//   },
+// ];
 
 function Thumb({ src, fallbackKey, isDark }: { src?: string | null; fallbackKey: string; isDark: boolean }) {
   const palette: Record<string, string> = {
@@ -865,7 +865,7 @@ export default function RecentsPage() {
         )}
       </section>
 
-      <section className="mb-10">
+      {/* <section className="mb-10">
         <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("recents", "sectionExamples")}</h2>
         {actionErr && (
           <div className={`mb-3 rounded-lg border px-3 py-2 ${isDark ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
@@ -894,7 +894,7 @@ export default function RecentsPage() {
             </li>
           ))}
         </ul>
-      </section>
+      </section> */}
 
       {/* Map Gallery Section */}
       <section className="mb-10">
