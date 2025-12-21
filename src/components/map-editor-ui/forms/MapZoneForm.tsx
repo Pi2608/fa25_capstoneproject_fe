@@ -150,7 +150,7 @@ export function MapZoneForm({
                     <label className="block text-xs text-zinc-400 mb-1">
                         Chọn Zone * <span className="text-zinc-500">({zones.length})</span>
                     </label>
-                    <div className="max-h-64 overflow-y-auto border border-zinc-700 rounded-lg bg-zinc-800/50">
+                    <div className="max-h-64 overflow-y-auto scrollbar-dark border border-zinc-700 rounded-lg bg-zinc-800/50">
                         {loading ? (
                             <div className="p-8 text-center text-zinc-400">
                                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500 mx-auto mb-2"></div>

@@ -88,6 +88,7 @@ interface TimelineTrackProps {
   zoomLevel: number;
   mapId?: string;
   currentMap?: any;
+  isPlaying?: boolean;
   onReorder: (newOrder: Segment[]) => void;
   onSegmentClick: (segmentId: string) => void;
   onPlaySingleSegment?: (segmentId: string) => void;
@@ -105,6 +106,7 @@ export function TimelineTrack({
   zoomLevel,
   mapId,
   currentMap,
+  isPlaying = false,
   onReorder,
   onSegmentClick,
   onPlaySingleSegment,
@@ -116,8 +118,11 @@ export function TimelineTrack({
 }: TimelineTrackProps) {
   const { showToast } = useToast();
   const { t } = useI18n();
+  // Disable drag sensors when playing
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: isPlaying ? { distance: Number.MAX_SAFE_INTEGER } : { distance: 0 },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
@@ -172,6 +177,11 @@ export function TimelineTrack({
   );
 
   const handleDragStart = (event: any) => {
+    // Prevent drag if playing
+    if (isPlaying) {
+      return;
+    }
+
     const itemId = event.active.id as string;
     setActiveId(itemId);
 
@@ -417,13 +427,12 @@ export function TimelineTrack({
           collisionDetection={closestCenter}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
-          disabled={isMoving}
         >
           <SortableContext
             items={segments.map((s) => `segment-${s.segmentId}`)}
             strategy={horizontalListSortingStrategy}
           >
-            <div className="h-full flex flex-col overflow-hidden bg-zinc-950/50">
+            <div className="h-full flex flex-col bg-zinc-950/50">
               {/* Track Headers - Video Editor Style */}
               <div className="flex-shrink-0 border-b border-zinc-800/80 bg-zinc-900/80">
                 <div
@@ -456,7 +465,7 @@ export function TimelineTrack({
               </div>
 
               {/* Tracks Container */}
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto scrollbar-dark">
                 <div
                   className="flex flex-col"
                   style={{ minWidth: `${totalWidth + 200}px` }}
@@ -480,6 +489,7 @@ export function TimelineTrack({
                         segment={segment}
                         mapId={mapId || ""}
                         currentMap={currentMap}
+                        isPlaying={isPlaying}
                       />
                     )}
                   />
@@ -503,6 +513,7 @@ export function TimelineTrack({
                         segment={segment}
                         mapId={mapId || ""}
                         currentMap={currentMap}
+                        isPlaying={isPlaying}
                       />
                     )}
                   />
@@ -526,6 +537,7 @@ export function TimelineTrack({
                         segment={segment}
                         mapId={mapId || ""}
                         currentMap={currentMap}
+                        isPlaying={isPlaying}
                         onAddZone={onAddZone}
                         onAddLayer={onAddLayer}
                       />
@@ -685,10 +697,12 @@ export function TimelineTrack({
     segment,
     mapId,
     currentMap,
+    isPlaying,
   }: {
     segment: Segment;
     mapId: string;
     currentMap?: any;
+    isPlaying?: boolean;
   }) {
     const timelineContext = useTimeline();
     // Use routes from prop if available, otherwise load from API
@@ -851,39 +865,61 @@ export function TimelineTrack({
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Dispatch event to show form in LeftSidebarToolbox
-                    if (typeof window !== "undefined") {
-                      window.dispatchEvent(
-                        new CustomEvent("editRoute", {
-                          detail: {
-                            route,
-                            segmentId: segment.segmentId,
-                            mapId,
-                          },
-                        }),
-                      );
+                    if (!isPlaying) {
+                      // Dispatch event to show form in LeftSidebarToolbox
+                      if (typeof window !== "undefined") {
+                        window.dispatchEvent(
+                          new CustomEvent("editRoute", {
+                            detail: {
+                              route,
+                              segmentId: segment.segmentId,
+                              mapId,
+                            },
+                          }),
+                        );
+                      }
                     }
                   }}
-                  className="px-2.5 hover:bg-orange-500/30 text-orange-300 hover:text-white transition-all flex items-center justify-center group/btn"
-                  title="Edit route"
+                  disabled={isPlaying}
+                  className={cn(
+                    "px-2.5 transition-all flex items-center justify-center group/btn",
+                    isPlaying
+                      ? "opacity-50 cursor-not-allowed text-zinc-600"
+                      : "hover:bg-orange-500/30 text-orange-300 hover:text-white"
+                  )}
+                  title={isPlaying ? "Cannot edit while playing" : "Edit route"}
                 >
                   <Icon
                     icon="mdi:pencil"
-                    className="w-4 h-4 group-hover/btn:scale-110 transition-transform"
+                    className={cn(
+                      "w-4 h-4",
+                      !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                    )}
                   />
                 </button>
                 <div className="w-px bg-orange-500/20" />
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleDelete(route.routeAnimationId);
+                    if (!isPlaying) {
+                      handleDelete(route.routeAnimationId);
+                    }
                   }}
-                  className="px-2.5 hover:bg-red-500/30 text-orange-300 hover:text-red-300 transition-all flex items-center justify-center group/btn"
-                  title="Delete route"
+                  disabled={isPlaying}
+                  className={cn(
+                    "px-2.5 transition-all flex items-center justify-center group/btn",
+                    isPlaying
+                      ? "opacity-50 cursor-not-allowed text-zinc-600"
+                      : "hover:bg-red-500/30 text-orange-300 hover:text-red-300"
+                  )}
+                  title={isPlaying ? "Cannot delete while playing" : "Delete route"}
                 >
                   <Icon
                     icon="mdi:delete"
-                    className="w-4 h-4 group-hover/btn:scale-110 transition-transform"
+                    className={cn(
+                      "w-4 h-4",
+                      !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                    )}
                   />
                 </button>
               </div>
@@ -898,10 +934,12 @@ export function TimelineTrack({
     segment,
     mapId,
     currentMap,
+    isPlaying,
   }: {
     segment: Segment;
     mapId: string;
     currentMap?: any;
+    isPlaying?: boolean;
   }) {
     const timelineContext = useTimeline();
     const locations = segment.locations || [];
@@ -1030,28 +1068,50 @@ export function TimelineTrack({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleEdit(location);
+                      if (!isPlaying) {
+                        handleEdit(location);
+                      }
                     }}
-                    className="px-2.5 hover:bg-emerald-500/30 text-emerald-300 hover:text-white transition-all flex items-center justify-center group/btn"
-                    title="Edit location"
+                    disabled={isPlaying}
+                    className={cn(
+                      "px-2.5 transition-all flex items-center justify-center group/btn",
+                      isPlaying
+                        ? "opacity-50 cursor-not-allowed text-zinc-600"
+                        : "hover:bg-emerald-500/30 text-emerald-300 hover:text-white"
+                    )}
+                    title={isPlaying ? "Cannot edit while playing" : "Edit location"}
                   >
                     <Icon
                       icon="mdi:pencil"
-                      className="w-4 h-4 group-hover/btn:scale-110 transition-transform"
+                      className={cn(
+                        "w-4 h-4",
+                        !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                      )}
                     />
                   </button>
                   <div className="w-px bg-emerald-500/20" />
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleDelete(locationId || "");
+                      if (!isPlaying) {
+                        handleDelete(locationId || "");
+                      }
                     }}
-                    className="px-2.5 hover:bg-red-500/30 text-emerald-300 hover:text-red-300 transition-all flex items-center justify-center group/btn"
-                    title="Delete location"
+                    disabled={isPlaying}
+                    className={cn(
+                      "px-2.5 transition-all flex items-center justify-center group/btn",
+                      isPlaying
+                        ? "opacity-50 cursor-not-allowed text-zinc-600"
+                        : "hover:bg-red-500/30 text-emerald-300 hover:text-red-300"
+                    )}
+                    title={isPlaying ? "Cannot delete while playing" : "Delete location"}
                   >
                     <Icon
                       icon="mdi:delete"
-                      className="w-4 h-4 group-hover/btn:scale-110 transition-transform"
+                      className={cn(
+                        "w-4 h-4",
+                        !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                      )}
                     />
                   </button>
                 </div>
@@ -1067,12 +1127,14 @@ export function TimelineTrack({
     segment,
     mapId,
     currentMap,
+    isPlaying,
     onAddZone,
     onAddLayer,
   }: {
     segment: Segment;
     mapId: string;
     currentMap?: any;
+    isPlaying?: boolean;
     onAddZone?: (segmentId: string) => void;
     onAddLayer?: (segmentId: string) => void;
   }) {
@@ -1177,14 +1239,25 @@ export function TimelineTrack({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDeleteZone(zone.segmentZoneId);
+                  if (!isPlaying) {
+                    handleDeleteZone(zone.segmentZoneId);
+                  }
                 }}
-                className="px-2.5 hover:bg-red-500/30 text-blue-300 hover:text-red-300 transition-all flex items-center justify-center group/btn"
-                title="Delete zone"
+                disabled={isPlaying}
+                className={cn(
+                  "px-2.5 transition-all flex items-center justify-center group/btn",
+                  isPlaying
+                    ? "opacity-50 cursor-not-allowed text-zinc-600"
+                    : "hover:bg-red-500/30 text-blue-300 hover:text-red-300"
+                )}
+                title={isPlaying ? "Cannot delete while playing" : "Delete zone"}
               >
                 <Icon
                   icon="mdi:delete"
-                  className="w-4 h-4 group-hover/btn:scale-110 transition-transform"
+                  className={cn(
+                    "w-4 h-4",
+                    !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                  )}
                 />
               </button>
             </div>
@@ -1228,14 +1301,25 @@ export function TimelineTrack({
               <button
                 onClick={(e) => {
                   e.stopPropagation();
-                  handleDeleteLayer(layer.segmentLayerId);
+                  if (!isPlaying) {
+                    handleDeleteLayer(layer.segmentLayerId);
+                  }
                 }}
-                className="px-2.5 hover:bg-red-500/30 text-purple-300 hover:text-red-300 transition-all flex items-center justify-center group/btn"
-                title="Delete layer"
+                disabled={isPlaying}
+                className={cn(
+                  "px-2.5 transition-all flex items-center justify-center group/btn",
+                  isPlaying
+                    ? "opacity-50 cursor-not-allowed text-zinc-600"
+                    : "hover:bg-red-500/30 text-purple-300 hover:text-red-300"
+                )}
+                title={isPlaying ? "Cannot delete while playing" : "Delete layer"}
               >
                 <Icon
                   icon="mdi:delete"
-                  className="w-4 h-4 group-hover/btn:scale-110 transition-transform"
+                  className={cn(
+                    "w-4 h-4",
+                    !isPlaying && "group-hover/btn:scale-110 transition-transform"
+                  )}
                 />
               </button>
             </div>
@@ -1394,7 +1478,7 @@ export function TimelineTrack({
         )}
 
         {/* Items */}
-        <div className="p-1 h-full overflow-x-auto overflow-y-hidden">
+        <div className="p-1 h-full overflow-x-auto overflow-y-hidden [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
           {children}
         </div>
       </div>

@@ -4111,6 +4111,7 @@ export default function EditMapPage() {
         currentMap={mapRef.current}
         mapId={mapId}
         layerVisibility={layerVisibility}
+        isPlaying={isPlayingTimeline}
         onSelectFeature={handleSelectFeature}
         onSelectLayer={handleSelectLayerNew}
         onBaseLayerChange={setBaseKey}

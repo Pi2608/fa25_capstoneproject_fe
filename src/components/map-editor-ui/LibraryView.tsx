@@ -149,7 +149,7 @@ export function LibraryView({
 
 
             {/* Grid */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto scrollbar-dark p-4">
                 {loading ? (
                     <div className="text-center py-8 text-zinc-500 text-xs">Loading...</div>
                 ) : assets.length === 0 ? (

@@ -621,7 +621,7 @@ export function LocationForm({
                     Chưa có audio trong Library.
                   </div>
                 ) : (
-                  <div className="max-h-32 overflow-y-auto space-y-1">
+                  <div className="max-h-32 overflow-y-auto scrollbar-dark space-y-1">
                     {audioAssets.map((a) => {
                       const active = selectedAudioAssetId === a.id || audioUrl === a.url;
 
@@ -715,7 +715,7 @@ export function LocationForm({
               <label className="block text-xs text-zinc-400 mb-1">Chọn icon</label>
               {/* Icon Library - Embedded */}
               <div className="border-t border-zinc-800 pt-3 -mx-3">
-                <div className="max-h-96 overflow-y-auto">
+                <div className="max-h-96 overflow-y-auto scrollbar-dark">
                   <IconLibraryView
                     currentMap={undefined}
                     mapId={mapId}
