@@ -2065,7 +2065,7 @@ export const messages = {
             status_inactive: "Không hoạt động",
         },
         profilelayout: {
-            toast_warning_title: "Cảnh báo",
+            account_suspended_title: "Tài khoản bị khóa",
             account_suspended_toast: "Bạn đã bị khóa tài khoản, hãy vào mục Trợ giúp để được hỗ trợ.",
             nav_home: "Trang chủ",
             nav_information: "Thông tin cá nhân",
@@ -4972,7 +4972,7 @@ export const messages = {
             no_changes: "No changes.",
         },
         profilelayout: {
-            toast_warning_title: "Warning",
+            account_suspended_title: "Account suspended",
             account_suspended_toast: "Your account has been suspended. Please go to Help for support.",
             nav_home: "Home",
             nav_information: "Personal information",

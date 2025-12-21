@@ -224,7 +224,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           >
             <BurgerIcon />
           </button>
-          <div className="flex-1 max-w-md">
+          {/* <div className="flex-1 max-w-md">
             <input
               className={`w-full h-9 px-3 rounded-lg border outline-none focus:ring-1 ${isDark
                 ? "border-zinc-800 bg-zinc-800/50 text-zinc-100 placeholder-zinc-500 focus:border-zinc-700 focus:ring-zinc-700"
@@ -233,10 +233,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               placeholder="Tìm kiếm…"
               aria-label="Tìm kiếm"
             />
-          </div>
-          <div className="flex items-center gap-2 ml-auto">
+          </div> */}
+          {/* <div className="flex items-center gap-2 ml-auto">
             <NotificationDropdown isDark={isDark} />
-          </div>
+          </div> */}
         </header>
 
         <div className={`flex-1 overflow-y-auto p-5 ${isDark ? "bg-zinc-950" : "bg-gray-50"
