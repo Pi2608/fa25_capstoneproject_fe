@@ -405,16 +405,6 @@ export default function HelpPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                    <div className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${isConnected
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                        : "bg-zinc-500/10 text-zinc-600 dark:text-zinc-400"
-                        }`}>
-                        {isConnected ? (
-                            <><Wifi className="h-3 w-3" /> Real-time</>
-                        ) : (
-                            <><WifiOff className="h-3 w-3" /> Offline</>
-                        )}
-                    </div>
                     <Button
                         size="sm"
                         onClick={() => setCreateOpen(true)}
