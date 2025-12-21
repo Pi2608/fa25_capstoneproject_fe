@@ -319,8 +319,8 @@ const fetchMapsForWorkspace = useCallback(
     };
   }, [selectedMapId, t]);
 
-  const handleCreateSession = async (e: React.FormEvent) => {
-    e.preventDefault();
+const handleCreateSession = async (e: React.FormEvent) => {
+  e.preventDefault();
 
     if (!selectedWorkspaceId) {
       toast.error(
@@ -359,14 +359,14 @@ const fetchMapsForWorkspace = useCallback(
         t("sessionCreate", "toast_success")
       );
 
-      const params = new URLSearchParams({
-        sessionId: session.sessionId,
-        sessionCode: session.sessionCode,
-      });
+    const params = new URLSearchParams({
+      sessionId: session.sessionId,
+      sessionCode: session.sessionCode,
+    });
 
-      params.set("workspaceId", selectedWorkspaceId);
-      params.set("mapId", selectedMapId);
-      if (selectedMap.name) params.set("mapName", selectedMap.name);
+    params.set("workspaceId", selectedWorkspaceId);
+    params.set("mapId", selectedMapId);
+    if (selectedMap.name) params.set("mapName", selectedMap.name);
 
       router.push(`/storymap/control/${selectedMapId}?${params.toString()}`);
     } catch (error: any) {
