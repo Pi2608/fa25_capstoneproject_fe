@@ -6,6 +6,7 @@ import { useTheme } from "../../layout";
 import {
   closeSupportTicket,
   getSupportTicketByIdByAdmin,
+  ReplySupportTicketRequest,
   replyToSupportTicket,
   SupportTicket,
   SupportTicketMessage,
@@ -79,8 +80,8 @@ export default function SupportTicketDetailPage() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const [reply, setReply] = useState("");
-  const [savingReply, setSavingReply] = useState(false);
+  const [reply, setReply] = useState<ReplySupportTicketRequest | null>(null);
+  const [savingReply, setSavingReply] = useState(false);  
 
   const [closeOpen, setCloseOpen] = useState(false);
   const [resolution, setResolution] = useState("");
@@ -179,18 +180,15 @@ export default function SupportTicketDetailPage() {
     if (!ticket) return;
     if (savingReply) return;
 
-    const content = reply.trim();
-    if (!content) return;
-
     setSavingReply(true);
     setErr(null);
 
     try {
-      await replyToSupportTicket(ticket.ticketId, content);
+      await replyToSupportTicket(ticket.ticketId, reply!);
 
       const optimistic: SupportTicketMessage = {
         messageId: Date.now(),
-        message: content,
+        message: reply?.reply ?? "",
         isFromUser: false,
         createdAt: new Date().toISOString(),
       };
@@ -200,7 +198,7 @@ export default function SupportTicketDetailPage() {
           ? { ...prev, messages: [optimistic, ...(prev.messages || [])] }
           : prev
       );
-      setReply("");
+      setReply(null);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Không thể lưu phản hồi.");
     } finally {
@@ -239,7 +237,7 @@ export default function SupportTicketDetailPage() {
     setTicket({ ...ticket, status: "closed" });
 
     try {
-      await closeSupportTicket(ticket.ticketId, text);
+      await closeSupportTicket(ticket.ticketId);
       setCloseOpen(false);
     } catch (e) {
       setTicket(prev);
@@ -259,20 +257,6 @@ export default function SupportTicketDetailPage() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <h3 className="m-0 text-base font-extrabold">Chi tiết yêu cầu hỗ trợ</h3>
-            <div
-              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
-                isConnected
-                  ? "bg-emerald-500/10 text-emerald-600"
-                  : "bg-zinc-500/10 text-zinc-600"
-              }`}
-            >
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  isConnected ? "bg-emerald-500 animate-pulse" : "bg-zinc-500"
-                }`}
-              />
-              {isConnected ? "Real-time" : "Offline"}
-            </div>
           </div>
 
           <button
@@ -481,9 +465,9 @@ export default function SupportTicketDetailPage() {
                       ? "border-zinc-800 bg-zinc-800/96 text-zinc-100 focus:border-zinc-700 focus:ring-1 focus:ring-zinc-700"
                       : "border-gray-300 bg-white text-gray-900 focus:border-gray-400 focus:ring-1 focus:ring-gray-400"
                   } disabled:opacity-50`}
-                  value={reply}
+                  value={reply?.reply ?? ""}
                   disabled={isClosed || savingReply}
-                  onChange={(e) => setReply(e.target.value)}
+                  onChange={(e) => setReply({ reply: e.target.value })}
                   placeholder={isClosed ? "Ticket đã đóng" : "Nhập phản hồi..."}
                 />
               </div>
@@ -491,7 +475,7 @@ export default function SupportTicketDetailPage() {
               <div className="flex justify-end gap-3">
                 <button
                   type="submit"
-                  disabled={isClosed || savingReply || !reply.trim()}
+                  disabled={isClosed || savingReply || !(reply?.reply.trim())}
                   className="px-4 py-2 rounded-lg bg-gradient-to-b from-[#2f6a39] to-[#264b30] text-white border-none font-extrabold cursor-pointer disabled:opacity-50"
                 >
                   {savingReply ? "Đang lưu..." : "Gửi phản hồi"}

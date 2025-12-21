@@ -265,7 +265,7 @@ export default function SupportTicketsPage() {
 
     try {
       // ✅ gửi resolution
-      await closeSupportTicket(detailTicket.ticketId, resolution);
+      await closeSupportTicket(detailTicket.ticketId);
     } catch (e: unknown) {
       const msg =
         e instanceof Error ? e.message : "Không thể đóng phiếu hỗ trợ.";
@@ -296,13 +296,6 @@ export default function SupportTicketsPage() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3">
             <h3 className="m-0 text-base font-extrabold">Yêu cầu hỗ trợ</h3>
-            <div className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${isConnected
-                ? "bg-emerald-500/10 text-emerald-600"
-                : "bg-zinc-500/10 text-zinc-600"
-              }`}>
-              <span className={`h-2 w-2 rounded-full ${isConnected ? "bg-emerald-500 animate-pulse" : "bg-zinc-500"}`} />
-              {isConnected ? "Real-time" : "Offline"}
-            </div>
           </div>
 
           <div className="flex gap-2 flex-wrap">

@@ -12,6 +12,8 @@ import {
   getPublishedGalleryMapById,
   getPublishedGalleryMapByMapId,
   duplicateMapFromGallery,
+  incrementGalleryMapView,
+  toggleGalleryMapLike,
   MapGalleryCategory,
   MapGalleryDetailResponse,
   MapGallerySummaryResponse,
@@ -114,6 +116,8 @@ export default function GalleryClient() {
   const [mapIdQuery, setMapIdQuery] = useState("");
   const [duplicating, setDuplicating] = useState<string | null>(null);
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
+  const [likedMaps, setLikedMaps] = useState<Set<string>>(new Set());
+  const [likingMap, setLikingMap] = useState<string | null>(null);
 
   const [q, setQ] = useState("");
   const [tagKey, setTagKey] = useState<TagKey>("All");
@@ -213,6 +217,13 @@ export default function GalleryClient() {
     try {
       const d = await getPublishedGalleryMapById(galleryId);
       setDetail(d);
+      // Increment view count
+      try {
+        await incrementGalleryMapView(galleryId);
+      } catch (err) {
+        // Silently fail view count increment
+        console.error("Failed to increment view:", err);
+      }
     } catch (err: any) {
       setDetailError(err?.message || t("gallery.error_load_detail"));
     } finally {
@@ -228,6 +239,12 @@ export default function GalleryClient() {
     try {
       const d = await getPublishedGalleryMapByMapId(id);
       setDetail(d);
+      // Increment view count
+      try {
+        await incrementGalleryMapView(d.id);
+      } catch (err) {
+        console.error("Failed to increment view:", err);
+      }
     } catch (err: any) {
       setDetailError(err?.message || t("gallery.error_load_detail"));
     } finally {
@@ -283,6 +300,54 @@ export default function GalleryClient() {
         setDuplicateError(errorMessage);
         showToast("error", errorMessage);
       }
+    }
+  };
+
+  const handleLike = async (galleryId: string) => {
+    setLikingMap(galleryId);
+    try {
+      const result = await toggleGalleryMapLike(galleryId);
+      
+      // Update local liked state
+      setLikedMaps((prev) => {
+        const newSet = new Set(prev);
+        if (result.isLiked) {
+          newSet.add(galleryId);
+        } else {
+          newSet.delete(galleryId);
+        }
+        return newSet;
+      });
+
+      // Update like count in maps list
+      setMaps((prevMaps) =>
+        prevMaps.map((m) =>
+          m.id === galleryId
+            ? { ...m, likeCount: m.likeCount + (result.isLiked ? 1 : -1) }
+            : m
+        )
+      );
+
+      // Update detail if open
+      if (detail && detail.id === galleryId) {
+        setDetail({
+          ...detail,
+          likeCount: detail.likeCount + (result.isLiked ? 1 : -1),
+        });
+      }
+
+      showToast(
+        "success",
+        result.isLiked ? t("gallery.liked") : t("gallery.unliked")
+      );
+    } catch (err: any) {
+      if (err?.status === 401) {
+        showToast("error", t("gallery.error_like_unauthorized"));
+      } else {
+        showToast("error", err?.message || t("gallery.error_like"));
+      }
+    } finally {
+      setLikingMap(null);
     }
   };
 
@@ -575,6 +640,20 @@ export default function GalleryClient() {
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleLike(m.id)}
+                    disabled={likingMap === m.id}
+                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-all ${
+                      likedMaps.has(m.id)
+                        ? "border-red-500/40 bg-red-500/10 text-red-300 hover:border-red-400/70"
+                        : "border-zinc-700/70 bg-zinc-900 text-zinc-200 hover:border-emerald-400/70"
+                    } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  >
+                    <HeartIcon className={`h-4 w-4 ${likedMaps.has(m.id) ? "fill-red-400" : ""}`} />
+                    {likingMap === m.id ? "..." : fmt(m.likeCount)}
+                  </button>
+
                   <Link
                     href={{
                       pathname: "/maps/publish",

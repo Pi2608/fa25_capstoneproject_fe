@@ -19,7 +19,7 @@ import { getSegments, reorderSegments, type Segment, type TimelineTransition, ge
 import { getMapDetail, type MapDetail, updateMap, type UpdateMapRequest, type UpdateMapFeatureRequest, uploadGeoJsonToMap, updateLayerData, MapStatus, updateMapFeature, LayerDTO, getMapFeatureById, type BaseLayer, createExport, getExportById, type ExportRequest, type ExportResponse} from "@/lib/api-maps";
 import { createMapLocation, deleteLocation, getMapLocations } from "@/lib/api-location";
 
-import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, ActiveUsersIndicator, MeasurementInfoBox } from "@/components/map-editor-ui";
+import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, MeasurementInfoBox } from "@/components/map-editor-ui";
 import { LocationInfoPanel } from "@/components/map-editor-ui/LocationInfoPanel";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
@@ -3967,12 +3967,6 @@ export default function EditMapPage() {
             <DrawingToolsBar mapRef={mapRef} onStartMeasurement={startMeasurement} />
             )}
             <div className="flex items-center justify-end gap-2 overflow-x-auto no-scrollbar">
-              {/* Active Users */}
-              <ActiveUsersIndicator
-                activeUsers={collaboration.activeUsers}
-                isConnected={collaboration.isConnected}
-              />
-
               {/* Toolbar Group - Canva Style */}
               <div className="flex items-center gap-0 bg-zinc-800/50 rounded-lg p-0.5 border border-zinc-700/50">
                 <input
@@ -4527,7 +4521,7 @@ export default function EditMapPage() {
                 />
               ) : (
                 <div className="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
-                  <p className="text-sm text-amber-800 dark:text-amber-200">
+                  <p className="text-sm text-amber-800 tracking-tight">
                     Story maps không thể được embed. Chỉ có map bình thường mới có thể embed.
                   </p>
                 </div>

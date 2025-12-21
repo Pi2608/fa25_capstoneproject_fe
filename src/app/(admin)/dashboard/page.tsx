@@ -187,23 +187,12 @@ function normalizeMonthlyData(data: Raw): MonthlyData[] {
   // Convert to array and sort by month
   const result = Array.from(monthMap.values());
 
-  // If no data, generate empty data for last 12 months
-  if (result.length === 0) {
-    const { start } = getLast12MonthsRange();
-    for (let i = 0; i < 12; i++) {
-      const date = new Date(start);
-      date.setMonth(start.getMonth() + i);
-      const monthStr = date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
-      result.push({ month: monthStr, users: 0, revenue: 0, maps: 0, exports: 0 });
-    }
-  } else {
-    // Sort by month
-    result.sort((a, b) => {
-      const dateA = new Date(a.month);
-      const dateB = new Date(b.month);
-      return dateA.getTime() - dateB.getTime();
-    });
-  }
+  // Sort by month
+  result.sort((a, b) => {
+    const dateA = new Date(a.month);
+    const dateB = new Date(b.month);
+    return dateA.getTime() - dateB.getTime();
+  });
 
   return result;
 }
@@ -473,17 +462,18 @@ export default function AdminDashboard(): JSX.Element {
       return () => { };
     }
 
-    // Enforce endDate >= startDate and endDate >= today
     // Enforce endDate >= startDate
     if (endDate < startDate) {
       endDate = addDays(startDate, 1);
       setRevEnd(dateInputValue(endDate));
     }
 
-    const endExclusive = addDays(endDate, 1);
+    // Set end time to end of day (inclusive)
+    const endInclusive = new Date(endDate);
+    endInclusive.setUTCHours(23, 59, 59, 999);
 
     setRevenueLoading(true);
-    adminGetRevenueAnalytics<unknown>(startDate, endExclusive)
+    adminGetRevenueAnalytics<unknown>(startDate, endInclusive)
       .then((res) => {
         if (!mounted) return;
         const resObj = res as any;
@@ -518,67 +508,37 @@ export default function AdminDashboard(): JSX.Element {
   }, [revStart, revEnd]);
 
   // Load monthly data (users/maps/exports + revenue) with selectable range
-  // Load monthly data (users/maps/exports + revenue) with selectable range
   useEffect(() => {
     let mounted = true;
     setMonthlyLoading(true);
 
-    const start = new Date(monthlyStart);
-    start.setHours(0, 0, 0, 0);
+    // Parse dates as UTC to avoid timezone issues
+    function parseYmdToUtc(ymd: string) {
+      return new Date(`${ymd}T00:00:00.000Z`);
+    }
 
-    // endExclusive = first day of next month (include full end month)
-    const endExclusive = new Date(monthlyEnd);
-    endExclusive.setHours(0, 0, 0, 0);
-    endExclusive.setDate(1);
-    endExclusive.setMonth(endExclusive.getMonth() + 1);
+    const start = parseYmdToUtc(monthlyStart);
 
-    if (Number.isNaN(start.getTime()) || Number.isNaN(endExclusive.getTime())) {
+    // Calculate last day of the selected end month (inclusive)
+    const endDate = parseYmdToUtc(monthlyEnd);
+    const endInclusive = new Date(endDate);
+    endInclusive.setUTCMonth(endInclusive.getUTCMonth() + 1);
+    endInclusive.setUTCDate(0); // Last day of previous month
+    endInclusive.setUTCHours(23, 59, 59, 999);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(endInclusive.getTime())) {
       setMonthlyLoading(false);
       return () => { };
     }
 
-    Promise.allSettled([
-      adminGetSystemAnalytics<Raw>(start, endExclusive),
-      adminGetRevenueAnalytics<Raw>(start, endExclusive),
-    ])
-      .then((results) => {
+    // Only call analytics API - it already includes monthly revenue
+    adminGetSystemAnalytics<Raw>(start, endInclusive)
+      .then((analyticsRes) => {
         if (!mounted) return;
 
-        const analyticsRes = results[0].status === "fulfilled" ? results[0].value : null;
-        const revenueRes = results[1].status === "fulfilled" ? results[1].value : null;
-
-        // 1) Parse monthly data if backend provides it
-        const normalizedFromAnalytics = analyticsRes ? normalizeMonthlyData(analyticsRes as Raw) : [];
-
-        // 2) Aggregate daily revenue -> monthly revenue if available
-        let monthlyFromRevenue: MonthlyData[] = [];
-        if (revenueRes) {
-          const resObj = revenueRes as any;
-          const dailyRevenue =
-            resObj?.dailyRevenue || resObj?.DailyRevenue || (Array.isArray(resObj) ? resObj : []);
-          const normalizedDaily = normalizeRevenue(dailyRevenue);
-          monthlyFromRevenue = aggregateDailyRevenueToMonthly(normalizedDaily);
-        }
-
-        // 3) Merge: prefer analytics for users/maps/exports; fill revenue from either source
-        const mergedMap = new Map<string, MonthlyData>();
-
-        normalizedFromAnalytics.forEach((m) => {
-          mergedMap.set(m.month, { ...m });
-        });
-
-        monthlyFromRevenue.forEach((m) => {
-          const existing = mergedMap.get(m.month) || { ...m, users: 0, maps: 0, exports: 0 };
-          mergedMap.set(m.month, { ...existing, revenue: m.revenue });
-        });
-
-        const merged = Array.from(mergedMap.values()).sort((a, b) => {
-          const da = new Date(a.month);
-          const db = new Date(b.month);
-          return da.getTime() - db.getTime();
-        });
-
-        setMonthlyData(merged.length > 0 ? merged : normalizedFromAnalytics);
+        // Backend returns complete monthly data including revenue
+        const normalized = analyticsRes ? normalizeMonthlyData(analyticsRes as Raw) : [];
+        setMonthlyData(normalized);
       })
       .catch((err) => {
         console.error("Failed to load monthly analytics:", err);

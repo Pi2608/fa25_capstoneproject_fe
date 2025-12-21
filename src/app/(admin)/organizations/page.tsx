@@ -21,6 +21,7 @@ type Organization = {
   status: OrgStatus;
   createdAt?: string | null;
   totalMembers?: number | null;
+  primaryPlanName?: string | null;
 };
 
 type EditDraft = {
@@ -264,6 +265,15 @@ export default function OrganizationsPage() {
                       : "border-gray-200 bg-gray-50 text-gray-600"
                   }`}
                 >
+                  Gói đăng ký
+                </th>
+                <th
+                  className={`p-3 border-b text-left font-extrabold text-xs ${
+                    isDark
+                      ? "border-zinc-800 bg-zinc-800/95 text-zinc-400"
+                      : "border-gray-200 bg-gray-50 text-gray-600"
+                  }`}
+                >
                   {t("admin", "status")}
                 </th>
                 <th
@@ -288,7 +298,7 @@ export default function OrganizationsPage() {
               {rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={6}
+                    colSpan={7}
                     className={`p-4 text-center ${
                       isDark ? "text-zinc-400" : "text-gray-500"
                     }`}
@@ -319,6 +329,21 @@ export default function OrganizationsPage() {
                       }`}
                     >
                       {o.totalMembers ?? "–"}
+                    </td>
+                    <td
+                      className={`p-3 border-b text-left ${
+                        isDark ? "border-zinc-800" : "border-gray-200"
+                      }`}
+                    >
+                      {o.primaryPlanName ? (
+                        <span className="px-2 py-1 rounded-full text-xs font-extrabold text-blue-600 bg-blue-500/16">
+                          {o.primaryPlanName}
+                        </span>
+                      ) : (
+                        <span className={`text-xs ${isDark ? "text-zinc-500" : "text-gray-400"}`}>
+                          Chưa có gói
+                        </span>
+                      )}
                     </td>
                     <td
                       className={`p-3 border-b text-left ${

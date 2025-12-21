@@ -487,7 +487,7 @@ function StatusBadge({ status }: { status: string }) {
       "border-emerald-300 text-emerald-700 bg-emerald-50 dark:border-emerald-400/30 dark:text-emerald-300 dark:bg-emerald-500/10";
   else if (s === "pending")
     cls =
-      "border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-400/30 dark:text-amber-300 dark:bg-amber-500/10";
+      "border-amber-300 text-amber-700 bg-amber-50 dark:border-amber-400/30 tracking-tight dark:bg-amber-500/10";
   else if (s === "cancelled" || s === "failed")
     cls =
       "border-rose-300 text-rose-700 bg-rose-50 dark:border-rose-400/30 dark:text-rose-300 dark:bg-rose-500/10";

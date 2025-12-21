@@ -6,13 +6,55 @@ import { adminGetOrganizationById } from "@/lib/admin-api";
 import Loading from "@/app/loading";
 import { useTheme } from "../../layout";
 import { getThemeClasses } from "@/utils/theme-utils";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type OrgStatus = "Active" | "Suspended";
+
+type OrgMember = {
+  memberId: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  role: string;
+  status: string;
+  joinedAt: string;
+  leftAt?: string | null;
+};
+
+type OrgMembership = {
+  membershipId: string;
+  userId: string;
+  userName: string;
+  userEmail: string;
+  planId: number;
+  planName: string;
+  status: string;
+  startDate: string;
+  endDate?: string | null;
+  autoRenew: boolean;
+  priceMonthly: number;
+  createdAt: string;
+};
+
+type OrgTransaction = {
+  transactionId: string;
+  membershipId: string;
+  userName: string;
+  amount: number;
+  paymentMethod: string;
+  status: string;
+  transactionDate: string;
+};
 
 type OrganizationDetail = {
   orgId: string;
   name: string;
   description?: string | null;
+  abbreviation?: string | null;
+  logoUrl?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  address?: string | null;
   status: OrgStatus;
   ownerUserId: string;
   ownerName: string;
@@ -21,7 +63,14 @@ type OrganizationDetail = {
   updatedAt?: string | null;
   totalMembers?: number | null;
   totalActiveMemberships?: number | null;
+  totalMaps?: number | null;
+  totalStorageUsedMB?: number | null;
+  totalRevenue?: number | null;
   primaryPlanName?: string | null;
+  members?: OrgMember[];
+  activeMemberships?: OrgMembership[];
+  expiredMemberships?: OrgMembership[];
+  recentTransactions?: OrgTransaction[];
 };
 
 export default function OrganizationDetailPage() {
@@ -33,7 +82,7 @@ export default function OrganizationDetailPage() {
   const [data, setData] = useState<OrganizationDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
+  const { t } = useI18n();
   useEffect(() => {
     let alive = true;
     if (!orgId) return;
@@ -103,10 +152,14 @@ export default function OrganizationDetailPage() {
               >
                 {data.name}
               </h2>
+              {data.abbreviation && (
+                <span className={`text-sm ${themeClasses.textMuted}`}>({data.abbreviation})</span>
+              )}
             </div>
             {StatusBadge}
           </div>
 
+          {/* Basic Information */}
           <div
             style={{
               display: "grid",
@@ -127,6 +180,26 @@ export default function OrganizationDetailPage() {
               {data.totalActiveMemberships ?? 0}
             </Field>
 
+            <Field label="Tổng số maps" themeClasses={themeClasses}>
+              {data.totalMaps ?? 0}
+            </Field>
+
+            <Field label="Storage sử dụng" themeClasses={themeClasses}>
+              {data.totalStorageUsedMB ? `${data.totalStorageUsedMB.toFixed(2)} MB` : "0 MB"}
+            </Field>
+
+            <Field label="Tổng doanh thu" themeClasses={themeClasses}>
+              {data.totalRevenue ? `$${data.totalRevenue.toFixed(2)}` : "$0.00"}
+            </Field>
+
+            {data.contactEmail && (
+              <Field label="Email liên hệ" themeClasses={themeClasses}>{data.contactEmail}</Field>
+            )}
+
+            {data.contactPhone && (
+              <Field label="Số điện thoại" themeClasses={themeClasses}>{data.contactPhone}</Field>
+            )}
+
             <Field label="Ngày tạo" themeClasses={themeClasses}>
               {data.createdAt ? new Date(data.createdAt).toLocaleString("vi-VN") : "—"}
             </Field>
@@ -136,6 +209,19 @@ export default function OrganizationDetailPage() {
             </Field>
           </div>
 
+          {/* Address */}
+          {data.address && (
+            <div style={{ marginTop: 28 }}>
+              <div className={`font-semibold mb-2 ${themeClasses.loading.text}`}>Địa chỉ</div>
+              <div
+                className={`rounded-lg p-3.5 min-h-[48px] whitespace-pre-wrap border ${themeClasses.panel} ${themeClasses.loading.text}`}
+              >
+                {data.address}
+              </div>
+            </div>
+          )}
+
+          {/* Description */}
           <div style={{ marginTop: 28 }}>
             <div className={`font-semibold mb-2 ${themeClasses.loading.text}`}>Mô tả</div>
             <div
@@ -144,6 +230,150 @@ export default function OrganizationDetailPage() {
               {data.description?.trim() || "Không có mô tả."}
             </div>
           </div>
+
+          {/* Members Table */}
+          {data.members && data.members.length > 0 && (
+            <div style={{ marginTop: 32 }}>
+              <h3 className={`font-semibold mb-3 text-lg ${themeClasses.loading.text}`}>
+                Thành viên ({data.members.length})
+              </h3>
+              <div className={`rounded-lg border ${themeClasses.tableBorder} overflow-hidden`}>
+                <table className="w-full">
+                  <thead className={themeClasses.panel}>
+                    <tr>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Tên</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Email</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Vai trò</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Trạng thái</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Ngày tham gia</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.members.map((member) => (
+                      <tr key={member.memberId} className={`border-t ${themeClasses.tableBorder}`}>
+                        <td className={`px-4 py-3 text-sm ${themeClasses.loading.text}`}>{member.userName}</td>
+                        <td className={`px-4 py-3 text-sm ${themeClasses.textMuted}`}>{member.userEmail}</td>
+                        <td className={`px-4 py-3 text-sm`}>
+                          <span className={`px-2 py-1 rounded-md text-xs ${
+                            member.role === "Admin" ? "bg-purple-500/10 text-purple-500" : 
+                            member.role === "Owner" ? "bg-blue-500/10 text-blue-500" : 
+                            "bg-gray-500/10 text-gray-500"
+                          }`}>
+                            {member.role}
+                          </span>
+                        </td>
+                        <td className={`px-4 py-3 text-sm`}>
+                          <span className={`px-2 py-1 rounded-md text-xs ${
+                            member.status === "Active" ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"
+                          }`}>
+                            {member.status}
+                          </span>
+                        </td>
+                        <td className={`px-4 py-3 text-sm ${themeClasses.textMuted}`}>
+                          {new Date(member.joinedAt).toLocaleDateString("vi-VN")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Active Memberships */}
+          {data.activeMemberships && data.activeMemberships.length > 0 && (
+            <div style={{ marginTop: 32 }}>
+              <h3 className={`font-semibold mb-3 text-lg ${themeClasses.loading.text}`}>
+                Membership đang hoạt động ({data.activeMemberships.length})
+              </h3>
+              <div className={`rounded-lg border ${themeClasses.tableBorder} overflow-hidden`}>
+                <table className="w-full">
+                  <thead className={themeClasses.panel}>
+                    <tr>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Người dùng</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Gói</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Giá/tháng</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Bắt đầu</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Kết thúc</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Tự động gia hạn</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.activeMemberships.map((membership) => (
+                      <tr key={membership.membershipId} className={`border-t ${themeClasses.tableBorder}`}>
+                        <td className={`px-4 py-3 text-sm ${themeClasses.loading.text}`}>
+                          <div>{membership.userName}</div>
+                          <div className={`text-xs ${themeClasses.textMuted}`}>{membership.userEmail}</div>
+                        </td>
+                        <td className={`px-4 py-3 text-sm ${themeClasses.loading.text}`}>{membership.planName}</td>
+                        <td className={`px-4 py-3 text-sm ${themeClasses.loading.text}`}>${membership.priceMonthly.toFixed(2)}</td>
+                        <td className={`px-4 py-3 text-sm ${themeClasses.textMuted}`}>
+                          {new Date(membership.startDate).toLocaleDateString("vi-VN")}
+                        </td>
+                        <td className={`px-4 py-3 text-sm ${themeClasses.textMuted}`}>
+                          {membership.endDate ? new Date(membership.endDate).toLocaleDateString("vi-VN") : "—"}
+                        </td>
+                        <td className={`px-4 py-3 text-sm`}>
+                          <span className={`px-2 py-1 rounded-md text-xs ${
+                            membership.autoRenew ? "bg-green-500/10 text-green-500" : "bg-gray-500/10 text-gray-500"
+                          }`}>
+                            {membership.autoRenew ? "Có" : "Không"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Recent Transactions */}
+          {data.recentTransactions && data.recentTransactions.length > 0 && (
+            <div style={{ marginTop: 32 }}>
+              <h3 className={`font-semibold mb-3 text-lg ${themeClasses.loading.text}`}>
+                {t("billing.recent_title")} ({data.recentTransactions.length})
+              </h3>
+              <div className={`rounded-lg border ${themeClasses.tableBorder} overflow-hidden`}>
+                <table className="w-full">
+                  <thead className={themeClasses.panel}>
+                    <tr>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Người dùng</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Số tiền</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Phương thức</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Trạng thái</th>
+                      <th className={`px-4 py-3 text-left text-sm font-semibold ${themeClasses.loading.text}`}>Ngày giao dịch</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.recentTransactions.map((transaction) => (
+                      <tr key={transaction.transactionId} className={`border-t ${themeClasses.tableBorder}`}>
+                        <td className={`px-4 py-3 text-sm ${themeClasses.loading.text}`}>{transaction.userName}</td>
+                        <td className={`px-4 py-3 text-sm font-semibold ${themeClasses.loading.text}`}>
+                          ${transaction.amount.toFixed(2)}
+                        </td>
+                        <td className={`px-4 py-3 text-sm ${themeClasses.textMuted}`}>{transaction.paymentMethod}</td>
+                        <td className={`px-4 py-3 text-sm`}>
+                          <span className={`px-2 py-1 rounded-md text-xs ${
+                            transaction.status.toLowerCase() === "completed" || transaction.status.toLowerCase() === "paid" || transaction.status.toLowerCase() === "success"
+                              ? "bg-green-500/10 text-green-500" 
+                              : transaction.status.toLowerCase() === "pending"
+                              ? "bg-yellow-500/10 text-yellow-500"
+                              : "bg-red-500/10 text-red-500"
+                          }`}>
+                            {transaction.status}
+                          </span>
+                        </td>
+                        <td className={`px-4 py-3 text-sm ${themeClasses.textMuted}`}>
+                          {new Date(transaction.transactionDate).toLocaleString("vi-VN")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       </section>
     </div>

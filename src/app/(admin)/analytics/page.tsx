@@ -12,6 +12,19 @@ export default function AnalyticsPage() {
   const theme = getThemeClasses(isDark);
   const [data, setData] = useState<AdminAnalytics | null>(null);
 
+  // Date range state
+  const [startDate, setStartDate] = useState<string>(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 6); // Last 7 days by default
+    d.setHours(0, 0, 0, 0);
+    return dateInputValue(d);
+  });
+  const [endDate, setEndDate] = useState<string>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return dateInputValue(today);
+  });
+
   useEffect(() => {
     let mounted = true;
 
@@ -19,7 +32,15 @@ export default function AnalyticsPage() {
       loading.showLoading();
 
       try {
-        const result = await adminGetAnalytics();
+        // Parse dates as UTC to avoid timezone issues
+        const start = parseYmdToUtc(startDate);
+        const end = parseYmdToUtc(endDate);
+        
+        // Set end time to end of day (inclusive)
+        const endInclusive = new Date(end);
+        endInclusive.setUTCHours(23, 59, 59, 999);
+
+        const result = await adminGetAnalytics(start, endInclusive);
         if (mounted) {
           setData(result);
         }
@@ -37,7 +58,7 @@ export default function AnalyticsPage() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [startDate, endDate]);
 
   const safeFixed2 = (n: number): string => {
     if (typeof n === "number" && Number.isFinite(n)) {
@@ -45,6 +66,21 @@ export default function AnalyticsPage() {
     }
     return "0.00";
   };
+
+  function parseYmdToUtc(ymd: string) {
+    return new Date(`${ymd}T00:00:00.000Z`);
+  }
+
+  function pad2(n: number) {
+    return String(n).padStart(2, "0");
+  }
+
+  function dateInputValue(d: Date) {
+    const y = d.getFullYear();
+    const m = pad2(d.getMonth() + 1);
+    const day = pad2(d.getDate());
+    return `${y}-${m}-${day}`;
+  }
 
   const renderBody = () => {
     if (!data) {
@@ -196,8 +232,26 @@ export default function AnalyticsPage() {
   return (
     <div className="grid gap-5">
       <section className={`${theme.panel} border rounded-xl p-4 shadow-sm grid gap-3 pt-2 mt-0`}>
-        <div className="flex items-center justify-between gap-3 mb-2">
+        <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
           <h3 className="m-0 text-base font-extrabold">Phân tích hệ thống</h3>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-zinc-400">Từ</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-2 py-1 rounded border border-zinc-600 bg-zinc-800 text-white text-sm"
+              max={endDate}
+            />
+            <label className="text-sm text-zinc-400">Đến</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-2 py-1 rounded border border-zinc-600 bg-zinc-800 text-white text-sm"
+              min={startDate}
+            />
+          </div>
         </div>
         {renderBody()}
       </section>
