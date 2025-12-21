@@ -360,103 +360,107 @@ function ProfileLayoutContent({ children }: { children: ReactNode }) {
               <ThemeToggle />
             </div>
 
-            <ScrollArea className="flex-1 min-h-0">
-              <div className="px-1 space-y-1">
-                {commonNav.map((n) => (
-                  <NavItem
-                    key={n.href}
-                    href={n.href}
-                    label={n.label}
-                    icon={n.icon}
-                    active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
-                    isDark={isDark}
-                    right={
-                      n.href === "/profile/notifications" && unread > 0 ? (
-                        <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
-                          {unread > 99 ? "99+" : unread}
-                        </Badge>
-                      ) : n.href === "/profile/invite" && invitationCount > 0 ? (
-                        <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
-                          {invitationCount > 99 ? "99+" : invitationCount}
-                        </Badge>
-                      ) : undefined
-                    }
-                  />
-                ))}
-              </div>
-
-              {!isSuspended && (
-                <div className="px-1 mt-5">
-                  <div
-                    suppressHydrationWarning
-                    className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}
-                  >
-                    {t("profilelayout.orgs_title")}
-                  </div>
-
-                <NavItem
-                  href="/register/organization"
-                  label={t("profilelayout.create_org")}
-                  icon={PlusCircle}
-                  active={pathname === "/register/organization"}
-                  isDark={isDark}
-                />
-
-                  {orgs === null && (
-                    <div className="space-y-2 py-2">
-                      <div className="h-8 rounded-md bg-muted animate-pulse" />
-                      <div className="h-8 rounded-md bg-muted animate-pulse" />
+              <ScrollArea className="flex-1 min-h-0">
+                {!isSuspended && (
+                  <>
+                    <div className="px-1 space-y-1">
+                      {commonNav.map((n) => (
+                        <NavItem
+                          key={n.href}
+                          href={n.href}
+                          label={n.label}
+                          icon={n.icon}
+                          active={pathname === n.href || pathname.startsWith(`${n.href}/`)}
+                          isDark={isDark}
+                          right={
+                            n.href === "/profile/notifications" && unread > 0 ? (
+                              <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
+                                {unread > 99 ? "99+" : unread}
+                              </Badge>
+                            ) : n.href === "/profile/invite" && invitationCount > 0 ? (
+                              <Badge variant="secondary" className="text-[11px] px-1.5 py-0 h-5 min-w-[20px] justify-center">
+                                {invitationCount > 99 ? "99+" : invitationCount}
+                              </Badge>
+                            ) : undefined
+                          }
+                        />
+                      ))}
                     </div>
-                  )}
 
-                  {orgsErr && (
-                    <div className="px-3 py-2 text-xs rounded-md border bg-destructive/10 text-destructive">
-                      {orgsErr}
-                    </div>
-                  )}
+                    <div className="px-1 mt-5">
+                      <div
+                        suppressHydrationWarning
+                        className={`text-[11px] uppercase tracking-widest ${themeClasses.textMuted} mb-2`}
+                      >
+                        {t("profilelayout.orgs_title")}
+                      </div>
 
-                  {orgs && !orgsErr && orgs.length === 0 && (
-                    <div className={`px-3 py-2 text-xs rounded-md border ${themeClasses.tableBorder} ${themeClasses.textMuted}`}>
-                      {t("profilelayout.no_orgs")}
-                    </div>
-                  )}
-
-                {(orgs ?? []).slice(0, 5).map((o) => {
-                  const planLabel = orgPlanLabels[o.orgId];
-                  const isActive = pathname.startsWith(`/profile/organizations/${o.orgId}`);
-                  return (
                     <NavItem
-                      key={o.orgId}
-                      href={`/profile/organizations/${o.orgId}`}
-                      label={o.orgName}
-                      icon={Building2}
-                      active={isActive}
+                      href="/register/organization"
+                      label={t("profilelayout.create_org")}
+                      icon={PlusCircle}
+                      active={pathname === "/register/organization"}
                       isDark={isDark}
-                      right={
-                        <Badge variant="secondary" className="text-[11px] font-semibold">
-                          <span className={`text-sm font-semibold ${isDark ? "text-emerald-300" : isActive ? "text-emerald-500" : "text-emerald-600"}`}>{planLabel}</span>
-                        </Badge>
-                      }
                     />
-                  );
-                })}
 
-                {(orgs ?? []).length > 5 && (
-                  <NavItem
-                    href="/organizations"
-                    label={t("profilelayout.view_all_orgs")}
-                    icon={Building2}
-                    active={pathname === "/organizations"}
-                    isDark={isDark}
-                  />
+                      {orgs === null && (
+                        <div className="space-y-2 py-2">
+                          <div className="h-8 rounded-md bg-muted animate-pulse" />
+                          <div className="h-8 rounded-md bg-muted animate-pulse" />
+                        </div>
+                      )}
+
+                      {orgsErr && (
+                        <div className="px-3 py-2 text-xs rounded-md border bg-destructive/10 text-destructive">
+                          {orgsErr}
+                        </div>
+                      )}
+
+                      {orgs && !orgsErr && orgs.length === 0 && (
+                        <div className={`px-3 py-2 text-xs rounded-md border ${themeClasses.tableBorder} ${themeClasses.textMuted}`}>
+                          {t("profilelayout.no_orgs")}
+                        </div>
+                      )}
+
+                    {(orgs ?? []).slice(0, 5).map((o) => {
+                      const planLabel = orgPlanLabels[o.orgId];
+                      const isActive = pathname.startsWith(`/profile/organizations/${o.orgId}`);
+                      return (
+                        <NavItem
+                          key={o.orgId}
+                          href={`/profile/organizations/${o.orgId}`}
+                          label={o.orgName}
+                          icon={Building2}
+                          active={isActive}
+                          isDark={isDark}
+                          right={
+                            <Badge variant="secondary" className="text-[11px] font-semibold">
+                              <span className={`text-sm font-semibold ${isDark ? "text-emerald-300" : isActive ? "text-emerald-500" : "text-emerald-600"}`}>{planLabel}</span>
+                            </Badge>
+                          }
+                        />
+                      );
+                    })}
+
+                    {(orgs ?? []).length > 5 && (
+                      <NavItem
+                        href="/organizations"
+                        label={t("profilelayout.view_all_orgs")}
+                        icon={Building2}
+                        active={pathname === "/organizations"}
+                        isDark={isDark}
+                      />
+                    )}
+
+                    <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} isDark={isDark} />
+
+                      <div className="h-3" />
+                    </div>
+                  </>
                 )}
+              </ScrollArea>
 
-                <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} isDark={isDark} />
-
-                  <div className="h-3" />
-                </div>
-              )}
-            </ScrollArea>
+            <NavItem href="/profile/help" label={t("profilelayout.help")} icon={HelpCircle} active={pathname === "/profile/help"} isDark={isDark} />
 
             <Separator className="my-2" />
 
