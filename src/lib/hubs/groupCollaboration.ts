@@ -164,11 +164,17 @@ function buildConnection(token?: string): signalR.HubConnection | null {
   const hubUrl = resolveHubUrl();
   if (!hubUrl) return null;
 
-  const conn = new signalR.HubConnectionBuilder()
-    .withUrl(
-      hubUrl,
-      token ? { accessTokenFactory: () => token } : undefined
-    )
+  const builder = new signalR.HubConnectionBuilder();
+  
+  if (token) {
+    builder.withUrl(hubUrl, {
+      accessTokenFactory: () => token
+    });
+  } else {
+    builder.withUrl(hubUrl);
+  }
+  
+  const conn = builder
     .withAutomaticReconnect()
     .configureLogging(signalR.LogLevel.Information)
     .build();
@@ -328,12 +334,11 @@ export async function createGroup(
     }
 
     await connection.invoke("CreateGroup", {
-      sessionId: payload.sessionId,
+      ...payload,
       groupName: payload.groupName,
       color: payload.color ?? null,
       memberParticipantIds: payload.memberParticipantIds ?? [],
       leaderParticipantId: payload.leaderParticipantId ?? null,
-      ...payload,
     });
 
     return true;
