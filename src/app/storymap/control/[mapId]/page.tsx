@@ -384,7 +384,6 @@ export default function StoryMapControlPage() {
 
   // ================== SignalR connection for session ==================
   const { connection, isConnected: signalRConnected } = useSessionHub({
-  const { connection, isConnected: signalRConnected } = useSessionHub({
     sessionId: session?.sessionId || "",
     enabled: !!session?.sessionId,
     handlers: {
