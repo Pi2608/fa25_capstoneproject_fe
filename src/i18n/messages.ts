@@ -209,8 +209,8 @@ export const messages = {
                 "Sau khi chuyển, bạn sẽ không còn là Owner nữa và một số thao tác quản trị sẽ bị hạn chế.\n\n" +
                 "Bạn có chắc chắn muốn tiếp tục?",
 
-            transfer_success_to:
-                "Đã chuyển quyền sở hữu tổ chức thành công cho {{name}}.",
+            // transfer_success_to:
+            //     "Đã chuyển quyền sở hữu tổ chức thành công cho {{name}}.",
 
             transfer_failed_with_reason:
                 "Không thể chuyển quyền sở hữu. Lý do: {{reason}}",
@@ -3480,8 +3480,8 @@ export const messages = {
                 "After the transfer, you will no longer be the Owner and some admin actions will be limited.\n\n" +
                 "Are you sure you want to continue?",
 
-            transfer_success_to:
-                "Ownership has been successfully transferred to {{name}}.",
+            // transfer_success_to:
+            //     "Ownership has been successfully transferred to {{name}}.",
 
             transfer_failed_with_reason:
                 "Could not transfer ownership. Reason: {{reason}}",

@@ -27,7 +27,7 @@ type MemberRow = {
   email: string;
   lastViewedAgo?: string;
   permissions: string;
-  license: "Owner" | "Admin" | "Member" | "Viewer" | string;
+  license: "Owner" | "Member" | string;
   joinedAt?: string;
 };
 
@@ -287,7 +287,6 @@ export default function MembersPage() {
   const [deleteTarget, setDeleteTarget] = useState<MemberRow | null>(null);
 
   const [inviteInput, setInviteInput] = useState("");
-  const [inviteRole, setInviteRole] = useState<"Admin" | "Member" | "Viewer">("Member");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
 
@@ -300,7 +299,7 @@ export default function MembersPage() {
       try {
         const meRes = await getMe();
         if (!cancelled) setMe(meRes);
-      } catch {}
+      } catch { }
 
       try {
         const orgRes = await getMyOrganizations();
@@ -309,8 +308,8 @@ export default function MembersPage() {
         const items: MyOrganizationDto[] = isOrgList(orgRes)
           ? orgRes
           : isOrgEnvelope(orgRes)
-          ? orgRes.organizations
-          : [];
+            ? orgRes.organizations
+            : [];
 
         setOrgs(items);
         setOrgErr(null);
@@ -340,11 +339,12 @@ export default function MembersPage() {
         const arr: MemberDto[] = isMembersRes(res)
           ? res.members
           : Array.isArray(res)
-          ? (res as MemberDto[])
-          : [];
+            ? (res as MemberDto[])
+            : [];
 
         const rows: MemberRow[] = arr.map((member) => {
-          const role = typeof member.role === "string" ? member.role : "Member";
+          const roleRaw = typeof member.role === "string" ? member.role : "Member";
+          const role = roleRaw === "Owner" ? "Owner" : "Member";
 
           return {
             memberId: member.memberId,
@@ -404,14 +404,15 @@ export default function MembersPage() {
     () =>
       me
         ? members.find(
-            (m) => m.email?.toLowerCase() === me.email?.toLowerCase()
-          ) ?? null
+          (m) => m.email?.toLowerCase() === me.email?.toLowerCase()
+        ) ?? null
         : null,
     [members, me]
   );
 
   const isOwner = currentUserRow?.license === "Owner";
-  const isAdminOrOwner = currentUserRow?.license === "Owner" || currentUserRow?.license === "Admin";
+  const isAdminOrOwner = isOwner;
+
 
   const canTransfer = (target: MemberRow) => {
     if (!currentUserRow) return false;
@@ -424,32 +425,32 @@ export default function MembersPage() {
   };
 
   const handleChangeRole = async (memberId: string, newRole: MemberRow["license"]) => {
-  if (!selectedOrgId || !isOwner) return;
+    if (!selectedOrgId || !isOwner) return;
 
-  if (newRole === "Owner") {
-    const target = members.find((m) => m.memberId === memberId);
-    if (target) {
-      handleTransferOwnershipClick(target);
-      return;
+    if (newRole === "Owner") {
+      const target = members.find((m) => m.memberId === memberId);
+      if (target) {
+        handleTransferOwnershipClick(target);
+        return;
+      }
     }
-  }
 
-  const previous = members;
-  setMembers((list) =>
-    list.map((m) => (m.memberId === memberId ? { ...m, license: newRole } : m))
-  );
-  setBusy(memberId, true);
+    const previous = members;
+    setMembers((list) =>
+      list.map((m) => (m.memberId === memberId ? { ...m, license: newRole } : m))
+    );
+    setBusy(memberId, true);
 
-  try {
-    await updateMemberRole({ orgId: selectedOrgId, memberId, newRole });
-  } catch {
-    setMembers(previous);
-    const msg = t("settings_members.update_role_failed");
-    showToast("error", msg, 4000);
-  } finally {
-    setBusy(memberId, false);
-  }
-};
+    try {
+      await updateMemberRole({ orgId: selectedOrgId, memberId, newRole });
+    } catch {
+      setMembers(previous);
+      const msg = t("settings_members.update_role_failed");
+      showToast("error", msg, 4000);
+    } finally {
+      setBusy(memberId, false);
+    }
+  };
 
 
   const handleTransferOwnershipClick = (target: MemberRow) => {
@@ -490,17 +491,12 @@ export default function MembersPage() {
 
       await loadMembers(selectedOrgId);
 
-      const name = target.displayName || target.email || "";
-      const fallback = name
-        ? t("settings_members.transfer_success_to", { name })
-        : t("settings_members.transfer_success");
-      const apiMsg =
-        typeof (res as any)?.result === "string"
-          ? ((res as any).result as string).trim()
-          : "";
-      const msg = apiMsg || fallback;
+      showToast(
+        "success",
+        t("settings_members.transfer_success"),
+        3000
+      );
 
-      showToast("success", msg, 3000);
       setTransferTarget(null);
     } catch (err) {
       const reason = safeErrorMessage(
@@ -568,7 +564,7 @@ export default function MembersPage() {
           await inviteMember({
             orgId: selectedOrgId,
             memberEmail: email,
-            memberType: inviteRole,
+            memberType: "Member",
           });
         }
 
@@ -587,7 +583,8 @@ export default function MembersPage() {
         setInviteBusy(false);
       }
     },
-    [inviteInput, inviteRole, selectedOrgId, loadMembers, t, showToast]
+    [inviteInput, selectedOrgId, loadMembers, t, showToast]
+
   );
 
   return (
@@ -681,19 +678,6 @@ export default function MembersPage() {
             </div>
 
             <div className="flex gap-2">
-              <select
-                value={inviteRole}
-                onChange={(e) =>
-                  setInviteRole(e.target.value as "Admin" | "Member" | "Viewer")
-                }
-                className={`rounded-md border px-2 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 ${themeClasses.select}`}
-                title={t("settings_members.invite_role_title")}
-              >
-                <option value="Admin">Admin</option>
-                <option value="Member">Member</option>
-                <option value="Viewer">Viewer</option>
-              </select>
-
               <button
                 onClick={() => void handleInvite()}
                 disabled={inviteBusy || !selectedOrgId}
@@ -728,7 +712,7 @@ export default function MembersPage() {
               <th className="px-3 py-2 text-sm font-medium text-left">
                 {t("settings_members.col_role")}
               </th>
-              {isAdminOrOwner && (
+              {isOwner && (
                 <th className="w-[280px] px-3 py-2 text-sm font-medium text-left">
                   {t("settings_members.col_actions")}
                 </th>
@@ -765,14 +749,14 @@ export default function MembersPage() {
                 const transferTitle = !isGuid(m.userId)
                   ? t("settings_members.no_guid_user")
                   : !isGuid(selectedOrgId)
-                  ? t("settings_members.invalid_orgid")
-                  : currentUserRow?.license !== "Owner"
-                  ? t("settings_members.only_owner_transfer")
-                  : m.email?.toLowerCase() === me?.email?.toLowerCase()
-                  ? t("settings_members.transfer_self_forbidden")
-                  : m.license === "Owner"
-                  ? t("settings_members.cannot_transfer_to_owner")
-                  : t("settings_members.transfer_ownership");
+                    ? t("settings_members.invalid_orgid")
+                    : currentUserRow?.license !== "Owner"
+                      ? t("settings_members.only_owner_transfer")
+                      : m.email?.toLowerCase() === me?.email?.toLowerCase()
+                        ? t("settings_members.transfer_self_forbidden")
+                        : m.license === "Owner"
+                          ? t("settings_members.cannot_transfer_to_owner")
+                          : t("settings_members.transfer_ownership");
 
                 return (
                   <tr
@@ -803,34 +787,19 @@ export default function MembersPage() {
                     </td>
 
                     <td className="px-3 py-3 text-sm">
-                      <select
-                        className={`rounded-md border px-2 py-1 text-sm shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 disabled:cursor-not-allowed disabled:opacity-60 ${themeClasses.select} ${isDark ? "dark:hover:bg-zinc-800" : ""}`}
-                        value={m.license}
-                        disabled={
-                          busy || m.license === "Owner" || !isOwner
-                        }
-                        onChange={(e) =>
-                          handleChangeRole(
-                            m.memberId,
-                            e.target.value as MemberRow["license"]
-                          )
-                        }
-                        title={
-                          !isOwner
-                            ? t("settings_members.role_change_only_owner")
-                            : m.license === "Owner"
-                            ? t("settings_members.role_change_owner_locked")
-                            : t("settings_members.role_change")
+                      <span
+                        className={
+                          m.license === "Owner"
+                            ? "inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-emerald-100 text-emerald-800 ring-1 ring-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/30"
+                            : "inline-flex items-center rounded-full px-3 py-1 text-xs font-medium bg-zinc-100 text-zinc-800 ring-1 ring-zinc-200 dark:bg-white/10 dark:text-zinc-200 dark:ring-white/10"
                         }
                       >
-                        <option value="Owner">Owner</option>
-                        <option value="Admin">Admin</option>
-                        <option value="Member">Member</option>
-                        <option value="Viewer">Viewer</option>
-                      </select>
+                        {m.license === "Owner" ? "Owner" : "Member"}
+                      </span>
                     </td>
 
-                    {isAdminOrOwner && (
+
+                    {isOwner && (
                       <td className="px-3 py-3 text-sm">
                         <div className="flex items-center gap-2">
                           <button

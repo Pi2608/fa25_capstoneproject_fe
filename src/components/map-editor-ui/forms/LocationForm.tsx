@@ -6,6 +6,7 @@ import { LocationType } from "@/types/location";
 import { Icon } from "@/components/map-editor-ui/Icon";
 import { IconLibraryView } from "@/components/map-editor-ui/IconLibraryView";
 import { UserAsset, getUserAssets } from "@/lib/api-library";
+import { useParams } from "next/navigation";
 
 type TabType = "basic" | "icon" | "display";
 
