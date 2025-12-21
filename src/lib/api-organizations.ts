@@ -282,8 +282,8 @@ export type CheckQuotaRequest = {
 export type CheckQuotaResponse = {
   isAllowed: boolean;
   currentUsage: number;
-  quota: number;
-  remaining: number;
+  limit: number;
+  remainingQuota: number;
   message?: string;
 };
 

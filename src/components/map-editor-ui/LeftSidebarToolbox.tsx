@@ -43,6 +43,7 @@ import {
   FrontendTransitionType,
   mapFromBackendTransitionType,
   mapToBackendTransitionType,
+  searchZones,
 } from "@/lib/api-storymap";
 import { iconEmojiMap } from "@/constants/icons";
 
@@ -3646,6 +3647,7 @@ function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: an
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
+  const [keyZone, setKeyZone] = useState<'name' | 'city' | 'state' | 'country'>('name');
 
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
@@ -3655,8 +3657,7 @@ function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: an
 
     setIsSearching(true);
     try {
-      const { searchZones } = await import("@/lib/api-storymap");
-      const results = await searchZones(searchQuery.trim());
+      const results = await searchZones(keyZone, searchQuery.trim());
       setZones(results || []);
     } catch (error) {
       console.error("Failed to search zones:", error);
@@ -3718,6 +3719,17 @@ function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: an
       {/* Search Section */}
       <div className="p-3 border-b border-zinc-800 space-y-2">
         <div className="flex gap-1">
+          <select
+            value={keyZone}
+            onChange={(e) => setKeyZone(e.target.value as any)} 
+            className="bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500"
+            disabled={isSearching || isAdding}
+          >
+            <option value="name">Tên vùng</option>
+            <option value="city">Thành phố</option>
+            <option value="state">Tỉnh/Thành</option>
+            <option value="country">Quốc gia</option>
+          </select>
           <input
             type="text"
             value={searchQuery}

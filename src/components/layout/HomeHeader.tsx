@@ -148,7 +148,7 @@ export default function HomeHeader() {
   };
 
   const showSuspendedToast = useCallback(() => {
-    const title = t("profilelayout.toast_warning_title");
+    const title = t("profilelayout.account_suspended_title");
     const message = t("profilelayout.account_suspended_toast");
 
     if (typeof (toastApi as any)?.addToast === "function") {
@@ -157,7 +157,7 @@ export default function HomeHeader() {
     }
 
     if (typeof (toastApi as any)?.showToast === "function") {
-      (toastApi as any).showToast(message, "warning");
+      (toastApi as any).showToast("warning", message, title);
       return;
     }
 

@@ -246,7 +246,7 @@ export default function OrgSettingsPage() {
                 <div className="text-xs text-zinc-600 dark:text-zinc-400 mt-1">
                   Chi phí hàng tháng:{" "}
                   <span className="text-zinc-900 dark:text-zinc-300">
-                    {sub?.totalMonthlyCost?.toLocaleString() ?? 0} VND
+                    {sub?.totalMonthlyCost?.toLocaleString() ?? 0} {billing?.recentTransactions?.[0]?.currency || "VND"}
                   </span>
                 </div>
               </div>
@@ -289,7 +289,7 @@ export default function OrgSettingsPage() {
                 </div>
                 <Meter value={exportsQuota?.currentUsage ?? 0} max={exportsQuota?.limit ?? 0} />
               </div>
-              <div>
+              {/* <div>
                 <div className="flex justify-between text-xs text-zinc-600 dark:text-zinc-400 mb-1">
                   <span>Tokens</span>
                   <span className="text-zinc-900 dark:text-zinc-300">
@@ -297,7 +297,7 @@ export default function OrgSettingsPage() {
                   </span>
                 </div>
                 <Meter value={tokensQuota?.currentUsage ?? 0} max={tokensQuota?.limit ?? 0} />
-              </div>
+              </div> */}
             </div>
           </Card>
 
@@ -327,7 +327,7 @@ export default function OrgSettingsPage() {
                   {t("orgSettings.billing_total_spent_label")}
                 </span>
                 <span className="text-zinc-900 dark:text-zinc-200">
-                  {billing?.totalSpentThisMonth?.toLocaleString() ?? 0} VND
+                  {billing?.totalSpentThisMonth?.toLocaleString() ?? 0} {billing?.recentTransactions?.[0]?.currency || "VND"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -428,7 +428,7 @@ export default function OrgSettingsPage() {
                   )}
                   <div>
                     {t("orgSettings.quota_remaining_label")}{" "}
-                    {quotaResult.remaining}
+                    {quotaResult.remainingQuota}
                   </div>
                 </div>
               )}

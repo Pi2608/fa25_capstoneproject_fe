@@ -86,6 +86,7 @@ export type Zone = {
   externalId?: string;
   zoneCode?: string;
   name: string;
+  state: string;
   zoneType: string; // "Country", "Province", "District", "Ward"
   adminLevel?: number;
   parentZoneId?: string;
@@ -572,8 +573,15 @@ export async function getZonesByParent(parentZoneId?: string): Promise<Zone[]> {
   return await getJson<Zone[]>(url);
 }
 
-export async function searchZones(searchTerm: string): Promise<Zone[]> {
-  return await getJson<Zone[]>(`/storymaps/zones/search?name=${encodeURIComponent(searchTerm)}`);
+export async function searchZones(
+  key: 'name' | 'city' | 'state' | 'country',
+  value: string,
+): Promise<Zone[]> {
+  const params = new URLSearchParams({
+    [key]: value,
+  });
+
+  return await getJson<Zone[]>(`/storymaps/zones/search?${params.toString()}`);
 }
 
 export async function searchRoutes(from: string, to: string): Promise<Zone[]> {
