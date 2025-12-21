@@ -322,7 +322,7 @@ export default function OrgSettingsPage() {
                   {t("orgSettings.billing_total_spent_label")}
                 </span>
                 <span className="text-zinc-900 dark:text-zinc-200">
-                  {billing?.totalSpentThisMonth?.toLocaleString() ?? 0} VND
+                  {billing?.totalSpentThisMonth?.toLocaleString() ?? 0} {billing?.recentTransactions?.[0]?.currency || "VND"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
