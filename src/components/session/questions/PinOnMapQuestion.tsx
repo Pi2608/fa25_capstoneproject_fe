@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
+import { useMapEvents } from "react-leaflet";
 import type { SessionQuestion } from "@/types/session";
 
 // Dynamically import Leaflet components (client-side only)
@@ -19,10 +20,6 @@ const Marker = dynamic(
 );
 const Circle = dynamic(
   () => import("react-leaflet").then((mod) => mod.Circle),
-  { ssr: false }
-);
-const useMapEvents = dynamic(
-  () => import("react-leaflet").then((mod) => mod.useMapEvents),
   { ssr: false }
 );
 
@@ -140,7 +137,7 @@ export function PinOnMapQuestion({
   const isWithinRadius =
     distance !== null &&
     question.acceptanceRadiusMeters !== null &&
-    distance <= question.acceptanceRadiusMeters;
+    distance <= (question.acceptanceRadiusMeters ?? 100);
 
   if (!isClient) {
     return (
@@ -193,7 +190,7 @@ export function PinOnMapQuestion({
           scrollWheelZoom={!disabled}
         >
           <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           />
 
