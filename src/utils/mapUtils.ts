@@ -861,7 +861,7 @@ export async function loadFeaturesToMap(
     const featureDataList: FeatureData[] = [];
 
     for (const feature of features) {
-      let coordinates: Position | Position[] | Position[][];
+      let coordinates: Position | Position[] | Position[][] | Position[][][];
       let actualGeometryType = feature.geometryType.toLowerCase();
       
       try {
@@ -872,16 +872,96 @@ export async function loadFeaturesToMap(
           // Use actual geometry type from GeoJSON if available
           actualGeometryType = parsed.type.toLowerCase();
           
-          // Handle MultiPolygon -> extract first polygon
+          // ⭐ FIX: Handle MultiPolygon - create FeatureGroup with all polygons
           if (actualGeometryType === "multipolygon" && Array.isArray(coordinates) && coordinates.length > 0) {
-            coordinates = (coordinates as unknown[])[0] as Position[][]; // Get first polygon from MultiPolygon
-            actualGeometryType = "polygon"; // Treat as regular polygon
+            // MultiPolygon format: [[[[lng, lat], ...]], [[[lng, lat], ...]]]
+            // Each element is a complete polygon
+            
+            // Create FeatureGroup to hold all polygons
+            const polygonGroup = L.featureGroup();
+            
+            for (const polygonCoords of coordinates as Position[][][]) {
+              if (Array.isArray(polygonCoords) && polygonCoords.length > 0) {
+                const ring = polygonCoords[0] as Position[]; // First ring of each polygon
+                
+                // Convert [lng, lat] to [lat, lng]
+                const leafletCoords = ring.map((c) => {
+                  if (Array.isArray(c) && c.length >= 2 && typeof c[0] === 'number' && typeof c[1] === 'number') {
+                    return [c[1], c[0]] as [number, number];
+                  }
+                  console.warn("Invalid coordinate in polygon ring:", c);
+                  return [0, 0] as [number, number];
+                });
+                
+                // Create individual polygon and add to group
+                const polygon = L.polygon(leafletCoords);
+                polygonGroup.addLayer(polygon);
+              }
+            }
+            
+            // Use the FeatureGroup as the main layer
+            const layer = polygonGroup as ExtendedLayer;
+            
+            // Apply stored style if available
+            if (feature.style) {
+              try {
+                const storedStyle = JSON.parse(feature.style);
+                // Apply style to all polygons in the group
+                polygonGroup.eachLayer((subLayer: Layer) => {
+                  applyLayerStyle(subLayer as ExtendedLayer, storedStyle);
+                });
+              } catch (error) {
+                console.warn("Failed to parse feature style:", error);
+              }
+            }
+            
+            const isVisible = feature.isVisible;
+            (layer as ExtendedLayer & { _featureId?: string })._featureId = feature.featureId;
+            
+            // Attach properties
+            let parsedProperties: Record<string, unknown> = {};
+            if (feature.properties) {
+              try {
+                parsedProperties = typeof feature.properties === 'string'
+                  ? JSON.parse(feature.properties)
+                  : feature.properties;
+              } catch (error) {
+                console.warn("Failed to parse feature properties:", error);
+              }
+            }
+            
+            if (!layer.feature) {
+              layer.feature = {
+                type: 'Feature',
+                properties: parsedProperties,
+                geometry: {
+                  type: 'MultiPolygon',
+                }
+              };
+            }
+            
+            if (isVisible) {
+              sketchGroup.addLayer(layer);
+            }
+            
+            featureDataList.push({
+              id: `feature-${feature.featureId}`,
+              name: feature.name || `MultiPolygon`,
+              type: 'Polygon', // Display as Polygon type
+              layer,
+              isVisible,
+              featureId: feature.featureId,
+              layerId: feature.layerId || null,
+              description: feature.description || null,
+            });
+            
+            continue; // Skip to next feature
           }
           
           // Handle MultiLineString -> extract first line
           if (actualGeometryType === "multilinestring" && Array.isArray(coordinates) && coordinates.length > 0) {
-            coordinates = (coordinates as unknown[])[0] as Position[]; // Get first line from MultiLineString
-            actualGeometryType = "linestring"; // Treat as regular linestring
+            coordinates = (coordinates as unknown[])[0] as Position[];
+            actualGeometryType = "linestring";
           }
         } else {
           coordinates = parsed;
@@ -1570,12 +1650,83 @@ export async function renderFeatures(
     if (!feature.isVisible) continue;
 
     try {
-      let coordinates: Position | Position[] | Position[][];
+      let coordinates: Position | Position[] | Position[][] | Position[][][];
+      let actualGeometryType = feature.geometryType.toLowerCase();
+      
       try {
         const parsed = JSON.parse(feature.coordinates);
         // Check if it's GeoJSON format
         if (parsed.type && parsed.coordinates) {
           coordinates = parsed.coordinates;
+          actualGeometryType = parsed.type.toLowerCase();
+          
+          // ⭐ FIX: Handle MultiPolygon - create FeatureGroup with all polygons
+          if (actualGeometryType === "multipolygon" && Array.isArray(coordinates) && coordinates.length > 0) {
+            const polygonGroup = L.featureGroup();
+            
+            for (const polygonCoords of coordinates as Position[][][]) {
+              if (Array.isArray(polygonCoords) && polygonCoords.length > 0) {
+                const ring = polygonCoords[0] as Position[];
+                
+                const leafletCoords = ring.map((c) => {
+                  if (Array.isArray(c) && c.length >= 2 && typeof c[0] === 'number' && typeof c[1] === 'number') {
+                    return [c[1], c[0]] as [number, number];
+                  }
+                  return [0, 0] as [number, number];
+                });
+                
+                const polygon = L.polygon(leafletCoords);
+                polygonGroup.addLayer(polygon);
+              }
+            }
+            
+            const layer = polygonGroup as ExtendedLayer;
+            
+            if (feature.style) {
+              try {
+                const storedStyle = JSON.parse(feature.style);
+                polygonGroup.eachLayer((subLayer: Layer) => {
+                  applyLayerStyle(subLayer as ExtendedLayer, storedStyle);
+                });
+              } catch (error) {
+                console.warn("Failed to parse feature style:", error);
+              }
+            }
+            
+            const featureZIndex = 2000 + (feature.zIndex || 0);
+            if (hasSetZIndex(layer)) {
+              layer.setZIndex(featureZIndex);
+            }
+            
+            if (feature.properties) {
+              try {
+                const properties = JSON.parse(feature.properties);
+                const popupContent = Object.entries(properties)
+                  .map(([key, value]) => `<strong>${key}:</strong> ${value}`)
+                  .join("<br>");
+                
+                // Add popup to each polygon in group
+                polygonGroup.eachLayer((subLayer: Layer) => {
+                  if (hasBindPopup(subLayer)) {
+                    (subLayer as Layer & { bindPopup: (html: string) => void }).bindPopup(popupContent);
+                  }
+                });
+              } catch {
+                // Fallback popup
+              }
+            }
+            
+            sketchGroup.addLayer(layer);
+            featureRefs.current.set(feature.featureId, layer);
+            
+            continue; // Skip to next feature
+          }
+          
+          // Handle MultiLineString -> extract first line
+          if (actualGeometryType === "multilinestring" && Array.isArray(coordinates) && coordinates.length > 0) {
+            coordinates = (coordinates as unknown[])[0] as Position[];
+            actualGeometryType = "linestring";
+          }
         } else {
           coordinates = parsed;
         }
@@ -1586,7 +1737,7 @@ export async function renderFeatures(
 
       let layer: ExtendedLayer | null = null;
 
-      if (feature.geometryType.toLowerCase() === "point") {
+      if (actualGeometryType === "point") {
         const coords = coordinates as Position;
 
         // Check if it's a Text annotation type
@@ -1630,10 +1781,10 @@ export async function renderFeatures(
             opacity: 1
           }) as ExtendedLayer;
         }
-      } else if (feature.geometryType.toLowerCase() === "linestring") {
+      } else if (actualGeometryType === "linestring") {
         const coords = coordinates as Position[];
         layer = L.polyline(coords.map((c) => [c[1], c[0]])) as ExtendedLayer;
-      } else if (feature.geometryType.toLowerCase() === "polygon") {
+      } else if (actualGeometryType === "polygon") {
         // Handle different coordinate formats for polygons
         // Coordinates from backend can be:
         // 1. GeoJSON format: [[[lng, lat], [lng, lat], ...]] (triple nested) - from MongoDB
@@ -1676,7 +1827,7 @@ export async function renderFeatures(
           return [0, 0] as [number, number];
         });
         layer = L.polygon(leafletCoords) as ExtendedLayer;
-      } else if (feature.geometryType.toLowerCase() === "rectangle") {
+      } else if (actualGeometryType === "rectangle") {
         // Rectangle is stored as bounds format: [minLng, minLat, maxLng, maxLat]
 
         // Parse Rectangle coordinates
@@ -1698,7 +1849,7 @@ export async function renderFeatures(
           [[minLat, minLng], [maxLat, maxLng]]
         ) as ExtendedLayer;
 
-      } else if (feature.geometryType.toLowerCase() === "circle") {
+      } else if (actualGeometryType === "circle") {
         // Handle different coordinate formats for circles
         let circleCoords: [number, number, number];
         
