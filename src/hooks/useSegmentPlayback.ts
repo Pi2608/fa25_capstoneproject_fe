@@ -3,7 +3,7 @@ import { Segment, TimelineTransition, RouteAnimation, getRouteAnimationsBySegmen
 import { getTimelineTransitions } from "@/lib/api-storymap";
 import {
   renderSegmentZones,
-  // renderSegmentLocations, // Now handled by usePoiMarkers globally
+  renderSegmentLocations,
   renderSegmentLayers,
   applyCameraState,
   autoFitBounds,
@@ -22,6 +22,8 @@ type UseSegmentPlaybackProps = {
   onSegmentSelect?: (segment: Segment) => void;
   onLocationClick?: (location: any, event?: any) => void;
   setCurrentTime?: (time: number) => void;
+  /** Enable rendering locations in handleViewSegment. Default false (use usePoiMarkers instead) */
+  renderLocations?: boolean;
 };
 
 export function useSegmentPlayback({
@@ -33,6 +35,7 @@ export function useSegmentPlayback({
   setActiveSegmentId,
   onSegmentSelect,
   onLocationClick,
+  renderLocations = false,
   setCurrentTime,
 }: UseSegmentPlaybackProps) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -168,15 +171,16 @@ export function useSegmentPlayback({
       newLayers.push(...layerResult.layers);
       allBounds.push(...layerResult.bounds);
 
-      // NOTE: Locations are now rendered globally by usePoiMarkers hook
-      // This prevents duplicate rendering of POIs
-      // renderSegmentLocations is only used in viewer mode (StoryMapViewer)
-      // const locationResult = await renderSegmentLocations(segment, currentMap, L, {
-      //   ...renderOptions,
-      //   onLocationClick,
-      // });
-      // newLayers.push(...locationResult.layers);
-      // allBounds.push(...locationResult.bounds);
+      // Render locations if enabled (for StoryMapViewer mode)
+      // In edit mode, locations are rendered globally by usePoiMarkers hook instead
+      if (renderLocations) {
+        const locationResult = await renderSegmentLocations(segment, currentMap, L, {
+          ...renderOptions,
+          onLocationClick,
+        });
+        newLayers.push(...locationResult.layers);
+        allBounds.push(...locationResult.bounds);
+      }
 
       // Apply camera state or auto-fit bounds using shared functions
       // FIXED: Always apply camera state when segment has one, even if route animations were playing

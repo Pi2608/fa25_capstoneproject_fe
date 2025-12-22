@@ -274,7 +274,7 @@ export default function GalleryClient() {
           return;
         }
       } catch (error) {
-        showToast("error", "Failed to load organizations");
+        showToast("info", "Vui lòng tạo tổ chức để nhân bản bản đồ câu chuyện");
         setShowWorkspaceSelector(false);
       } finally {
         setLoadingOrgs(false);
@@ -424,8 +424,12 @@ export default function GalleryClient() {
         workspaceId: selectedWorkspaceId,
       });
       showToast("success", "Map duplicated successfully!");
-      // Redirect to the new map
-      window.location.href = `/maps/${result.mapId}`;
+      // Redirect to the new map - story map goes to storymap player
+      if (pendingDuplicate.isStoryMap) {
+        window.location.href = `/maps/${result.mapId}`;
+      } else {
+        window.location.href = `/maps/${result.mapId}`;
+      }
     } catch (err: any) {
       setDuplicating(null);
 
@@ -654,27 +658,36 @@ export default function GalleryClient() {
                     {likingMap === m.id ? "..." : fmt(m.likeCount)}
                   </button>
 
-                  <Link
-                    href={{
-                      pathname: "/maps/publish",
-                      query: { mapId: m.mapId, view: "true" },
-                    }}
-                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
-                  >
-                    {t("gallery.view_map")}
-                  </Link>
-
-                  {!m.isStoryMap && (
-                    <button
-                      type="button"
-                      onClick={() => handleDuplicate(m.id, m.mapId, m)}
-                      disabled={duplicating === m.id}
-                      className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-3 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70 disabled:opacity-50 disabled:cursor-not-allowed"
+                  {/* View button - different routes for story maps vs normal maps */}
+                  {m.isStoryMap ? (
+                    <Link
+                      href={`/storymap/${m.mapId}`}
+                      className="inline-flex items-center gap-2 rounded-xl bg-purple-500 px-3 py-2 text-sm font-medium text-white hover:bg-purple-400"
                     >
-                      <CopyIcon className="h-4 w-4" />
-                      {duplicating === m.id ? t("gallery.duplicating") : t("gallery.duplicate")}
-                    </button>
+                      ▶ {t("gallery.play_storymap")}
+                    </Link>
+                  ) : (
+                    <Link
+                      href={{
+                        pathname: "/maps/publish",
+                        query: { mapId: m.mapId, view: "true" },
+                      }}
+                      className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-sm font-medium text-zinc-950 hover:bg-emerald-400"
+                    >
+                      {t("gallery.view_map")}
+                    </Link>
                   )}
+
+                  {/* Duplicate button - available for both story maps and normal maps */}
+                  <button
+                    type="button"
+                    onClick={() => handleDuplicate(m.id, m.mapId, m)}
+                    disabled={duplicating === m.id}
+                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-3 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <CopyIcon className="h-4 w-4" />
+                    {duplicating === m.id ? t("gallery.duplicating") : t("gallery.duplicate")}
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleSelectByGalleryId(m.id)}

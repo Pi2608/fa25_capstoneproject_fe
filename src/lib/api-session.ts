@@ -978,3 +978,120 @@ export interface TeacherFocusRequest {
   longitude: number;
   zoom: number;
 }
+
+// ---------- Session Summary (GV xem tổng kết sau khi kết thúc session) ----------
+
+export interface QuestionBankSummaryDto {
+  questionBankId: string;
+  questionBankName: string;
+  totalQuestions: number;
+}
+
+export interface OverallStatisticsDto {
+  totalParticipants: number;
+  totalQuestions: number;
+  totalResponses: number;
+  averageScore: number;
+  averageAccuracyPercent: number;
+  averageResponseTimeSeconds: number;
+  highestScore: number;
+  lowestScore: number;
+  medianScore: number;
+  participationRatePercent: number;
+  completionRatePercent: number;
+  participantsWithPerfectScore: number;
+  participantsWithZeroScore: number;
+  totalCorrectAnswers: number;
+  totalIncorrectAnswers: number;
+}
+
+export interface ParticipantAnalysisDto {
+  totalJoined: number;
+  activeThroughout: number;
+  leftEarly: number;
+  guestParticipants: number;
+  registeredUsers: number;
+  averageQuestionsAnswered: number;
+}
+
+export interface OptionAnalysisDto {
+  optionId: string;
+  optionText: string;
+  isCorrect: boolean;
+  selectCount: number;
+  selectPercentage: number;
+}
+
+export interface WordFrequencyDto {
+  word: string;
+  count: number;
+  percentage: number;
+}
+
+export interface QuestionBreakdownDto {
+  sessionQuestionId: string;
+  questionId: string;
+  queueOrder: number;
+  questionType: string;
+  questionText: string;
+  questionImageUrl?: string | null;
+  points: number;
+  timeLimit: number;
+  totalResponses: number;
+  correctResponses: number;
+  incorrectResponses: number;
+  correctPercentage: number;
+  averageResponseTimeSeconds: number;
+  averagePointsEarned: number;
+  optionAnalysis?: OptionAnalysisDto[] | null;
+  averageDistanceErrorMeters?: number | null;
+  commonAnswers?: WordFrequencyDto[] | null;
+  difficultyLevel: string;
+}
+
+export interface TopPerformerDto {
+  rank: number;
+  sessionParticipantId: string;
+  displayName: string;
+  totalScore: number;
+  totalCorrect: number;
+  totalAnswered: number;
+  accuracyPercent: number;
+  averageResponseTimeSeconds: number;
+}
+
+export interface ScoreDistributionBucketDto {
+  label: string;
+  minScore: number;
+  maxScore: number;
+  count: number;
+  percentage: number;
+}
+
+export interface SessionSummaryDto {
+  sessionId: string;
+  sessionCode: string;
+  sessionName: string;
+  description?: string | null;
+  status: string;
+  actualStartTime?: string | null;
+  endTime?: string | null;
+  durationMinutes: number;
+  mapId: string;
+  mapName: string;
+  questionBanks: QuestionBankSummaryDto[];
+  statistics: OverallStatisticsDto;
+  participantAnalysis: ParticipantAnalysisDto;
+  questionBreakdowns: QuestionBreakdownDto[];
+  topPerformers: TopPerformerDto[];
+  scoreDistribution: ScoreDistributionBucketDto[];
+}
+
+export async function getSessionSummary(
+  sessionId: string
+): Promise<SessionSummaryDto> {
+  const res = await getJson<SessionSummaryDto>(
+    `/sessions/${sessionId}/summary`
+  );
+  return res;
+}

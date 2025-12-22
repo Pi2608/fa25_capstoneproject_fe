@@ -86,6 +86,11 @@ export const messages = {
             next: "Tiếp theo",
             submit: "Gửi",
         },
+        storymap: {
+            notAvailable: "Story map không khả dụng",
+            error: "Lỗi khi tải Story map",
+            backToGallery: "Quay lại Thư viện bản đồ",
+        },
         recents: {
             loading: "Đang tải…",
             title: "Gần đây",
@@ -209,8 +214,8 @@ export const messages = {
                 "Sau khi chuyển, bạn sẽ không còn là Owner nữa và một số thao tác quản trị sẽ bị hạn chế.\n\n" +
                 "Bạn có chắc chắn muốn tiếp tục?",
 
-            transfer_success_to:
-                "Đã chuyển quyền sở hữu tổ chức thành công cho {{name}}.",
+            // transfer_success_to:
+            //     "Đã chuyển quyền sở hữu tổ chức thành công cho {{name}}.",
 
             transfer_failed_with_reason:
                 "Không thể chuyển quyền sở hữu. Lý do: {{reason}}",
@@ -1776,7 +1781,7 @@ export const messages = {
             cancel: "Hủy",
             deleting: "Đang xoá...",
             delete_map_cta: "Xoá bản đồ",
-
+            manage_err_has_active_sessions: "Không thể xóa bản đồ khi bản đồ đang có các session hoạt động. Vui lòng kết thúc hoặc hủy tất cả các phiên hoạt động trước.",
             toast_deleted: "Đã xoá bản đồ!",
             toast_removed: "Đã gỡ bản đồ khỏi workspace!",
 
@@ -2393,6 +2398,7 @@ export const messages = {
             toast_payment_failed: "Thiết lập thanh toán thất bại. Vui lòng thử lại."
         },
         gallery: {
+            play_storymap: "Chạy Storymap",
             hero_eyebrow: "Tài nguyên / Thư viện bản đồ",
             hero_title: "Bộ sưu tập Bản đồ Cộng đồng",
             hero_sub:
@@ -2480,7 +2486,7 @@ export const messages = {
             unliked: "Đã bỏ thích",
             error_like: "Không thể like map",
             error_like_unauthorized: "Vui lòng đăng nhập để like",
-  
+
             // Buttons
             button_details: "Chi tiết",
 
@@ -3537,6 +3543,11 @@ export const messages = {
             next: "Next",
             submit: "Submit",
         },
+        storymap: {
+            notAvailable: "Story Maps are not available.",
+            error_loading: "Error loading Story Map.",
+            backToGallery: "Back to Gallery",
+        },
         settings_members: {
             unknown_member: "this member",
             remove: "Delete",
@@ -3547,8 +3558,8 @@ export const messages = {
                 "After the transfer, you will no longer be the Owner and some admin actions will be limited.\n\n" +
                 "Are you sure you want to continue?",
 
-            transfer_success_to:
-                "Ownership has been successfully transferred to {{name}}.",
+            // transfer_success_to:
+            //     "Ownership has been successfully transferred to {{name}}.",
 
             transfer_failed_with_reason:
                 "Could not transfer ownership. Reason: {{reason}}",
@@ -6103,6 +6114,7 @@ export const messages = {
             footer_ticket: "open a support ticket",
         },
         gallery: {
+            play_storymap: "Play Story Map",
             hero_eyebrow: "Resources / Map Library",
             hero_title: "Community Map Gallery",
             hero_sub:

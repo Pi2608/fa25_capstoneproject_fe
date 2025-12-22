@@ -35,8 +35,9 @@ export function RouteAnimationForm({
   // Route tab
   const [fromLocationId, setFromLocationId] = useState<string>("");
   const [toLocationId, setToLocationId] = useState<string>("");
-  const [iconType, setIconType] = useState<"car" | "walking" | "bike" | "plane" | "custom">("car");
+  const [iconType, setIconType] = useState<"car" | "walking" | "bike" | "plane" | "bus" | "train" | "motorcycle" | "boat" | "truck" | "helicopter" | "custom">("car");
   const [routePath, setRoutePath] = useState<string | null>(null); // GeoJSON LineString
+  const [showIconLibrary, setShowIconLibrary] = useState(false);
   const [isCalculatingRoute, setIsCalculatingRoute] = useState(false);
   const [useStraightLine, setUseStraightLine] = useState(true);
   const [routeDistance, setRouteDistance] = useState<number | null>(null); // meters
@@ -200,9 +201,9 @@ export function RouteAnimationForm({
       return;
     }
 
-    // For plane, only use straight line
-    if (iconType === "plane") {
-      alert("Máy bay chỉ hỗ trợ đường thẳng");
+    // For air transport, only use straight line
+    if (iconType === "plane" || iconType === "helicopter") {
+      alert("Phương tiện hàng không chỉ hỗ trợ đường thẳng");
       return;
     }
 
@@ -464,17 +465,214 @@ export function RouteAnimationForm({
                   <label className="block text-xs text-zinc-400 mb-1">Loại Icon</label>
                   <select
                     value={iconType}
-                    onChange={(e) => setIconType(e.target.value as "car" | "walking" | "bike" | "plane" | "custom")}
+                    onChange={(e) => {
+                      const newType = e.target.value as typeof iconType;
+                      setIconType(newType);
+                      if (newType === "custom") {
+                        setShowIconLibrary(true);
+                      } else {
+                        setShowIconLibrary(false);
+                        setIconFile(null);
+                        setIconUrl("");
+                        setIconPreview(null);
+                      }
+                    }}
                     className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
                     disabled={saving}
                   >
-                    <option value="car">Xe hơi</option>
-                    <option value="walking">Đi bộ</option>
-                    <option value="bike">Xe đạp</option>
-                    <option value="plane">Máy bay</option>
-                    <option value="custom">Tùy chỉnh</option>
+                    <optgroup label="Đường bộ">
+                      <option value="car">🚗 Xe hơi</option>
+                      <option value="walking">🚶 Đi bộ</option>
+                      <option value="bike">🚴 Xe đạp</option>
+                      <option value="motorcycle">🏍️ Xe máy</option>
+                      <option value="bus">🚌 Xe buýt</option>
+                      <option value="truck">🚛 Xe tải</option>
+                    </optgroup>
+                    <optgroup label="Đường sắt">
+                      <option value="train">🚆 Tàu hỏa</option>
+                    </optgroup>
+                    <optgroup label="Đường thủy">
+                      <option value="boat">⛵ Thuyền</option>
+                    </optgroup>
+                    <optgroup label="Đường hàng không">
+                      <option value="plane">✈️ Máy bay</option>
+                      <option value="helicopter">🚁 Trực thăng</option>
+                    </optgroup>
+                    <optgroup label="Khác">
+                      <option value="custom">🎨 Tùy chỉnh</option>
+                    </optgroup>
                   </select>
                 </div>
+
+                {/* Custom Icon Section - Show when custom is selected */}
+                {iconType === "custom" && (
+                  <div className="space-y-2 p-2 bg-zinc-800/50 rounded border border-zinc-700">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs text-zinc-400">Chọn icon tùy chỉnh</label>
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowIconLibrary(true)}
+                          className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                            showIconLibrary
+                              ? "bg-emerald-600 text-white"
+                              : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                          }`}
+                          disabled={saving}
+                        >
+                          Thư viện
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowIconLibrary(false)}
+                          className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
+                            !showIconLibrary
+                              ? "bg-emerald-600 text-white"
+                              : "bg-zinc-700 text-zinc-300 hover:bg-zinc-600"
+                          }`}
+                          disabled={saving}
+                        >
+                          Upload
+                        </button>
+                      </div>
+                    </div>
+
+                    {showIconLibrary ? (
+                      // Icon Library Grid
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-6 gap-1 max-h-32 overflow-y-auto p-1 bg-zinc-900/50 rounded">
+                          {[
+                            { icon: "🚗", label: "Car", url: "" },
+                            { icon: "🚕", label: "Taxi", url: "" },
+                            { icon: "🚙", label: "SUV", url: "" },
+                            { icon: "🚐", label: "Van", url: "" },
+                            { icon: "🚎", label: "Trolley", url: "" },
+                            { icon: "🏎️", label: "Race Car", url: "" },
+                            { icon: "🚓", label: "Police", url: "" },
+                            { icon: "🚑", label: "Ambulance", url: "" },
+                            { icon: "🚒", label: "Fire Truck", url: "" },
+                            { icon: "🛻", label: "Pickup", url: "" },
+                            { icon: "🚚", label: "Delivery", url: "" },
+                            { icon: "🚛", label: "Semi", url: "" },
+                            { icon: "🚲", label: "Bicycle", url: "" },
+                            { icon: "🛵", label: "Scooter", url: "" },
+                            { icon: "🏍️", label: "Motorcycle", url: "" },
+                            { icon: "🚶", label: "Walking", url: "" },
+                            { icon: "🏃", label: "Running", url: "" },
+                            { icon: "🚀", label: "Rocket", url: "" },
+                            { icon: "🛸", label: "UFO", url: "" },
+                            { icon: "🚁", label: "Helicopter", url: "" },
+                            { icon: "✈️", label: "Plane", url: "" },
+                            { icon: "🛩️", label: "Small Plane", url: "" },
+                            { icon: "🛫", label: "Departure", url: "" },
+                            { icon: "🚢", label: "Ship", url: "" },
+                            { icon: "⛵", label: "Sailboat", url: "" },
+                            { icon: "🚤", label: "Speedboat", url: "" },
+                            { icon: "🛥️", label: "Motor Boat", url: "" },
+                            { icon: "🚂", label: "Locomotive", url: "" },
+                            { icon: "🚃", label: "Railway Car", url: "" },
+                            { icon: "🚄", label: "High Speed", url: "" },
+                            { icon: "📍", label: "Pin", url: "" },
+                            { icon: "🎯", label: "Target", url: "" },
+                            { icon: "⭐", label: "Star", url: "" },
+                            { icon: "💎", label: "Diamond", url: "" },
+                            { icon: "🔥", label: "Fire", url: "" },
+                            { icon: "⚡", label: "Lightning", url: "" },
+                          ].map((item, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => {
+                                setIconUrl(item.icon);
+                                setIconFile(null);
+                                setIconPreview(null);
+                              }}
+                              className={`p-1.5 text-base rounded hover:bg-zinc-700 transition-colors ${
+                                iconUrl === item.icon ? "bg-emerald-600/30 ring-1 ring-emerald-500" : "bg-zinc-800"
+                              }`}
+                              title={item.label}
+                              disabled={saving}
+                            >
+                              {item.icon}
+                            </button>
+                          ))}
+                        </div>
+                        {iconUrl && !iconUrl.startsWith("http") && (
+                          <div className="flex items-center gap-2 text-xs text-emerald-400">
+                            <span>Đã chọn:</span>
+                            <span className="text-lg">{iconUrl}</span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      // Upload Section
+                      <div className="space-y-2">
+                        {/* Current Icon Preview */}
+                        {(iconPreview || (iconUrl && iconUrl.startsWith("http"))) && (
+                          <div className="flex items-center gap-2 p-2 bg-zinc-900/50 rounded text-xs border border-zinc-700">
+                            <img
+                              src={iconPreview || iconUrl}
+                              alt="Icon"
+                              className="w-10 h-10 rounded object-cover"
+                            />
+                            <div className="flex-1">
+                              <div className="text-zinc-300 text-xs">Icon đã chọn</div>
+                              {iconFile && (
+                                <div className="text-zinc-500 text-[10px] truncate">{iconFile.name}</div>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIconFile(null);
+                                setIconUrl("");
+                                setIconPreview(null);
+                              }}
+                              className="p-1 hover:bg-zinc-700 rounded"
+                              disabled={saving}
+                            >
+                              <Icon icon="mdi:close" className="w-3 h-3 text-zinc-400" />
+                            </button>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2">
+                          <input
+                            ref={iconInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleIconFileChange}
+                            className="hidden"
+                            disabled={saving}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => iconInputRef.current?.click()}
+                            disabled={saving}
+                            className="flex-1 px-2 py-1.5 text-xs bg-zinc-700 hover:bg-zinc-600 text-white rounded transition-colors flex items-center justify-center gap-1"
+                          >
+                            <Icon icon="mdi:upload" className="w-3 h-3" />
+                            {iconFile ? "Đổi file" : "Upload file"}
+                          </button>
+                        </div>
+
+                        <div className="text-[10px] text-zinc-500">Hoặc nhập URL:</div>
+                        <input
+                          type="url"
+                          value={iconUrl.startsWith("http") ? iconUrl : ""}
+                          onChange={(e) => {
+                            setIconUrl(e.target.value);
+                            setIconFile(null);
+                            setIconPreview(null);
+                          }}
+                          className="w-full bg-zinc-900 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                          placeholder="https://example.com/icon.png"
+                          disabled={saving}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Route Options */}
                 <div className="pt-2 border-t border-zinc-800 space-y-2">
@@ -496,7 +694,7 @@ export function RouteAnimationForm({
                       <button
                         type="button"
                         onClick={handleFindRoute}
-                        disabled={saving || isCalculatingRoute || !fromLocationId || !toLocationId || iconType === "plane"}
+                        disabled={saving || isCalculatingRoute || !fromLocationId || !toLocationId || iconType === "plane" || iconType === "helicopter"}
                         className={`px-2 py-1 text-[10px] rounded transition-colors flex items-center gap-1 ${
                           !useStraightLine && routePath
                             ? "bg-emerald-600 text-white"
@@ -538,10 +736,10 @@ export function RouteAnimationForm({
                     </div>
                   )}
 
-                  {iconType === "plane" && (
+                  {(iconType === "plane" || iconType === "helicopter") && (
                     <div className="bg-amber-500/10 border border-amber-500/30 rounded px-2 py-1.5 text-[10px] text-amber-400">
                       <Icon icon="mdi:information" className="w-3 h-3 inline mr-1" />
-                      Máy bay chỉ hỗ trợ đường thẳng
+                      Phương tiện hàng không chỉ hỗ trợ đường thẳng
                     </div>
                   )}
                 </div>
@@ -621,86 +819,13 @@ export function RouteAnimationForm({
                   <span className="text-xs text-zinc-300">Hiển thị markers</span>
                 </label>
 
-                {/* Custom Icon Upload */}
-                <div className="space-y-2 pt-2 border-t border-zinc-700/50">
-                  <label className="block text-xs text-zinc-400">Custom Icon (Tùy chỉnh icon di chuyển)</label>
-
-                  {/* Current Icon Preview */}
-                  {(iconPreview || iconUrl) && !iconFile && (
-                    <div className="flex items-center gap-2 p-2 bg-zinc-800/50 rounded text-xs border border-zinc-700">
-                      <img
-                        src={iconPreview || iconUrl}
-                        alt="Current icon"
-                        className="w-10 h-10 rounded object-cover"
-                      />
-                      <div className="flex-1">
-                        <div className="text-zinc-300 text-xs">Icon hiện tại</div>
-                        {iconUrl && (
-                          <div className="text-zinc-500 text-[10px] truncate max-w-[180px]" title={iconUrl}>
-                            {iconUrl}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex gap-2">
-                    <input
-                      ref={iconInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleIconFileChange}
-                      className="hidden"
-                      disabled={saving}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => iconInputRef.current?.click()}
-                      disabled={saving}
-                      className="w-full px-2 py-1.5 text-xs bg-zinc-800 hover:bg-zinc-700 text-white rounded transition-colors flex items-center justify-center gap-1"
-                    >
-                      {iconUrl || iconPreview ? "Thay đổi" : "Upload icon"}
-                    </button>
+                {/* Note about custom icon */}
+                {iconType === "custom" && (iconUrl || iconFile) && (
+                  <div className="p-2 bg-emerald-900/20 rounded border border-emerald-700/50 text-[10px] text-emerald-400">
+                    <Icon icon="mdi:check-circle" className="w-3 h-3 inline mr-1" />
+                    Đã chọn icon tùy chỉnh. Quay lại tab Route để thay đổi.
                   </div>
-
-                  {iconFile && (
-                    <div className="flex items-center gap-2 p-2 bg-emerald-900/20 rounded text-xs border border-emerald-700/50">
-                      {iconPreview && (
-                        <img src={iconPreview} alt="Preview" className="w-8 h-8 rounded object-cover" />
-                      )}
-                      <span className="flex-1 truncate text-emerald-300 font-medium">{iconFile.name}</span>
-                      <span className="text-[10px] text-emerald-400">Mới</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIconFile(null);
-                          setIconPreview(null);
-                        }}
-                        className="p-1 hover:bg-zinc-700 rounded"
-                      >
-                        <Icon icon="mdi:close" className="w-3 h-3 text-zinc-400" />
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="text-xs text-zinc-500">Nhập URL icon:</div>
-                  <input
-                    type="url"
-                    value={iconUrl}
-                    onChange={(e) => {
-                      setIconUrl(e.target.value);
-                      setIconFile(null);
-                      setIconPreview(null);
-                    }}
-                    className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
-                    placeholder="https://example.com/icon.png"
-                    disabled={saving}
-                  />
-
-                  <div className="text-[10px] text-zinc-500 italic">
-                    💡 Nhập URL hoặc upload file. Nếu để trống, sẽ dùng icon mặc định theo loại phương tiện.
-                  </div>
-                </div>
+                )}
               </div>
             )}
           </>

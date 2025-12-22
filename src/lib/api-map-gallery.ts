@@ -24,6 +24,7 @@ export type MapGallerySummaryResponse = {
   authorName: string;
   status: MapGalleryStatusEnum | MapGalleryStatus;
   isFeatured: boolean;
+  isStoryMap: boolean;
   viewCount: number;
   likeCount: number;
   createdAt: string;
@@ -43,6 +44,7 @@ export type MapGalleryDetailResponse = {
   authorEmail: string;
   status: MapGalleryStatusEnum | MapGalleryStatus;
   isFeatured: boolean;
+  isStoryMap: boolean;
   viewCount: number;
   likeCount: number;
   createdAt: string;
@@ -104,12 +106,16 @@ export async function getPublishedGalleryMaps(params?: {
   category?: MapGalleryCategory;
   search?: string;
   featured?: boolean;
+  isStoryMap?: boolean;
 }): Promise<MapGallerySummaryResponse[]> {
   const sp = new URLSearchParams();
   if (params?.category) sp.set("category", params.category);
   if (params?.search) sp.set("search", params.search);
   if (typeof params?.featured === "boolean") {
     sp.set("featured", String(params.featured));
+  }
+  if (typeof params?.isStoryMap === "boolean") {
+    sp.set("isStoryMap", String(params.isStoryMap));
   }
   const qs = sp.toString();
   const url = qs ? `/map-gallery/maps?${qs}` : `/map-gallery/maps`;
