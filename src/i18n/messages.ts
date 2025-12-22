@@ -2490,6 +2490,22 @@ export const messages = {
             // Buttons
             button_details: "Chi tiết",
 
+            // Workspace Selector Popup
+            workspace_selector_title: "Chọn Workspace cho Story Map",
+            workspace_selector_desc: "Story map cần được lưu vào một workspace. Vui lòng chọn tổ chức và workspace.",
+            workspace_selector_loading_orgs: "Đang tải danh sách tổ chức...",
+            workspace_selector_org_label: "Tổ chức",
+            workspace_selector_org_placeholder: "Chọn một tổ chức...",
+            workspace_selector_ws_label: "Workspace",
+            workspace_selector_ws_loading: "Đang tải workspaces...",
+            workspace_selector_ws_empty: "Không tìm thấy workspace trong tổ chức này.",
+            workspace_selector_ws_placeholder: "Chọn một workspace...",
+            workspace_selector_cancel: "Hủy",
+            workspace_selector_confirm: "Nhân bản vào Workspace",
+            workspace_selector_error: "Vui lòng chọn một workspace",
+            workspace_selector_success: "Nhân bản bản đồ thành công!",
+            workspace_selector_load_error: "Không thể tải workspaces",
+
         },
         developers: {
             title: "Nhà phát triển",
@@ -6205,6 +6221,22 @@ export const messages = {
 
             // Buttons
             button_details: "Details",
+
+            // Workspace Selector Popup
+            workspace_selector_title: "Select Workspace for Story Map",
+            workspace_selector_desc: "Story maps must be saved to a workspace. Please select an organization and workspace.",
+            workspace_selector_loading_orgs: "Loading organizations...",
+            workspace_selector_org_label: "Organization",
+            workspace_selector_org_placeholder: "Select an organization...",
+            workspace_selector_ws_label: "Workspace",
+            workspace_selector_ws_loading: "Loading workspaces...",
+            workspace_selector_ws_empty: "No workspaces found in this organization.",
+            workspace_selector_ws_placeholder: "Select a workspace...",
+            workspace_selector_cancel: "Cancel",
+            workspace_selector_confirm: "Duplicate to Workspace",
+            workspace_selector_error: "Please select a workspace",
+            workspace_selector_success: "Map duplicated successfully!",
+            workspace_selector_load_error: "Failed to load workspaces",
         },
         cloudSources: {
             heroBadge: "Connect once — use across maps",
