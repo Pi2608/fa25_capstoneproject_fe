@@ -573,16 +573,24 @@ export async function getZonesByParent(parentZoneId?: string): Promise<Zone[]> {
   return await getJson<Zone[]>(url);
 }
 
-export async function searchZones(
-  key: 'name' | 'city' | 'state' | 'country',
-  value: string,
-): Promise<Zone[]> {
+export type ZoneSearchParams = {
+  name: string;
+  city: string;
+  state: string;
+  country: string;
+};
+
+export async function searchZones(paramsInput: Partial<ZoneSearchParams>): Promise<Zone[]> {
   const params = new URLSearchParams({
-    [key]: value,
+    name: paramsInput.name ?? "",
+    city: paramsInput.city ?? "",
+    state: paramsInput.state ?? "",
+    country: paramsInput.country ?? "",
   });
 
   return await getJson<Zone[]>(`/storymaps/zones/search?${params.toString()}`);
 }
+
 
 export async function searchRoutes(from: string, to: string): Promise<Zone[]> {
   return await getJson<Zone[]>(`/storymaps/routes/search?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);

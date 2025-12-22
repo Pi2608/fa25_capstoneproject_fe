@@ -1776,7 +1776,7 @@ export const messages = {
             cancel: "Hủy",
             deleting: "Đang xoá...",
             delete_map_cta: "Xoá bản đồ",
-
+            manage_err_has_active_sessions: "Không thể xóa bản đồ khi bản đồ đang có các session hoạt động. Vui lòng kết thúc hoặc hủy tất cả các phiên hoạt động trước.",
             toast_deleted: "Đã xoá bản đồ!",
             toast_removed: "Đã gỡ bản đồ khỏi workspace!",
 
@@ -2480,7 +2480,7 @@ export const messages = {
             unliked: "Đã bỏ thích",
             error_like: "Không thể like map",
             error_like_unauthorized: "Vui lòng đăng nhập để like",
-  
+
             // Buttons
             button_details: "Chi tiết",
 
