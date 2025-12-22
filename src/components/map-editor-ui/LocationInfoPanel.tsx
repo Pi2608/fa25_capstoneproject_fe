@@ -3,6 +3,8 @@
 import { useRef, useEffect, useState } from "react";
 import { gsap } from "gsap";
 import { Icon } from "./Icon";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface LocationInfoPanelProps {
   locationId: string;
@@ -137,9 +139,9 @@ export function LocationInfoPanel({
           {/* Content */}
           {content && (
             <div className="border-t border-zinc-800 pt-4">
-              <p className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed">
-                {content}
-              </p>
+              <div className="text-sm text-zinc-300 leading-relaxed prose prose-sm prose-invert max-w-none prose-img:rounded-lg prose-img:max-h-64 prose-img:w-auto prose-a:text-emerald-400 prose-a:no-underline hover:prose-a:underline">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+              </div>
             </div>
           )}
         </div>
