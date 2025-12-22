@@ -862,11 +862,27 @@ export async function loadFeaturesToMap(
 
     for (const feature of features) {
       let coordinates: Position | Position[] | Position[][];
+      let actualGeometryType = feature.geometryType.toLowerCase();
+      
       try {
         const parsed = JSON.parse(feature.coordinates);
-        // Check if it's GeoJSON format
+        // Check if it's GeoJSON format with type and coordinates
         if (parsed.type && parsed.coordinates) {
           coordinates = parsed.coordinates;
+          // Use actual geometry type from GeoJSON if available
+          actualGeometryType = parsed.type.toLowerCase();
+          
+          // Handle MultiPolygon -> extract first polygon
+          if (actualGeometryType === "multipolygon" && Array.isArray(coordinates) && coordinates.length > 0) {
+            coordinates = (coordinates as unknown[])[0] as Position[][]; // Get first polygon from MultiPolygon
+            actualGeometryType = "polygon"; // Treat as regular polygon
+          }
+          
+          // Handle MultiLineString -> extract first line
+          if (actualGeometryType === "multilinestring" && Array.isArray(coordinates) && coordinates.length > 0) {
+            coordinates = (coordinates as unknown[])[0] as Position[]; // Get first line from MultiLineString
+            actualGeometryType = "linestring"; // Treat as regular linestring
+          }
         } else {
           coordinates = parsed;
         }
