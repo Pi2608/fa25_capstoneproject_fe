@@ -5,6 +5,9 @@ import { useParams, useRouter } from "next/navigation";
 import { getSegments, type Segment } from "@/lib/api-storymap";
 import { getMapDetail } from "@/lib/api-maps";
 import StoryMapViewer from "@/components/storymap/StoryMapViewer";
+import { MapEditorLegend } from "@/components/map-editor-ui";
+import ReportViolationDialog from "@/components/map/ReportViolationDialog";
+import { AlertTriangle } from "lucide-react";
 
 export default function StoryMapPlayerPage() {
   const params = useParams<{ mapId: string }>();
@@ -17,6 +20,8 @@ export default function StoryMapPlayerPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [legendCollapsed, setLegendCollapsed] = useState(false);
+  const [showReportDialog, setShowReportDialog] = useState(false);
 
   // Load map + segments
   useEffect(() => {
@@ -39,8 +44,10 @@ export default function StoryMapPlayerPage() {
         }
 
         setMapDetail(detail);
-        setSegments(Array.isArray(segs) ? segs : []);
+        const segmentList = Array.isArray(segs) ? segs : [];
+        setSegments(segmentList);
         setCurrentIndex(0);
+
       } catch (e: any) {
         console.error("Load storymap failed:", e);
         setError(e?.message || "Failed to load storymap");
@@ -98,7 +105,7 @@ export default function StoryMapPlayerPage() {
   return (
     <div className="h-screen flex flex-col bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
       {/* MAP FULL WIDTH – không có panel trái/phải */}
-      <div className="flex-1 min-h-0">
+      <div className="flex-1 min-h-0 relative">
         <StoryMapViewer
           mapId={mapId}
           segments={segments}
@@ -109,7 +116,38 @@ export default function StoryMapPlayerPage() {
           // KHÔNG set controlledIndex/controlledPlaying, KHÔNG controlsEnabled=false
           // => UI Play/Stop bên trong StoryMapViewer giống hệt trang control
         />
+        
+        {/* Legend Panel - Bảng chú giải (chỉ xem, không edit) */}
+        <MapEditorLegend
+          mapId={mapId}
+          segments={segments}
+          layers={[]}
+          features={[]}
+          isCollapsed={legendCollapsed}
+          onToggle={() => setLegendCollapsed(!legendCollapsed)}
+          isVisible={true}
+          isEditMode={false}
+        />
+
+        {/* Report Violation Button */}
+        <div className="absolute top-4 right-4 z-[1000]">
+          <button
+            onClick={() => setShowReportDialog(true)}
+            className="w-10 h-10 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110"
+            title="Báo cáo vi phạm"
+          >
+            <AlertTriangle className="w-5 h-5" strokeWidth={2.5} />
+          </button>
+        </div>
       </div>
+
+      {/* Report Violation Dialog */}
+      <ReportViolationDialog
+        mapId={mapId}
+        mapName={mapDetail?.name || "Untitled Map"}
+        isOpen={showReportDialog}
+        onClose={() => setShowReportDialog(false)}
+      />
 
       {/* BOTTOM: Timeline panel giống y chang file control */}
       <div className="h-24 border-t border-zinc-800 bg-zinc-900/95 px-6 flex items-center gap-4">

@@ -17,9 +17,9 @@ interface CircleLayer extends Layer {
 }
 import { getSegments, reorderSegments, type Segment, type TimelineTransition, getTimelineTransitions, getRouteAnimationsBySegment, updateSegment, createSegment, deleteSegment, createTimelineTransition, deleteTimelineTransition, type Location } from "@/lib/api-storymap";
 import { getMapDetail, type MapDetail, updateMap, type UpdateMapRequest, type UpdateMapFeatureRequest, uploadGeoJsonToMap, updateLayerData, MapStatus, updateMapFeature, LayerDTO, getMapFeatureById, type BaseLayer, createExport, getExportById, type ExportRequest, type ExportResponse} from "@/lib/api-maps";
-import { createMapLocation, deleteLocation, getMapLocations } from "@/lib/api-location";
+import { createMapLocation, deleteLocation, getMapLocations, MapLocation } from "@/lib/api-location";
 
-import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, MeasurementInfoBox } from "@/components/map-editor-ui";
+import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, MeasurementInfoBox, MapEditorLegend } from "@/components/map-editor-ui";
 import { LocationInfoPanel } from "@/components/map-editor-ui/LocationInfoPanel";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
 import { CopyFeatureDialog } from "@/components/features";
@@ -151,6 +151,8 @@ export default function EditMapPage() {
   const [isTimelineOpen, setIsTimelineOpen] = useState(true);
   const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
   const [currentZoom, setCurrentZoom] = useState<number>(10);
+  const [legendCollapsed, setLegendCollapsed] = useState(false);
+  const [mapLocations, setMapLocations] = useState<MapLocation[]>([]);
 
   const [selectedZone, setSelectedZone] = useState<{
     mapZone: import("@/lib/api-maps").MapZone;
@@ -1746,6 +1748,51 @@ export default function EditMapPage() {
       window.removeEventListener('routeAnimationChanged', handleRouteAnimationChanged);
     };
   }, [loadSegmentsAndTransitions]);
+
+  // Load map locations for legend picker (regular maps store locations at map level, not in segments)
+  useEffect(() => {
+    if (!mapId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const locations = await getMapLocations(mapId);
+        if (!cancelled) {
+          setMapLocations(locations);
+        }
+      } catch (error) {
+        console.warn("Failed to load map locations for legend:", error);
+        if (!cancelled) {
+          setMapLocations([]);
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [mapId]);
+
+  // Refresh mapLocations when location is created/updated
+  useEffect(() => {
+    const handleLocationChanged = async () => {
+      if (!mapId) return;
+      try {
+        const locations = await getMapLocations(mapId);
+        setMapLocations(locations);
+      } catch (error) {
+        console.warn("Failed to refresh map locations:", error);
+      }
+    };
+
+    window.addEventListener('locationCreated', handleLocationChanged);
+    window.addEventListener('locationUpdated', handleLocationChanged);
+    window.addEventListener('locationDeleted', handleLocationChanged);
+    
+    return () => {
+      window.removeEventListener('locationCreated', handleLocationChanged);
+      window.removeEventListener('locationUpdated', handleLocationChanged);
+      window.removeEventListener('locationDeleted', handleLocationChanged);
+    };
+  }, [mapId]);
 
   // Listen for zone created/deleted events to refresh segments
   useEffect(() => {
@@ -4157,6 +4204,22 @@ export default function EditMapPage() {
         isTimelineOpen={isTimelineOpen}
         currentZoom={currentZoom}
       />
+
+      {/* Map Legend Editor */}
+      {mapId && mapStatus !== "archived" && (
+
+        <MapEditorLegend
+          mapId={mapId}
+          segments={segments}
+          layers={layers}
+          features={features}
+          isCollapsed={legendCollapsed}
+          onToggle={() => setLegendCollapsed(!legendCollapsed)}
+          isVisible={true}
+          isEditMode={true}
+          mapLocations={mapLocations}
+        />
+    )}
 
       {/* Route Animations with Sequential Playback */}
       {playback.routeAnimations && playback.routeAnimations.length > 0 && playbackMap && (() => {
