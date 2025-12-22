@@ -89,9 +89,11 @@ export default function StoryMapPlayerPage() {
     );
   }
 
-  const center: [number, number] = mapDetail?.center
-    ? [mapDetail.center.latitude, mapDetail.center.longitude]
+  const center: [number, number] = mapDetail?.viewState?.center
+    ? [mapDetail.viewState.center[0], mapDetail.viewState.center[1]]
     : [10.8231, 106.6297];
+  
+  const zoom = mapDetail?.viewState?.zoom || 10;
 
   return (
     <div className="h-screen flex flex-col bg-gradient-to-b from-emerald-100 via-white to-emerald-50 dark:from-[#0b0f0e] dark:via-emerald-900/10 dark:to-[#0b0f0e]">
@@ -100,9 +102,9 @@ export default function StoryMapPlayerPage() {
         <StoryMapViewer
           mapId={mapId}
           segments={segments}
-          baseMapProvider={mapDetail?.baseMapProvider}
+          baseMapProvider={mapDetail?.baseLayer || "Satellite"}
           initialCenter={center}
-          initialZoom={mapDetail?.defaultZoom || 10}
+          initialZoom={zoom}
           onSegmentChange={handleSegmentChange}
           // KHÔNG set controlledIndex/controlledPlaying, KHÔNG controlsEnabled=false
           // => UI Play/Stop bên trong StoryMapViewer giống hệt trang control

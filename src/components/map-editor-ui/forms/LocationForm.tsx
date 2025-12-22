@@ -12,7 +12,7 @@ import "@uiw/react-md-editor/markdown-editor.css";
 import "@uiw/react-markdown-preview/markdown.css";
 import ReactMarkdown from "react-markdown";
 
-type TabType = "basic" | "icon" | "display";
+type TabType = "basic" | "media" | "display";
 
 interface LocationFormProps {
   segmentId?: string;
@@ -436,7 +436,7 @@ export function LocationForm({
                   onChange={(value) => setModalText(value || "")}
                   preview="edit"
                   hideToolbar={false}
-                  visibleDragBar={false}
+                  visibleDragbar={false}
                   textareaProps={{
                     placeholder: "Nhập nội dung risk text với Markdown..."
                   }}
