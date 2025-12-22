@@ -3376,6 +3376,50 @@ export const messages = {
             // Confirm dialog buttons
             confirmMoveButton: "Di chuyển",
             movingButton: "Đang di chuyển...",
+
+            // Confirm dialog titles and messages
+            deleteLayerTitle: "Xóa Layer",
+            deleteLayerMessage: "Bạn có chắc chắn muốn xóa layer này?",
+            deleteLayerWarning: "Các feature trong layer sẽ không bị xóa nhưng sẽ không còn thuộc về layer nào.",
+            removeZoneFromSegmentTitle: "Xóa Zone",
+            removeZoneFromSegmentMessage: "Bạn có chắc chắn muốn xóa zone này khỏi segment?",
+            removeLocationFromSegmentTitle: "Xóa Location",
+            removeLocationFromSegmentMessage: "Bạn có chắc chắn muốn xóa location này khỏi segment?",
+            removeLayerFromSegmentTitle: "Xóa Layer",
+            removeLayerFromSegmentMessage: "Bạn có chắc chắn muốn xóa layer này khỏi segment?",
+            deleteRouteAnimationTitle: "Xóa Route Animation",
+            deleteRouteAnimationMessage: "Bạn có chắc chắn muốn xóa route animation này?",
+            deleteTransitionTitle: "Xóa Transition",
+            deleteTransitionMessage: "Bạn có chắc chắn muốn xóa transition này?",
+            deleteZoneTitle: "Xóa Zone",
+            deleteZoneMessage: "Bạn có chắc chắn muốn xóa zone này khỏi bản đồ?",
+            deleteLocationTitle: "Xóa Location",
+            deleteLocationMessage: "Bạn có chắc chắn muốn xóa location này khỏi bản đồ?",
+
+            // Tooltip strings
+            deleteLayerTooltip: "Xóa layer",
+            deleteZoneTooltip: "Xóa zone",
+            deleteAttributeTooltip: "Xóa thuộc tính",
+            clearSearchTooltip: "Xóa tìm kiếm",
+
+            // Error messages
+            cannotCreateLocation: "Không thể tạo location. Vui lòng thử lại.",
+
+            // Button labels
+            pickLocationOnMap: "Chọn vị trí trên bản đồ",
+            addLocation: "Thêm Location",
+            editLocation: "Sửa Location",
+            addZone: "Thêm Zone",
+            addLayer: "Thêm Layer",
+            addRoute: "Thêm Route",
+
+            // Form labels - Layers
+            layerName: "Tên Layer",
+            layerNamePlaceholder: "Nhập tên layer",
+            noLayers: "Chưa có layer nào",
+            featuresWithoutLayer: "FEATURES CHƯA CÓ LAYER",
+            noFeatures: "Chưa có feature",
+            defaultLayer: "Default Layer",
         },
         footer: {
             tagline: 'Xây dựng và chia sẻ bản đồ tương tác thật dễ dàng. Mạnh mẽ cho đội nhóm, đơn giản cho mọi người.',
@@ -6796,6 +6840,50 @@ export const messages = {
             // Confirm dialog buttons
             confirmMoveButton: "Move",
             movingButton: "Moving...",
+
+            // Confirm dialog titles and messages
+            deleteLayerTitle: "Delete Layer",
+            deleteLayerMessage: "Are you sure you want to delete this layer?",
+            deleteLayerWarning: "Features in the layer will not be deleted but will no longer belong to any layer.",
+            removeZoneFromSegmentTitle: "Remove Zone",
+            removeZoneFromSegmentMessage: "Are you sure you want to remove this zone from the segment?",
+            removeLocationFromSegmentTitle: "Remove Location",
+            removeLocationFromSegmentMessage: "Are you sure you want to remove this location from the segment?",
+            removeLayerFromSegmentTitle: "Remove Layer",
+            removeLayerFromSegmentMessage: "Are you sure you want to remove this layer from the segment?",
+            deleteRouteAnimationTitle: "Delete Route Animation",
+            deleteRouteAnimationMessage: "Are you sure you want to delete this route animation?",
+            deleteTransitionTitle: "Delete Transition",
+            deleteTransitionMessage: "Are you sure you want to delete this transition?",
+            deleteZoneTitle: "Delete Zone",
+            deleteZoneMessage: "Are you sure you want to delete this zone from the map?",
+            deleteLocationTitle: "Delete Location",
+            deleteLocationMessage: "Are you sure you want to delete this location from the map?",
+
+            // Tooltip strings
+            deleteLayerTooltip: "Delete layer",
+            deleteZoneTooltip: "Delete zone",
+            deleteAttributeTooltip: "Delete attribute",
+            clearSearchTooltip: "Clear search",
+
+            // Error messages
+            cannotCreateLocation: "Cannot create location. Please try again.",
+
+            // Button labels
+            pickLocationOnMap: "Pick location on map",
+            addLocation: "Add Location",
+            editLocation: "Edit Location",
+            addZone: "Add Zone",
+            addLayer: "Add Layer",
+            addRoute: "Add Route",
+
+            // Form labels - Layers
+            layerName: "Layer Name",
+            layerNamePlaceholder: "Enter layer name",
+            noLayers: "No layers yet",
+            featuresWithoutLayer: "FEATURES WITHOUT LAYER",
+            noFeatures: "No features",
+            defaultLayer: "Default Layer",
         },
         footer: {
             tagline: 'Create and share interactive maps with ease. Powerful for teams, simple for everyone.',

@@ -257,6 +257,7 @@ export type Location = {
   iconUrl?: string;
   iconColor?: string;
   iconSize?: number;
+  rotation?: string; // Icon rotation angle in degrees
   openPopupOnClick?: boolean;
   popupContent?: string;
   description?: string;
@@ -711,6 +712,7 @@ export type CreateLocationRequest = {
   iconType?: string; // Preset icon key (e.g., "plane", "car")
   iconUrl?: string; // Custom icon URL
   iconSize?: number;
+  rotation?: string; // Icon rotation angle in degrees
 };
 
 export async function getSegmentLocations(mapId: string, segmentId: string): Promise<Location[]> {
@@ -767,6 +769,7 @@ export async function createLocation(
   // Optional number field
   if (data.zIndex !== undefined) formData.append('ZIndex', data.zIndex.toString());
   if (data.iconSize !== undefined) formData.append('IconSize', data.iconSize.toString());
+  if (data.rotation !== undefined) formData.append('Rotation', data.rotation);
 
   // Media file fields
   if (data.iconFile) formData.append('IconFile', data.iconFile);
@@ -814,6 +817,7 @@ export async function updateLocation(
   if (data.iconType !== undefined) formData.append('IconType', data.iconType);
   if (data.iconUrl !== undefined) formData.append('IconUrl', data.iconUrl);
   if (data.iconSize !== undefined) formData.append('IconSize', data.iconSize.toString());
+  if (data.rotation !== undefined) formData.append('Rotation', data.rotation);
 
   // Add file uploads
   if (data.iconFile) formData.append('IconFile', data.iconFile);

@@ -12,6 +12,21 @@ type LeafletInstance = typeof import("leaflet");
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Flag to track if leaflet-imageoverlay-rotated has been loaded
+let rotatedOverlayLoaded = false;
+
+// Lazy load leaflet-imageoverlay-rotated when needed
+function ensureRotatedOverlayLoaded(L: LeafletInstance) {
+  if (!rotatedOverlayLoaded && typeof window !== 'undefined' && L) {
+    try {
+      require('leaflet-imageoverlay-rotated');
+      rotatedOverlayLoaded = true;
+    } catch (error) {
+      console.error('Failed to load leaflet-imageoverlay-rotated:', error);
+    }
+  }
+}
+
 function isLeafletMapReady(map?: L.Map | null): boolean {
   try {
     if (!map) return false;
@@ -326,27 +341,82 @@ export async function renderSegmentLocations(
       const iconColor = location.iconColor || '#FF0000';
       const rotation = parseInt((location as any).rotation) || 0;
 
-      // Determine icon content: IconUrl (image), IconType (emoji), or default
-      let iconHtml = '';
+      // Debug logging
+      console.log('[SegmentRenderer] Rendering location:', {
+        title: location.title,
+        hasIconUrl: !!location.iconUrl,
+        iconUrl: location.iconUrl,
+        rotation: rotation,
+        rotationRaw: (location as any).rotation,
+        iconSize: iconSize
+      });
+
+      let marker: any;
+
+      // Use imageOverlay.rotated for custom images, regular marker for emojis
       if (location.iconUrl) {
-        // Use custom image with rotation
-        iconHtml = `<div style="
-          width: ${iconSize}px;
-          height: ${iconSize}px;
-          transform: rotate(${rotation}deg);
-          transform-origin: center center;
-        ">
-          <img src="${location.iconUrl}" style="
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-          " />
-        </div>`;
+        // Ensure leaflet-imageoverlay-rotated is loaded
+        ensureRotatedOverlayLoaded(L);
+
+        const hasRotatedFunction = typeof (L as any).imageOverlay?.rotated === 'function';
+        console.log('[SegmentRenderer] Rotated overlay available?', hasRotatedFunction);
+
+        // Check if rotated overlay is available
+        if (hasRotatedFunction) {
+          console.log('[SegmentRenderer] Using imageOverlay.rotated with rotation:', rotation);
+          // Calculate the three corners for imageOverlay.rotated based on center point, size, and rotation
+          const metersPerPixel = 156543.03392 * Math.cos(latLng[0] * Math.PI / 180) / Math.pow(2, map.getZoom());
+          const sizeInMeters = iconSize * metersPerPixel;
+          const sizeInDegrees = sizeInMeters / 111320; // Approximate meters to degrees
+
+          // Calculate corners based on rotation
+          const rotRad = (rotation * Math.PI) / 180;
+          const halfSize = sizeInDegrees / 2;
+
+          // Calculate rotated corners relative to center
+          const cos = Math.cos(rotRad);
+          const sin = Math.sin(rotRad);
+
+          // Top-left corner (before rotation: -halfSize, +halfSize)
+          const tlLat = latLng[0] + (halfSize * cos - halfSize * sin);
+          const tlLng = latLng[1] + (-halfSize * cos - halfSize * sin);
+
+          // Top-right corner (before rotation: +halfSize, +halfSize)
+          const trLat = latLng[0] + (halfSize * cos + halfSize * sin);
+          const trLng = latLng[1] + (halfSize * cos - halfSize * sin);
+
+          // Bottom-left corner (before rotation: -halfSize, -halfSize)
+          const blLat = latLng[0] + (-halfSize * cos - halfSize * sin);
+          const blLng = latLng[1] + (-halfSize * cos + halfSize * sin);
+
+          // Create rotated image overlay
+          marker = (L as any).imageOverlay.rotated(
+            location.iconUrl,
+            L.latLng(tlLat, tlLng),
+            L.latLng(trLat, trLng),
+            L.latLng(blLat, blLng),
+            {
+              opacity: 1,
+              interactive: true,
+              className: 'location-image-overlay',
+            }
+          );
+        } else {
+          // Fallback to regular marker with CSS rotation if rotated overlay not available
+          console.log('[SegmentRenderer] Using CSS fallback with rotation:', rotation);
+          const iconHtml = `<img src="${location.iconUrl}" style="width: ${iconSize}px; height: ${iconSize}px; transform: rotate(${rotation}deg); transform-origin: center center;" />`;
+          marker = L.marker(latLng, {
+            icon: L.divIcon({
+              html: iconHtml,
+              iconSize: [iconSize, iconSize],
+              className: 'location-image-marker',
+            }),
+          });
+        }
       } else {
-        // Use emoji or default with rotation
+        // Use emoji or default with CSS rotation for non-image markers
         const iconContent = location.iconType || '📍';
-        iconHtml = `<div style="
+        const iconHtml = `<div style="
           width: ${iconSize}px;
           height: ${iconSize}px;
           transform: rotate(${rotation}deg);
@@ -360,17 +430,17 @@ export async function renderSegmentLocations(
             line-height: 1;
           ">${iconContent}</div>
         </div>`;
-      }
 
-      const marker = L.marker(latLng, {
-        icon: L.divIcon({
-          className: 'location-marker',
-          html: iconHtml,
-          iconSize: [iconSize, iconSize],
-          iconAnchor: [iconSize / 2, iconSize / 2], // Center anchor for proper rotation
-        }),
-        zIndexOffset: location.zIndex || 100,
-      });
+        marker = L.marker(latLng, {
+          icon: L.divIcon({
+            className: 'location-marker',
+            html: iconHtml,
+            iconSize: [iconSize, iconSize],
+            iconAnchor: [iconSize / 2, iconSize / 2],
+          }),
+          zIndexOffset: location.zIndex || 100,
+        });
+      }
 
       // Add tooltip if enabled - support HTML content
       // During playback, always show title as permanent label above marker
