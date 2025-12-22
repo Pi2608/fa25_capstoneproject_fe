@@ -12,6 +12,7 @@ interface ConfirmDialogProps {
   confirmText?: string;
   cancelText?: string;
   variant?: "danger" | "warning" | "info";
+  actionType?: "delete" | "move" | "custom"; // Type of action being confirmed
   itemName?: string;
   itemType?: string;
   relatedItems?: {
@@ -29,6 +30,7 @@ export default function ConfirmDialog({
   confirmText,
   cancelText,
   variant = "danger",
+  actionType = "delete",
   itemName,
   itemType,
   relatedItems,
@@ -58,10 +60,38 @@ export default function ConfirmDialog({
     }
   };
 
-  const headerTitle = title ?? t("common.confirm_delete_title", { itemType: itemType ?? t("common.confirm_dialog_item") });
-  const primaryMessage = message ?? t("common.confirm_delete_message");
-  const confirmButtonText = confirmText ?? t("common.delete");
-  const cancelButtonText = cancelText ?? t("common.cancel");
+  // Get appropriate defaults based on action type
+  const getDefaults = () => {
+    switch (actionType) {
+      case "move":
+        return {
+          title: title ?? t("mapEditor", "confirm_move_title", { itemType: itemType ?? t("common", "confirm_dialog_item") }),
+          message: message ?? "",
+          confirmText: confirmText ?? t("mapEditor", "confirmMoveButton"),
+          loadingText: t("mapEditor", "movingButton"),
+        };
+      case "delete":
+        return {
+          title: title ?? t("common", "confirm_delete_title", { itemType: itemType ?? t("common", "confirm_dialog_item") }),
+          message: message ?? t("common", "confirm_delete_message"),
+          confirmText: confirmText ?? t("common", "delete"),
+          loadingText: t("common", "deleting"),
+        };
+      default: // custom
+        return {
+          title: title ?? "",
+          message: message ?? "",
+          confirmText: confirmText ?? t("common", "continue"),
+          loadingText: t("common", "loading"),
+        };
+    }
+  };
+
+  const defaults = getDefaults();
+  const headerTitle = defaults.title;
+  const primaryMessage = defaults.message;
+  const confirmButtonText = defaults.confirmText;
+  const cancelButtonText = cancelText ?? t("common", "cancel");
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center">
@@ -69,19 +99,38 @@ export default function ConfirmDialog({
       <div className="relative w-full max-w-md mx-4 rounded-2xl border bg-white dark:bg-zinc-900 dark:border-zinc-700 shadow-2xl">
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-200 dark:border-zinc-800">
-          <div className="flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-500/20">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              className="text-red-600 dark:text-red-400"
-            >
-              <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" />
-            </svg>
+          <div className={`flex-shrink-0 flex h-10 w-10 items-center justify-center rounded-full ${
+            actionType === "move"
+              ? "bg-blue-100 dark:bg-blue-500/20"
+              : "bg-red-100 dark:bg-red-500/20"
+          }`}>
+            {actionType === "move" ? (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-blue-600 dark:text-blue-400"
+              >
+                <path d="M7 7h10v10M17 7l-10 10" />
+              </svg>
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-red-600 dark:text-red-400"
+              >
+                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" />
+              </svg>
+            )}
           </div>
 
           <div className="flex-1">
@@ -137,9 +186,11 @@ export default function ConfirmDialog({
             </div>
           )}
 
-          <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-            {t("common.cannot_undo")}
-          </p>
+          {actionType !== "move" && (
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+              {t("common", "cannot_undo")}
+            </p>
+          )}
         </div>
 
         {/* Footer */}
@@ -154,7 +205,11 @@ export default function ConfirmDialog({
           <button
             onClick={handleConfirm}
             disabled={isLoading}
-            className="px-4 py-2 rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-500 dark:bg-red-600 dark:hover:bg-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className={`px-4 py-2 rounded-md text-sm font-medium text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ${
+              actionType === "move"
+                ? "bg-blue-600 hover:bg-blue-500 dark:bg-blue-600 dark:hover:bg-blue-500"
+                : "bg-red-600 hover:bg-red-500 dark:bg-red-600 dark:hover:bg-red-500"
+            }`}
           >
             {isLoading && (
               <svg
@@ -178,7 +233,7 @@ export default function ConfirmDialog({
                 />
               </svg>
             )}
-            {isLoading ? t("common.deleting") : confirmButtonText}
+            {isLoading ? defaults.loadingText : confirmButtonText}
           </button>
         </div>
       </div>

@@ -324,27 +324,42 @@ export async function renderSegmentLocations(
       // Create marker icon based on config
       const iconSize = location.iconSize || 32;
       const iconColor = location.iconColor || '#FF0000';
+      const rotation = parseInt((location as any).rotation) || 0;
 
       // Determine icon content: IconUrl (image), IconType (emoji), or default
       let iconHtml = '';
       if (location.iconUrl) {
-        // Use custom image
-        iconHtml = `<img src="${location.iconUrl}" style="
+        // Use custom image with rotation
+        iconHtml = `<div style="
           width: ${iconSize}px;
           height: ${iconSize}px;
-          object-fit: contain;
-          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-        " />`;
+          transform: rotate(${rotation}deg);
+          transform-origin: center center;
+        ">
+          <img src="${location.iconUrl}" style="
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+          " />
+        </div>`;
       } else {
-        // Use emoji or default
+        // Use emoji or default with rotation
         const iconContent = location.iconType || '📍';
         iconHtml = `<div style="
-          font-size: ${iconSize}px;
-          text-align: center;
-          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-          color: ${iconColor};
-          line-height: 1;
-        ">${iconContent}</div>`;
+          width: ${iconSize}px;
+          height: ${iconSize}px;
+          transform: rotate(${rotation}deg);
+          transform-origin: center center;
+        ">
+          <div style="
+            font-size: ${iconSize}px;
+            text-align: center;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+            color: ${iconColor};
+            line-height: 1;
+          ">${iconContent}</div>
+        </div>`;
       }
 
       const marker = L.marker(latLng, {
@@ -352,7 +367,7 @@ export async function renderSegmentLocations(
           className: 'location-marker',
           html: iconHtml,
           iconSize: [iconSize, iconSize],
-          iconAnchor: [iconSize / 2, iconSize],
+          iconAnchor: [iconSize / 2, iconSize / 2], // Center anchor for proper rotation
         }),
         zIndexOffset: location.zIndex || 100,
       });
@@ -418,9 +433,28 @@ export async function renderSegmentLocations(
 
       marker.addTo(map);
 
+      // Store timing metadata for visibility control during playback
+      const exitDelayMs = (location as any).exitDelayMs;
+      const markerElement = marker.getElement();
+
+      if (markerElement) {
+        // Store timing data on the marker for later use during playback
+        (marker as any)._locationTiming = {
+          entryTime: entryDelayMs,
+          exitTime: exitDelayMs !== undefined ? exitDelayMs : Infinity,
+          entryEffect: entryEffect,
+          entryDuration: entryDurationMs
+        };
+
+        // If we have timing controls, start hidden and let playback control visibility
+        if (exitDelayMs !== undefined && entryDelayMs > 0) {
+          markerElement.style.opacity = '0';
+          markerElement.style.display = 'none';
+        }
+      }
+
       // Apply entry animation (only if not using segment transition)
       if (!options?.transitionType && entryEffect !== 'none') {
-        const markerElement = marker.getElement();
         if (markerElement) {
           // Initial state
           markerElement.style.transition = 'none';
@@ -439,13 +473,15 @@ export async function renderSegmentLocations(
             markerElement.style.opacity = '0';
           }
 
-          // Animate after delay
-          setTimeout(() => {
-            if (!markerElement) return;
-            markerElement.style.transition = `all ${entryDurationMs}ms ease-out`;
-            markerElement.style.opacity = '1';
-            markerElement.style.transform = 'scale(1) translateY(0)';
-          }, entryDelayMs);
+          // Animate after delay (only if no explicit timing controls)
+          if ((location as any).exitDelayMs === undefined || entryDelayMs === 0) {
+            setTimeout(() => {
+              if (!markerElement) return;
+              markerElement.style.transition = `all ${entryDurationMs}ms ease-out`;
+              markerElement.style.opacity = '1';
+              markerElement.style.transform = 'scale(1) translateY(0)';
+            }, entryDelayMs);
+          }
         }
       } else if (options?.transitionType && options.transitionType !== 'Jump') {
         // Use segment transition fade

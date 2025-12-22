@@ -8,6 +8,7 @@ import type { Segment, TimelineTransition } from "@/lib/api-storymap";
 import { TimelineRuler } from "./timeline/TimelineRuler";
 import { TimelineTrack } from "./timeline/TimelineTrack";
 import { calculateTotalTimelineDuration } from "@/utils/segmentTiming";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface TimelineWorkspaceProps {
   segments: Segment[];
@@ -44,6 +45,7 @@ export function TimelineWorkspace({
   onPlaySingleSegment,
   onRefreshSegments,
 }: TimelineWorkspaceProps) {
+  const { t } = useI18n();
   const [height, setHeight] = useState(280); // Default height - increased to show all tracks
   const [zoomLevel, setZoomLevel] = useState(1); // 1 = 100%
   const [isResizing, setIsResizing] = useState(false);
@@ -109,7 +111,7 @@ export function TimelineWorkspace({
           className="h-full w-full flex items-center justify-center gap-2 hover:bg-zinc-800/50 transition-colors"
         >
           <Icon icon="mdi:chevron-up" className="w-5 h-5 text-zinc-400" />
-          <span className="text-sm text-zinc-400">Timeline</span>
+          <span className="text-sm text-zinc-400">{t('mapEditor', 'timeline')}</span>
         </button>
       </div>
     );
@@ -139,7 +141,7 @@ export function TimelineWorkspace({
           <button
             onClick={onPlay}
             className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
-            title={isPlaying ? "Pause" : "Play"}
+            title={isPlaying ? t('mapEditor', 'timelinePause') : t('mapEditor', 'timelinePlay')}
           >
             <Icon
               icon={isPlaying ? "mdi:pause" : "mdi:play"}
@@ -149,7 +151,7 @@ export function TimelineWorkspace({
           <button
             onClick={onStop}
             className="p-2 hover:bg-zinc-800 rounded-md transition-colors"
-            title="Stop"
+            title={t('mapEditor', 'timelineStop')}
           >
             <Icon icon="mdi:stop" className="w-5 h-5 text-zinc-300" />
           </button>
@@ -161,19 +163,19 @@ export function TimelineWorkspace({
         {/* Center: Timeline Title */}
         <div className="flex items-center gap-2">
           <Icon icon="mdi:timeline-outline" className="w-5 h-5 text-zinc-400" />
-          <span className="text-sm font-medium text-zinc-300">Timeline</span>
+          <span className="text-sm font-medium text-zinc-300">{t('mapEditor', 'timeline')}</span>
           <span className="px-2 py-0.5 bg-zinc-800 text-zinc-400 text-xs rounded">
-            {segments.length} segments
+            {t('mapEditor', 'timelineSegments', { count: segments.length })}
           </span>
         </div>
 
         {/* Right: Zoom Controls (Integrated & Smaller) */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">Zoom:</span>
+          <span className="text-xs text-zinc-500">{t('mapEditor', 'timelineZoom')}</span>
           <button
             onClick={() => setZoomLevel((prev) => Math.max(0.5, prev - 0.1))}
             className="p-1 hover:bg-zinc-800 rounded transition-colors"
-            title="Zoom out"
+            title={t('mapEditor', 'timelineZoomOut')}
           >
             <Icon icon="mdi:magnify-minus-outline" className="w-4 h-4 text-zinc-400" />
           </button>
@@ -183,14 +185,14 @@ export function TimelineWorkspace({
           <button
             onClick={() => setZoomLevel((prev) => Math.min(2, prev + 0.1))}
             className="p-1 hover:bg-zinc-800 rounded transition-colors"
-            title="Zoom in"
+            title={t('mapEditor', 'timelineZoomIn')}
           >
             <Icon icon="mdi:magnify-plus-outline" className="w-4 h-4 text-zinc-400" />
           </button>
           <button
             onClick={() => setZoomLevel(1)}
             className="p-1 hover:bg-zinc-800 rounded transition-colors"
-            title="Reset zoom"
+            title={t('mapEditor', 'timelineZoomReset')}
           >
             <Icon icon="mdi:fit-to-screen-outline" className="w-4 h-4 text-zinc-400" />
           </button>
@@ -200,7 +202,7 @@ export function TimelineWorkspace({
             <button
               onClick={onToggle}
               className="p-2 hover:bg-zinc-800 rounded-md transition-colors ml-2"
-              title="Close timeline"
+              title={t('mapEditor', 'timelineClose')}
             >
               <Icon icon="mdi:chevron-down" className="w-5 h-5 text-zinc-300" />
             </button>

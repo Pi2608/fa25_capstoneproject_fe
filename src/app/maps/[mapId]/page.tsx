@@ -334,6 +334,7 @@ export default function EditMapPage() {
     currentSegmentLayers,
     setCurrentSegmentLayers,
     setActiveSegmentId,
+    setCurrentTime: setCurrentPlaybackTime,
   });
 
 
@@ -2934,6 +2935,13 @@ export default function EditMapPage() {
   useEffect(() => {
     const currentPlayback = playbackRef.current;
     const currentSegments = segmentsRef.current;
+
+    // CRITICAL FIX: Skip time management if useSegmentPlayback is controlling time
+    // This happens during single segment playback or route-only playback
+    // where the hook has its own RAF loop that manages currentTime with absolute positioning
+    if (playback.isControllingTime) {
+      return;
+    }
 
     if (!currentPlayback.isPlaying || currentSegments.length === 0) {
       // Reset time when not playing

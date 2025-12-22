@@ -6,6 +6,7 @@ import { LocationType } from "@/types/location";
 import { Icon } from "@/components/map-editor-ui/Icon";
 import { IconLibraryView } from "@/components/map-editor-ui/IconLibraryView";
 import { UserAsset, getUserAssets } from "@/lib/api-library";
+import { calculateEffectiveSegmentDuration } from "@/utils/segmentTiming";
 
 type TabType = "basic" | "icon" | "display" | "media";
 
@@ -48,6 +49,11 @@ export function LocationForm({
   const [highlightOnEnter, setHighlightOnEnter] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Timing control states
+  const [entryDelayMs, setEntryDelayMs] = useState(0);
+  const [exitDelayMs, setExitDelayMs] = useState(5000);
+  const [segmentDuration, setSegmentDuration] = useState(5000);
+
   // Media state
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -61,6 +67,7 @@ export function LocationForm({
   const [iconUrl, setIconUrl] = useState("");
   const [iconType, setIconType] = useState(""); // For preset icons (e.g., "plane", "car")
   const [iconSize, setIconSize] = useState(32);
+  const [rotation, setRotation] = useState(0); // Icon rotation in degrees
   const [audioUrl, setAudioUrl] = useState("");
   const [iconPreview, setIconPreview] = useState<string | null>(null);
 
@@ -184,9 +191,34 @@ export function LocationForm({
       }
 
       setIconSize(initialLocation.iconSize || 32);
+      setRotation(initialLocation.rotation ? parseInt(initialLocation.rotation) : 0);
       setAudioUrl(initialLocation.audioUrl || "");
+
+      // Load timing values if they exist
+      if ((initialLocation as any).entryDelayMs !== undefined) {
+        setEntryDelayMs((initialLocation as any).entryDelayMs);
+      }
+      if ((initialLocation as any).exitDelayMs !== undefined) {
+        setExitDelayMs((initialLocation as any).exitDelayMs);
+      }
     }
   }, [initialLocation, initialCoordinates]);
+
+  // Load segment duration when segmentId changes
+  useEffect(() => {
+    if (segmentId && segments && segments.length > 0) {
+      const segment = segments.find((s) => s.segmentId === segmentId);
+      if (segment) {
+        const duration = calculateEffectiveSegmentDuration(segment);
+        setSegmentDuration(duration);
+
+        // Set default exitDelayMs to segment duration if creating new location
+        if (!initialLocation) {
+          setExitDelayMs(duration);
+        }
+      }
+    }
+  }, [segmentId, segments, initialLocation]);
 
   useEffect(() => {
     if (activeTab !== "media") return;
@@ -309,8 +341,12 @@ export function LocationForm({
         iconType: finalIconType,
         iconUrl: finalIconUrl,
         iconSize: iconSize,
+        rotation: rotation.toString(),
         audioUrl: audioUrl.trim() || undefined,
-      };
+        // Timing fields
+        entryDelayMs: entryDelayMs,
+        exitDelayMs: exitDelayMs,
+      } as any;
 
       await onSave(data);
     } finally {
@@ -590,6 +626,50 @@ export function LocationForm({
                   min={1}
                 />
               </div>
+
+              {/* Icon Rotation */}
+              <div className="space-y-1">
+                <label className="block text-xs text-zinc-500">
+                  Góc xoay: <span className="text-zinc-300 font-medium">{rotation}°</span>
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  step="15"
+                  value={rotation}
+                  onChange={(e) => setRotation(parseInt(e.target.value))}
+                  className="w-full"
+                  disabled={saving}
+                />
+                <div className="flex justify-between text-[10px] text-zinc-500">
+                  <span>0° (Bắc)</span>
+                  <span>90° (Đông)</span>
+                  <span>180° (Nam)</span>
+                  <span>270° (Tây)</span>
+                </div>
+              </div>
+
+              {/* Rotation Preview */}
+              {(iconPreview || iconUrl || iconType) && (
+                <div className="bg-zinc-800/50 rounded p-3 flex items-center justify-center">
+                  <div
+                    style={{
+                      transform: `rotate(${rotation}deg)`,
+                      transition: 'transform 0.2s ease-out'
+                    }}
+                    className="text-2xl"
+                  >
+                    {iconPreview ? (
+                      <img src={iconPreview} alt="Preview" className="w-8 h-8" />
+                    ) : iconUrl ? (
+                      <img src={iconUrl} alt="Preview" className="w-8 h-8" />
+                    ) : iconType ? (
+                      <Icon icon={getIconForKey(iconType)} className="w-8 h-8 text-emerald-400" />
+                    ) : null}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Audio Upload */}
@@ -733,7 +813,7 @@ export function LocationForm({
 
         {/* Display Tab */}
         {activeTab === "display" && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -744,16 +824,98 @@ export function LocationForm({
               />
               <span className="text-xs text-zinc-300">Hiển thị trên bản đồ</span>
             </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={highlightOnEnter}
-                onChange={(e) => setHighlightOnEnter(e.target.checked)}
-                className="w-4 h-4 rounded"
-                disabled={saving}
-              />
-              <span className="text-xs text-zinc-300">Highlight khi vào segment</span>
-            </label>
+
+            {/* Display Timing Controls */}
+            <div className="space-y-2 pt-2 border-t border-zinc-700/50">
+              <label className="text-xs font-semibold text-zinc-300">Thời gian hiển thị</label>
+
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">
+                  Thời gian xuất hiện (ms)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max={segmentDuration}
+                  step="100"
+                  value={entryDelayMs}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    setEntryDelayMs(val);
+                  }}
+                  onBlur={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    const clamped = Math.max(0, Math.min(val, segmentDuration - 500));
+                    setEntryDelayMs(clamped);
+                    // Ensure minimum gap of 500ms
+                    if (exitDelayMs - clamped < 500) {
+                      setExitDelayMs(clamped + 500);
+                    }
+                  }}
+                  className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                  disabled={saving}
+                />
+                <div className="text-[10px] text-zinc-500 mt-0.5">
+                  Location sẽ xuất hiện tại thời điểm này trong segment
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">
+                  Thời gian biến mất (ms)
+                </label>
+                <input
+                  type="number"
+                  min={entryDelayMs + 500}
+                  max={segmentDuration}
+                  step="100"
+                  value={exitDelayMs}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 0;
+                    setExitDelayMs(val);
+                  }}
+                  onBlur={(e) => {
+                    const val = parseInt(e.target.value) || exitDelayMs;
+                    const clamped = Math.max(entryDelayMs + 500, Math.min(val, segmentDuration));
+                    setExitDelayMs(clamped);
+                  }}
+                  className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500"
+                  disabled={saving}
+                />
+                <div className="text-[10px] text-zinc-500 mt-0.5">
+                  Location sẽ biến mất tại thời điểm này trong segment
+                </div>
+              </div>
+
+              <div className="bg-zinc-800/50 rounded px-2 py-1.5 text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Thời gian hiển thị:</span>
+                  <span className="text-zinc-200 font-medium">
+                    {((exitDelayMs - entryDelayMs) / 1000).toFixed(1)}s
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-400">Tổng thời lượng segment:</span>
+                  <span className="text-zinc-200 font-medium">
+                    {(segmentDuration / 1000).toFixed(1)}s
+                  </span>
+                </div>
+              </div>
+
+              {exitDelayMs - entryDelayMs < 500 && (
+                <div className="text-red-400 text-xs flex items-center gap-1">
+                  <Icon icon="mdi:alert" className="w-4 h-4" />
+                  <span>⚠️ Khoảng cách tối thiểu 500ms</span>
+                </div>
+              )}
+
+              {exitDelayMs > segmentDuration && (
+                <div className="text-yellow-400 text-xs flex items-center gap-1">
+                  <Icon icon="mdi:alert-circle" className="w-4 h-4" />
+                  <span>⚠️ Thời gian vượt quá thời lượng segment</span>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

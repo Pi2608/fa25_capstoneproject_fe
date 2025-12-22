@@ -5,6 +5,7 @@ import type { Segment, RouteAnimation } from "@/lib/api-storymap";
 import { calculateEffectiveSegmentDuration } from "@/utils/segmentTiming";
 import { cn } from "@/lib/utils";
 import { Icon } from "../Icon";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface RouteTimingBarsProps {
   segments: Segment[];
@@ -28,6 +29,8 @@ export function RouteTimingBars({
   currentTime,
   onRouteClick,
 }: RouteTimingBarsProps) {
+  const { t } = useI18n();
+
   // Calculate absolute timing for all routes across segments
   const routeTimingData = useMemo<RouteTimingData[]>(() => {
     const allRoutes: RouteTimingData[] = [];
@@ -193,7 +196,7 @@ export function RouteTimingBars({
                   onRouteClick(route, segmentId);
                 }
               }}
-              title={`${route.fromName || 'Start'} → ${route.toName || 'End'}\nSegment: ${segmentName}\nStart: ${(absoluteStartTime / 1000).toFixed(1)}s\nDuration: ${(route.durationMs / 1000).toFixed(1)}s`}
+              title={`${route.fromName || t('mapEditor', 'routeStart')} → ${route.toName || t('mapEditor', 'routeEnd')}\n${t('mapEditor', 'routeSegment')} ${segmentName}\nStart: ${(absoluteStartTime / 1000).toFixed(1)}s\n${t('mapEditor', 'routeDuration')} ${(route.durationMs / 1000).toFixed(1)}s`}
             >
               {/* Route bar content */}
               <div className="h-full flex items-center justify-between px-1.5 overflow-hidden">
@@ -206,7 +209,7 @@ export function RouteTimingBars({
                   {width > 80 && (
                     <div className="flex-1 min-w-0">
                       <div className="text-[9px] font-medium text-white truncate">
-                        {route.fromName || 'Start'} → {route.toName || 'End'}
+                        {route.fromName || t('mapEditor', 'routeStart')} → {route.toName || t('mapEditor', 'routeEnd')}
                       </div>
                     </div>
                   )}
@@ -238,13 +241,13 @@ export function RouteTimingBars({
               {/* Hover tooltip expansion */}
               <div className="absolute left-0 bottom-full mb-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30">
                 <div className="bg-zinc-900 border border-zinc-700 rounded-md px-2 py-1 text-xs text-white shadow-lg whitespace-nowrap">
-                  <div className="font-semibold">{route.fromName || 'Start'} → {route.toName || 'End'}</div>
-                  <div className="text-zinc-400 text-[10px]">Segment: {segmentName}</div>
+                  <div className="font-semibold">{route.fromName || t('mapEditor', 'routeStart')} → {route.toName || t('mapEditor', 'routeEnd')}</div>
+                  <div className="text-zinc-400 text-[10px]">{t('mapEditor', 'routeSegment')} {segmentName}</div>
                   <div className="text-zinc-400 text-[10px]">
-                    Start: {(absoluteStartTime / 1000).toFixed(1)}s | Duration: {(route.durationMs / 1000).toFixed(1)}s
+                    Start: {(absoluteStartTime / 1000).toFixed(1)}s | {t('mapEditor', 'routeDuration')} {(route.durationMs / 1000).toFixed(1)}s
                   </div>
                   {isOverlapping && (
-                    <div className="text-yellow-400 text-[10px] mt-0.5">⚠ Overlaps with other routes</div>
+                    <div className="text-yellow-400 text-[10px] mt-0.5">{t('mapEditor', 'routeOverlapsWarning')}</div>
                   )}
                 </div>
               </div>
@@ -256,7 +259,7 @@ export function RouteTimingBars({
       {/* Empty state */}
       {routeTimingData.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="text-xs text-zinc-500 italic">No routes with timing data</span>
+          <span className="text-xs text-zinc-500 italic">{t('mapEditor', 'routeNoTimingData')}</span>
         </div>
       )}
     </div>

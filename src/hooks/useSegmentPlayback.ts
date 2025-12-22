@@ -21,6 +21,7 @@ type UseSegmentPlaybackProps = {
   setActiveSegmentId: (id: string | null) => void;
   onSegmentSelect?: (segment: Segment) => void;
   onLocationClick?: (location: any, event?: any) => void;
+  setCurrentTime?: (time: number) => void;
 };
 
 export function useSegmentPlayback({
@@ -32,6 +33,7 @@ export function useSegmentPlayback({
   setActiveSegmentId,
   onSegmentSelect,
   onLocationClick,
+  setCurrentTime,
 }: UseSegmentPlaybackProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentPlayIndex, setCurrentPlayIndex] = useState(0);
@@ -265,6 +267,78 @@ export function useSegmentPlayback({
       });
     }
   }, [segments, currentMap, currentPlayIndex, isPlaying, handleViewSegment, routeAnimations]); // Re-render when segments change
+
+  // ==================== LOCATION VISIBILITY CONTROL ====================
+  // RAF loop to control location visibility based on timing during playback
+  useEffect(() => {
+    if (!isPlaying || !currentMap || currentSegmentLayers.length === 0) return;
+    if (segmentStartTime === 0) return;
+
+    let rafId: number;
+
+    const updateLocationVisibility = () => {
+      const currentSegmentTime = Date.now() - segmentStartTime;
+
+      // Filter for markers with timing metadata
+      const markersWithTiming = currentSegmentLayers.filter(layer =>
+        (layer as any)._locationTiming
+      );
+
+      markersWithTiming.forEach(marker => {
+        const timing = (marker as any)._locationTiming;
+        if (!timing) return;
+
+        const element = marker.getElement?.();
+        if (!element) return;
+
+        const shouldShow = currentSegmentTime >= timing.entryTime &&
+                          currentSegmentTime < timing.exitTime;
+        const isShown = element.style.display !== 'none';
+
+        if (shouldShow && !isShown) {
+          // Show location with entry effect
+          element.style.display = 'block';
+          element.style.transition = `opacity ${timing.entryDuration}ms ease-out`;
+
+          // Apply entry effect
+          if (timing.entryEffect === 'scale') {
+            element.style.transform = 'scale(0)';
+          } else if (timing.entryEffect === 'slide-up') {
+            element.style.transform = 'translateY(20px)';
+          } else if (timing.entryEffect === 'bounce') {
+            element.style.transform = 'scale(0.3)';
+          }
+
+          // Trigger animation
+          requestAnimationFrame(() => {
+            element.style.opacity = '1';
+            element.style.transform = 'scale(1) translateY(0)';
+          });
+        } else if (!shouldShow && isShown && currentSegmentTime >= timing.exitTime) {
+          // Hide location with fade out
+          element.style.transition = `opacity ${timing.entryDuration}ms ease-out`;
+          element.style.opacity = '0';
+          setTimeout(() => {
+            if (element.style.opacity === '0') {
+              element.style.display = 'none';
+            }
+          }, timing.entryDuration);
+        }
+      });
+
+      if (isPlaying) {
+        rafId = requestAnimationFrame(updateLocationVisibility);
+      }
+    };
+
+    rafId = requestAnimationFrame(updateLocationVisibility);
+
+    return () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [isPlaying, currentMap, currentSegmentLayers, segmentStartTime]);
 
   // ==================== AUTO-PLAY EFFECT ====================
   useEffect(() => {
@@ -528,6 +602,12 @@ export function useSegmentPlayback({
 
     const segment = segments[segmentIndex];
 
+    // Calculate absolute start time (sum of all previous segments' effective durations)
+    let absoluteStartTime = 0;
+    for (let i = 0; i < segmentIndex; i++) {
+      absoluteStartTime += calculateEffectiveSegmentDuration(segments[i]);
+    }
+
     // IMPORTANT: Set flags FIRST to prevent auto-play effect from running
     isSingleSegmentPlayRef.current = true;
     setIsRouteAnimationOnly(true);
@@ -546,38 +626,62 @@ export function useSegmentPlayback({
     // Load and play route animations
     try {
       const animations = await getRouteAnimationsBySegment(mapId, segmentId);
-      if (animations && animations.length > 0) {
-        setRouteAnimations(animations);
-        setSegmentStartTime(Date.now());
-        // Flags already set above
-        setIsPlaying(true);
 
-        // FIXED: Use effective duration that accounts for route animations
-        const effectiveDuration = calculateEffectiveSegmentDuration(segment, animations);
-        setTimeout(() => {
+      // FIXED: Use effective duration that accounts for route animations
+      const effectiveDuration = calculateEffectiveSegmentDuration(segment, animations || []);
+
+      setRouteAnimations(animations || []);
+      const playbackStartTime = Date.now();
+      setSegmentStartTime(playbackStartTime);
+      setIsPlaying(true);
+
+      // Animate timeline from absolute position using RAF
+      let rafId: number;
+      const animateTimeline = () => {
+        const elapsed = Date.now() - playbackStartTime;
+        const progress = Math.min(elapsed / effectiveDuration, 1);
+
+        // Update currentTime to jump to absolute segment position
+        if (setCurrentTime) {
+          const currentSegmentTime = absoluteStartTime / 1000 + (effectiveDuration / 1000) * progress;
+          setCurrentTime(currentSegmentTime);
+        }
+
+        if (progress < 1 && isSingleSegmentPlayRef.current) {
+          rafId = requestAnimationFrame(animateTimeline);
+        } else {
+          // Reset currentTime to 0 when playback completes
+          if (setCurrentTime) {
+            setCurrentTime(0);
+          }
           handleStopPreview();
           isSingleSegmentPlayRef.current = false;
-        }, effectiveDuration);
-      } else {
-        // No route animations, just show the segment for its duration
-        setSegmentStartTime(Date.now());
-        // Flags already set above
-        setIsPlaying(true);
+        }
+      };
 
-        const duration = segment.durationMs || 5000;
-        setTimeout(() => {
-          setIsPlaying(false);
-          setSegmentStartTime(0);
-          setIsRouteAnimationOnly(false);
-          isSingleSegmentPlayRef.current = false;
-        }, duration);
-      }
+      rafId = requestAnimationFrame(animateTimeline);
+
+      // Cleanup timeout in case of manual stop
+      setTimeout(() => {
+        if (rafId) {
+          cancelAnimationFrame(rafId);
+        }
+        if (setCurrentTime) {
+          setCurrentTime(0);
+        }
+        handleStopPreview();
+        isSingleSegmentPlayRef.current = false;
+      }, effectiveDuration + 100);
+
     } catch (e) {
       console.error("Failed to play single segment:", e);
       setIsRouteAnimationOnly(false);
       isSingleSegmentPlayRef.current = false;
+      if (setCurrentTime) {
+        setCurrentTime(0);
+      }
     }
-  }, [currentMap, segments, mapId, handleViewSegment, handleStopPreview, setActiveSegmentId]);
+  }, [currentMap, segments, mapId, handleViewSegment, handleStopPreview, setActiveSegmentId, setCurrentTime]);
 
   return {
     isPlaying,
@@ -586,6 +690,7 @@ export function useSegmentPlayback({
     currentTransition,
     routeAnimations,
     segmentStartTime,
+    isControllingTime: isRouteAnimationOnly || isSingleSegmentPlayRef.current, // Flag to indicate this hook is managing currentTime
     handleViewSegment,
     handlePlayPreview,
     handlePausePreview,

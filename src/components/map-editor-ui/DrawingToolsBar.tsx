@@ -139,7 +139,7 @@ export const DrawingToolsBar: React.FC<DrawingToolsBarProps> = ({
         <Pencil size={18} strokeWidth={1.8} />
       </ToolButton>
 
-      {onStartMeasurement && (
+      {/* {onStartMeasurement && (
         <>
           <ToolButton
             title="Measure Distance (M)"
@@ -157,7 +157,7 @@ export const DrawingToolsBar: React.FC<DrawingToolsBarProps> = ({
             <Square size={18} strokeWidth={1.8} />
           </ToolButton>
         </>
-      )}
+      )} */}
     </div>
   );
 };

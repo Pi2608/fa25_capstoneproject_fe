@@ -3353,6 +3353,29 @@ export const messages = {
             confirm_remove_layer: "Xóa layer này?",
             error_remove_layer: "Không thể xóa layer",
             success_remove_layer: "Đã xóa layer thành công",
+            // Timeline UI
+            timeline: "Timeline",
+            timelineSegments: "{count} segments",
+            timelineZoom: "Zoom:",
+            timelineZoomOut: "Thu nhỏ",
+            timelineZoomIn: "Phóng to",
+            timelineZoomReset: "Đặt lại zoom",
+            timelineClose: "Đóng timeline",
+            timelinePlay: "Phát",
+            timelinePause: "Tạm dừng",
+            timelineStop: "Dừng",
+            // Route animation UI
+            routeStart: "Điểm đầu",
+            routeEnd: "Điểm cuối",
+            routeSegment: "Segment:",
+            routeDuration: "Thời lượng:",
+            routeOverlapsWarning: "⚠ Trùng lặp với routes khác",
+            routeNoTimingData: "Không có routes với dữ liệu thời gian",
+            // RouteAnimation component description
+            routeAnimationDesc: "Hiển thị icon di chuyển dọc theo route và highlight phần đường đã đi qua",
+            // Confirm dialog buttons
+            confirmMoveButton: "Di chuyển",
+            movingButton: "Đang di chuyển...",
         },
         footer: {
             tagline: 'Xây dựng và chia sẻ bản đồ tương tác thật dễ dàng. Mạnh mẽ cho đội nhóm, đơn giản cho mọi người.',
@@ -6750,6 +6773,29 @@ export const messages = {
             confirm_remove_layer: "Remove this layer?",
             error_remove_layer: "Failed to remove layer",
             success_remove_layer: "Layer removed successfully",
+            // Timeline UI
+            timeline: "Timeline",
+            timelineSegments: "{count} segments",
+            timelineZoom: "Zoom:",
+            timelineZoomOut: "Zoom out",
+            timelineZoomIn: "Zoom in",
+            timelineZoomReset: "Reset zoom",
+            timelineClose: "Close timeline",
+            timelinePlay: "Play",
+            timelinePause: "Pause",
+            timelineStop: "Stop",
+            // Route animation UI
+            routeStart: "Start",
+            routeEnd: "End",
+            routeSegment: "Segment:",
+            routeDuration: "Duration:",
+            routeOverlapsWarning: "⚠ Overlaps with other routes",
+            routeNoTimingData: "No routes with timing data",
+            // RouteAnimation component description
+            routeAnimationDesc: "Display moving icon along route and highlight traveled path",
+            // Confirm dialog buttons
+            confirmMoveButton: "Move",
+            movingButton: "Moving...",
         },
         footer: {
             tagline: 'Create and share interactive maps with ease. Powerful for teams, simple for everyone.',
