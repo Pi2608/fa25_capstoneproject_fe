@@ -11,6 +11,7 @@ import MDEditor from "@uiw/react-md-editor";
 import "@uiw/react-md-editor/markdown-editor.css";
 import "@uiw/react-markdown-preview/markdown.css";
 import ReactMarkdown from "react-markdown";
+import { calculateEffectiveSegmentDuration } from "@/utils/segmentTiming";
 
 type TabType = "basic" | "media" | "display";
 
@@ -58,6 +59,11 @@ export function LocationForm({
   const [highlightOnEnter, setHighlightOnEnter] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  // Timing control states
+  const [entryDelayMs, setEntryDelayMs] = useState(0);
+  const [exitDelayMs, setExitDelayMs] = useState(5000);
+  const [segmentDuration, setSegmentDuration] = useState(5000);
+
   // Media state
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
@@ -77,6 +83,7 @@ export function LocationForm({
   const [iconUrl, setIconUrl] = useState("");
   const [iconType, setIconType] = useState(""); // For preset icons (e.g., "plane", "car")
   const [iconSize, setIconSize] = useState(32);
+  const [rotation, setRotation] = useState(0); // Icon rotation in degrees
   const [audioUrl, setAudioUrl] = useState("");
   const [iconPreview, setIconPreview] = useState<string | null>(null);
 
@@ -223,9 +230,34 @@ export function LocationForm({
       }
 
       setIconSize(initialLocation.iconSize || 32);
+      setRotation(initialLocation.rotation ? parseInt(initialLocation.rotation) : 0);
       setAudioUrl(initialLocation.audioUrl || "");
+
+      // Load timing values if they exist
+      if ((initialLocation as any).entryDelayMs !== undefined) {
+        setEntryDelayMs((initialLocation as any).entryDelayMs);
+      }
+      if ((initialLocation as any).exitDelayMs !== undefined) {
+        setExitDelayMs((initialLocation as any).exitDelayMs);
+      }
     }
   }, [initialLocation, initialCoordinates]);
+
+  // Load segment duration when segmentId changes
+  useEffect(() => {
+    if (segmentId && segments && segments.length > 0) {
+      const segment = segments.find((s) => s.segmentId === segmentId);
+      if (segment) {
+        const duration = calculateEffectiveSegmentDuration(segment);
+        setSegmentDuration(duration);
+
+        // Set default exitDelayMs to segment duration if creating new location
+        if (!initialLocation) {
+          setExitDelayMs(duration);
+        }
+      }
+    }
+  }, [segmentId, segments, initialLocation]);
 
   useEffect(() => {
     if (activeTab !== "media") return;
@@ -356,8 +388,12 @@ export function LocationForm({
         iconType: finalIconType,
         iconUrl: finalIconUrl,
         iconSize: iconSize,
+        rotation: rotation.toString(),
         audioUrl: audioUrl.trim() || undefined,
-      };
+        // Timing fields
+        entryDelayMs: entryDelayMs,
+        exitDelayMs: exitDelayMs,
+      } as any;
 
       await onSave(data);
     } finally {
@@ -764,6 +800,50 @@ export function LocationForm({
                   min={1}
                 />
               </div>
+
+              {/* Icon Rotation */}
+              <div className="space-y-1">
+                <label className="block text-xs text-zinc-500">
+                  Góc xoay: <span className="text-zinc-300 font-medium">{rotation}°</span>
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="360"
+                  step="15"
+                  value={rotation}
+                  onChange={(e) => setRotation(parseInt(e.target.value))}
+                  className="w-full"
+                  disabled={saving}
+                />
+                <div className="flex justify-between text-[10px] text-zinc-500">
+                  <span>0° (Bắc)</span>
+                  <span>90° (Đông)</span>
+                  <span>180° (Nam)</span>
+                  <span>270° (Tây)</span>
+                </div>
+              </div>
+
+              {/* Rotation Preview */}
+              {(iconPreview || iconUrl || iconType) && (
+                <div className="bg-zinc-800/50 rounded p-3 flex items-center justify-center">
+                  <div
+                    style={{
+                      transform: `rotate(${rotation}deg)`,
+                      transition: 'transform 0.2s ease-out'
+                    }}
+                    className="text-2xl"
+                  >
+                    {iconPreview ? (
+                      <img src={iconPreview} alt="Preview" className="w-8 h-8" />
+                    ) : iconUrl ? (
+                      <img src={iconUrl} alt="Preview" className="w-8 h-8" />
+                    ) : iconType ? (
+                      <Icon icon={getIconForKey(iconType)} className="w-8 h-8 text-emerald-400" />
+                    ) : null}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Audio Upload */}
@@ -906,7 +986,7 @@ export function LocationForm({
         )}
 
         {activeTab === "display" && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"

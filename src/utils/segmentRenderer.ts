@@ -13,6 +13,21 @@ type LeafletInstance = typeof import("leaflet");
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Flag to track if leaflet-imageoverlay-rotated has been loaded
+let rotatedOverlayLoaded = false;
+
+// Lazy load leaflet-imageoverlay-rotated when needed
+function ensureRotatedOverlayLoaded(L: LeafletInstance) {
+  if (!rotatedOverlayLoaded && typeof window !== 'undefined' && L) {
+    try {
+      require('leaflet-imageoverlay-rotated');
+      rotatedOverlayLoaded = true;
+    } catch (error) {
+      console.error('Failed to load leaflet-imageoverlay-rotated:', error);
+    }
+  }
+}
+
 function isLeafletMapReady(map?: L.Map | null): boolean {
   try {
     if (!map) return false;
@@ -325,19 +340,81 @@ export async function renderSegmentLocations(
       // Create marker icon based on config
       const iconSize = location.iconSize || 32;
       const iconColor = location.iconColor || '#FF0000';
-
-      // Determine icon content: IconUrl (image), IconType (emoji), or default
-      let iconHtml = '';
+      const rotation = parseInt((location as any).rotation) || 0;
       const defaultIcon = '📍';
-      
+
+      // Debug logging
+      console.log('[SegmentRenderer] Rendering location:', {
+        title: location.title,
+        hasIconUrl: !!location.iconUrl,
+        iconUrl: location.iconUrl,
+        rotation: rotation,
+        rotationRaw: (location as any).rotation,
+        iconSize: iconSize
+      });
+
+      let marker: any;
+
+      // Use imageOverlay.rotated for custom images, regular marker for emojis
       if (location.iconUrl) {
-        // Use custom image
-        iconHtml = `<img src="${location.iconUrl}" style="
-          width: ${iconSize}px;
-          height: ${iconSize}px;
-          object-fit: contain;
-          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-        " />`;
+        // Ensure leaflet-imageoverlay-rotated is loaded
+        ensureRotatedOverlayLoaded(L);
+
+        const hasRotatedFunction = typeof (L as any).imageOverlay?.rotated === 'function';
+        console.log('[SegmentRenderer] Rotated overlay available?', hasRotatedFunction);
+
+        // Check if rotated overlay is available
+        if (hasRotatedFunction) {
+          console.log('[SegmentRenderer] Using imageOverlay.rotated with rotation:', rotation);
+          // Calculate the three corners for imageOverlay.rotated based on center point, size, and rotation
+          const metersPerPixel = 156543.03392 * Math.cos(latLng[0] * Math.PI / 180) / Math.pow(2, map.getZoom());
+          const sizeInMeters = iconSize * metersPerPixel;
+          const sizeInDegrees = sizeInMeters / 111320; // Approximate meters to degrees
+
+          // Calculate corners based on rotation
+          const rotRad = (rotation * Math.PI) / 180;
+          const halfSize = sizeInDegrees / 2;
+
+          // Calculate rotated corners relative to center
+          const cos = Math.cos(rotRad);
+          const sin = Math.sin(rotRad);
+
+          // Top-left corner (before rotation: -halfSize, +halfSize)
+          const tlLat = latLng[0] + (halfSize * cos - halfSize * sin);
+          const tlLng = latLng[1] + (-halfSize * cos - halfSize * sin);
+
+          // Top-right corner (before rotation: +halfSize, +halfSize)
+          const trLat = latLng[0] + (halfSize * cos + halfSize * sin);
+          const trLng = latLng[1] + (halfSize * cos - halfSize * sin);
+
+          // Bottom-left corner (before rotation: -halfSize, -halfSize)
+          const blLat = latLng[0] + (-halfSize * cos - halfSize * sin);
+          const blLng = latLng[1] + (-halfSize * cos + halfSize * sin);
+
+          // Create rotated image overlay
+          marker = (L as any).imageOverlay.rotated(
+            location.iconUrl,
+            L.latLng(tlLat, tlLng),
+            L.latLng(trLat, trLng),
+            L.latLng(blLat, blLng),
+            {
+              opacity: 1,
+              interactive: true,
+              className: 'location-image-overlay',
+            }
+          );
+        } else {
+          // Fallback to regular marker with CSS rotation if rotated overlay not available
+          console.log('[SegmentRenderer] Using CSS fallback with rotation:', rotation);
+          const iconHtml = `<img src="${location.iconUrl}" style="width: ${iconSize}px; height: ${iconSize}px; transform: rotate(${rotation}deg); transform-origin: center center;" />`;
+          marker = L.marker(latLng, {
+            icon: L.divIcon({
+              html: iconHtml,
+              iconSize: [iconSize, iconSize],
+              className: 'location-image-marker',
+            }),
+          });
+        }
       } else {
         // Use emoji or default - Map iconType key to emoji
         let iconContent = defaultIcon;
@@ -346,24 +423,33 @@ export async function renderSegmentLocations(
           // If it's a key in iconEmojiMap, use the emoji; otherwise use it directly (might already be emoji)
           iconContent = iconEmojiMap[trimmedIconType] || trimmedIconType || defaultIcon;
         }
-        iconHtml = `<div style="
-          font-size: ${iconSize}px;
-          text-align: center;
-          filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
-          color: ${iconColor};
-          line-height: 1;
-        ">${iconContent}</div>`;
-      }
+        // Use emoji or default with CSS rotation for non-image markers
+        const iconContent = location.iconType || '📍';
+        const iconHtml = `<div style="
+          width: ${iconSize}px;
+          height: ${iconSize}px;
+          transform: rotate(${rotation}deg);
+          transform-origin: center center;
+        ">
+          <div style="
+            font-size: ${iconSize}px;
+            text-align: center;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+            color: ${iconColor};
+            line-height: 1;
+          ">${iconContent}</div>
+        </div>`;
 
-      const marker = L.marker(latLng, {
-        icon: L.divIcon({
-          className: 'location-marker',
-          html: iconHtml,
-          iconSize: [iconSize, iconSize],
-          iconAnchor: [iconSize / 2, iconSize],
-        }),
-        zIndexOffset: location.zIndex || 100,
-      });
+        marker = L.marker(latLng, {
+          icon: L.divIcon({
+            className: 'location-marker',
+            html: iconHtml,
+            iconSize: [iconSize, iconSize],
+            iconAnchor: [iconSize / 2, iconSize / 2],
+          }),
+          zIndexOffset: location.zIndex || 100,
+        });
+      }
 
       // Add tooltip if enabled - support HTML content
       // During playback, always show title as permanent label above marker
@@ -426,9 +512,28 @@ export async function renderSegmentLocations(
 
       marker.addTo(map);
 
+      // Store timing metadata for visibility control during playback
+      const exitDelayMs = (location as any).exitDelayMs;
+      const markerElement = marker.getElement();
+
+      if (markerElement) {
+        // Store timing data on the marker for later use during playback
+        (marker as any)._locationTiming = {
+          entryTime: entryDelayMs,
+          exitTime: exitDelayMs !== undefined ? exitDelayMs : Infinity,
+          entryEffect: entryEffect,
+          entryDuration: entryDurationMs
+        };
+
+        // If we have timing controls, start hidden and let playback control visibility
+        if (exitDelayMs !== undefined && entryDelayMs > 0) {
+          markerElement.style.opacity = '0';
+          markerElement.style.display = 'none';
+        }
+      }
+
       // Apply entry animation (only if not using segment transition)
       if (!options?.transitionType && entryEffect !== 'none') {
-        const markerElement = marker.getElement();
         if (markerElement) {
           // Initial state
           markerElement.style.transition = 'none';
@@ -447,13 +552,15 @@ export async function renderSegmentLocations(
             markerElement.style.opacity = '0';
           }
 
-          // Animate after delay
-          setTimeout(() => {
-            if (!markerElement) return;
-            markerElement.style.transition = `all ${entryDurationMs}ms ease-out`;
-            markerElement.style.opacity = '1';
-            markerElement.style.transform = 'scale(1) translateY(0)';
-          }, entryDelayMs);
+          // Animate after delay (only if no explicit timing controls)
+          if ((location as any).exitDelayMs === undefined || entryDelayMs === 0) {
+            setTimeout(() => {
+              if (!markerElement) return;
+              markerElement.style.transition = `all ${entryDurationMs}ms ease-out`;
+              markerElement.style.opacity = '1';
+              markerElement.style.transform = 'scale(1) translateY(0)';
+            }, entryDelayMs);
+          }
         }
       } else if (options?.transitionType && options.transitionType !== 'Jump') {
         // Use segment transition fade

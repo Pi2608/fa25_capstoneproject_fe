@@ -29,8 +29,8 @@ export interface RouteAnimationProps {
 }
 
 /**
- * RouteAnimation component - Hiển thị icon di chuyển dọc theo route
- * và highlight phần đường đã đi qua
+ * RouteAnimation component - Display moving icon along route and highlight traveled path
+ * Component hiển thị icon di chuyển dọc theo route và highlight phần đường đã đi qua
  */
 export default function RouteAnimation({
   map,
@@ -388,22 +388,22 @@ export default function RouteAnimation({
         
         // Only create if not already exists
         if (!routeLineRef.current) {
-        fullRoute = L.polyline(
-          validRoutePath.map(([lng, lat]) => [lat, lng] as [number, number]),
-          {
-            color: routeColor,
-            weight: routeWidth,
-            opacity: 0.6,
-            dashArray: '5, 5', // Dashed line for unvisited
-          }
-        );
-        
-        if (isMapReady(map)) {
-          fullRoute.addTo(map);
-          routeLineRef.current = fullRoute;
-        } else {
-          console.warn('Map became invalid before adding route line');
-          return;
+          fullRoute = L.polyline(
+            validRoutePath.map(([lng, lat]) => [lat, lng] as [number, number]),
+            {
+              color: routeColor,
+              weight: routeWidth,
+              opacity: 0.6,
+              dashArray: '5, 5', // Dashed line for unvisited
+            }
+          );
+
+          if (isMapReady(map)) {
+            fullRoute.addTo(map);
+            routeLineRef.current = fullRoute;
+          } else {
+            console.warn('Map became invalid before adding route line');
+            return;
           }
         }
 
@@ -414,7 +414,7 @@ export default function RouteAnimation({
           weight: routeWidth + 2, // Slightly thicker
           opacity: 1,
         });
-        
+
         if (isMapReady(map)) {
           visitedRoute.addTo(map);
           visitedLineRef.current = visitedRoute;

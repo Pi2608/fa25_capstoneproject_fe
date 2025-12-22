@@ -103,13 +103,14 @@ export function usePoiMarkers({
             // Create marker icon based on config
             const iconSize = poi.iconSize || 32;
             const iconColor = poi.iconColor || "#FF0000";
+            const rotation = parseInt((poi as any).rotation) || 0;
 
             // Determine icon content: IconUrl (image), IconType (emoji), or default
             let iconHtml = "";
             const defaultIcon = "📍";
 
             if (poi.iconUrl) {
-              // Use custom image
+              // Use custom image with rotation
               iconHtml = `<div style="
                 display: flex !important;
                 align-items: center !important;
@@ -119,6 +120,8 @@ export function usePoiMarkers({
                 background: transparent !important;
                 visibility: visible !important;
                 opacity: 1 !important;
+                transform: rotate(${rotation}deg) !important;
+                transform-origin: center center !important;
               "><img src="${poi.iconUrl}" style="
                 width: 100% !important;
                 height: 100% !important;
@@ -155,6 +158,8 @@ export function usePoiMarkers({
                 visibility: visible !important;
                 opacity: 1 !important;
                 font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif !important;
+                transform: rotate(${rotation}deg) !important;
+                transform-origin: center center !important;
               ">${iconContent}</div>`;
             }
 

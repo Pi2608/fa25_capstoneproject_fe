@@ -18,6 +18,7 @@ export type CreateLocationReq = {
   markerGeometry: string;
   mediaResources?: string;
   displayOrder?: number;
+  rotation: string;
   iconType?: string;
   iconColor?: string;
   iconSize?: number; // Default: 32
@@ -38,7 +39,6 @@ export type CreateLocationReq = {
   linkedLocationId?: string;
   externalUrl?: string;
   isVisible?: boolean; // Default: true
-  // File uploads (handled as FormData, not in JSON)
   audioFile?: File | Blob;
   iconFile?: File | Blob;
 };
@@ -67,6 +67,7 @@ export type MapLocation = {
   displayOrder?: number;
   isVisible?: boolean;
   zIndex?: number;
+  rotation: string;
 
   // Tooltip & Popup
   showTooltip?: boolean;
@@ -172,6 +173,7 @@ export function createMapLocation(mapId: string, body: Omit<CreateLocationReq, '
     mapId,
     locationType: body.locationType,
     displayOrder: body.displayOrder ?? 0,
+    rotation:body.rotation ?? "",
     zIndex: body.zIndex ?? 100,
     showTooltip: body.showTooltip ?? true,
     iconSize: body.iconSize ?? 32,

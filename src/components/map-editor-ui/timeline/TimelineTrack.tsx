@@ -145,6 +145,7 @@ export function TimelineTrack({
     message: string;
     onConfirm: () => void | Promise<void>;
     itemName?: string;
+    actionType?: "delete" | "move" | "custom";
   }>({
     isOpen: false,
     title: "",
@@ -275,6 +276,7 @@ export function TimelineTrack({
           // Open confirm dialog
           setConfirmDialog({
             isOpen: true,
+            actionType: "move",
             title: t("mapEditor", "confirm_move_title", {
               itemType: draggedItem.type,
             }),
@@ -561,6 +563,7 @@ export function TimelineTrack({
               title={confirmDialog.title}
               message={confirmDialog.message}
               itemName={confirmDialog.itemName}
+              actionType={confirmDialog.actionType}
             />,
             document.body,
           )}

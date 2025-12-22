@@ -4,6 +4,7 @@ import { Manrope } from "next/font/google";
 import { ThemeProvider } from "@/components/common";
 import { ToastProvider } from "@/contexts/ToastContext";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ConfirmDialogProvider } from "@/contexts/ConfirmDialogContext";
 import ToastContainer from "@/components/ui/ToastContainer";
 import { I18nProvider } from "@/i18n/I18nProvider";
 import type { Lang } from "@/i18n/messages";
@@ -41,12 +42,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>
             <ToastProvider>
               <I18nProvider initialLang={initialLang}>
-                <LoadingProvider>
-                  <LeafletStylesBoundary />
-                  <ZoneHighlightStyles />
-                  {children}
-                  <ToastContainer />
-                </LoadingProvider>
+                <ConfirmDialogProvider>
+                  <LoadingProvider>
+                    <LeafletStylesBoundary />
+                    <ZoneHighlightStyles />
+                    {children}
+                    <ToastContainer />
+                  </LoadingProvider>
+                </ConfirmDialogProvider>
               </I18nProvider>
             </ToastProvider>
           </AuthProvider>
