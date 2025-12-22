@@ -89,17 +89,18 @@ export default function RouteAnimation({
   // Create icon based on type
   const createIcon = (): any => {
     if (!L) return null;
-    const iconSize: [number, number] = [32, 32];
+    const iconSize: [number, number] = [40, 40];
     
     if (iconUrl) {
       return L.icon({
         iconUrl,
         iconSize,
         iconAnchor: [iconSize[0] / 2, iconSize[1] / 2],
+        className: 'route-animation-custom-icon',
       });
     }
     
-    // Default icons based on type
+    // Default icons based on type - extended list
     const iconMap: Record<string, string> = {
       car: '🚗',
       walking: '🚶',
@@ -111,10 +112,22 @@ export default function RouteAnimation({
       boat: '⛵',
       truck: '🚛',
       helicopter: '🚁',
+      ship: '🚢',
+      taxi: '🚕',
+      ambulance: '🚑',
+      fire_truck: '🚒',
+      police: '🚔',
+      rocket: '🚀',
+      bicycle: '🚲',
+      scooter: '🛴',
+      skateboard: '🛹',
+      custom: '📍', // Fallback for custom without iconUrl
     };
     
+    const emoji = iconMap[iconType] || iconMap['car'] || '🚗';
+    
     return L.divIcon({
-      html: `<div style="font-size: 24px; text-align: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">${iconMap[iconType] || '📍'}</div>`,
+      html: `<div style="font-size: 32px; line-height: 1; text-align: center; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5));">${emoji}</div>`,
       className: 'route-animation-icon',
       iconSize,
       iconAnchor: [iconSize[0] / 2, iconSize[1] / 2],

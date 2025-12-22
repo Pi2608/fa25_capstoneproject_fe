@@ -86,6 +86,11 @@ export const messages = {
             next: "Tiếp theo",
             submit: "Gửi",
         },
+        storymap: {
+            notAvailable: "Story map không khả dụng",
+            error: "Lỗi khi tải Story map",
+            backToGallery: "Quay lại Thư viện bản đồ",
+        },
         recents: {
             loading: "Đang tải…",
             title: "Gần đây",
@@ -2393,6 +2398,7 @@ export const messages = {
             toast_payment_failed: "Thiết lập thanh toán thất bại. Vui lòng thử lại."
         },
         gallery: {
+            play_storymap: "Chạy Storymap",
             hero_eyebrow: "Tài nguyên / Thư viện bản đồ",
             hero_title: "Bộ sưu tập Bản đồ Cộng đồng",
             hero_sub:
@@ -3469,6 +3475,11 @@ export const messages = {
             back: "Back",
             next: "Next",
             submit: "Submit",
+        },
+        storymap: {
+            notAvailable: "Story Maps are not available.",
+            error_loading: "Error loading Story Map.",
+            backToGallery: "Back to Gallery",
         },
         settings_members: {
             unknown_member: "this member",
@@ -6036,6 +6047,7 @@ export const messages = {
             footer_ticket: "open a support ticket",
         },
         gallery: {
+            play_storymap: "Play Story Map",
             hero_eyebrow: "Resources / Map Library",
             hero_title: "Community Map Gallery",
             hero_sub:
