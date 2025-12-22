@@ -192,10 +192,27 @@ export function usePoiMarkers({
               const rawContent = poi.tooltipContent || "";
               let processedContent = rawContent;
 
-              // Method 1: Parse JSON string if needed
-              if (rawContent.startsWith('"') && rawContent.endsWith('"')) {
+              // Method 1: Parse JSON object with text/images structure
+              if (rawContent.startsWith('{') && rawContent.endsWith('}')) {
                 try {
-                  processedContent = JSON.parse(rawContent);
+                  const parsed = JSON.parse(rawContent);
+                  if (parsed.text !== undefined) {
+                    // Combine text and images as markdown
+                    let finalContent = parsed.text || '';
+                    if (parsed.images && Array.isArray(parsed.images) && parsed.images.length > 0) {
+                      finalContent += '\n\n' + parsed.images.join('\n');
+                    }
+                    processedContent = finalContent;
+                  }
+                } catch (e) {
+                  // Not JSON object, continue with other methods
+                }
+              }
+
+              // Method 2: Parse JSON string if needed
+              if (processedContent.startsWith('"') && processedContent.endsWith('"')) {
+                try {
+                  processedContent = JSON.parse(processedContent);
                 } catch (e) {
                   // Not JSON, use as-is
                 }

@@ -8,7 +8,7 @@ export interface RouteAnimationProps {
   routePath: [number, number][]; // Array of [lng, lat] coordinates
   fromLocation: { lat: number; lng: number };
   toLocation: { lat: number; lng: number };
-  iconType?: 'car' | 'walking' | 'bike' | 'plane' | 'custom';
+  iconType?: 'car' | 'walking' | 'bike' | 'plane' | 'bus' | 'train' | 'motorcycle' | 'boat' | 'truck' | 'helicopter' | 'custom';
   iconUrl?: string;
   routeColor?: string; // Color for unvisited route
   visitedColor?: string; // Color for visited route
@@ -105,6 +105,12 @@ export default function RouteAnimation({
       walking: '🚶',
       bike: '🚴',
       plane: '✈️',
+      bus: '🚌',
+      train: '🚆',
+      motorcycle: '🏍️',
+      boat: '⛵',
+      truck: '🚛',
+      helicopter: '🚁',
     };
     
     return L.divIcon({

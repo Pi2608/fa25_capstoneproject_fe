@@ -205,3 +205,75 @@ body {
   scrollbar-width: thin;
   scrollbar-color: rgba(63, 63, 70, 0.7) rgba(9, 9, 11, 0.6);
 }
+
+/* Markdown Editor Styles */
+.w-md-editor {
+  --md-editor-bg-color: #27272a !important; /* zinc-800 */
+  --md-editor-border-color: #374151 !important; /* zinc-700 */
+  --md-editor-toolbar-bg-color: #1f2937 !important; /* zinc-800 */
+  --md-editor-toolbar-border-color: #374151 !important; /* zinc-700 */
+  --md-editor-text-color: #ffffff !important;
+  --md-editor-text-placeholder-color: #9ca3af !important; /* zinc-400 */
+  --md-editor-code-bg-color: #111827 !important; /* zinc-900 */
+  --md-editor-code-border-color: #374151 !important; /* zinc-700 */
+  --md-editor-focus-ring-color: #10b981 !important; /* emerald-500 */
+}
+
+.w-md-editor .w-md-editor-toolbar {
+  background-color: var(--md-editor-toolbar-bg-color) !important;
+  border-color: var(--md-editor-toolbar-border-color) !important;
+}
+
+.w-md-editor .w-md-editor-text {
+  background-color: var(--md-editor-bg-color) !important;
+  color: var(--md-editor-text-color) !important;
+  border-color: var(--md-editor-border-color) !important;
+}
+
+.w-md-editor .w-md-editor-text::placeholder {
+  color: var(--md-editor-text-placeholder-color) !important;
+}
+
+.w-md-editor .w-md-editor-text:focus {
+  outline: 2px solid var(--md-editor-focus-ring-color) !important;
+  outline-offset: 1px !important;
+}
+
+.w-md-editor .w-md-editor-toolbar button {
+  color: #d1d5db !important; /* zinc-300 */
+}
+
+.w-md-editor .w-md-editor-toolbar button:hover {
+  background-color: #374151 !important; /* zinc-700 */
+  color: #ffffff !important;
+}
+
+.w-md-editor .w-md-editor-toolbar button.active {
+  background-color: #10b981 !important; /* emerald-500 */
+  color: #ffffff !important;
+}
+
+/* Prose styles for markdown preview */
+.prose {
+  color: var(--tw-prose-body);
+  max-width: none;
+}
+
+.prose-invert {
+  --tw-prose-body: #e5e7eb; /* zinc-200 */
+  --tw-prose-headings: #f9fafb; /* zinc-50 */
+  --tw-prose-lead: #d1d5db; /* zinc-300 */
+  --tw-prose-links: #10b981; /* emerald-500 */
+  --tw-prose-bold: #f9fafb; /* zinc-50 */
+  --tw-prose-counters: #9ca3af; /* zinc-400 */
+  --tw-prose-bullets: #6b7280; /* zinc-500 */
+  --tw-prose-hr: #374151; /* zinc-700 */
+  --tw-prose-quotes: #f9fafb; /* zinc-50 */
+  --tw-prose-quote-borders: #374151; /* zinc-700 */
+  --tw-prose-captions: #9ca3af; /* zinc-400 */
+  --tw-prose-code: #f9fafb; /* zinc-50 */
+  --tw-prose-pre-code: #e5e7eb; /* zinc-200 */
+  --tw-prose-pre-bg: #111827; /* zinc-900 */
+  --tw-prose-th-borders: #374151; /* zinc-700 */
+  --tw-prose-td-borders: #374151; /* zinc-700 */
+}

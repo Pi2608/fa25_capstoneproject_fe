@@ -7,6 +7,10 @@ import { Icon } from "@/components/map-editor-ui/Icon";
 import { IconLibraryView } from "@/components/map-editor-ui/IconLibraryView";
 import { UserAsset, getUserAssets } from "@/lib/api-library";
 import { useParams } from "next/navigation";
+import MDEditor from "@uiw/react-md-editor";
+import "@uiw/react-md-editor/markdown-editor.css";
+import "@uiw/react-markdown-preview/markdown.css";
+import ReactMarkdown from "react-markdown";
 
 type TabType = "basic" | "icon" | "display";
 
@@ -60,6 +64,12 @@ export function LocationForm({
   const [audioAssets, setAudioAssets] = useState<UserAsset[]>([]);
   const [audioAssetsLoading, setAudioAssetsLoading] = useState(false);
   const [selectedAudioAssetId, setSelectedAudioAssetId] = useState<string>("");
+
+  // Risk Text Modal state
+  const [isRiskModalOpen, setIsRiskModalOpen] = useState(false);
+  const [riskText, setRiskText] = useState("");
+  const [riskImages, setRiskImages] = useState<File[]>([]);
+  const [riskImageUrls, setRiskImageUrls] = useState<string[]>([]);
 
   // simple audio preview
   const audioPreviewRef = useRef<HTMLAudioElement | null>(null);
@@ -167,6 +177,29 @@ export function LocationForm({
       setLocationType(initialLocation.locationType || "PointOfInterest");
       setIsVisible(initialLocation.isVisible !== false);
       setHighlightOnEnter(initialLocation.highlightOnEnter ?? false);
+
+      // Initialize risk content from tooltipContent
+      if (initialLocation.tooltipContent) {
+        try {
+          // Check if it's rich content (JSON) or plain text
+          const parsed = JSON.parse(initialLocation.tooltipContent);
+          if (parsed && typeof parsed === 'object' && 'text' in parsed) {
+            setRiskText(parsed.text || "");
+            setRiskImageUrls(parsed.images || []);
+          } else {
+            // Plain text - treat as text only
+            setRiskText(initialLocation.tooltipContent);
+            setRiskImageUrls([]);
+          }
+        } catch {
+          // Plain text - treat as text only
+          setRiskText(initialLocation.tooltipContent);
+          setRiskImageUrls([]);
+        }
+      } else {
+        setRiskText("");
+        setRiskImageUrls([]);
+      }
 
       // Handle icon: priority iconType > iconUrl (mutual exclusivity)
       const hasIconType = initialLocation.iconType && initialLocation.iconType.trim() !== "";
@@ -294,11 +327,19 @@ export function LocationForm({
         finalIconUrl = "";
       }
 
+      // Create rich tooltip content
+      const richTooltipContent = riskText.trim() || riskImageUrls.length > 0
+        ? JSON.stringify({
+            text: riskText.trim(),
+            images: riskImageUrls,
+          })
+        : undefined;
+
       const data: CreateLocationRequest = {
         segmentId: segmentId, // CRITICAL: Must include segmentId to maintain segment association
         title: title.trim(),
         subtitle: subtitle.trim() || undefined,
-        tooltipContent: tooltipContent.trim() || undefined,
+        tooltipContent: richTooltipContent,
         locationType,
         markerGeometry: JSON.stringify({
           type: "Point",
@@ -306,7 +347,7 @@ export function LocationForm({
         }),
         displayOrder: initialLocation?.displayOrder ?? 0,
         highlightOnEnter: highlightOnEnter,
-        showTooltip: !!tooltipContent.trim(),
+        showTooltip: !!(richTooltipContent),
         isVisible,
         // Media fields
         iconFile: iconFile || undefined,
@@ -329,6 +370,119 @@ export function LocationForm({
     { id: "media", label: "Icon & Media", icon: "🎨" },
     { id: "display", label: "Hiển thị", icon: "👁️" },
   ];
+
+  // Risk Text Modal Component
+  const RiskTextModal = () => {
+    const [modalText, setModalText] = useState(riskText);
+    const [modalImages, setModalImages] = useState<File[]>(riskImages);
+    const [modalImageUrls, setModalImageUrls] = useState<string[]>(riskImageUrls);
+    const [newImageUrl, setNewImageUrl] = useState("");
+
+    const handleSaveModal = () => {
+      setRiskText(modalText);
+      setRiskImages(modalImages);
+      setRiskImageUrls(modalImageUrls);
+      setIsRiskModalOpen(false);
+    };
+
+    const handleCancelModal = () => {
+      setModalText(riskText);
+      setModalImages(riskImages);
+      setModalImageUrls(riskImageUrls);
+      setNewImageUrl("");
+      setIsRiskModalOpen(false);
+    };
+
+    const handleAddImageUrl = () => {
+      if (newImageUrl.trim()) {
+        setModalImageUrls([...modalImageUrls, newImageUrl.trim()]);
+        setNewImageUrl("");
+      }
+    };
+
+    const handleRemoveImageUrl = (index: number) => {
+      setModalImageUrls(modalImageUrls.filter((_, i) => i !== index));
+    };
+
+    const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      setModalImages([...modalImages, ...files]);
+    };
+
+    const handleRemoveImageFile = (index: number) => {
+      setModalImages(modalImages.filter((_, i) => i !== index));
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[2000] flex items-center justify-center p-4">
+        <div className="bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+          <div className="flex items-center justify-between p-4 border-b border-zinc-700">
+            <h3 className="text-lg font-semibold text-white">Chỉnh sửa Risk Text</h3>
+            <button
+              onClick={handleCancelModal}
+              className="p-1 hover:bg-zinc-800 rounded transition-colors"
+            >
+              <Icon icon="mdi:close" className="w-5 h-5 text-zinc-400" />
+            </button>
+          </div>
+
+          <div className="p-4 space-y-4 max-h-[calc(80vh-120px)] overflow-y-auto">
+            {/* Markdown Content */}
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-zinc-300">Nội dung Markdown</label>
+              <div data-color-mode="dark">
+                <MDEditor
+                  value={modalText}
+                  onChange={(value) => setModalText(value || "")}
+                  preview="edit"
+                  hideToolbar={false}
+                  visibleDragBar={false}
+                  textareaProps={{
+                    placeholder: "Nhập nội dung risk text với Markdown..."
+                  }}
+                  className="!bg-zinc-800 !text-white"
+                />
+              </div>
+            </div>
+
+            {/* Preview */}
+            {(modalText.trim() || modalImageUrls.length > 0) && (
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-300">Xem trước</label>
+                <div className="bg-zinc-800 border border-zinc-700 rounded p-3 max-h-48 overflow-y-auto">
+                  {modalText.trim() && (
+                    <div className="text-zinc-200 text-sm mb-2 prose prose-sm prose-invert max-w-none">
+                      <ReactMarkdown>{modalText}</ReactMarkdown>
+                    </div>
+                  )}
+                  {modalImageUrls.length > 0 && (
+                    <div className="text-zinc-200 text-sm prose prose-sm prose-invert max-w-none">
+                      <ReactMarkdown>{modalImageUrls.join('\n')}</ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 p-4 border-t border-zinc-700 bg-zinc-900">
+            <button
+              onClick={handleCancelModal}
+              className="flex-1 px-4 py-2 text-sm rounded bg-zinc-800 hover:bg-zinc-700 text-white transition-colors"
+            >
+              Hủy
+            </button>
+            <button
+              onClick={handleSaveModal}
+              className="flex-1 px-4 py-2 text-sm rounded bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+            >
+              Lưu
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="p-3 space-y-3 border-b border-zinc-800">
@@ -394,14 +548,22 @@ export function LocationForm({
 
             <div>
               <label className="block text-xs text-zinc-400 mb-1">Risk Text</label>
-              <textarea
-                value={tooltipContent}
-                onChange={(e) => setTooltipContent(e.target.value)}
-                className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500 resize-none"
-                placeholder="Nhập nội dung Risk Text..."
-                rows={3}
+              <button
+                type="button"
+                onClick={() => setIsRiskModalOpen(true)}
                 disabled={saving}
-              />
+                className="w-full bg-zinc-800 hover:bg-zinc-700 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-emerald-500 text-left transition-colors disabled:opacity-50"
+              >
+                <div className="flex items-center justify-between">
+                  <span className={riskText.trim() || riskImageUrls.length > 0 || riskImages.length > 0 ? "text-zinc-200" : "text-zinc-500"}>
+                    {riskText.trim() || riskImageUrls.length > 0 || riskImages.length > 0
+                      ? (riskText.trim() ? `${riskText.substring(0, 50)}${riskText.length > 50 ? "..." : ""}` : `${riskImageUrls.length + riskImages.length} ảnh`)
+                      : "Nhấn để thêm nội dung..."
+                    }
+                  </span>
+                  <Icon icon="mdi:pencil" className="w-3 h-3 text-zinc-400" />
+                </div>
+              </button>
             </div>
 
             <div>
@@ -790,6 +952,9 @@ export function LocationForm({
           </button>
         </div>
       </form>
+
+      {/* Risk Text Modal */}
+      {isRiskModalOpen && <RiskTextModal />}
     </div>
   );
 }

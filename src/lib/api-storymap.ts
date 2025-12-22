@@ -341,7 +341,7 @@ export type RouteAnimation = {
   waypoints?: string; // JSON array of waypoints
 
   // Icon configuration
-  iconType: "car" | "walking" | "bike" | "plane" | "custom";
+  iconType: "car" | "walking" | "bike" | "plane" | "bus" | "train" | "motorcycle" | "boat" | "truck" | "helicopter" | "custom";
   iconUrl?: string;
   iconWidth: number;
   iconHeight: number;
@@ -394,7 +394,7 @@ export type CreateRouteAnimationRequest = {
   toLocationId?: string; // Link to Location at destination point
   routePath: string; // GeoJSON LineString
   waypoints?: string; // JSON array of waypoints
-  iconType: "car" | "walking" | "bike" | "plane" | "custom";
+  iconType: "car" | "walking" | "bike" | "plane" | "bus" | "train" | "motorcycle" | "boat" | "truck" | "helicopter" | "custom";
   iconFile?: File; // Upload custom icon image
   iconUrl?: string;
   iconWidth?: number;

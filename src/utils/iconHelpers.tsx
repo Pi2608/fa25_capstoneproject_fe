@@ -3,6 +3,12 @@ const ICON_EMOJI_MAP: Record<string, string> = {
   walking: "🚶",
   bike: "🚴",
   plane: "✈️",
+  bus: "🚌",
+  train: "🚆",
+  motorcycle: "🏍️",
+  boat: "⛵",
+  truck: "🚛",
+  helicopter: "🚁",
   custom: "📍",
 };
 

@@ -9,7 +9,7 @@ import type L from 'leaflet';
 import { generateIconHtml } from '@/utils/iconHelpers';
 
 export interface MarkerConfig {
-  iconType: 'car' | 'walking' | 'bike' | 'plane' | 'custom';
+  iconType: 'car' | 'walking' | 'bike' | 'plane' | 'bus' | 'train' | 'motorcycle' | 'boat' | 'truck' | 'helicopter' | 'custom';
   iconUrl?: string;
   iconSize?: [number, number];
 }
