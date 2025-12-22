@@ -401,7 +401,7 @@ export default function GalleryClient() {
         setWorkspaces(ws || []);
         setSelectedWorkspaceId("");
       } catch (error) {
-        showToast("error", "Failed to load workspaces");
+        showToast("error", t("gallery.workspace_selector_load_error"));
         setWorkspaces([]);
       } finally {
         setLoadingWorkspaces(false);
@@ -413,7 +413,7 @@ export default function GalleryClient() {
 
   const handleConfirmDuplicate = async () => {
     if (!pendingDuplicate || !selectedWorkspaceId) {
-      showToast("error", "Please select a workspace");
+      showToast("error", t("gallery.workspace_selector_error"));
       return;
     }
 
@@ -423,7 +423,7 @@ export default function GalleryClient() {
       const result = await duplicateMapFromGallery(pendingDuplicate.galleryId, {
         workspaceId: selectedWorkspaceId,
       });
-      showToast("success", "Map duplicated successfully!");
+      showToast("success", t("gallery.workspace_selector_success"));
       // Redirect to the new map - story map goes to storymap player
       if (pendingDuplicate.isStoryMap) {
         window.location.href = `/maps/${result.mapId}`;
@@ -857,27 +857,27 @@ export default function GalleryClient() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
           <div className="w-full max-w-md rounded-2xl border border-emerald-500/20 bg-zinc-900 shadow-2xl p-6">
             <h3 className="text-xl font-semibold text-zinc-100 mb-2">
-              Select Workspace for Story Map
+              {t("gallery.workspace_selector_title")}
             </h3>
             <p className="text-sm text-zinc-400 mb-4">
-              Story maps must be saved to a workspace. Please select an organization and workspace.
+              {t("gallery.workspace_selector_desc")}
             </p>
 
             {loadingOrgs ? (
-              <div className="text-center text-zinc-400 py-8">Loading organizations...</div>
+              <div className="text-center text-zinc-400 py-8">{t("gallery.workspace_selector_loading_orgs")}</div>
             ) : (
               <div className="space-y-4">
                 {/* Organization Selector */}
                 <div>
                   <label className="block text-sm font-medium text-zinc-200 mb-2">
-                    Organization
+                    {t("gallery.workspace_selector_org_label")}
                   </label>
                   <select
                     value={selectedOrgId}
                     onChange={(e) => setSelectedOrgId(e.target.value)}
                     className="w-full rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-emerald-400/60"
                   >
-                    <option value="">Select an organization...</option>
+                    <option value="">{t("gallery.workspace_selector_org_placeholder")}</option>
                     {organizations.map((org) => (
                       <option key={org.orgId} value={org.orgId}>
                         {org.orgName}
@@ -890,13 +890,13 @@ export default function GalleryClient() {
                 {selectedOrgId && (
                   <div>
                     <label className="block text-sm font-medium text-zinc-200 mb-2">
-                      Workspace
+                      {t("gallery.workspace_selector_ws_label")}
                     </label>
                     {loadingWorkspaces ? (
-                      <div className="text-sm text-zinc-400 py-2">Loading workspaces...</div>
+                      <div className="text-sm text-zinc-400 py-2">{t("gallery.workspace_selector_ws_loading")}</div>
                     ) : workspaces.length === 0 ? (
                       <div className="text-sm text-zinc-400 py-2">
-                        No workspaces found in this organization.
+                        {t("gallery.workspace_selector_ws_empty")}
                       </div>
                     ) : (
                       <select
@@ -904,7 +904,7 @@ export default function GalleryClient() {
                         onChange={(e) => setSelectedWorkspaceId(e.target.value)}
                         className="w-full rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-emerald-400/60"
                       >
-                        <option value="">Select a workspace...</option>
+                        <option value="">{t("gallery.workspace_selector_ws_placeholder")}</option>
                         {workspaces.map((ws) => (
                           <option key={ws.workspaceId} value={ws.workspaceId}>
                             {ws.workspaceName}
@@ -921,14 +921,14 @@ export default function GalleryClient() {
                     onClick={handleCancelWorkspaceSelector}
                     className="px-4 py-2 rounded-xl border border-zinc-700/70 bg-zinc-900 text-sm font-medium text-zinc-200 hover:border-zinc-600"
                   >
-                    Cancel
+                    {t("gallery.workspace_selector_cancel")}
                   </button>
                   <button
                     onClick={handleConfirmDuplicate}
                     disabled={!selectedWorkspaceId}
                     className="px-4 py-2 rounded-xl bg-emerald-500 text-sm font-semibold text-zinc-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Duplicate to Workspace
+                    {t("gallery.workspace_selector_confirm")}
                   </button>
                 </div>
               </div>
