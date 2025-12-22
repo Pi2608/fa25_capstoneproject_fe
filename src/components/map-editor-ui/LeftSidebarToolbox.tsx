@@ -3640,24 +3640,34 @@ function MapZonesView({ mapId }: { mapId?: string }) {
   );
 }
 
-// Search Administrative Zones View - similar to ZoneForm layout
 function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: any }) {
   const [zones, setZones] = useState<import("@/lib/api-storymap").Zone[]>([]);
   const [selectedZone, setSelectedZone] = useState<import("@/lib/api-storymap").Zone | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [qName, setQName] = useState("");
+  const [qCity, setQCity] = useState("");
+  const [qState, setQState] = useState("");
+  const [qCountry, setQCountry] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
-  const [keyZone, setKeyZone] = useState<'name' | 'city' | 'state' | 'country'>('name');
+
+  const hasAnyQuery = useMemo(() => {
+    return !!(qName.trim() || qCity.trim() || qState.trim() || qCountry.trim());
+  }, [qName, qCity, qState, qCountry]);
 
   const handleSearch = async () => {
-    if (!searchQuery.trim()) {
+    if (!hasAnyQuery) {
       setZones([]);
       return;
     }
 
     setIsSearching(true);
     try {
-      const results = await searchZones(keyZone, searchQuery.trim());
+      const results = await searchZones({
+        name: qName.trim(),
+        city: qCity.trim(),
+        state: qState.trim(),
+        country: qCountry.trim(),
+      } as any);
       setZones(results || []);
     } catch (error) {
       console.error("Failed to search zones:", error);
@@ -3683,10 +3693,8 @@ function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: an
         return;
       }
 
-      const createdFeature = await createMapFeature(mapId, featureRequest);
+      await createMapFeature(mapId, featureRequest);
 
-      // Only dispatch layerCreated to trigger map detail refresh
-      // (Removed featureCreated event as it's not listened to anywhere)
       window.dispatchEvent(new Event("layerCreated"));
 
       const center = getZoneCenter(selectedZone);
@@ -3695,7 +3703,10 @@ function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: an
       }
 
       setSelectedZone(null);
-      setSearchQuery("");
+      setQName("");
+      setQCity("");
+      setQState("");
+      setQCountry("");
       setZones([]);
     } catch (error) {
       console.error("Failed to add zone to map:", error);
@@ -3716,94 +3727,131 @@ function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: an
 
   return (
     <div className="flex flex-col h-full">
-      {/* Search Section */}
       <div className="p-3 border-b border-zinc-800 space-y-2">
-        <div className="flex gap-1">
-          <select
-            value={keyZone}
-            onChange={(e) => setKeyZone(e.target.value as any)} 
-            className="bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500"
-            disabled={isSearching || isAdding}
-          >
-            <option value="name">Tên vùng</option>
-            <option value="city">Thành phố</option>
-            <option value="state">Tỉnh/Thành</option>
-            <option value="country">Quốc gia</option>
-          </select>
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                handleSearch();
-              }
-            }}
-            placeholder="Nhập tên vùng (VD: Việt Nam, Hà Nội, Quận 1)..."
-            className="flex-1 bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-500"
-            disabled={isSearching || isAdding}
-          />
+        <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-1">
+            <div className="text-[10px] text-zinc-400">Name</div>
+            <input
+              type="text"
+              value={qName}
+              onChange={(e) => setQName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSearch();
+              }}
+              placeholder="VD: Đồng Tháp"
+              className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-500"
+              disabled={isSearching || isAdding}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-[10px] text-zinc-400">City</div>
+            <input
+              type="text"
+              value={qCity}
+              onChange={(e) => setQCity(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSearch();
+              }}
+              placeholder="VD: Cao Lãnh"
+              className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-500"
+              disabled={isSearching || isAdding}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-[10px] text-zinc-400">State</div>
+            <input
+              type="text"
+              value={qState}
+              onChange={(e) => setQState(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSearch();
+              }}
+              placeholder="VD: Đồng Tháp"
+              className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-500"
+              disabled={isSearching || isAdding}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="text-[10px] text-zinc-400">Country</div>
+            <input
+              type="text"
+              value={qCountry}
+              onChange={(e) => setQCountry(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSearch();
+              }}
+              placeholder="VD: Việt Nam"
+              className="w-full bg-zinc-800 text-white rounded px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 placeholder-zinc-500"
+              disabled={isSearching || isAdding}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2">
           <button
             onClick={handleSearch}
-            disabled={isSearching || !searchQuery.trim() || isAdding}
-            className="px-2 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[60px]"
+            disabled={isSearching || !hasAnyQuery || isAdding}
+            className="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
           >
             {isSearching ? (
-              <>
-                <Icon icon="mdi:loading" className="w-3.5 h-3.5 animate-spin" />
-              </>
+              <Icon icon="mdi:loading" className="w-4 h-4 animate-spin" />
             ) : (
               <>
-                <Icon icon="mdi:magnify" className="w-3.5 h-3.5 mr-1" />
-                Tìm
+                <Icon icon="mdi:magnify" className="w-4 h-4 mr-1" />
+                Tìm kiếm
               </>
             )}
           </button>
-          {searchQuery && (
-            <button
-              onClick={() => {
-                setSearchQuery("");
-                setZones([]);
-                setSelectedZone(null);
-              }}
-              disabled={isSearching || isAdding}
-              className="px-2 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs transition-colors disabled:opacity-50"
-            >
-              <Icon icon="mdi:close" className="w-3.5 h-3.5" />
-            </button>
-          )}
+
+          <button
+            onClick={() => {
+              setQName("");
+              setQCity("");
+              setQState("");
+              setQCountry("");
+              setZones([]);
+              setSelectedZone(null);
+            }}
+            disabled={isSearching || isAdding || !hasAnyQuery}
+            className="px-3 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded text-xs transition-colors disabled:opacity-50"
+          >
+            <Icon icon="mdi:close" className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {/* Results List */}
       <div className="flex-1 overflow-y-auto scrollbar-dark">
         {zones.length === 0 ? (
           <div className="p-8 text-center text-zinc-500 text-xs">
             <Icon icon="mdi:map-search" className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>{searchQuery.trim() ? "Không tìm thấy zone nào" : "Nhập từ khóa để tìm kiếm"}</p>
+            <p>{hasAnyQuery ? "Không tìm thấy zone nào" : "Nhập từ khóa để tìm kiếm"}</p>
           </div>
         ) : (
           <div className="divide-y divide-zinc-800">
             {zones.map((zone) => {
               const geometryType = getGeometryType(zone.geometry);
               const isSelected = selectedZone?.zoneId === zone.zoneId;
+
               return (
                 <button
                   key={zone.zoneId}
                   onClick={() => setSelectedZone(zone)}
                   disabled={isAdding}
                   className={`w-full text-left p-2 hover:bg-zinc-800/50 transition-colors disabled:opacity-50 ${
-                    isSelected ? 'bg-blue-900/30 border-l-4 border-blue-500' : ''
+                    isSelected ? "bg-blue-900/30 border-l-4 border-blue-500" : ""
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-white text-xs truncate">{zone.name}</div>
+
                       {zone.description && (
-                        <div className="text-[10px] text-zinc-400 mt-0.5 line-clamp-2">
-                          {zone.description}
-                        </div>
+                        <div className="text-[10px] text-zinc-400 mt-0.5 line-clamp-2">{zone.description}</div>
                       )}
+
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <span className="px-1.5 py-0.5 bg-zinc-800 text-zinc-400 rounded text-[10px]">
                           {zone.zoneType}
@@ -3818,9 +3866,8 @@ function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: an
                         </span>
                       </div>
                     </div>
-                    {isSelected && (
-                      <Icon icon="mdi:check-circle" className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                    )}
+
+                    {isSelected && <Icon icon="mdi:check-circle" className="w-4 h-4 text-blue-400 flex-shrink-0" />}
                   </div>
                 </button>
               );
@@ -3829,7 +3876,6 @@ function SearchZoneView({ mapId, currentMap }: { mapId?: string; currentMap?: an
         )}
       </div>
 
-      {/* Add to Map Button */}
       {selectedZone && (
         <div className="p-3 border-t border-zinc-800">
           <button
