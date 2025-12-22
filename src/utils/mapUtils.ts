@@ -896,11 +896,11 @@ export async function loadFeaturesToMap(
             const coordNumbers = coordStrings.map(coord => parseFloat(coord.trim()));
 
             // For circle geometry, we expect [lng, lat, radius]
-            if (feature.geometryType.toLowerCase() === "circle" && coordNumbers.length === 3) {
+            if (actualGeometryType === "circle" && coordNumbers.length === 3) {
               coordinates = coordNumbers as [number, number, number];
-            } else if (feature.geometryType.toLowerCase() === "point" && coordNumbers.length >= 2) {
+            } else if (actualGeometryType === "point" && coordNumbers.length >= 2) {
               coordinates = [coordNumbers[0], coordNumbers[1]] as Position;
-            } else if (feature.geometryType.toLowerCase() === "rectangle" && coordNumbers.length === 4) {
+            } else if (actualGeometryType === "rectangle" && coordNumbers.length === 4) {
               // Rectangle format: [minLng, minLat, maxLng, maxLat]
               coordinates = [coordNumbers[0], coordNumbers[1], coordNumbers[2], coordNumbers[3]] as Position;
             } else {
@@ -919,7 +919,7 @@ export async function loadFeaturesToMap(
 
       let layer: ExtendedLayer | null = null;
 
-      if (feature.geometryType.toLowerCase() === "point") {
+      if (actualGeometryType === "point") {
         const coords = coordinates as Position;
 
         // Check if it's a Text annotation type
@@ -963,10 +963,10 @@ export async function loadFeaturesToMap(
             opacity: 1
           }) as ExtendedLayer;
         }
-      } else if (feature.geometryType.toLowerCase() === "linestring") {
+      } else if (actualGeometryType === "linestring") {
         const coords = coordinates as Position[];
         layer = L.polyline(coords.map((c) => [c[1], c[0]])) as ExtendedLayer;
-      } else if (feature.geometryType.toLowerCase() === "polygon") {
+      } else if (actualGeometryType === "polygon") {
         // Handle different coordinate formats for polygons
         // Coordinates from backend can be:
         // 1. GeoJSON format: [[[lng, lat], [lng, lat], ...]] (triple nested) - from MongoDB
@@ -997,6 +997,7 @@ export async function loadFeaturesToMap(
           console.warn("Invalid polygon coordinates structure. Feature:", feature.featureId, "Coordinates:", JSON.stringify(coordinates).substring(0, 300));
           continue;
         }
+      
         
         // Convert from [lng, lat] to [lat, lng] for Leaflet
         // Each coordinate in polygonRing is [lng, lat] (GeoJSON format)
