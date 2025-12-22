@@ -461,22 +461,6 @@ export default function GalleryClient() {
 
   return (
     <main className="mx-auto max-w-7xl px-6 py-10 text-zinc-100">
-      <section className="relative overflow-hidden rounded-2xl border border-emerald-400/20 bg-zinc-900/60 p-8 shadow-xl ring-1 ring-emerald-500/10">
-        <div className="relative z-10">
-          <p className="gal-hero-eyebrow text-sm tracking-wide text-emerald-300/90">
-            {t("gallery.hero_eyebrow")}
-          </p>
-          <h1 className="gal-hero-title mt-2 text-3xl font-semibold sm:text-4xl">
-            {t("gallery.hero_title")}
-          </h1>
-          <p className="gal-hero-sub mt-3 max-w-2xl text-zinc-300">
-            {t("gallery.hero_sub")}
-          </p>
-        </div>
-        <div className="pointer-events-none absolute -left-32 -top-24 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl" />
-        <div className="pointer-events-none absolute -right-20 bottom-0 h-60 w-60 rounded-full bg-emerald-400/10 blur-3xl" />
-      </section>
-
       <section className="gal-controls mt-6 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 p-4 ring-1 ring-emerald-500/10">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="sm:col-span-2">
