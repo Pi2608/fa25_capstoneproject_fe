@@ -424,7 +424,6 @@ export async function renderSegmentLocations(
           iconContent = iconEmojiMap[trimmedIconType] || trimmedIconType || defaultIcon;
         }
         // Use emoji or default with CSS rotation for non-image markers
-        const iconContent = location.iconType || '📍';
         const iconHtml = `<div style="
           width: ${iconSize}px;
           height: ${iconSize}px;
