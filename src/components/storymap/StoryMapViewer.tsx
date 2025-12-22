@@ -32,7 +32,7 @@ const ROUTE_ANIMATION_DELAY_MS = 2000; // Tổng delay = 100 + 1500 + buffer 400
 export default function StoryMapViewer({
   mapId,
   segments,
-  baseMapProvider = "OpenStreetMap",
+  baseMapProvider = "sat",
   initialCenter = [10.8231, 106.6297],
   initialZoom = 10,
   onSegmentChange,
