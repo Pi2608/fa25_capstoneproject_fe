@@ -7,6 +7,7 @@ import type { Segment, Location, FrontendTransitionType } from "@/lib/api-storym
 import type L from "leaflet";
 import { applyLayerStyle, type ExtendedLayer } from "@/utils/mapUtils";
 import { applyZoneHighlight, applyLayerHighlight, type HighlightOptions } from "@/utils/zoneHighlightEffects";
+import { iconEmojiMap } from "@/constants/icons";
 
 type LeafletInstance = typeof import("leaflet");
 
@@ -327,6 +328,8 @@ export async function renderSegmentLocations(
 
       // Determine icon content: IconUrl (image), IconType (emoji), or default
       let iconHtml = '';
+      const defaultIcon = '📍';
+      
       if (location.iconUrl) {
         // Use custom image
         iconHtml = `<img src="${location.iconUrl}" style="
@@ -336,8 +339,13 @@ export async function renderSegmentLocations(
           filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
         " />`;
       } else {
-        // Use emoji or default
-        const iconContent = location.iconType || '📍';
+        // Use emoji or default - Map iconType key to emoji
+        let iconContent = defaultIcon;
+        if (location.iconType && location.iconType.trim()) {
+          const trimmedIconType = location.iconType.trim();
+          // If it's a key in iconEmojiMap, use the emoji; otherwise use it directly (might already be emoji)
+          iconContent = iconEmojiMap[trimmedIconType] || trimmedIconType || defaultIcon;
+        }
         iconHtml = `<div style="
           font-size: ${iconSize}px;
           text-align: center;

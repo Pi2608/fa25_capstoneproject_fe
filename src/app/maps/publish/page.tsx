@@ -37,6 +37,8 @@ import ZoomControls from "@/components/map/controls/ZoomControls";
 import { ZoneStyleEditor } from "@/components/map-editor-ui/ZoneStyleEditor";
 import EmbedCodeGenerator from "@/components/map/EmbedCodeGenerator";
 import ReportViolationDialog from "@/components/map/ReportViolationDialog";
+import { LocationInfoPanel } from "@/components/map-editor-ui/LocationInfoPanel";
+import { MapEditorLegend } from "@/components/map-editor-ui";
 
 
 const baseKeyToBackend = (key: BaseKey): BaseLayer => {
@@ -115,10 +117,10 @@ export default function EditMapPage() {
   // POI tooltip modal state
   const [poiTooltipModal, setPoiTooltipModal] = useState<{
     isOpen: boolean;
+    locationId?: string;
     title?: string;
+    subtitle?: string;
     content?: string;
-    x?: number;
-    y?: number;
     poi?: Location;
   }>({
     isOpen: false,
@@ -140,6 +142,7 @@ export default function EditMapPage() {
   const [isTimelineOpen, setIsTimelineOpen] = useState(true);
   const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
   const [currentZoom, setCurrentZoom] = useState<number>(10);
+  const [legendCollapsed, setLegendCollapsed] = useState(false);
 
   const [selectedZone, setSelectedZone] = useState<{
     mapZone: import("@/lib/api-maps").MapZone;
@@ -2094,6 +2097,18 @@ export default function EditMapPage() {
         }}
       />
 
+      {/* Legend Panel - Bảng chú giải (chỉ xem, không cho phép tạo/edit) */}
+      <MapEditorLegend
+        mapId={mapId}
+        segments={segments}
+        layers={layers}
+        features={features}
+        isCollapsed={legendCollapsed}
+        onToggle={() => setLegendCollapsed(!legendCollapsed)}
+        isVisible={isMapReady && !loading}
+        isEditMode={false}
+      />
+
       <ZoomControls
         zoomIn={handleZoomIn}
         zoomOut={handleZoomOut}
@@ -2118,11 +2133,11 @@ export default function EditMapPage() {
             onClick={() => {
               setShowReportDialog(true);
             }}
-            className="w-12 h-12 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110 pointer-events-auto"
+            className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110 pointer-events-auto"
             title="Báo cáo vi phạm"
             style={{ zIndex: 1700 }}
           >
-            <AlertTriangle className="w-6 h-6" strokeWidth={2.5} />
+            <AlertTriangle className="w-4 h-4" strokeWidth={2.5} />
           </button>
         </div>
       )}
@@ -2242,7 +2257,16 @@ export default function EditMapPage() {
           transition: none !important;
         }
       `}</style>
-
+      {poiTooltipModal.isOpen && poiTooltipModal.locationId && (
+        <LocationInfoPanel
+          locationId={poiTooltipModal.locationId}
+          title={poiTooltipModal.title || ''}
+          subtitle={poiTooltipModal.subtitle}
+          content={poiTooltipModal.content}
+          isOpen={poiTooltipModal.isOpen}
+          onClose={() => setPoiTooltipModal({ isOpen: false })}
+        />
+      )}
     </main>
   );
 }

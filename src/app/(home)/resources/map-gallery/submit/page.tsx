@@ -220,8 +220,18 @@ export default function MapGallerySubmitPage() {
       const currentMap = maps.find((m) => m.id === selectedMapId);
       if (currentMap && currentMap.status !== "published") {
         showToast("info", "Đang publish bản đồ...");
-        await publishMap(selectedMapId);
-        showToast("success", "Bản đồ đã được publish thành công.");
+        try {
+          await publishMap(selectedMapId);
+          showToast("success", "Bản đồ đã được publish thành công.");
+        } catch (pubErr: any) {
+          // Handle "already published" error gracefully
+          if (pubErr?.type === "Map.InvalidStatus" || pubErr?.status === 400) {
+            // Map is already published, continue with submission
+            console.log("Map already published, continuing with submission...");
+          } else {
+            throw pubErr;
+          }
+        }
       }
 
       if (existingSubmission) {
@@ -245,7 +255,20 @@ export default function MapGallerySubmitPage() {
         showToast("success", "Gửi bản đồ lên thư viện thành công.");
       }
     } catch (err: any) {
-      showToast("error", err?.message || "Gửi bản đồ thất bại.");
+      // Handle specific API errors
+      const errorType = err?.type || "";
+      const errorStatus = err?.status || 0;
+      const errorDetail = err?.detail || err?.message || "Gửi bản đồ thất bại.";
+
+      if (errorType === "MapGallery.AlreadySubmitted" || errorStatus === 409) {
+        showToast("error", "Bản đồ này đã được gửi lên Gallery trước đó. Vui lòng nhấn 'Tải / làm mới từ Gallery' để xem và cập nhật submission hiện có.");
+        // Auto-load existing submission
+        await loadSubmissionForMap(selectedMapId, { silent: true });
+      } else if (errorType === "Map.InvalidStatus") {
+        showToast("error", "Không thể publish bản đồ. " + errorDetail);
+      } else {
+        showToast("error", errorDetail);
+      }
     } finally {
       setSubmitting(false);
     }

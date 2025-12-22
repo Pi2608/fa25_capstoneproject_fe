@@ -6,3 +6,4 @@ export { DrawingToolsBar } from "./DrawingToolsBar";
 export { ActiveUsersIndicator } from "./ActiveUsersIndicator";
 export { FeatureStyleEditor } from "./FeatureStyleEditor";
 export { MeasurementInfoBox } from "./MeasurementInfoBox";
+export { default as MapEditorLegend } from "./MapEditorLegend";

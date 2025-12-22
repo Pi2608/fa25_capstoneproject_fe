@@ -79,6 +79,8 @@ export default function StoryMapViewer({
       onSegmentChange?.(segment, index);
     },
     onLocationClick,
+    // Enable location rendering in StoryMapViewer (no usePoiMarkers here)
+    renderLocations: true,
   });
 
   const [playbackTime, setPlaybackTime] = useState(0);

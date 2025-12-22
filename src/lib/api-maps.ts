@@ -936,3 +936,114 @@ export function updateMapZone(mapId: string, mapZoneId: string, data: UpdateMapZ
 export function deleteMapZone(mapId: string, mapZoneId: string) {
   return delJson<boolean>(`/maps/${mapId}/zones/${mapZoneId}`);
 }
+
+// ================== MAP LEGEND ITEMS ==================
+
+/**
+ * Custom legend item for map - allows users to define their own legend entries
+ */
+export type MapLegendItem = {
+  legendItemId: string;
+  mapId: string;
+  label: string;
+  description?: string;
+  emoji: string;
+  iconUrl?: string;
+  color?: string;
+  displayOrder: number;
+  isVisible: boolean;
+  createdAt: string;
+  updatedAt?: string;
+};
+
+export type GetMapLegendItemsResponse = {
+  items: MapLegendItem[];
+};
+
+export type CreateMapLegendItemRequest = {
+  label: string;
+  description?: string;
+  emoji?: string;
+  iconUrl?: string;
+  color?: string;
+  displayOrder?: number;
+  isVisible?: boolean;
+};
+
+export type CreateMapLegendItemResponse = {
+  legendItemId: string;
+  message?: string;
+};
+
+export type UpdateMapLegendItemRequest = {
+  label?: string;
+  description?: string;
+  emoji?: string;
+  iconUrl?: string;
+  color?: string;
+  displayOrder?: number;
+  isVisible?: boolean;
+};
+
+export type UpdateMapLegendItemResponse = {
+  message?: string;
+};
+
+export type DeleteMapLegendItemResponse = {
+  message?: string;
+};
+
+export type ReorderMapLegendItemsRequest = {
+  itemIds: string[];
+};
+
+export type ReorderMapLegendItemsResponse = {
+  message?: string;
+};
+
+/**
+ * Get all custom legend items for a map
+ */
+export async function getMapLegendItems(mapId: string): Promise<MapLegendItem[]> {
+  try {
+    const res = await getJson<GetMapLegendItemsResponse | MapLegendItem[]>(`/maps/${mapId}/legend-items`);
+    return Array.isArray(res) ? res : (res.items ?? []);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Get a single legend item by ID
+ */
+export function getMapLegendItemById(mapId: string, legendItemId: string) {
+  return getJson<MapLegendItem>(`/maps/${mapId}/legend-items/${legendItemId}`);
+}
+
+/**
+ * Create a new custom legend item for a map
+ */
+export function createMapLegendItem(mapId: string, data: CreateMapLegendItemRequest) {
+  return postJson<CreateMapLegendItemRequest, CreateMapLegendItemResponse>(`/maps/${mapId}/legend-items`, data);
+}
+
+/**
+ * Update an existing legend item
+ */
+export function updateMapLegendItem(mapId: string, legendItemId: string, data: UpdateMapLegendItemRequest) {
+  return putJson<UpdateMapLegendItemRequest, UpdateMapLegendItemResponse>(`/maps/${mapId}/legend-items/${legendItemId}`, data);
+}
+
+/**
+ * Delete a legend item
+ */
+export function deleteMapLegendItem(mapId: string, legendItemId: string) {
+  return delJson<DeleteMapLegendItemResponse>(`/maps/${mapId}/legend-items/${legendItemId}`);
+}
+
+/**
+ * Reorder legend items for a map
+ */
+export function reorderMapLegendItems(mapId: string, itemIds: string[]) {
+  return putJson<ReorderMapLegendItemsRequest, ReorderMapLegendItemsResponse>(`/maps/${mapId}/legend-items/reorder`, { itemIds });
+}
