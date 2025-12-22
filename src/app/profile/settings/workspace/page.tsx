@@ -237,9 +237,8 @@ export default function WorkspacePage() {
                     <button
                       key={w.workspaceId}
                       onClick={() => setSelectedWsId(w.workspaceId)}
-                      className={`w-full px-4 py-4 text-left transition border-top ${
-                        active ? (isDark ? "bg-emerald-500/10" : "bg-emerald-50/70") : (isDark ? "hover:bg-white/5" : "hover:bg-gray-50")
-                      } ${themeClasses.tableBorder}`}
+                      className={`w-full px-4 py-4 text-left transition border-top ${active ? (isDark ? "bg-emerald-500/10" : "bg-emerald-50/70") : (isDark ? "hover:bg-white/5" : "hover:bg-gray-50")
+                        } ${themeClasses.tableBorder}`}
                     >
                       <div className="flex items-center justify-between">
                         <div className={`line-clamp-1 font-medium ${isDark ? "text-zinc-50" : "text-gray-900"}`}>{w.workspaceName}</div>
@@ -319,8 +318,11 @@ export default function WorkspacePage() {
                   {maps.length === 0 && (
                     <div className={`text-sm ${themeClasses.textMuted}`}>{t("workspaces.no_maps")}</div>
                   )}
-                  {maps.map((m) => (
-                    <div key={m.mapId} className={`rounded-xl border p-3 ${themeClasses.tableBorder}`}>
+                  {maps.map((m, idx) => (
+                    <div
+                      key={m.mapId ?? `${selectedWsId ?? "ws"}-${idx}`}
+                      className={`rounded-xl border p-3 ${themeClasses.tableBorder}`}
+                    >
                       <div className={`truncate text-sm font-medium ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
                         {"name" in m ? (m as { name: string }).name : (m as { mapName: string }).mapName}
                       </div>

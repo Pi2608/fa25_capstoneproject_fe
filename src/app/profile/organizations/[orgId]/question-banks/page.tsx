@@ -308,12 +308,14 @@ function RowMenu({
   deletingBankId,
   onEdit,
   onDelete,
+  onTogglePublic,
   onClose,
 }: {
   state: RowMenuState | null;
   deletingBankId: string | null;
   onEdit: (bank: QuestionBankDto) => void;
   onDelete: (id: string) => void;
+  onTogglePublic: (bank: QuestionBankDto) => void;
   onClose: () => void;
 }) {
   const { resolvedTheme, theme } = useTheme();
@@ -340,6 +342,17 @@ function RowMenu({
           isDark={isDark}
         >
           {t("org_question_banks", "menu_edit")}
+        </MenuButton>
+        <MenuButton
+          onClick={() => {
+            onTogglePublic(state.bank);
+            onClose();
+          }}
+          isDark={isDark}
+        >
+          {state.bank.isPublic
+            ? t("org_question_banks", "menu_unpublish") || "Unpublish"
+            : t("org_question_banks", "menu_publish") || "Publish"}
         </MenuButton>
         <MenuButton
           danger
@@ -444,13 +457,24 @@ export default function QuestionBanksPage() {
   const [deletingBankId, setDeletingBankId] = useState<string | null>(null);
   const [duplicateBankId, setDuplicateBankId] = useState<string | null>(null);
   const [processingDuplicate, setProcessingDuplicate] = useState(false);
+  const [searchTag, setSearchTag] = useState("");
   const { userId } = useAuth();
 
   const data = useQuestionBanksData(orgId);
   const bankForm = useBankForm(data.workspaces);
   const rowMenu = useRowMenu();
 
-  const displayBanks = activeTab === "my" ? data.myBanks : data.publicBanks;
+  const rawBanks = activeTab === "my" ? data.myBanks : data.publicBanks;
+
+  // Filter banks by tag search
+  const displayBanks = searchTag.trim()
+    ? rawBanks.filter((bank) => {
+        const bankId = resolveBankId(bank);
+        const tags = data.bankDetails[bankId]?.tags || [];
+        const searchLower = searchTag.toLowerCase().trim();
+        return tags.some((tag: string) => tag.toLowerCase().includes(searchLower));
+      })
+    : rawBanks;
 
   const handleSave = async () => {
     if (!bankForm.form.bankName.trim()) {
@@ -546,6 +570,32 @@ export default function QuestionBanksPage() {
     }
   };
 
+  const handleTogglePublic = async (bank: QuestionBankDto) => {
+    const bankId = resolveBankId(bank);
+    const newPublicState = !bank.isPublic;
+
+    try {
+      await updateQuestionBank(bankId, {
+        isPublic: newPublicState,
+      });
+      showToast(
+        "success",
+        newPublicState
+          ? t("org_question_banks", "toast_publish_success") || "Question bank published successfully"
+          : t("org_question_banks", "toast_unpublish_success") || "Question bank unpublished successfully"
+      );
+      data.loadAll();
+    } catch (e) {
+      showToast(
+        "error",
+        safeMessage(
+          e,
+          t("org_question_banks", "toast_toggle_public_error") || "Failed to update question bank"
+        )
+      );
+    }
+  };
+
   const goToEditQuestions = (id: string) => {
     router.push(
       `/profile/organizations/${orgId}/question-banks/${id}/question`
@@ -606,6 +656,17 @@ export default function QuestionBanksPage() {
           >
             {t("org_question_banks", "header_create_btn")}
           </button>
+        </div>
+
+        {/* Search by tag */}
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder={t("org_question_banks", "search_by_tag_placeholder") || "Search by tag..."}
+            value={searchTag}
+            onChange={(e) => setSearchTag(e.target.value)}
+            className={`w-full max-w-md rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500 ${themeClasses.input}`}
+          />
         </div>
 
         {/* Tabs */}
@@ -827,6 +888,7 @@ export default function QuestionBanksPage() {
           deletingBankId={deletingBankId}
           onEdit={bankForm.openEdit}
           onDelete={handleDelete}
+          onTogglePublic={handleTogglePublic}
           onClose={rowMenu.close}
         />
 

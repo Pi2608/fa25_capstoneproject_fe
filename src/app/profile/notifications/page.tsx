@@ -398,13 +398,13 @@ export default function NotificationsPage() {
                                 Gói: {meta.planName}
                               </p>
                             )}
-                            <Link
+                            {/* <Link
                               href={`/profile/settings/plans?transactionId=${meta.transactionId}`}
                               className="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md transition-colors bg-emerald-500 hover:bg-emerald-400 text-white"
                               onClick={() => onMarkRead(n)}
                             >
                               {tr("continue_payment")}
-                            </Link>
+                            </Link> */}
                           </div>
                         );
                       }

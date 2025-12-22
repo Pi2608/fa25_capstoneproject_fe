@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useGsapHomeScroll } from "@/components/common/useGsapHomeScroll";
 import { useI18n } from "@/i18n/I18nProvider";
 import { useToast } from "@/contexts/ToastContext";
@@ -17,6 +18,10 @@ import {
   MapGalleryDetailResponse,
   MapGallerySummaryResponse,
 } from "@/lib/api-map-gallery";
+import { getMapById } from "@/lib/api-maps";
+import { getMyOrganizations, MyOrganizationDto } from "@/lib/api-organizations";
+import { getWorkspacesByOrganization } from "@/lib/api-workspaces";
+import type { Workspace } from "@/types/workspace";
 
 type GalleryMapDetail = MapGalleryDetailResponse;
 
@@ -99,6 +104,7 @@ const CATEGORY_BY_TAG: Record<TagKey, MapGalleryCategory | undefined> = {
 export default function GalleryClient() {
   const { t } = useI18n();
   const { showToast } = useToast();
+  const router = useRouter();
 
   const [maps, setMaps] = useState<MapGallerySummaryResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -119,6 +125,16 @@ export default function GalleryClient() {
   const [pageSize, setPageSize] = useState<12 | 18 | 24>(12);
   const [page, setPage] = useState(1);
   const [featuredOnly, setFeaturedOnly] = useState(false);
+
+  // Workspace Selector Popup State
+  const [showWorkspaceSelector, setShowWorkspaceSelector] = useState(false);
+  const [pendingDuplicate, setPendingDuplicate] = useState<{ galleryId: string; mapId: string; isStoryMap: boolean } | null>(null);
+  const [organizations, setOrganizations] = useState<MyOrganizationDto[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string>("");
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -160,7 +176,26 @@ export default function GalleryClient() {
 
         if (!isMounted) return;
 
-        setMaps(data);
+        // Fetch individual map details to get correct isStoryMap value
+        const mapsWithDetails = await Promise.all(
+          data.map(async (map) => {
+            try {
+              const mapDetail = await getMapById(map.mapId);
+              return {
+                ...map,
+                isStoryMap: mapDetail.isStoryMap,
+              };
+            } catch (error) {
+              // If fetching map details fails, keep original map data
+              console.error(`Failed to fetch details for map ${map.mapId}:`, error);
+              return map;
+            }
+          })
+        );
+
+        if (!isMounted) return;
+
+        setMaps(mapsWithDetails);
       } catch (err: any) {
         if (!isMounted) return;
         setLoadError(err?.message || t("gallery.error_load_maps"));
@@ -217,7 +252,37 @@ export default function GalleryClient() {
     }
   };
 
-  const handleDuplicate = async (galleryId: string, mapId: string) => {
+  const handleDuplicate = async (galleryId: string, mapId: string, map: MapGallerySummaryResponse) => {
+    // Check if this is a story map
+    if (map.isStoryMap) {
+      // Story map requires workspace, show workspace selector
+      setPendingDuplicate({ galleryId, mapId, isStoryMap: true });
+      setShowWorkspaceSelector(true);
+
+      // Load organizations
+      setLoadingOrgs(true);
+      try {
+        const orgsRes = await getMyOrganizations();
+        const orgList = orgsRes.organizations || [];
+        setOrganizations(orgList);
+
+        if (orgList.length === 0) {
+          // No organizations, redirect to create organization
+          setShowWorkspaceSelector(false);
+          showToast("info", "You need to create an organization first to duplicate story maps");
+          router.push("/profile/organizations/new");
+          return;
+        }
+      } catch (error) {
+        showToast("error", "Failed to load organizations");
+        setShowWorkspaceSelector(false);
+      } finally {
+        setLoadingOrgs(false);
+      }
+      return;
+    }
+
+    // Normal map, duplicate directly
     setDuplicating(galleryId);
     setDuplicateError(null);
     try {
@@ -320,6 +385,70 @@ export default function GalleryClient() {
   }, [sorted, page, pageSize]);
 
   useEffect(() => setPage(1), [q, tagKey, sort, pageSize, featuredOnly]);
+
+  // Load workspaces when organization is selected
+  useEffect(() => {
+    if (!selectedOrgId) {
+      setWorkspaces([]);
+      setSelectedWorkspaceId("");
+      return;
+    }
+
+    const loadWorkspaces = async () => {
+      setLoadingWorkspaces(true);
+      try {
+        const ws = await getWorkspacesByOrganization(selectedOrgId);
+        setWorkspaces(ws || []);
+        setSelectedWorkspaceId("");
+      } catch (error) {
+        showToast("error", "Failed to load workspaces");
+        setWorkspaces([]);
+      } finally {
+        setLoadingWorkspaces(false);
+      }
+    };
+
+    loadWorkspaces();
+  }, [selectedOrgId, showToast]);
+
+  const handleConfirmDuplicate = async () => {
+    if (!pendingDuplicate || !selectedWorkspaceId) {
+      showToast("error", "Please select a workspace");
+      return;
+    }
+
+    setDuplicating(pendingDuplicate.galleryId);
+    setShowWorkspaceSelector(false);
+    try {
+      const result = await duplicateMapFromGallery(pendingDuplicate.galleryId, {
+        workspaceId: selectedWorkspaceId,
+      });
+      showToast("success", "Map duplicated successfully!");
+      // Redirect to the new map
+      window.location.href = `/maps/${result.mapId}`;
+    } catch (err: any) {
+      setDuplicating(null);
+
+      // Check if error is 401 Unauthorized
+      if (err?.status === 401) {
+        showToast("error", t("gallery.error_duplicate_unauthorized"));
+      } else {
+        const errorMessage = err?.message || t("gallery.error_duplicate");
+        showToast("error", errorMessage);
+      }
+    } finally {
+      setPendingDuplicate(null);
+      setSelectedOrgId("");
+      setSelectedWorkspaceId("");
+    }
+  };
+
+  const handleCancelWorkspaceSelector = () => {
+    setShowWorkspaceSelector(false);
+    setPendingDuplicate(null);
+    setSelectedOrgId("");
+    setSelectedWorkspaceId("");
+  };
 
   const renderTagFilterLabel = (key: TagKey) => {
     if (key === "All") return t("gallery.tag_All");
@@ -485,6 +614,12 @@ export default function GalleryClient() {
 
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                   <TagPill>{t(`gallery.category_${m.category}`)}</TagPill>
+                  <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${m.isStoryMap
+                    ? "border-purple-400/30 bg-purple-500/10 text-purple-300"
+                    : "border-blue-400/30 bg-blue-500/10 text-blue-300"
+                  }`}>
+                    {m.isStoryMap ? "Story Map" : "Normal Map - Bản đồ thường"}
+                  </span>
                   {m.isFeatured && (
                     <TagPill>{t("gallery.featured_badge")}</TagPill>
                   )}
@@ -529,15 +664,17 @@ export default function GalleryClient() {
                     {t("gallery.view_map")}
                   </Link>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDuplicate(m.id, m.mapId)}
-                    disabled={duplicating === m.id}
-                    className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-3 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <CopyIcon className="h-4 w-4" />
-                    {duplicating === m.id ? t("gallery.duplicating") : t("gallery.duplicate")}
-                  </button>
+                  {!m.isStoryMap && (
+                    <button
+                      type="button"
+                      onClick={() => handleDuplicate(m.id, m.mapId, m)}
+                      disabled={duplicating === m.id}
+                      className="inline-flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-zinc-900 px-3 py-2 text-sm font-medium text-emerald-300 hover:border-emerald-400/70 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <CopyIcon className="h-4 w-4" />
+                      {duplicating === m.id ? t("gallery.duplicating") : t("gallery.duplicate")}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => handleSelectByGalleryId(m.id)}
@@ -701,6 +838,91 @@ export default function GalleryClient() {
           </div>
         </div>
       </section>
+
+      {/* Workspace Selector Popup */}
+      {showWorkspaceSelector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-md rounded-2xl border border-emerald-500/20 bg-zinc-900 shadow-2xl p-6">
+            <h3 className="text-xl font-semibold text-zinc-100 mb-2">
+              Select Workspace for Story Map
+            </h3>
+            <p className="text-sm text-zinc-400 mb-4">
+              Story maps must be saved to a workspace. Please select an organization and workspace.
+            </p>
+
+            {loadingOrgs ? (
+              <div className="text-center text-zinc-400 py-8">Loading organizations...</div>
+            ) : (
+              <div className="space-y-4">
+                {/* Organization Selector */}
+                <div>
+                  <label className="block text-sm font-medium text-zinc-200 mb-2">
+                    Organization
+                  </label>
+                  <select
+                    value={selectedOrgId}
+                    onChange={(e) => setSelectedOrgId(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-emerald-400/60"
+                  >
+                    <option value="">Select an organization...</option>
+                    {organizations.map((org) => (
+                      <option key={org.orgId} value={org.orgId}>
+                        {org.orgName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Workspace Selector */}
+                {selectedOrgId && (
+                  <div>
+                    <label className="block text-sm font-medium text-zinc-200 mb-2">
+                      Workspace
+                    </label>
+                    {loadingWorkspaces ? (
+                      <div className="text-sm text-zinc-400 py-2">Loading workspaces...</div>
+                    ) : workspaces.length === 0 ? (
+                      <div className="text-sm text-zinc-400 py-2">
+                        No workspaces found in this organization.
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedWorkspaceId}
+                        onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-700/60 bg-zinc-900/70 px-3 py-2.5 text-sm text-zinc-100 outline-none focus:border-emerald-400/60"
+                      >
+                        <option value="">Select a workspace...</option>
+                        {workspaces.map((ws) => (
+                          <option key={ws.workspaceId} value={ws.workspaceId}>
+                            {ws.workspaceName}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end gap-3 mt-6">
+                  <button
+                    onClick={handleCancelWorkspaceSelector}
+                    className="px-4 py-2 rounded-xl border border-zinc-700/70 bg-zinc-900 text-sm font-medium text-zinc-200 hover:border-zinc-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmDuplicate}
+                    disabled={!selectedWorkspaceId}
+                    className="px-4 py-2 rounded-xl bg-emerald-500 text-sm font-semibold text-zinc-950 hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Duplicate to Workspace
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

@@ -109,3 +109,99 @@ body {
 .measurement-tooltip::before {
   display: none !important; /* Hide default arrow */
 }
+
+/* Custom Scrollbar Styles - Zinc/Emerald Theme */
+/* For Webkit browsers (Chrome, Safari, Edge) */
+.scrollbar-custom::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-custom::-webkit-scrollbar-track {
+  background: rgba(39, 39, 42, 0.5); /* zinc-800/50 */
+  border-radius: 4px;
+}
+
+.scrollbar-custom::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.6); /* zinc-500/60 */
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.scrollbar-custom::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.7); /* emerald-500/70 */
+}
+
+.scrollbar-custom::-webkit-scrollbar-thumb:active {
+  background: rgba(16, 185, 129, 0.9); /* emerald-500/90 */
+}
+
+.scrollbar-custom::-webkit-scrollbar-corner {
+  background: rgba(39, 39, 42, 0.5); /* zinc-800/50 */
+}
+
+/* For Firefox */
+.scrollbar-custom {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(113, 113, 122, 0.6) rgba(39, 39, 42, 0.5); /* thumb track */
+}
+
+/* Thin scrollbar variant */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: rgba(39, 39, 42, 0.3); /* zinc-800/30 */
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(113, 113, 122, 0.5); /* zinc-500/50 */
+  border-radius: 3px;
+  transition: background 0.2s ease;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.6); /* emerald-500/60 */
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:active {
+  background: rgba(16, 185, 129, 0.8); /* emerald-500/80 */
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(113, 113, 122, 0.5) rgba(39, 39, 42, 0.3);
+}
+
+/* Dark scrollbar variant (for darker backgrounds) */
+.scrollbar-dark::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-dark::-webkit-scrollbar-track {
+  background: rgba(9, 9, 11, 0.6); /* zinc-950/60 */
+  border-radius: 4px;
+}
+
+.scrollbar-dark::-webkit-scrollbar-thumb {
+  background: rgba(63, 63, 70, 0.7); /* zinc-700/70 */
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.scrollbar-dark::-webkit-scrollbar-thumb:hover {
+  background: rgba(16, 185, 129, 0.7); /* emerald-500/70 */
+}
+
+.scrollbar-dark::-webkit-scrollbar-thumb:active {
+  background: rgba(16, 185, 129, 0.9); /* emerald-500/90 */
+}
+
+.scrollbar-dark {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(63, 63, 70, 0.7) rgba(9, 9, 11, 0.6);
+}

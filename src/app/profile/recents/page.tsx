@@ -10,20 +10,23 @@ import {
   createDefaultMap,
   deleteMap,
   getMyRecentMaps,
-  getMapDetail,
   MapDto,
   updateMap,
   UpdateMapRequest,
-  getMapTemplates,
-  getMapTemplateWithDetails,
-  getMapTemplateLayerData,
-  uploadGeoJsonToMap,
-  MapTemplate,
-  MapTemplateDetails,
+  getMapById,
 } from "@/lib/api-maps";
+import {
+  getPublishedGalleryMaps,
+  duplicateMapFromGallery,
+  MapGallerySummaryResponse,
+} from "@/lib/api-map-gallery";
+import { getMyOrganizations, MyOrganizationDto } from "@/lib/api-organizations";
+import { getWorkspacesByOrganization } from "@/lib/api-workspaces";
+import type { Workspace } from "@/types/workspace";
 import { useTheme } from "next-themes";
 import { getThemeClasses } from "@/utils/theme-utils";
 import { useI18n } from "@/i18n/I18nProvider";
+import { useToast } from "@/contexts/ToastContext";
 
 type ViewMode = "grid" | "list";
 
@@ -44,78 +47,78 @@ type Sample = {
   };
 };
 
-const SAMPLES: Sample[] = [
-  {
-    key: "reservoir-precip",
-    title: "Example: Reservoir Levels & Precipitation",
-    author: "Yen Nhi Dang",
-    lastViewed: "Last viewed 3 months ago",
-    blurb: "Combine reservoir level overlays with accumulated precipitation.",
-    preset: {
-      name: "Reservoir Levels & Precip",
-      baseMapProvider: "OSM",
-      initialLatitude: 15.95,
-      initialLongitude: 107.8,
-      initialZoom: 5,
-    },
-  },
-  {
-    key: "sandy-inundation",
-    title: "Example: Hurricane Sandy Inundation Zone",
-    author: "Yen Nhi Dang",
-    lastViewed: "Last viewed 3 months ago",
-    blurb: "Historic storm surge zones for quick risk illustration.",
-    preset: {
-      name: "Sandy Inundation Zone",
-      baseMapProvider: "OSM",
-      initialLatitude: 40.71,
-      initialLongitude: -74.0,
-      initialZoom: 10,
-    },
-  },
-  {
-    key: "bike-collisions",
-    title: "Example: City of Toronto Bike Collisions",
-    author: "Yen Nhi Dang",
-    lastViewed: "Last viewed 3 months ago",
-    blurb: "Point dataset for bicycle collision safety analysis.",
-    preset: {
-      name: "Toronto Bike Collisions",
-      baseMapProvider: "OSM",
-      initialLatitude: 43.65,
-      initialLongitude: -79.38,
-      initialZoom: 11,
-    },
-  },
-  {
-    key: "sales-territories",
-    title: "Example: Sales Territories",
-    author: "Yen Nhi Dang",
-    lastViewed: "Last viewed 3 months ago",
-    blurb: "Territory boundaries and regional assignments.",
-    preset: {
-      name: "Sales Territories",
-      baseMapProvider: "OSM",
-      initialLatitude: 39.5,
-      initialLongitude: -98.35,
-      initialZoom: 4,
-    },
-  },
-  {
-    key: "getting-started",
-    title: "Getting started with IMOS",
-    author: "Yen Nhi Dang",
-    lastViewed: "Last viewed 3 months ago",
-    blurb: "Onboarding sample with basic point and area layers.",
-    preset: {
-      name: "Getting Started",
-      baseMapProvider: "OSM",
-      initialLatitude: 21.03,
-      initialLongitude: 105.85,
-      initialZoom: 11,
-    },
-  },
-];
+// const SAMPLES: Sample[] = [
+//   {
+//     key: "reservoir-precip",
+//     title: "Example: Reservoir Levels & Precipitation",
+//     author: "Yen Nhi Dang",
+//     lastViewed: "Last viewed 3 months ago",
+//     blurb: "Combine reservoir level overlays with accumulated precipitation.",
+//     preset: {
+//       name: "Reservoir Levels & Precip",
+//       baseMapProvider: "OSM",
+//       initialLatitude: 15.95,
+//       initialLongitude: 107.8,
+//       initialZoom: 5,
+//     },
+//   },
+//   {
+//     key: "sandy-inundation",
+//     title: "Example: Hurricane Sandy Inundation Zone",
+//     author: "Yen Nhi Dang",
+//     lastViewed: "Last viewed 3 months ago",
+//     blurb: "Historic storm surge zones for quick risk illustration.",
+//     preset: {
+//       name: "Sandy Inundation Zone",
+//       baseMapProvider: "OSM",
+//       initialLatitude: 40.71,
+//       initialLongitude: -74.0,
+//       initialZoom: 10,
+//     },
+//   },
+//   {
+//     key: "bike-collisions",
+//     title: "Example: City of Toronto Bike Collisions",
+//     author: "Yen Nhi Dang",
+//     lastViewed: "Last viewed 3 months ago",
+//     blurb: "Point dataset for bicycle collision safety analysis.",
+//     preset: {
+//       name: "Toronto Bike Collisions",
+//       baseMapProvider: "OSM",
+//       initialLatitude: 43.65,
+//       initialLongitude: -79.38,
+//       initialZoom: 11,
+//     },
+//   },
+//   {
+//     key: "sales-territories",
+//     title: "Example: Sales Territories",
+//     author: "Yen Nhi Dang",
+//     lastViewed: "Last viewed 3 months ago",
+//     blurb: "Territory boundaries and regional assignments.",
+//     preset: {
+//       name: "Sales Territories",
+//       baseMapProvider: "OSM",
+//       initialLatitude: 39.5,
+//       initialLongitude: -98.35,
+//       initialZoom: 4,
+//     },
+//   },
+//   {
+//     key: "getting-started",
+//     title: "Getting started with IMOS",
+//     author: "Yen Nhi Dang",
+//     lastViewed: "Last viewed 3 months ago",
+//     blurb: "Onboarding sample with basic point and area layers.",
+//     preset: {
+//       name: "Getting Started",
+//       baseMapProvider: "OSM",
+//       initialLatitude: 21.03,
+//       initialLongitude: 105.85,
+//       initialZoom: 11,
+//     },
+//   },
+// ];
 
 function Thumb({ src, fallbackKey, isDark }: { src?: string | null; fallbackKey: string; isDark: boolean }) {
   const palette: Record<string, string> = {
@@ -173,28 +176,17 @@ export default function RecentsPage() {
   const isDark = currentTheme === "dark";
   const themeClasses = getThemeClasses(isDark);
   const { t } = useI18n();
+  const { showToast } = useToast();
 
   const [maps, setMaps] = useState<PublishedMap[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  // Templates state
-  const [templates, setTemplates] = useState<MapTemplate[]>([]);
-  const [templatesLoading, setTemplatesLoading] = useState(true);
-  const [templatesErr, setTemplatesErr] = useState<string | null>(null);
-
-  // Template detail modal state
-  const [templateDetail, setTemplateDetail] = useState<{
-    open: boolean;
-    template: MapTemplateDetails | null;
-    loading: boolean;
-    error: string | null;
-  }>({
-    open: false,
-    template: null,
-    loading: false,
-    error: null,
-  });
+  // Map Gallery state
+  const [galleryMaps, setGalleryMaps] = useState<MapGallerySummaryResponse[]>([]);
+  const [galleryLoading, setGalleryLoading] = useState(true);
+  const [galleryErr, setGalleryErr] = useState<string | null>(null);
+  const [gallerySearchTag, setGallerySearchTag] = useState<string>("");
 
   const [viewOpen, setViewOpen] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -222,6 +214,16 @@ export default function RecentsPage() {
     open: false,
     map: null,
   });
+
+  // Workspace Selector Popup State
+  const [showWorkspaceSelector, setShowWorkspaceSelector] = useState(false);
+  const [pendingDuplicate, setPendingDuplicate] = useState<{ galleryId: string; mapId: string; isStoryMap: boolean } | null>(null);
+  const [organizations, setOrganizations] = useState<MyOrganizationDto[]>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string>("");
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>("");
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
 
   useEffect(() => {
     function onDown(e: MouseEvent) {
@@ -262,6 +264,7 @@ export default function RecentsPage() {
         ownerId: m.ownerId ?? null,
         ownerName: m.ownerName ?? null,
         isOwner: m.isOwner ?? true,
+        isStoryMap: m.isStoryMap ?? false,
         workspaceName: m.workspaceName ?? null,
         publishedAt: m.publishedAt ?? (m.status === "Published" || m.status === "published" ? m.createdAt : null),
         workspaceId: m.workspaceId ?? m.workspace_id ?? null,
@@ -282,121 +285,96 @@ export default function RecentsPage() {
   }, [loadMyMaps]);
 
   // Load templates
-  const loadTemplates = useCallback(async () => {
-    setTemplatesLoading(true);
-    setTemplatesErr(null);
+  // Load Map Gallery
+  const loadGalleryMaps = useCallback(async () => {
+    setGalleryLoading(true);
+    setGalleryErr(null);
     try {
-      const data = await getMapTemplates();
-      setTemplates(data);
+      // Load all maps
+      const data = await getPublishedGalleryMaps({});
+
+      // Fetch individual map details to get correct isStoryMap value
+      const mapsWithDetails = await Promise.all(
+        data.map(async (map) => {
+          try {
+            const mapDetail = await getMapById(map.mapId);
+            return {
+              ...map,
+              isStoryMap: mapDetail.isStoryMap,
+            };
+          } catch (error) {
+            // If fetching map details fails, keep original map data
+            console.error(`Failed to fetch details for map ${map.mapId}:`, error);
+            return map;
+          }
+        })
+      );
+
+      // Filter by tag if search tag is provided
+      if (gallerySearchTag.trim()) {
+        const searchLower = gallerySearchTag.toLowerCase().trim();
+        const filtered = mapsWithDetails.filter((map) =>
+          map.tags?.some((tag) => tag.toLowerCase().includes(searchLower))
+        );
+        setGalleryMaps(filtered);
+      } else {
+        setGalleryMaps(mapsWithDetails);
+      }
     } catch (e) {
-      setTemplatesErr(e instanceof Error ? e.message : t("recents", "templateLoadError"));
+      setGalleryErr(e instanceof Error ? e.message : t("recents", "galleryLoadError"));
     } finally {
-      setTemplatesLoading(false);
+      setGalleryLoading(false);
     }
-  }, [t]);
+  }, [gallerySearchTag, t]);
 
   useEffect(() => {
-    void loadTemplates();
-  }, [loadTemplates]);
+    void loadGalleryMaps();
+  }, [loadGalleryMaps]);
 
-  // Open template detail modal
-  const openTemplateDetail = async (template: MapTemplate) => {
-    setTemplateDetail({
-      open: true,
-      template: null,
-      loading: true,
-      error: null,
-    });
+  // Duplicate map from gallery
+  const handleDuplicateFromGallery = async (galleryId: string, map: MapGallerySummaryResponse) => {
+    // Check if this is a story map
+    if (map.isStoryMap) {
+      // Story map requires workspace, show workspace selector
+      setPendingDuplicate({ galleryId, mapId: map.mapId, isStoryMap: true });
+      setShowWorkspaceSelector(true);
 
-    try {
-      const details = await getMapTemplateWithDetails(template.templateId);
-      setTemplateDetail({
-        open: true,
-        template: details,
-        loading: false,
-        error: null,
-      });
-    } catch (e) {
-      setTemplateDetail((prev) => ({
-        ...prev,
-        loading: false,
-        error: e instanceof Error ? e.message : t("recents", "templateDetailLoadError"),
-      }));
-    }
-  };
+      // Load organizations
+      setLoadingOrgs(true);
+      try {
+        const orgsRes = await getMyOrganizations();
+        const orgList = orgsRes.organizations || [];
+        setOrganizations(orgList);
 
-  const closeTemplateDetail = () => {
-    setTemplateDetail({
-      open: false,
-      template: null,
-      loading: false,
-      error: null,
-    });
-  };
-
-  // Create map from template
-  const createMapFromTemplateHandler = async (template: MapTemplate | MapTemplateDetails) => {
-    setActionErr(null);
-    setBusyKey(template.templateId);
-    try {
-      // Step 1: Create map from template (creates map with metadata only)
-      const r = await createMapFromTemplate({
-        templateId: template.templateId,
-        customName: template.templateName || t("recents", "newMapFromTemplateDefault"),
-        customDescription: template.description,
-        workspaceId: null,
-      });
-
-      const newMapId = r.mapId;
-
-      // Step 2: Load template details to get layers
-      const templateDetails = await getMapTemplateWithDetails(template.templateId);
-
-      // Step 3: Load and upload each layer's data to the new map
-      if (templateDetails.layers && templateDetails.layers.length > 0) {
-        for (const layer of templateDetails.layers) {
-          try {
-            // Get layer data (GeoJSON)
-            const layerDataResponse = await getMapTemplateLayerData(
-              template.templateId,
-              layer.layerId || (layer as any).mapLayerId
-            );
-
-            if (layerDataResponse.layerData) {
-              // layerData is a JSON string, parse it to get the GeoJSON object
-              const geoJsonData = typeof layerDataResponse.layerData === 'string'
-                ? JSON.parse(layerDataResponse.layerData)
-                : layerDataResponse.layerData;
-
-              // Convert to Blob and create File object
-              const geoJsonString = typeof geoJsonData === 'string'
-                ? geoJsonData
-                : JSON.stringify(geoJsonData);
-
-              const geoJsonBlob = new Blob([geoJsonString], {
-                type: "application/json",
-              });
-              const geoJsonFile = new File(
-                [geoJsonBlob],
-                `${layer.layerName || "layer"}.geojson`,
-                { type: "application/json" }
-              );
-
-              // Upload to new map
-              await uploadGeoJsonToMap(newMapId, geoJsonFile, layer.layerName);
-            }
-          } catch (layerError) {
-            console.error(`Failed to load/upload layer ${layer.layerName}:`, layerError);
-            // Continue with other layers even if one fails
-          }
+        if (orgList.length === 0) {
+          // No organizations, redirect to create organization
+          setShowWorkspaceSelector(false);
+          showToast("info", "You need to create an organization first to duplicate story maps");
+          router.push("/profile/organizations/new");
+          return;
         }
+      } catch (error) {
+        showToast("error", "Failed to load organizations");
+        setShowWorkspaceSelector(false);
+      } finally {
+        setLoadingOrgs(false);
       }
+      return;
+    }
 
-      // Step 4: Navigate to the new map
-      router.push(`/maps/${newMapId}`);
+    // Normal map, duplicate directly
+    setBusyKey(galleryId);
+    setActionErr(null);
+    try {
+      const result = await duplicateMapFromGallery(galleryId, {
+        workspaceId: undefined,
+      });
+      showToast("success", t("recents", "galleryDuplicateSuccess"));
+      router.push(`/maps/${result.mapId}`);
     } catch (error) {
-      console.error("Error creating map from template:", error);
-      setActionErr(t("recents", "errorTemplateCreate"));
+      const errorMessage = error instanceof Error ? error.message : t("recents", "galleryDuplicateError");
+      setActionErr(errorMessage);
+      showToast("error", errorMessage);
     } finally {
       setBusyKey(null);
     }
@@ -544,6 +522,85 @@ export default function RecentsPage() {
     [router, t]
   );
 
+  const handleViewMap = useCallback(
+    (map: PublishedMap) => {
+      if (map.isStoryMap) {
+        window.open(`/storymap/${map.id}`, "_blank");
+      } else {
+        window.open(`/maps/publish?mapId=${map.id}&view=true`, "_blank");
+      }
+    },
+    []
+  );
+
+  const handleViewGalleryMap = useCallback(
+    (map: MapGallerySummaryResponse) => {
+      if (map.isStoryMap) {
+        window.open(`/storymap/${map.mapId}`, "_blank");
+      } else {
+        window.open(`/maps/publish?mapId=${map.mapId}&view=true`, "_blank");
+      }
+    },
+    []
+  );
+
+  // Load workspaces when organization is selected
+  useEffect(() => {
+    if (!selectedOrgId) {
+      setWorkspaces([]);
+      setSelectedWorkspaceId("");
+      return;
+    }
+
+    const loadWorkspaces = async () => {
+      setLoadingWorkspaces(true);
+      try {
+        const ws = await getWorkspacesByOrganization(selectedOrgId);
+        setWorkspaces(ws || []);
+        setSelectedWorkspaceId("");
+      } catch (error) {
+        showToast("error", "Failed to load workspaces");
+        setWorkspaces([]);
+      } finally {
+        setLoadingWorkspaces(false);
+      }
+    };
+
+    loadWorkspaces();
+  }, [selectedOrgId, showToast]);
+
+  const handleConfirmDuplicate = async () => {
+    if (!pendingDuplicate || !selectedWorkspaceId) {
+      showToast("error", "Please select a workspace");
+      return;
+    }
+
+    setBusyKey(pendingDuplicate.galleryId);
+    setShowWorkspaceSelector(false);
+    try {
+      const result = await duplicateMapFromGallery(pendingDuplicate.galleryId, {
+        workspaceId: selectedWorkspaceId,
+      });
+      showToast("success", t("recents", "galleryDuplicateSuccess"));
+      router.push(`/maps/${result.mapId}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : t("recents", "galleryDuplicateError");
+      showToast("error", errorMessage);
+    } finally {
+      setBusyKey(null);
+      setPendingDuplicate(null);
+      setSelectedOrgId("");
+      setSelectedWorkspaceId("");
+    }
+  };
+
+  const handleCancelWorkspaceSelector = () => {
+    setShowWorkspaceSelector(false);
+    setPendingDuplicate(null);
+    setSelectedOrgId("");
+    setSelectedWorkspaceId("");
+  };
+
   if (loading) return <div suppressHydrationWarning className={`min-h-[60vh] animate-pulse px-4 ${themeClasses.textMuted}`}>{t("recents", "loading")}</div>;
   if (err) return <div suppressHydrationWarning className={`max-w-3xl px-4 ${isDark ? "text-red-400" : "text-red-600"}`}>{err}</div>;
 
@@ -673,7 +730,15 @@ export default function RecentsPage() {
                   <div className={`truncate font-semibold ${isDark ? "text-zinc-50" : "text-gray-900"}`}>
                     {m.name || "Untitled"}
                   </div>
-                  <div className={`text-xs ${themeClasses.textMuted}`}>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${m.isStoryMap
+                      ? "border-purple-400/30 bg-purple-500/10 text-purple-300"
+                      : "border-blue-400/30 bg-blue-500/10 text-blue-300"
+                    }`}>
+                      {m.isStoryMap ? "Story Map" : "Normal Map - Bản đồ thường"}
+                    </span>
+                  </div>
+                  <div className={`text-xs mt-1 ${themeClasses.textMuted}`}>
                     {m.publishedAt
                       ? t("recents", "publishedDate", { date: new Date(m.publishedAt).toLocaleDateString() })
                       : m.createdAt
@@ -683,6 +748,12 @@ export default function RecentsPage() {
                 </div>
 
                 <div className="flex flex-col gap-2 mt-auto">
+                  <button
+                    className={`w-full px-3 py-2 rounded-xl border text-sm ${themeClasses.button}`}
+                    onClick={() => handleViewMap(m)}
+                  >
+                    View Map
+                  </button>
                   <button
                     className={`w-full px-3 py-2 rounded-xl border text-sm ${themeClasses.button}`}
                     onClick={() => router.push(`/maps/${m.id}`)}
@@ -766,6 +837,12 @@ export default function RecentsPage() {
 
                         <button
                           className={`text-xs px-2 py-1 rounded border ${themeClasses.button}`}
+                          onClick={() => handleViewMap(m)}
+                        >
+                          View Map
+                        </button>
+                        <button
+                          className={`text-xs px-2 py-1 rounded border ${themeClasses.button}`}
                           onClick={() => router.push(`/maps/${m.id}`)}
                         >
                           {t("recents", "openMap")}
@@ -788,7 +865,7 @@ export default function RecentsPage() {
         )}
       </section>
 
-      <section className="mb-10">
+      {/* <section className="mb-10">
         <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>{t("recents", "sectionExamples")}</h2>
         {actionErr && (
           <div className={`mb-3 rounded-lg border px-3 py-2 ${isDark ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
@@ -817,42 +894,53 @@ export default function RecentsPage() {
             </li>
           ))}
         </ul>
-      </section>
+      </section> */}
 
-      {/* Templates Section */}
+      {/* Map Gallery Section */}
       <section className="mb-10">
-        <h2 className={`mb-3 text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
-          {t("recents", "sectionTemplates")}
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className={`text-lg font-semibold ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
+            {t("recents", "sectionMapGallery")}
+          </h2>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder={t("recents", "gallerySearchPlaceholder")}
+              value={gallerySearchTag}
+              onChange={(e) => setGallerySearchTag(e.target.value)}
+              className={`px-3 py-1.5 rounded-lg border text-sm ${themeClasses.input}`}
+            />
+          </div>
+        </div>
 
-        {templatesLoading && (
+        {galleryLoading && (
           <div className={`text-center py-8 ${themeClasses.textMuted}`}>
             {t("recents", "loading")}
           </div>
         )}
 
-        {templatesErr && (
+        {galleryErr && (
           <div className={`mb-3 rounded-lg border px-3 py-2 ${isDark ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
-            {templatesErr}
+            {galleryErr}
           </div>
         )}
 
-        {!templatesLoading && !templatesErr && templates.length === 0 && (
+        {!galleryLoading && !galleryErr && galleryMaps.length === 0 && (
           <div className={`rounded-xl border p-6 text-center ${themeClasses.panel}`}>
-            <p className={themeClasses.textMuted}>{t("recents", "templateNoTemplates")}</p>
+            <p className={themeClasses.textMuted}>{t("recents", "galleryNoMaps")}</p>
           </div>
         )}
 
-        {!templatesLoading && !templatesErr && templates.length > 0 && (
+        {!galleryLoading && !galleryErr && galleryMaps.length > 0 && (
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {templates.map((template) => (
-              <li key={template.templateId} className={`rounded-xl border p-4 ${themeClasses.panel}`}>
+            {galleryMaps.map((map) => (
+              <li key={map.id} className={`rounded-xl border p-4 ${themeClasses.panel}`}>
                 {/* Preview Image */}
                 <div className={`h-32 w-full rounded-lg border overflow-hidden mb-3 ${isDark ? "border-white/10 bg-zinc-900/40" : "border-gray-200 bg-gray-100"}`}>
-                  {template.previewImageUrl ? (
+                  {map.previewImage ? (
                     <img
-                      src={template.previewImageUrl}
-                      alt={template.templateName}
+                      src={map.previewImage}
+                      alt={map.mapName}
                       className="h-full w-full object-cover"
                       loading="lazy"
                     />
@@ -863,28 +951,39 @@ export default function RecentsPage() {
                   )}
                 </div>
 
-                {/* Template Info */}
+                {/* Map Info */}
                 <div className="min-w-0 mb-3">
                   <div className={`truncate font-semibold ${isDark ? "text-zinc-50" : "text-gray-900"}`}>
-                    {template.templateName || "Untitled Template"}
+                    {map.mapName || "Untitled Map"}
                   </div>
-                  {template.description && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${map.isStoryMap
+                      ? "border-purple-400/30 bg-purple-500/10 text-purple-300"
+                      : "border-blue-400/30 bg-blue-500/10 text-blue-300"
+                    }`}>
+                      {map.isStoryMap ? "Story Map" : "Normal Map - Bản đồ thường"}
+                    </span>
+                  </div>
+                  {map.description && (
                     <p className={`text-sm mt-1 line-clamp-2 ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
-                      {template.description}
+                      {map.description}
                     </p>
                   )}
                   <div className={`text-xs mt-2 space-y-1 ${themeClasses.textMuted}`}>
-                    {template.category && (
-                      <div>{t("recents", "templateCategory", { category: template.category })}</div>
-                    )}
-                    {template.layerCount !== null && template.layerCount !== undefined && (
-                      <div>{t("recents", "templateLayers", { count: template.layerCount })}</div>
-                    )}
-                    {template.featureCount !== null && template.featureCount !== undefined && (
-                      <div>{t("recents", "templateFeatures", { count: template.featureCount })}</div>
-                    )}
-                    {template.usageCount !== null && template.usageCount !== undefined && (
-                      <div>{t("recents", "templateUsageCount", { count: template.usageCount })}</div>
+                    <div>Category: {map.category}</div>
+                    <div>Author: {map.authorName}</div>
+                    <div>Views: {map.viewCount} • Likes: {map.likeCount}</div>
+                    {map.tags && map.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {map.tags.slice(0, 3).map((tag, idx) => (
+                          <span
+                            key={idx}
+                            className={`inline-block rounded px-1.5 py-0.5 text-xs ${isDark ? "bg-emerald-500/10 text-emerald-300" : "bg-emerald-50 text-emerald-600"}`}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -893,140 +992,25 @@ export default function RecentsPage() {
                 <div className="flex flex-col gap-2 mt-auto">
                   <button
                     className={`w-full px-3 py-2 rounded-xl border text-sm ${themeClasses.button}`}
-                    onClick={() => openTemplateDetail(template)}
+                    onClick={() => handleViewGalleryMap(map)}
                   >
-                    {t("recents", "templateViewDetails")}
+                    View Map
                   </button>
-                  <button
-                    className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
-                    onClick={() => createMapFromTemplateHandler(template)}
-                    disabled={busyKey === template.templateId}
-                  >
-                    {busyKey === template.templateId ? t("recents", "creatingFromTemplate") : t("recents", "templateUseTemplate")}
-                  </button>
+                  {!map.isStoryMap && (
+                    <button
+                      className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
+                      onClick={() => handleDuplicateFromGallery(map.id, map)}
+                      disabled={busyKey === map.id}
+                    >
+                      {busyKey === map.id ? t("recents", "galleryDuplicating") : t("recents", "galleryDuplicateButton")}
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
           </ul>
         )}
       </section>
-
-      {/* Template Detail Modal */}
-      {templateDetail.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className={`w-full max-w-2xl rounded-2xl border shadow-2xl p-5 max-h-[80vh] overflow-y-auto ${themeClasses.panel}`}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className={`text-lg font-semibold ${isDark ? "text-white" : "text-gray-900"}`}>
-                {t("recents", "templateModalTitle")}
-              </h3>
-              <button
-                className={`${isDark ? "text-zinc-300 hover:text-white" : "text-gray-600 hover:text-gray-900"}`}
-                onClick={closeTemplateDetail}
-              >
-                ✕
-              </button>
-            </div>
-
-            {templateDetail.loading && (
-              <div className={`text-center py-8 ${themeClasses.textMuted}`}>
-                {t("recents", "loading")}
-              </div>
-            )}
-
-            {templateDetail.error && (
-              <div className={`mb-3 rounded-lg border px-3 py-2 ${isDark ? "border-red-500/20 bg-red-500/10 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
-                {templateDetail.error}
-              </div>
-            )}
-
-            {templateDetail.template && (
-              <div>
-                {/* Template Preview */}
-                {templateDetail.template.previewImage && (
-                  <div className="mb-4">
-                    <img
-                      src={templateDetail.template.previewImage}
-                      alt={templateDetail.template.templateName}
-                      className="w-full rounded-lg"
-                    />
-                  </div>
-                )}
-
-                {/* Template Details */}
-                <div className="mb-4">
-                  <h4 className={`text-xl font-semibold mb-2 ${isDark ? "text-white" : "text-gray-900"}`}>
-                    {templateDetail.template.templateName}
-                  </h4>
-                  {templateDetail.template.description && (
-                    <p className={`text-sm ${isDark ? "text-zinc-300" : "text-gray-700"}`}>
-                      {templateDetail.template.description}
-                    </p>
-                  )}
-                </div>
-
-                {/* Layers */}
-                <div className="mb-4">
-                  <h5 className={`text-sm font-semibold mb-2 ${isDark ? "text-zinc-200" : "text-gray-800"}`}>
-                    {t("recents", "templateLayers", { count: templateDetail.template.layers?.length || 0 })}
-                  </h5>
-                  {templateDetail.template.layers && templateDetail.template.layers.length > 0 ? (
-                    <div className={`rounded-lg border overflow-hidden ${themeClasses.panel}`}>
-                      <table className="w-full text-sm">
-                        <thead className={`${isDark ? "bg-white/5" : "bg-gray-50"}`}>
-                          <tr>
-                            <th className={`text-left px-3 py-2 ${themeClasses.textMuted}`}>
-                              {t("recents", "templateModalLayerName")}
-                            </th>
-                            <th className={`text-left px-3 py-2 ${themeClasses.textMuted}`}>
-                              {t("recents", "templateModalFeatureCount")}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className={`divide-y ${themeClasses.tableBorder}`}>
-                          {templateDetail.template.layers.map((layer: any) => (
-                            <tr key={layer.layerId || layer.mapLayerId}>
-                              <td className={`px-3 py-2 ${isDark ? "text-zinc-200" : "text-gray-800"}`}>
-                                {layer.layerName}
-                              </td>
-                              <td className={`px-3 py-2 ${themeClasses.textMuted}`}>
-                                {layer.featureCount || 0}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className={themeClasses.textMuted}>
-                      {t("recents", "templateModalNoLayers")}
-                    </p>
-                  )}
-                </div>
-
-                {/* Use Template Button */}
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    className={`px-4 py-2 rounded-lg border text-sm ${themeClasses.button}`}
-                    onClick={closeTemplateDetail}
-                  >
-                    {t("recents", "templateModalClose")}
-                  </button>
-                  <button
-                    className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
-                    onClick={() => {
-                      closeTemplateDetail();
-                      createMapFromTemplateHandler(templateDetail.template!);
-                    }}
-                    disabled={busyKey === templateDetail.template.templateId}
-                  >
-                    {busyKey === templateDetail.template.templateId ? t("recents", "creatingFromTemplate") : t("recents", "templateUseTemplate")}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {confirmDelete.open && confirmDelete.map && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
@@ -1155,6 +1139,91 @@ export default function RecentsPage() {
                 {edit.saving ? t("recents", "modalSaving") : t("recents", "modalSave")}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Workspace Selector Popup */}
+      {showWorkspaceSelector && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className={`w-full max-w-md rounded-2xl border shadow-2xl p-6 ${themeClasses.panel}`}>
+            <h3 className={`text-xl font-semibold mb-2 ${isDark ? "text-zinc-100" : "text-gray-900"}`}>
+              Select Workspace for Story Map
+            </h3>
+            <p className={`text-sm mb-4 ${themeClasses.textMuted}`}>
+              Story maps must be saved to a workspace. Please select an organization and workspace.
+            </p>
+
+            {loadingOrgs ? (
+              <div className={`text-center py-8 ${themeClasses.textMuted}`}>Loading organizations...</div>
+            ) : (
+              <div className="space-y-4">
+                {/* Organization Selector */}
+                <div>
+                  <label className={`block text-sm font-medium mb-2 ${isDark ? "text-zinc-200" : "text-gray-700"}`}>
+                    Organization
+                  </label>
+                  <select
+                    value={selectedOrgId}
+                    onChange={(e) => setSelectedOrgId(e.target.value)}
+                    className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none ${themeClasses.input}`}
+                  >
+                    <option value="">Select an organization...</option>
+                    {organizations.map((org) => (
+                      <option key={org.orgId} value={org.orgId}>
+                        {org.orgName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Workspace Selector */}
+                {selectedOrgId && (
+                  <div>
+                    <label className={`block text-sm font-medium mb-2 ${isDark ? "text-zinc-200" : "text-gray-700"}`}>
+                      Workspace
+                    </label>
+                    {loadingWorkspaces ? (
+                      <div className={`text-sm py-2 ${themeClasses.textMuted}`}>Loading workspaces...</div>
+                    ) : workspaces.length === 0 ? (
+                      <div className={`text-sm py-2 ${themeClasses.textMuted}`}>
+                        No workspaces found in this organization.
+                      </div>
+                    ) : (
+                      <select
+                        value={selectedWorkspaceId}
+                        onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+                        className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none ${themeClasses.input}`}
+                      >
+                        <option value="">Select a workspace...</option>
+                        {workspaces.map((ws) => (
+                          <option key={ws.workspaceId} value={ws.workspaceId}>
+                            {ws.workspaceName}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex items-center justify-end gap-3 mt-6">
+                  <button
+                    onClick={handleCancelWorkspaceSelector}
+                    className={`px-4 py-2 rounded-xl border text-sm font-medium ${themeClasses.button}`}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleConfirmDuplicate}
+                    disabled={!selectedWorkspaceId}
+                    className="px-4 py-2 rounded-xl bg-emerald-500 text-sm font-semibold text-white hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Duplicate to Workspace
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -43,7 +43,7 @@ export type MyOrganizationDto = {
   orgId: string;
   orgName: string;
   abbreviation: string;
-  myRole: "Owner" | "Admin" | "Member" | string;
+  myRole: "Owner" | "Member" | string;
   joinedAt?: string;
   logoUrl?: string | null;
 };
@@ -55,7 +55,7 @@ export type InvitationDto = {
   orgName: string;
   email: string;
   inviterEmail: string;
-  memberType: "Admin" | "Member" | "Viewer" | string;
+memberType: "Member" | string;
   invitedAt: string;
   isAccepted: boolean;
   acceptedAt?: string | null;
@@ -67,7 +67,7 @@ export type MemberDto = {
   userId?: string;
   email: string;
   fullName: string;
-  role: "Owner" | "Admin" | "Member" | "Viewer" | string;
+  role: "Owner" | "Member" | string;
   joinedAt: string;
   isActive: boolean;
 };
@@ -76,7 +76,7 @@ export type GetOrganizationMembersResDto = { members: MemberDto[] };
 export type InviteMemberOrganizationReqDto = {
   orgId: string;
   memberEmail: string;
-  memberType: "Admin" | "Member" | "Viewer" | string;
+memberType: "Member" | string;
 };
 export type InviteMemberOrganizationResDto = { result?: string };
 
@@ -92,7 +92,7 @@ export type CancelInviteOrganizationResDto = { result?: string };
 export type UpdateMemberRoleReqDto = {
   orgId: string;
   memberId: string;
-  newRole: "Owner" | "Admin" | "Member" | "Viewer" | string;
+  newRole: "Owner" | "Member" | string;
 };
 export type UpdateMemberRoleResDto = { result?: string };
 

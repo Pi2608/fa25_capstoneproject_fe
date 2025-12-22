@@ -49,6 +49,12 @@ export default function MapGalleryAdminPage() {
   const [submissions, setSubmissions] = useState<MapGallerySummaryResponse[]>([]);
   const [selected, setSelected] = useState<MapGalleryDetailResponse | null>(null);
 
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+
+  const [draftRejectReason, setDraftRejectReason] = useState("");
+  const [actionErr, setActionErr] = useState<string | null>(null);
+
   async function loadList() {
     try {
       setLoadingList(true);
@@ -77,52 +83,79 @@ export default function MapGalleryAdminPage() {
     }
   }
 
-  async function handleApprove() {
+  function handleApprove() {
     if (!selected) return;
-    if (!confirm("Duyệt bản đồ này lên gallery?")) return;
+    setActionErr(null);
+    setApproveOpen(true);
+  }
+
+  async function submitApprove() {
+    if (!selected) return;
 
     try {
       setUpdating(true);
+      setActionErr(null);
+
       const updated = await adminApproveOrRejectGallerySubmission(selected.id, {
         status: "approved",
         isFeatured: selected.isFeatured ?? false,
       });
+
       setSelected(updated);
       setSubmissions((prev) =>
-        prev.map((x) => (x.id === updated.id ? { ...x, status: updated.status, isFeatured: updated.isFeatured } : x))
+        prev.map((x) =>
+          x.id === updated.id
+            ? { ...x, status: updated.status, isFeatured: updated.isFeatured }
+            : x
+        )
       );
-      alert("Đã duyệt map gallery.");
+
+      setApproveOpen(false);
     } catch (err) {
       console.error(err);
-      alert("Duyệt map gallery thất bại.");
+      setActionErr("Duyệt map gallery thất bại.");
     } finally {
       setUpdating(false);
     }
   }
 
-  async function handleReject() {
+  function handleReject() {
     if (!selected) return;
-    const reason = prompt("Nhập lý do từ chối (có thể bỏ trống):", selected.rejectionReason ?? "");
-    if (reason === null) return;
+    setActionErr(null);
+    setDraftRejectReason(selected.rejectionReason ?? "");
+    setRejectOpen(true);
+  }
+
+  async function submitReject() {
+    if (!selected) return;
 
     try {
       setUpdating(true);
+      setActionErr(null);
+
+      const reason = draftRejectReason.trim();
+
       const updated = await adminApproveOrRejectGallerySubmission(selected.id, {
         status: "rejected",
-        rejectionReason: reason || null,
+        rejectionReason: reason ? reason : null,
       });
+
       setSelected(updated);
       setSubmissions((prev) =>
-        prev.map((x) => (x.id === updated.id ? { ...x, status: updated.status } : x))
+        prev.map((x) =>
+          x.id === updated.id ? { ...x, status: updated.status } : x
+        )
       );
-      alert("Đã từ chối map gallery.");
+
+      setRejectOpen(false);
     } catch (err) {
       console.error(err);
-      alert("Từ chối map gallery thất bại.");
+      setActionErr("Từ chối map gallery thất bại.");
     } finally {
       setUpdating(false);
     }
   }
+
 
   async function handleDelete(id: string) {
     if (!confirm("Xoá submission này?")) return;
@@ -215,7 +248,7 @@ export default function MapGalleryAdminPage() {
                   <th className="px-4 py-2 text-left">Tác giả</th>
                   <th className="px-4 py-2 text-left">Trạng thái</th>
                   <th className="px-4 py-2 text-left">Tạo lúc</th>
-                  <th className="px-4 py-2 text-right">Thao tác</th>
+                  <th className="px-4 py-2 text-center w-[180px] whitespace-nowrap">Thao tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -258,28 +291,30 @@ export default function MapGalleryAdminPage() {
                     <td className="px-4 py-2 align-middle text-xs text-neutral-500">
                       {formatDate(s.createdAt)}
                     </td>
-                    <td className="px-4 py-2 align-middle text-right space-x-2">
-                      <button
-                        onClick={() => handleViewMap(s.mapId)}
-                        disabled={viewingMapId === s.mapId}
-                        className="rounded-md border border-sky-400 px-2 py-1 text-xs font-medium text-sky-600 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        title="Xem thử bản đồ"
-                      >
-                        {viewingMapId === s.mapId ? "..." : "Xem Map"}
-                      </button>
-                      <button
-                        onClick={() => loadDetail(s.id)}
-                        className="rounded-md border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-800 hover:bg-neutral-50"
-                      >
-                        Chi tiết
-                      </button>
-                      <button
-                        onClick={() => handleDelete(s.id)}
-                        className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                        disabled={updating}
-                      >
-                        Xoá
-                      </button>
+                    <td className="px-4 py-2 align-middle">
+                      <div className="flex justify-center gap-2 whitespace-nowrap">
+                        <button
+                          onClick={() => handleViewMap(s.mapId)}
+                          disabled={viewingMapId === s.mapId}
+                          className="rounded-md border border-sky-400 px-2 py-1 text-xs font-medium text-sky-600 hover:bg-sky-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          title="Xem thử bản đồ"
+                        >
+                          {viewingMapId === s.mapId ? "..." : "Xem Map"}
+                        </button>
+                        <button
+                          onClick={() => loadDetail(s.id)}
+                          className="rounded-md border border-neutral-300 px-2 py-1 text-xs font-medium text-neutral-800 hover:bg-neutral-50"
+                        >
+                          Chi tiết
+                        </button>
+                        <button
+                          onClick={() => handleDelete(s.id)}
+                          className="rounded-md px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={updating}
+                        >
+                          Xoá
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -314,7 +349,7 @@ export default function MapGalleryAdminPage() {
             )}
 
             {loadingDetail && (
-              <p className="text-sm text-neutral-500"><Loading /></p>
+              <div className="text-sm text-neutral-500"><Loading /></div>
             )}
 
             {selected && !loadingDetail && (
@@ -426,6 +461,125 @@ export default function MapGalleryAdminPage() {
           </div>
         </div>
       </div>
+      {approveOpen && selected && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full mx-4">
+            <div className="p-6 border-b border-zinc-200">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-green-500/16 border border-green-500/25 flex-shrink-0">
+                  <span className="text-green-600 font-semibold">✓</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="m-0 text-lg font-semibold leading-tight">
+                    Duyệt map lên gallery
+                  </div>
+                  <div className="text-zinc-500 text-sm mt-1">
+                    Map <b>{selected.mapName}</b> sẽ hiển thị công khai trong gallery.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {actionErr && (
+                <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {actionErr}
+                </div>
+              )}
+              <div className="text-sm text-zinc-600">
+                Kiểm tra lại nội dung/preview trước khi duyệt nhé.
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-zinc-200 flex justify-end gap-3">
+              <button
+                className="px-4 py-2 rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 transition-colors disabled:opacity-50"
+                onClick={() => {
+                  if (updating) return;
+                  setApproveOpen(false);
+                }}
+                disabled={updating}
+              >
+                Hủy
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg bg-gradient-to-br from-green-600 to-green-700 text-white shadow-sm disabled:opacity-50"
+                onClick={submitApprove}
+                disabled={updating}
+              >
+                {updating ? "Đang duyệt..." : "Duyệt"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {rejectOpen && selected && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl border border-red-500/20 max-w-lg w-full mx-4">
+            <div className="p-6 border-b border-zinc-200">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-red-500/18 border border-red-500/40 flex-shrink-0">
+                  <span className="text-red-600 font-semibold">!</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="m-0 text-lg font-semibold leading-tight text-red-600">
+                    Từ chối map gallery
+                  </div>
+                  <div className="text-zinc-500 text-sm mt-1">
+                    Map <b>{selected.mapName}</b> sẽ bị từ chối. Anh có thể nhập lý do (không bắt buộc).
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-3">
+              {actionErr && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {actionErr}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-zinc-700">
+                  Lý do từ chối
+                </label>
+                <textarea
+                  className="w-full px-3 py-2 rounded-lg border border-zinc-300 bg-white text-zinc-900 outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 resize-y min-h-[92px] disabled:opacity-50"
+                  placeholder="VD: Nội dung chưa phù hợp, thiếu mô tả, hình preview mờ..."
+                  value={draftRejectReason}
+                  disabled={updating}
+                  onChange={(e) => setDraftRejectReason(e.target.value)}
+                />
+                <div className="text-zinc-500 text-xs">
+                  Lý do này sẽ hiển thị trong chi tiết submission.
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-zinc-200 flex justify-end gap-3">
+              <button
+                className="px-4 py-2 rounded-lg border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50 transition-colors disabled:opacity-50"
+                onClick={() => {
+                  if (updating) return;
+                  setRejectOpen(false);
+                }}
+                disabled={updating}
+              >
+                Hủy
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg border border-red-500/40 bg-white text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 shadow-sm"
+                onClick={submitReject}
+                disabled={updating}
+              >
+                {updating ? "Đang từ chối..." : "Từ chối"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
