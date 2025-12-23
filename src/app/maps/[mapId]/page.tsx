@@ -4261,6 +4261,7 @@ export default function EditMapPage() {
           activeSegmentId={activeSegmentId}
           mapId={mapId}
           isPlaying={isPlayingTimeline}
+          isSingleSegmentPlaying={playback.isSingleSegmentPlaying}
           currentTime={currentPlaybackTime}
           leftOffset={leftSidebarView ? 376 : 56}
           isOpen={isTimelineOpen}

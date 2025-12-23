@@ -8,6 +8,7 @@ import SubmitButton from "@/components/ui/SubmitButton";
 import AuthLinks from "@/components/auth/AuthLinks";
 import { resetPassword } from "@/lib/api-auth";
 import { useI18n } from "@/i18n/I18nProvider";
+import { prettyError } from "@/utils/registerUtils";
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -36,8 +37,8 @@ export default function ResetPasswordPage() {
     try {
       await resetPassword({ otp, newPassword, confirmPassword });
       router.push("/login");
-    } catch {
-      setToast(t("reset", "errInvalid"));
+    } catch (e: unknown) {
+      setToast(prettyError(e, t("reset", "errInvalid")));
     } finally {
       setLoading(false);
     }

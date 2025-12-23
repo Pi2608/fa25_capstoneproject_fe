@@ -15,6 +15,7 @@ interface TimelineWorkspaceProps {
   transitions: TimelineTransition[];
   activeSegmentId: string | null;
   isPlaying?: boolean;
+  isSingleSegmentPlaying?: boolean;
   currentTime?: number;
   leftOffset?: number; // Offset from left for VSCode-style sidebar
   isOpen?: boolean;
@@ -33,6 +34,7 @@ export function TimelineWorkspace({
   transitions,
   activeSegmentId,
   isPlaying = false,
+  isSingleSegmentPlaying = false,
   currentTime = 0,
   leftOffset = 0,
   isOpen = true,
@@ -221,6 +223,7 @@ export function TimelineWorkspace({
             zoomLevel={zoomLevel}
             currentTime={currentTime}
             isPlaying={isPlaying}
+            isSingleSegmentPlaying={isSingleSegmentPlaying}
             segments={segments}
             onRouteClick={(route, segmentId) => {
               // Dispatch event to show route form in LeftSidebarToolbox
