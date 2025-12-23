@@ -341,18 +341,20 @@ export function TransactionDetailModal({
                 )}>
                   {t("billing.modal_quotas")}
                 </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   <QuotaItem label={t("billing.modal_maps")} value={transaction.plannedPlan.mapQuota} isDark={isDark} />
                   <QuotaItem label={t("billing.modal_exports")} value={transaction.plannedPlan.exportQuota} isDark={isDark} />
                   <QuotaItem label={t("billing.modal_users")} value={transaction.plannedPlan.maxUsersPerOrg} isDark={isDark} />
+                  {/* HIDDEN: Not core quotas for user workflow
                   <QuotaItem label={t("billing.modal_locations")} value={transaction.plannedPlan.maxLocationsPerOrg} isDark={isDark} />
                   <QuotaItem label={t("billing.modal_maps_per_month")} value={transaction.plannedPlan.maxMapsPerMonth} isDark={isDark} />
                   <QuotaItem label={t("billing.modal_custom_layers")} value={transaction.plannedPlan.maxCustomLayers} isDark={isDark} />
                   <QuotaItem label={t("billing.modal_monthly_tokens")} value={transaction.plannedPlan.monthlyTokens} isDark={isDark} />
+                  */}
                 </div>
               </div>
 
-              {/* Interactive Features */}
+              {/* HIDDEN: Interactive Features - Not relevant for user workflow
               <div className="mb-4">
                 <h4 className={cn(
                   "text-sm font-semibold mb-2",
@@ -368,8 +370,9 @@ export function TransactionDetailModal({
                   <QuotaItem label={t("billing.modal_audio_size")} value={formatFileSize(transaction.plannedPlan.maxAudioFileSizeBytes)} isDark={isDark} isString />
                 </div>
               </div>
+              */}
 
-              {/* Features */}
+              {/* HIDDEN: Features - Not relevant for user workflow
               <div>
                 <h4 className={cn(
                   "text-sm font-semibold mb-2",
@@ -384,6 +387,7 @@ export function TransactionDetailModal({
                   <FeatureItem label={t("billing.modal_priority_support")} enabled={transaction.plannedPlan.prioritySupport} isDark={isDark} yesText={t("billing.modal_yes")} noText={t("billing.modal_no")} />
                 </div>
               </div>
+              */}
             </section>
           )}
 
