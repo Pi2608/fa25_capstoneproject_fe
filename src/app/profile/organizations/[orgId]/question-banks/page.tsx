@@ -255,17 +255,6 @@ function BankFormDialog({
 
           <div className="flex items-center gap-4">
             <Checkbox
-              name="isTemplate"
-              checked={form.isTemplate}
-              onChange={onChange}
-              label={t(
-                "org_question_banks",
-                "field_isTemplate_label"
-              )}
-              isDark={isDark}
-              themeClasses={themeClasses}
-            />
-            <Checkbox
               name="isPublic"
               checked={form.isPublic}
               onChange={onChange}
@@ -469,11 +458,11 @@ export default function QuestionBanksPage() {
   // Filter banks by tag search
   const displayBanks = searchTag.trim()
     ? rawBanks.filter((bank) => {
-        const bankId = resolveBankId(bank);
-        const tags = data.bankDetails[bankId]?.tags || [];
-        const searchLower = searchTag.toLowerCase().trim();
-        return tags.some((tag: string) => tag.toLowerCase().includes(searchLower));
-      })
+      const bankId = resolveBankId(bank);
+      const tags = data.bankDetails[bankId]?.tags || [];
+      const searchLower = searchTag.toLowerCase().trim();
+      return tags.some((tag: string) => tag.toLowerCase().includes(searchLower));
+    })
     : rawBanks;
 
   const handleSave = async () => {
