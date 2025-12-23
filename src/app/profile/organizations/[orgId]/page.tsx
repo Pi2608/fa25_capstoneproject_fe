@@ -1366,9 +1366,7 @@ export default function OrgDetailPage() {
                 className={`rounded-md border px-2 py-2 text-sm ${themeClasses.select}`}
                 disabled={!isOwner}
               >
-                <option value="Admin">{t("org_detail.role_admin")}</option>
                 <option value="Member">{t("org_detail.role_member")}</option>
-                <option value="Viewer">{t("org_detail.role_viewer")}</option>
               </select>
               <button
                 onClick={() => void onInvite()}
