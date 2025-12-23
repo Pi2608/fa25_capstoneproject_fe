@@ -9,30 +9,8 @@ import {
   type LeaderboardEntryDto,
 } from "@/lib/api-session";
 import { EmptyState } from "@/components/ui/EmptyState";
-
-type HeaderMode = "light" | "dark";
-
-function useThemeMode(): HeaderMode {
-  const [mode, setMode] = useState<HeaderMode>("light");
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const html = document.documentElement;
-
-    const update = () => {
-      setMode(html.classList.contains("dark") ? "dark" : "light");
-    };
-
-    update();
-
-    const observer = new MutationObserver(update);
-    observer.observe(html, { attributes: true, attributeFilter: ["class"] });
-
-    return () => observer.disconnect();
-  }, []);
-
-  return mode;
-}
+import { useTheme } from "next-themes";
+import { getThemeClasses } from "@/utils/theme-utils";
 
 function formatDate(value?: string | null) {
   if (!value) return "--";
@@ -89,7 +67,10 @@ export default function OrgSessionDetailPage() {
   const orgId = params?.orgId ?? "";
   const sessionId = params?.sessionId ?? "";
 
-  const mode = useThemeMode();
+  const { resolvedTheme, theme } = useTheme();
+  const currentTheme = (resolvedTheme ?? theme ?? "light") as "light" | "dark";
+  const isDark = currentTheme === "dark";
+  const themeClasses = getThemeClasses(isDark);
 
   const [session, setSession] = useState<SessionDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -170,7 +151,7 @@ export default function OrgSessionDetailPage() {
   }, [sessionId]);
 
   return (
-    <div className="min-w-0 relative px-6 py-8 space-y-6">
+    <div className={`min-w-0 relative px-6 py-8 space-y-6 ${isDark ? "text-zinc-50" : "text-zinc-900"}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-3">
@@ -179,26 +160,20 @@ export default function OrgSessionDetailPage() {
               onClick={() =>
                 router.push(`/profile/organizations/${orgId}/sessions`)
               }
-              className="px-3 py-1.5 rounded-lg border text-sm border-zinc-300 bg-white hover:bg-zinc-50 hover:border-zinc-400 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
-              style={{
-                color: mode === "dark" ? "#e5e7eb" : "#4b5563",
-              }}
+              className={`px-3 py-1.5 rounded-lg border text-sm ${themeClasses.button}`}
             >
               ← Quay lại danh sách session
             </button>
             <h1
-              className="text-2xl font-semibold"
-              style={{
-                color: mode === "dark" ? "#f9fafb" : "#047857",
-              }}
+              className={`text-2xl font-semibold ${isDark ? "text-zinc-100" : "text-emerald-700"}`}
             >
               Chi tiết session
             </h1>
           </div>
           {session && (
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            <p className={`text-sm ${themeClasses.textMuted}`}>
               Mã:{" "}
-              <span className="font-mono text-emerald-600 dark:text-emerald-300">
+              <span className={`font-mono ${isDark ? "text-emerald-300" : "text-emerald-600"}`}>
                 {(session as any).sessionCode ?? "--"}
               </span>
             </p>
@@ -209,7 +184,11 @@ export default function OrgSessionDetailPage() {
           <button
             type="button"
             onClick={handleGoToControl}
-            className="px-4 py-2 rounded-xl text-sm font-semibold border shadow-[0_8px_20px_rgba(14,165,233,0.45)] border-sky-500 bg-sky-500 text-white hover:bg-sky-400 hover:border-sky-400 dark:border-sky-400 dark:bg-sky-500/10 dark:text-sky-200 dark:shadow-none dark:hover:bg-sky-500/20"
+            className={`px-4 py-2 rounded-xl text-sm font-semibold border ${
+              isDark
+                ? "border-sky-400 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20"
+                : "border-sky-500 bg-sky-500 text-white hover:bg-sky-400 hover:border-sky-400 shadow-[0_8px_20px_rgba(14,165,233,0.45)]"
+            }`}
           >
             {primaryLabel}
           </button>
@@ -217,40 +196,40 @@ export default function OrgSessionDetailPage() {
       </div>
 
       {loading && (
-        <div className="min-h-[40vh] flex items-center justify-center text-sm text-zinc-600 dark:text-zinc-400">
+        <div className={`min-h-[40vh] flex items-center justify-center text-sm ${themeClasses.textMuted}`}>
           Đang tải thông tin session...
         </div>
       )}
 
       {!loading && error && (
         <div className="min-h-[40vh] flex items-center justify-center">
-          <p className="text-sm text-red-500 dark:text-red-300">{error}</p>
+          <p className={`text-sm ${isDark ? "text-red-300" : "text-red-500"}`}>{error}</p>
         </div>
       )}
 
       {!loading && !error && !session && (
-        <div className="min-h-[40vh] flex items-center justify-center text-sm text-zinc-600 dark:text-zinc-400">
+        <div className={`min-h-[40vh] flex items-center justify-center text-sm ${themeClasses.textMuted}`}>
           Không tìm thấy session.
         </div>
       )}
 
       {!loading && !error && session && (
         <div className="grid gap-6 md:grid-cols-2">
-          <div className="rounded-2xl border border-zinc-200 bg-white/95 p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900/70">
-            <h2 className="mb-4 text-sm font-semibold tracking-wide text-zinc-500 dark:text-zinc-400">
+          <div className={`rounded-2xl border p-5 shadow-sm ${themeClasses.panel}`}>
+            <h2 className={`mb-4 text-sm font-semibold tracking-wide ${themeClasses.textMuted}`}>
               Thông tin chung
             </h2>
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500 dark:text-zinc-400">
+                <dt className={themeClasses.textMuted}>
                   Tên session
                 </dt>
-                <dd className="text-right text-zinc-900 dark:text-zinc-100">
+                <dd className={`text-right ${themeClasses.text}`}>
                   {session.sessionName || "--"}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500 dark:text-zinc-400">
+                <dt className={themeClasses.textMuted}>
                   Trạng thái
                 </dt>
                 <dd
@@ -260,23 +239,23 @@ export default function OrgSessionDetailPage() {
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500 dark:text-zinc-400">Loại</dt>
-                <dd className="text-right text-zinc-900 dark:text-zinc-100">
+                <dt className={themeClasses.textMuted}>Loại</dt>
+                <dd className={`text-right ${themeClasses.text}`}>
                   {session.sessionType || "--"}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500 dark:text-zinc-400">Bản đồ</dt>
-                <dd className="text-right text-zinc-900 dark:text-zinc-100">
+                <dt className={themeClasses.textMuted}>Bản đồ</dt>
+                <dd className={`text-right ${themeClasses.text}`}>
                   {session.mapName || "Bản đồ chưa đặt tên"}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500 dark:text-zinc-400">
+                <dt className={themeClasses.textMuted}>
                   Bộ câu hỏi
                 </dt>
                 <dd
-                  className="text-right text-zinc-900 dark:text-zinc-100 max-w-[60%] truncate"
+                  className={`text-right ${themeClasses.text} max-w-[60%] truncate`}
                   title={
                     session.questionBanks && session.questionBanks.length > 0
                       ? session.questionBanks.map((qb) => qb.questionBankName).join(", ")
@@ -292,54 +271,58 @@ export default function OrgSessionDetailPage() {
             </dl>
           </div>
 
-          <div className="rounded-2xl border border-zinc-200 bg-white/95 p-5 shadow-sm dark:border-white/10 dark:bg-zinc-900/70">
-            <h2 className="mb-4 text-sm font-semibold tracking-wide text-zinc-500 dark:text-zinc-400">
+          <div className={`rounded-2xl border p-5 shadow-sm ${themeClasses.panel}`}>
+            <h2 className={`mb-4 text-sm font-semibold tracking-wide ${themeClasses.textMuted}`}>
               Cấu hình & thống kê
             </h2>
             <dl className="space-y-2 text-sm">
               <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500 dark:text-zinc-400">
+                <dt className={themeClasses.textMuted}>
                   Số người tham gia
                 </dt>
-                <dd className="text-right text-zinc-900 dark:text-zinc-100">
+                <dd className={`text-right ${themeClasses.text}`}>
                   {session.totalParticipants ?? 0}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500 dark:text-zinc-400">Ngày tạo</dt>
-                <dd className="text-right text-zinc-900 dark:text-zinc-100">
+                <dt className={themeClasses.textMuted}>Ngày tạo</dt>
+                <dd className={`text-right ${themeClasses.text}`}>
                   {formatDate(session.createdAt)}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500 dark:text-zinc-400">
+                <dt className={themeClasses.textMuted}>
                   Dự kiến bắt đầu
                 </dt>
-                <dd className="text-right text-zinc-900 dark:text-zinc-100">
+                <dd className={`text-right ${themeClasses.text}`}>
                   {formatDate((session as any).scheduledStartTime)}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500 dark:text-zinc-400">
+                <dt className={themeClasses.textMuted}>
                   Bắt đầu thực tế
                 </dt>
-                <dd className="text-right text-zinc-900 dark:text-zinc-100">
+                <dd className={`text-right ${themeClasses.text}`}>
                   {formatDate((session as any).actualStartTime)}
                 </dd>
               </div>
               <div className="flex justify-between gap-4">
-                <dt className="text-zinc-500 dark:text-zinc-400">Kết thúc</dt>
-                <dd className="text-right text-zinc-900 dark:text-zinc-100">
+                <dt className={themeClasses.textMuted}>Kết thúc</dt>
+                <dd className={`text-right ${themeClasses.text}`}>
                   {formatDate((session as any).endTime)}
                 </dd>
               </div>
-              <div className="flex justify-between gap-4 pt-2 mt-2 border-t border-zinc-200 dark:border-zinc-800">
-                <dt className="text-zinc-500 dark:text-zinc-400">Bảng xếp hạng</dt>
+              <div className={`flex justify-between gap-4 pt-2 mt-2 border-t ${themeClasses.tableBorder}`}>
+                <dt className={themeClasses.textMuted}>Bảng xếp hạng</dt>
                 <dd className="text-right">
                   <button
                     type="button"
                     onClick={handleLoadLeaderboard}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-300 dark:border-emerald-400 dark:hover:bg-emerald-500/10 disabled:opacity-60"
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${
+                      isDark
+                        ? "border-emerald-400 text-emerald-300 hover:bg-emerald-500/10"
+                        : "border-emerald-500 text-emerald-600 hover:bg-emerald-50"
+                    } disabled:opacity-60`}
                     disabled={leaderboardLoading}
                   >
                     {leaderboardLoading ? "Đang tải..." : "Xem bảng xếp hạng"}
@@ -349,7 +332,7 @@ export default function OrgSessionDetailPage() {
 
             </dl>
             {leaderboardError && (
-              <p className="mt-3 text-xs text-red-500 dark:text-red-300">
+              <p className={`mt-3 text-xs ${isDark ? "text-red-300" : "text-red-500"}`}>
                 {leaderboardError}
               </p>
             )}
@@ -373,8 +356,8 @@ export default function OrgSessionDetailPage() {
             )}
 
             {leaderboard && leaderboard.length > 0 && (
-              <div className="mt-4 border-t border-zinc-200 pt-3 dark:border-zinc-800">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              <div className={`mt-4 border-t pt-3 ${themeClasses.tableBorder}`}>
+                <p className={`mb-2 text-xs font-semibold uppercase tracking-wide ${themeClasses.textMuted}`}>
                   TOP NGƯỜI THAM GIA
                 </p>
                 <ul className="space-y-2 text-xs">
@@ -389,15 +372,15 @@ export default function OrgSessionDetailPage() {
                         {/* Rank */}
                         <span
                           className={`mt-0.5 ${rank === 1
-                              ? "font-semibold text-emerald-500 dark:text-emerald-400"
-                              : "text-zinc-500 dark:text-zinc-400"
+                              ? isDark ? "font-semibold text-emerald-400" : "font-semibold text-emerald-500"
+                              : themeClasses.textMuted
                             }`}
                         >
                           #{rank}
                         </span>
 
                         <div className="flex-1 text-right">
-                          <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                          <div className={`text-sm font-medium ${themeClasses.text}`}>
                             {entry.displayName ?? "Người chơi"}
                             {entry.isCurrentUser && (
                               <span className="ml-2 inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-500">
@@ -406,7 +389,7 @@ export default function OrgSessionDetailPage() {
                             )}
                           </div>
 
-                          <div className="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+                          <div className={`mt-0.5 text-[11px] ${themeClasses.textMuted}`}>
                             <span>{entry.totalScore ?? 0} điểm</span>
                             <span className="mx-1.5">·</span>
                             <span>

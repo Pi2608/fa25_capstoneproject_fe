@@ -609,12 +609,12 @@ export function LeftSidebarToolbox({
                 isActive={activeView === "segments"}
                 onClick={() => handleIconClick("segments")}
               />
-              <IconButton
+              {/* <IconButton
                 icon="mdi:transition"
                 label="Transitions"
                 isActive={activeView === "transitions"}
                 onClick={() => handleIconClick("transitions")}
-              />
+              /> */}
             </>
           ) : (
             <>
