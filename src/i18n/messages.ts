@@ -206,6 +206,16 @@ export const messages = {
             galleryDuplicating: "Đang sao chép...",
         },
         settings_members: {
+            delete_org: "Xóa tổ chức",
+            delete_org_has_workspaces:
+                "Không thể xóa tổ chức vì vẫn còn Workspace đang hoạt động. Hãy xóa hoặc đóng Workspace trước rồi thử lại.",
+            delete_org_button_title_owner: "Xóa tổ chức hiện tại",
+            only_owner_delete_org_title: "Chỉ Owner mới có thể xóa tổ chức",
+
+            delete_org_modal_title: "Xóa tổ chức",
+            delete_org_confirm: "Bạn có chắc muốn xóa tổ chức “{name}” không?\nHành động này không thể hoàn tác.",
+            delete_org_success: "Đã xóa tổ chức thành công.",
+            delete_org_failed: "Xóa tổ chức thất bại.",
             unknown_member: "thành viên này",
             invite_success_toast: "Đã gửi lời mời thành công",
 
@@ -1775,6 +1785,8 @@ export const messages = {
             copied: "Đã sao chép",
         },
         workspace_detail: {
+            err_map_not_owner_delete: "Bạn không phải chủ sở hữu bản đồ nên không thể xóa.",
+            err_forbidden: "Bạn không có quyền thực hiện thao tác này.",
             delete_map_title: "Xoá bản đồ",
             delete_map_desc: "Bạn có chắc chắn muốn xoá bản đồ \"{name}\"? Hành động này không thể hoàn tác.",
             delete_map_fallback_name: "bản đồ này",
@@ -3669,6 +3681,16 @@ export const messages = {
             backToGallery: "Back to Gallery",
         },
         settings_members: {
+            delete_org: "Delete organization",
+            delete_org_has_workspaces:
+                "Cannot delete this organization because it still has active workspaces. Please delete or close the workspaces first, then try again.",
+            delete_org_button_title_owner: "Delete current organization",
+            only_owner_delete_org_title: "Only the Owner can delete the organization",
+
+            delete_org_modal_title: "Delete organization",
+            delete_org_confirm: "Are you sure you want to delete “{name}”?\nThis action cannot be undone.",
+            delete_org_success: "Organization deleted successfully.",
+            delete_org_failed: "Failed to delete organization.",
             unknown_member: "this member",
             remove: "Delete",
             invite_success_toast: "Invitation sent successfully",
@@ -5070,6 +5092,8 @@ export const messages = {
                 "Note: You may be redirected to a payment gateway to complete the transaction. After completion, your plan status will be updated automatically.",
         },
         workspace_detail: {
+            err_map_not_owner_delete: "You’re not the map owner, so you can’t delete this map.",
+            err_forbidden: "You don’t have permission to perform this action.",
             manage_delete_failed: "Failed to delete",
             err_generic: "Something went wrong. Please try again.",
             storymap_section_title: "Storymap maps",

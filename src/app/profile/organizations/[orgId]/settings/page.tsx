@@ -23,6 +23,27 @@ import {
   type CheckQuotaResponse,
 } from "@/lib/api-organizations";
 
+/**
+ * Calculate total spent from recent transactions
+ * Only counts transactions with status "success" or "paid"
+ *
+ * @param transactions - Array of recent transaction items
+ * @returns Total amount in the transaction's currency
+ */
+function calculateSuccessfulTransactionsTotal(
+  transactions: OrganizationBillingDto["recentTransactions"] | undefined
+): number {
+  if (!transactions || transactions.length === 0) {
+    return 0;
+  }
+
+  return transactions
+    .filter(t => {
+      const status = (t.status ?? "").toLowerCase();
+      return status === "success" || status === "paid";
+    })
+    .reduce((sum, t) => sum + (t.amount || 0), 0);
+}
 
 export default function OrgSettingsPage() {
   const params = useParams<{ orgId: string }>();
@@ -288,6 +309,7 @@ export default function OrgSettingsPage() {
               </div>
             </div>
             <div className="space-y-3 text-sm">
+              {/* HIDDEN: Invoices count - Not relevant for users
               <div className="flex items-center justify-between">
                 <span className="text-zinc-600  tracking-tight">
                   {t("orgSettings.billing_invoices_label")}
@@ -296,6 +318,7 @@ export default function OrgSettingsPage() {
                   {billing?.recentInvoices?.length ?? 0}
                 </span>
               </div>
+              */}
               <div className="flex items-center justify-between">
                 <span className="text-zinc-600 tracking-tight">
                   {t("orgSettings.billing_transactions_label")}
@@ -309,7 +332,10 @@ export default function OrgSettingsPage() {
                   {t("orgSettings.billing_total_spent_label")}
                 </span>
                 <span className="text-zinc-900 dark:text-zinc-400 tracking-tight">
-                  {billing?.totalSpentThisMonth?.toLocaleString() ?? 0} {billing?.recentTransactions?.[0]?.currency || "VND"}
+                  {billing?.recentTransactions
+                    ? calculateSuccessfulTransactionsTotal(billing.recentTransactions).toLocaleString()
+                    : 0}{" "}
+                  {billing?.recentTransactions?.[0]?.currency || "VND"}
                 </span>
               </div>
               <div className="flex items-center justify-between">
@@ -347,6 +373,7 @@ export default function OrgSettingsPage() {
           </div>
         </div>
 
+        {/* HIDDEN: Quota Checker Section - Not needed for regular users
         <div className={`mt-6 hover:shadow-md transition-shadow rounded-2xl border p-6 ${themeClasses.kpiCard}`}>
           <div className="pb-3">
             <div className="text-lg font-semibold tracking-tight">
@@ -427,6 +454,7 @@ export default function OrgSettingsPage() {
               )}
             </div>
         </div>
+        */}
 
         {/* Members Section */}
         <div className="mt-6">
