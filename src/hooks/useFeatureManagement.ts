@@ -24,6 +24,7 @@ interface UseFeatureManagementParams {
   sketchRef: React.MutableRefObject<FeatureGroup | null>;
   rafThrottle: <T extends (...args: any[]) => any>(func: T) => (...args: Parameters<T>) => void;
   currentLayerId?: string | null; // Current selected layer ID for new features
+  handleFeatureRightClick?: (feature: FeatureData, x: number, y: number) => void; // Right-click handler
 }
 
 /**
@@ -41,6 +42,7 @@ export function useFeatureManagement({
   sketchRef,
   rafThrottle,
   currentLayerId = null,
+  handleFeatureRightClick,
 }: UseFeatureManagementParams) {
   const lastUpdateRef = useRef<Map<string, number>>(new Map());
   const recentlyCreatedFeatureIdsRef = useRef<Set<string>>(new Set());
@@ -58,10 +60,8 @@ export function useFeatureManagement({
       const extLayer = e.layer as ExtendedLayer;
       sketch.addLayer(e.layer);
 
-      // Apply custom marker icon for markers
-      if (extLayer instanceof LModule.Marker && customMarkerIcon) {
-        extLayer.setIcon(customMarkerIcon);
-      }
+      // CircleMarker is already created with correct style by Geoman
+      // No need to replace it anymore
 
       // Store original style
       storeOriginalStyle(e.layer);
@@ -79,14 +79,27 @@ export function useFeatureManagement({
 
       const type = getFeatureTypeUtil(extLayer);
       const localId = `feature-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // Use "Point" instead of "Marker" for CircleMarkers
+      const displayType = type.toLowerCase() === 'marker' || type.toLowerCase() === 'circlemarker' ? 'Point' : type;
+
       const newFeature: FeatureData = {
         id: localId,
-        name: `${type} ${features.length + 1}`,
+        name: displayType,
         type,
         layer: extLayer,
         isVisible: true,
         layerId: currentLayerId || null, // Include layerId immediately
       };
+
+      // Attach right-click event listener if handler is provided
+      if (handleFeatureRightClick) {
+        e.layer.on("contextmenu", (event: LeafletMouseEvent) => {
+          event.originalEvent.preventDefault();
+          event.originalEvent.stopPropagation();
+          handleFeatureRightClick(newFeature, event.originalEvent.clientX, event.originalEvent.clientY);
+        });
+      }
 
       // Save to database
       try {
@@ -214,6 +227,7 @@ export function useFeatureManagement({
       handleLayerClick,
       resetToOriginalStyle,
       currentLayerId,
+      handleFeatureRightClick,
     ]
   );
 

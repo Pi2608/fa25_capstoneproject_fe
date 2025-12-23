@@ -11,7 +11,7 @@ let L: typeof import("leaflet") | null = null;
 /**
  * Enable drawing mode for a specific shape on the map
  */
-export function enableDraw(
+export async function enableDraw(
   mapRef: React.MutableRefObject<MapWithPM | null>,
   shape: "Marker" | "Line" | "Polygon" | "Rectangle" | "Circle" | "CircleMarker" | "Text" | "FreehandMarker" | "FreehandHighlighter"
 ) {
@@ -29,6 +29,25 @@ export function enableDraw(
   } else if (shape === "FreehandHighlighter") {
     // Enable custom freehand highlighter drawing (yellow, thick)
     enableCustomFreehand(mapRef, "highlighter");
+  } else if (shape === "Marker") {
+    // For Marker, use CircleMarker instead to match loaded features
+    if (!L) {
+      L = (await import("leaflet")).default;
+    }
+
+    // Configure Geoman to use CircleMarker instead of Marker
+    // This ensures consistent styling with loaded features
+    mapRef.current?.pm.enableDraw("CircleMarker", {
+      cursorMarker: false, // Disable cursor marker (no icon following mouse)
+      pathOptions: {
+        radius: 6,
+        color: '#3388ff',
+        fillColor: '#3388ff', // Blue fill instead of white
+        fillOpacity: 1,
+        weight: 2,
+        opacity: 1
+      }
+    });
   } else {
     mapRef.current?.pm.enableDraw(shape);
   }

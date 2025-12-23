@@ -42,11 +42,13 @@ import {
   updateLocation,
   createRouteAnimation,
   updateRouteAnimation,
+  updateSegment,
   FrontendTransitionType,
   mapFromBackendTransitionType,
   mapToBackendTransitionType,
   searchZones,
 } from "@/lib/api-storymap";
+import { extendSegmentDuration, updateSegmentDurationOnEdit } from "@/utils/segmentTiming";
 import { iconEmojiMap } from "@/constants/icons";
 
 import { Icon } from "./Icon";
@@ -1063,10 +1065,76 @@ export function LeftSidebarToolbox({
                 onSave={async (data: CreateRouteAnimationRequest) => {
                   try {
                     if (editingRoute && editingRoute.routeAnimationId) {
+                      // Edit existing route
                       await updateRouteAnimation(mapId, editingSegment.segmentId, editingRoute.routeAnimationId, data);
+
+                      // Auto-update segment duration if needed
+                      const oldRoute = {
+                        durationMs: editingRoute.durationMs,
+                        startTimeMs: editingRoute.startTimeMs,
+                        startDelayMs: editingRoute.startDelayMs,
+                        endTimeMs: editingRoute.endTimeMs,
+                      };
+                      const newRoute = {
+                        durationMs: data.durationMs,
+                        startTimeMs: data.startTimeMs,
+                        startDelayMs: data.startDelayMs,
+                        endTimeMs: data.endTimeMs,
+                      };
+
+                      const newSegmentDuration = updateSegmentDurationOnEdit(
+                        editingSegment,
+                        oldRoute,
+                        newRoute
+                      );
+
+                      console.log('[AUTO-EXTEND] Route edited:', {
+                        oldRoute,
+                        newRoute,
+                        currentSegmentDuration: editingSegment.durationMs,
+                        newSegmentDuration,
+                        willUpdate: newSegmentDuration !== editingSegment.durationMs
+                      });
+
+                      // Update segment duration if it needs to be extended
+                      if (newSegmentDuration !== editingSegment.durationMs) {
+                        await updateSegment(mapId, editingSegment.segmentId, {
+                          name: editingSegment.name,
+                          durationMs: newSegmentDuration,
+                        });
+                        console.log('[AUTO-EXTEND] Segment duration updated to:', newSegmentDuration);
+                      }
                     } else {
+                      // Create new route
                       await createRouteAnimation(mapId, editingSegment.segmentId, data);
+
+                      // Auto-extend segment duration if needed
+                      const newRoute = {
+                        durationMs: data.durationMs,
+                        startTimeMs: data.startTimeMs,
+                        startDelayMs: data.startDelayMs,
+                        endTimeMs: data.endTimeMs,
+                      };
+                      const newSegmentDuration = extendSegmentDuration(editingSegment, newRoute);
+
+                      console.log('[AUTO-EXTEND] Route created:', {
+                        newRoute,
+                        currentSegmentDuration: editingSegment.durationMs,
+                        newSegmentDuration,
+                        willUpdate: newSegmentDuration !== editingSegment.durationMs
+                      });
+
+                      // Update segment duration if it needs to be extended
+                      if (newSegmentDuration !== editingSegment.durationMs) {
+                        await updateSegment(mapId, editingSegment.segmentId, {
+                          name: editingSegment.name,
+                          durationMs: newSegmentDuration,
+                        });
+                        console.log('[AUTO-EXTEND] Segment duration updated to:', newSegmentDuration);
+                      }
                     }
+
+                    // Fire event AFTER all updates are complete
                     window.dispatchEvent(new CustomEvent("routeAnimationChanged", {
                       detail: { segmentId: editingSegment.segmentId }
                     }));
@@ -1273,6 +1341,7 @@ function ExplorerView({
   onLayerChange?: (layerId: string | null) => void;
 }) {
   const { confirmDelete } = useConfirmDialogContext();
+  const { t } = useI18n();
   const [searchQuery, setSearchQuery] = useState("");
   const [editingLayerId, setEditingLayerId] = useState<string | null>(null);
   const [editingLayerName, setEditingLayerName] = useState("");
@@ -1445,7 +1514,7 @@ function ExplorerView({
       );
     } catch (error) {
       console.error("Failed to move feature to layer:", error);
-      alert("Không thể di chuyển feature. Vui lòng thử lại.");
+      toast.error(t('mapEditor', 'errorMoveFeature'));
     } finally {
       setUpdatingFeatureId(null);
       resetDragState();
@@ -1471,8 +1540,8 @@ function ExplorerView({
         onDragEnd={handleFeatureDragEnd}
         title={
           isDraggable
-            ? "Kéo thả để chuyển layer"
-            : "Feature cần được lưu trước khi kéo"
+            ? t('mapEditor', 'explorerDragToMove')
+            : t('mapEditor', 'explorerNeedSave')
         }
       >
         <div className="w-6 h-6 rounded bg-emerald-500/20 flex items-center justify-center flex-shrink-0">
@@ -1561,7 +1630,7 @@ function ExplorerView({
       window.dispatchEvent(new CustomEvent("layerCreated"));
     } catch (error) {
       console.error("Failed to create layer:", error);
-      alert("Không thể tạo layer. Vui lòng thử lại.");
+      toast.error(t('mapEditor', 'errorCreateLayer'));
     }
   };
 
@@ -1590,7 +1659,7 @@ function ExplorerView({
       setEditingLayerName("");
     } catch (error) {
       console.error("Failed to update layer name:", error);
-      toast.error("Không thể cập nhật tên layer. Vui lòng thử lại.");
+      toast.error(t('mapEditor', 'errorUpdateLayerName'));
     } finally {
       setIsUpdatingLayer(false);
     }
@@ -1619,7 +1688,7 @@ function ExplorerView({
           }
         } catch (error) {
           console.error("Failed to delete layer:", error);
-          toast.error("Không thể xóa layer. Vui lòng thử lại.");
+          toast.error(t('mapEditor', 'errorDeleteLayer'));
         }
       },
       {
@@ -1640,7 +1709,7 @@ function ExplorerView({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search..."
+            placeholder={t('mapEditor', 'explorerSearch')}
             className="w-full pl-8 pr-2 py-1.5 bg-zinc-800/50 border border-zinc-700/50 rounded text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/50"
           />
         </div>
@@ -1651,17 +1720,17 @@ function ExplorerView({
         {/* Base Layer Selection */}
         <div className="space-y-2">
           <h4 className="text-xs font-semibold text-zinc-400 uppercase">
-            Map Base Layer
+            {t('mapEditor', 'explorerMapBaseLayer')}
           </h4>
           <div className="grid grid-cols-3 gap-2">
             {[
               // { key: "osm" as BaseKey, label: "OSM", icon: "mdi:map-outline" },
-              { key: "sat" as BaseKey, label: "Satellite", icon: "mdi:satellite-variant" },
-              { key: "dark" as BaseKey, label: "Dark", icon: "mdi:moon-waning-crescent" },
-              { key: "positron" as BaseKey, label: "Light", icon: "mdi:brightness-7" },
-              { key: "dark-matter" as BaseKey, label: "Dark Matter", icon: "mdi:weather-night" },
-              { key: "terrain" as BaseKey, label: "Terrain", icon: "mdi:terrain" },
-              { key: "toner" as BaseKey, label: "Toner", icon: "mdi:circle-outline" },
+              { key: "sat" as BaseKey, label: t('mapEditor', 'explorerBaseSatellite'), icon: "mdi:satellite-variant" },
+              { key: "dark" as BaseKey, label: t('mapEditor', 'explorerBaseDark'), icon: "mdi:moon-waning-crescent" },
+              { key: "positron" as BaseKey, label: t('mapEditor', 'explorerBaseLight'), icon: "mdi:brightness-7" },
+              { key: "dark-matter" as BaseKey, label: t('mapEditor', 'explorerBaseDarkMatter'), icon: "mdi:weather-night" },
+              { key: "terrain" as BaseKey, label: t('mapEditor', 'explorerBaseTerrain'), icon: "mdi:terrain" },
+              { key: "toner" as BaseKey, label: t('mapEditor', 'explorerBaseToner'), icon: "mdi:circle-outline" },
               // { key: "watercolor" as BaseKey, label: "Watercolor", icon: "mdi:palette" },
               // { key: "topo" as BaseKey, label: "Topo", icon: "mdi:map-marker-radius" },
             ].map(({ key, label, icon }) => (
@@ -1687,17 +1756,17 @@ function ExplorerView({
         <div className="space-y-1.5">
           <div className="flex items-center justify-between px-1">
             <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-              Layers & Features
+              {t('mapEditor', 'explorerLayersFeatures')}
             </h4>
             <div className="flex items-center gap-2 text-[10px] text-zinc-600">
-              <span>{visibleLayers.length} layers</span>
+              <span>{visibleLayers.length} {t('mapEditor', 'explorerLayers')}</span>
               <span>•</span>
-              <span>{filteredFeatures.length} features</span>
+              <span>{filteredFeatures.length} {t('mapEditor', 'explorerFeatures')}</span>
               {mapId && (
                 <button
                   onClick={handleCreateLayer}
                   className="p-1 hover:bg-zinc-700/50 rounded transition-colors"
-                  title="Tạo layer mới"
+                  title={t('mapEditor', 'explorerCreateLayer')}
                 >
                   <Icon icon="mdi:plus" className="w-3.5 h-3.5 text-emerald-400" />
                 </button>
@@ -1706,7 +1775,7 @@ function ExplorerView({
           </div>
           {visibleLayers.length === 0 ? (
             <div className="px-2 py-4 text-center">
-              <p className="text-xs text-zinc-500 italic">Không có layer nào</p>
+              <p className="text-xs text-zinc-500 italic">{t('mapEditor', 'explorerNoLayers')}</p>
             </div>
           ) : (
             <div className="space-y-1">
@@ -1755,7 +1824,7 @@ function ExplorerView({
                           toggleLayerExpanded(layer.id);
                         }}
                         className="p-1 rounded hover:bg-zinc-800/80 transition-colors"
-                        title={isExpanded ? "Thu gọn" : "Mở rộng"}
+                        title={isExpanded ? t('mapEditor', 'explorerCollapse') : t('mapEditor', 'explorerExpand')}
                       >
                         <Icon
                           icon={isExpanded ? "mdi:chevron-down" : "mdi:chevron-right"}
@@ -1809,7 +1878,7 @@ function ExplorerView({
                             e.stopPropagation();
                             handleStartEditLayerName(layer);
                           }}
-                          title="Double click để đổi tên"
+                          title={t('mapEditor', 'explorerDoubleClickRename')}
                         >
                           {layer.layerName}
                         </span>
@@ -1825,7 +1894,7 @@ function ExplorerView({
                         }}
                         onMouseDown={(e) => e.stopPropagation()}
                         className="opacity-0 group-hover/item:opacity-100 transition-opacity p-0.5 hover:bg-zinc-700 rounded"
-                        title={(layerVisibility?.[layer.id] ?? true) ? "Ẩn layer" : "Hiện layer"}
+                        title={(layerVisibility?.[layer.id] ?? true) ? t('mapEditor', 'explorerHideLayer') : t('mapEditor', 'explorerShowLayer')}
                       >
                         <Icon
                           icon={(layerVisibility?.[layer.id] ?? true) ? "mdi:eye" : "mdi:eye-off"}
@@ -1842,7 +1911,7 @@ function ExplorerView({
                         }}
                         onMouseDown={(e) => e.stopPropagation()}
                         className="opacity-0 group-hover/item:opacity-100 transition-opacity p-0.5 hover:bg-zinc-700 rounded"
-                        title="Delete layer"
+                        title={t('mapEditor', 'explorerDeleteLayer')}
                       >
                         <Icon
                           icon="mdi:trash-can-outline"
@@ -1855,8 +1924,8 @@ function ExplorerView({
                         {featuresToShow.length === 0 ? (
                           <p className="text-[11px] text-zinc-500 italic">
                             {assignedFeatures.length === 0
-                              ? "Chưa có feature"
-                              : "Không có feature khớp tìm kiếm"}
+                              ? t('mapEditor', 'explorerNoFeatures')
+                              : t('mapEditor', 'explorerNoFeaturesMatch')}
                           </p>
                         ) : (
                           featuresToShow.map(feature => renderFeatureRow(feature))
@@ -1874,7 +1943,7 @@ function ExplorerView({
         <div className="space-y-1.5">
           <div className="flex items-center justify-between px-1">
             <h4 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-wider">
-              Features chưa có layer
+              {t('mapEditor', 'explorerUnassignedFeatures')}
             </h4>
             <span className="text-[10px] text-zinc-600">{visibleUnassignedFeatures.length}</span>
           </div>
@@ -1894,13 +1963,13 @@ function ExplorerView({
             {visibleUnassignedFeatures.length === 0 ? (
               <p className="text-[11px] text-zinc-500 italic">
                 {unassignedFeatures.length === 0
-                  ? "Trống"
-                  : "Không có feature"}
+                  ? t('mapEditor', 'explorerEmpty')
+                  : t('mapEditor', 'explorerNoFeatures')}
               </p>
             ) : (
               <div className="space-y-0.5">
                 {visibleUnassignedFeatures.map(feature =>
-                  renderFeatureRow(feature, "Chưa thuộc layer")
+                  renderFeatureRow(feature, t('mapEditor', 'explorerNotInLayer'))
                 )}
               </div>
             )}
@@ -1937,6 +2006,7 @@ function SegmentsView({
   mapId?: string;
 }) {
   const { confirmDelete } = useConfirmDialogContext();
+  const { t } = useI18n();
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredSegments = segments.filter(s =>
@@ -1952,8 +2022,8 @@ function SegmentsView({
         }
       },
       {
-        title: "Delete Segment",
-        message: `Are you sure you want to delete segment "${segmentName}"? This action will remove all associated locations, zones, layers, and route animations. This cannot be undone.`,
+        title: t('mapEditor', 'deleteSegmentTitle'),
+        message: t('mapEditor', 'deleteSegmentMessage').replace('{name}', segmentName),
         itemType: "segment"
       }
     );
@@ -1969,7 +2039,7 @@ function SegmentsView({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search segments..."
+            placeholder={t('mapEditor', 'segmentsSearch')}
             className="w-full pl-8 pr-2 py-1.5 bg-zinc-800/50 border border-zinc-700/50 rounded text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 focus:border-emerald-500/50"
           />
         </div>
@@ -1979,7 +2049,7 @@ function SegmentsView({
         {filteredSegments.length === 0 ? (
           <div className="px-2 py-8 text-center">
             <Icon icon="mdi:filmstrip-off" className="w-12 h-12 mx-auto mb-2 text-zinc-600" />
-            <p className="text-xs text-zinc-500 italic">No segments</p>
+            <p className="text-xs text-zinc-500 italic">{t('mapEditor', 'segmentsNoSegments')}</p>
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -2016,7 +2086,7 @@ function SegmentsView({
                               ? "opacity-50 cursor-not-allowed"
                               : "hover:bg-zinc-700"
                           )}
-                          title={isPlaying ? "Cannot edit while playing" : "Edit segment"}
+                          title={isPlaying ? t('mapEditor', 'segmentCannotEditPlaying') : t('mapEditor', 'segmentEditTooltip')}
                         >
                           <Icon icon="mdi:pencil" className={cn("w-3.5 h-3.5", isPlaying ? "text-zinc-600" : "text-blue-400")} />
                         </button>
@@ -2035,7 +2105,7 @@ function SegmentsView({
                                 ? "opacity-50 cursor-not-allowed"
                                 : "hover:bg-zinc-700"
                             )}
-                            title={isPlaying ? "Cannot delete while playing" : "Delete segment"}
+                            title={isPlaying ? t('mapEditor', 'segmentCannotDeletePlaying') : t('mapEditor', 'segmentDeleteTooltip')}
                           >
                             <Icon icon="mdi:delete-outline" className={cn("w-3.5 h-3.5", isPlaying ? "text-zinc-600" : "text-red-400")} />
                           </button>
@@ -2295,6 +2365,11 @@ export function SegmentItemsList({
         try {
           await deleteRouteAnimation(mapId, segmentId, routeAnimationId);
           setRouteAnimations(prev => prev.filter(r => r.routeAnimationId !== routeAnimationId));
+
+          // Fire event to reload segments and remove icon from timeline
+          window.dispatchEvent(new CustomEvent("routeAnimationChanged", {
+            detail: { segmentId: segmentId }
+          }));
         } catch (e) {
           console.error("Failed to delete route:", e);
           toast.error("Failed to delete route animation");
@@ -2530,6 +2605,7 @@ function PlayRouteButton({
   mapId: string;
   compact?: boolean;
 }) {
+  const { t } = useI18n();
   const [isPlayingRoute, setIsPlayingRoute] = useState(false);
 
   useEffect(() => {
@@ -2562,12 +2638,12 @@ function PlayRouteButton({
                 detail: { segmentId, animations }
               }));
             } else {
-              alert("Không có route animation nào trong segment này");
+              toast.info(t('mapEditor', 'routeAnimationNoRoutes'));
               setIsPlayingRoute(false);
             }
           } catch (e) {
             console.error("Failed to play route animation:", e);
-            alert("Lỗi khi play route animation");
+            toast.error(t('mapEditor', 'routeAnimationPlayError'));
             setIsPlayingRoute(false);
           }
         }
@@ -2576,11 +2652,11 @@ function PlayRouteButton({
         ? "flex items-center gap-1 px-2 py-1 rounded-md bg-green-500/10 hover:bg-green-500/20 border border-green-500/30 hover:border-green-500/50 text-green-400 hover:text-green-300 transition-all"
         : "px-2 py-1.5 text-xs rounded-lg bg-green-600 hover:bg-green-500 text-white font-medium flex items-center justify-center gap-1"
       }
-      title="Play route animation (không zoom camera)"
+      title={t('mapEditor', 'routeAnimationPlayTooltip')}
     >
       <Icon icon={isPlayingRoute ? "mdi:stop" : "mdi:play"} className={compact ? "w-3 h-3" : "w-4 h-4"} />
-      {compact && <span className="text-[10px] font-medium">{isPlayingRoute ? "Stop" : "Play"}</span>}
-      {!compact && <span>{isPlayingRoute ? "Stop" : "Play Route"}</span>}
+      {compact && <span className="text-[10px] font-medium">{isPlayingRoute ? t('mapEditor', 'routeAnimationStop') : t('mapEditor', 'routeAnimationPlay')}</span>}
+      {!compact && <span>{isPlayingRoute ? t('mapEditor', 'routeAnimationStop') : t('mapEditor', 'routeAnimationPlayRoute')}</span>}
     </button>
   );
 }
@@ -2606,6 +2682,7 @@ function SegmentFormView({
   onAddLayer: () => void;
   onAddRouteAnimation?: () => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState(editing?.name || "");
   const [description, setDescription] = useState(editing?.description || "");
 
@@ -2739,43 +2816,43 @@ function SegmentFormView({
     <div className="p-3 space-y-3 text-sm">
       {/* Segment Name */}
       <div>
-        <label className="block text-xs text-zinc-400 mb-1">Segment name *</label>
+        <label className="block text-xs text-zinc-400 mb-1">{t('mapEditor', 'segmentFormNameLabel')}</label>
         <input
           type="text"
           value={name}
           onChange={e => setName(e.target.value)}
           className="w-full bg-zinc-800 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/80"
-          placeholder="e.g., Explore District 1"
+          placeholder={t('mapEditor', 'segmentFormNamePlaceholder')}
         />
       </div>
 
       {/* Description */}
       <div>
-        <label className="block text-xs text-zinc-400 mb-1">Description</label>
+        <label className="block text-xs text-zinc-400 mb-1">{t('mapEditor', 'segmentFormDescriptionLabel')}</label>
         <textarea
           value={description}
           onChange={e => setDescription(e.target.value)}
           rows={2}
           className="w-full bg-zinc-800 text-white rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-500/80 resize-none"
-          placeholder="Brief description..."
+          placeholder={t('mapEditor', 'segmentFormDescriptionPlaceholder')}
         />
       </div>
 
       {/* Camera View */}
       <div className="border border-zinc-700/80 rounded-lg px-3 py-2 space-y-2 bg-zinc-900/60">
         <div>
-          <h4 className="text-xs font-semibold text-white">Camera view</h4>
+          <h4 className="text-xs font-semibold text-white">{t('mapEditor', 'segmentFormCameraView')}</h4>
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="bg-zinc-800 rounded-lg px-2 py-1.5">
-            <div className="text-zinc-500 mb-0.5 text-[10px]">Center</div>
+            <div className="text-zinc-500 mb-0.5 text-[10px]">{t('mapEditor', 'segmentFormCenter')}</div>
             <div className="text-white font-mono text-[11px]">
               {cameraState.center[0].toFixed(4)}, {cameraState.center[1].toFixed(4)}
             </div>
           </div>
           <div className="bg-zinc-800 rounded-lg px-2 py-1.5">
-            <div className="text-zinc-500 mb-0.5 text-[10px]">Zoom</div>
+            <div className="text-zinc-500 mb-0.5 text-[10px]">{t('mapEditor', 'segmentFormZoom')}</div>
             <div className="text-white font-mono text-[11px]">
               {cameraState.zoom.toFixed(2)}
             </div>
@@ -2786,9 +2863,9 @@ function SegmentFormView({
       {/* Playback */}
       <div className="border border-zinc-700/80 rounded-lg px-3 py-2 space-y-2 bg-zinc-900/60">
         <div>
-          <h4 className="text-xs font-semibold text-white">Playback</h4>
+          <h4 className="text-xs font-semibold text-white">{t('mapEditor', 'segmentFormPlayback')}</h4>
           <p className="text-[10px] text-zinc-400">
-            Control how long this segment is visible.
+            {t('mapEditor', 'segmentFormPlaybackDesc')}
           </p>
         </div>
 
@@ -2799,12 +2876,12 @@ function SegmentFormView({
             onChange={e => setAutoAdvance(e.target.checked)}
             className="h-4 w-4 rounded border-zinc-600 bg-zinc-900 text-emerald-500 focus:ring-emerald-500"
           />
-          Auto advance to next segment
+          {t('mapEditor', 'segmentFormAutoAdvance')}
         </label>
 
         {autoAdvance && (
           <div>
-            <label className="block text-xs text-zinc-400 mb-1">Duration (seconds)</label>
+            <label className="block text-xs text-zinc-400 mb-1">{t('mapEditor', 'segmentFormDuration')}</label>
             <input
               type="number"
               value={durationMs / 1000}

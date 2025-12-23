@@ -332,7 +332,7 @@ const ManageWorkspaces = forwardRef<ManageWorkspacesHandle, Props>(
               <div className="mt-4 flex justify-end">
                 <button
                   onClick={() => setOpen(false)}
-                  className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                  className={`px-3 py-2 rounded-lg border text-sm transition-colors ${themeClasses.buttonOutline}`}
                 >
                   {t("org_workspace.close")}
                 </button>
@@ -340,25 +340,25 @@ const ManageWorkspaces = forwardRef<ManageWorkspacesHandle, Props>(
             </div>
 
             {deleteId && (
-              <div className="fixed inset-0 z-50 grid place-items-center bg-black/70">
-                <div className="w-[28rem] max-w-[95vw] rounded-2xl border border-white/10 bg-zinc-900 p-5 shadow-2xl">
-                  <h3 className="text-white font-semibold mb-2 text-lg">
+              <div className={`fixed inset-0 z-50 grid place-items-center backdrop-blur-sm ${themeClasses.dialogOverlay}`}>
+                <div className={`w-[28rem] max-w-[95vw] rounded-2xl border p-5 shadow-2xl ${themeClasses.dialog}`}>
+                  <h3 className={`font-semibold mb-2 text-lg ${themeClasses.text}`}>
                     {t("org_workspace.manage_delete_title")}
                   </h3>
-                  <p className="text-sm text-zinc-300 mb-4">
+                  <p className={`text-sm mb-4 ${themeClasses.textMuted}`}>
                     {t("org_workspace.manage_delete_desc")}
                   </p>
                   <div className="flex justify-end gap-2">
                     <button
                       onClick={() => setDeleteId(null)}
-                      className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-sm"
+                      className={`px-3 py-2 rounded-lg border text-sm transition-colors ${themeClasses.buttonOutline}`}
                     >
                       {t("org_workspace.cancel")}
                     </button>
                     <button
                       onClick={() => void onConfirmDelete()}
                       disabled={deleteBusyId === deleteId}
-                      className="px-3 py-2 rounded-lg bg-red-500 text-zinc-900 text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
+                      className="px-3 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-400 disabled:opacity-60"
                     >
                       {deleteBusyId === deleteId
                         ? t("org_workspace.manage_deleting")

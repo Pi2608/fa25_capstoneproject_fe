@@ -22,6 +22,7 @@ import { createMapLocation, deleteLocation, getMapLocations, MapLocation } from 
 import { LeftSidebarToolbox, TimelineWorkspace, PropertiesPanel, DrawingToolsBar, MeasurementInfoBox, MapEditorLegend } from "@/components/map-editor-ui";
 import { LocationInfoPanel } from "@/components/map-editor-ui/LocationInfoPanel";
 import ZoneContextMenu from "@/components/map/ZoneContextMenu";
+import FeatureTooltipModal from "@/components/map/FeatureTooltipModal";
 import { CopyFeatureDialog } from "@/components/features";
 import SequentialRoutePlaybackWrapper from "@/components/storymap/SequentialRoutePlaybackWrapper";
 import { SharedMarkerProvider } from "@/contexts/SharedMarkerContext";
@@ -142,6 +143,8 @@ export default function EditMapPage() {
     type: "feature" | "layer" | "segment";
     data: FeatureData | LayerDTO | Segment;
   } | null>(null);
+  const [propertiesPanelHasChanges, setPropertiesPanelHasChanges] = useState(false);
+  const [propertiesPanelSaveFn, setPropertiesPanelSaveFn] = useState<(() => Promise<void>) | null>(null);
 
   const [segments, setSegments] = useState<Segment[]>([]);
   const [transitions, setTransitions] = useState<TimelineTransition[]>([]);
@@ -207,6 +210,19 @@ export default function EditMapPage() {
     sourceLayerName: '',
     featureIndex: -1,
     copyMode: "existing"
+  });
+
+  // Feature tooltip modal state
+  const [featureTooltip, setFeatureTooltip] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    featureId: string | null;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    featureId: null
   });
 
   const mapEl = useRef<HTMLDivElement | null>(null);
@@ -317,6 +333,14 @@ export default function EditMapPage() {
     sketchRef,
     rafThrottle,
     currentLayerId,
+    handleFeatureRightClick: (feature, x, y) => {
+      setFeatureTooltip({
+        visible: true,
+        x,
+        y,
+        featureId: feature.featureId || null
+      });
+    },
   });
   const {
     lastUpdateRef,
@@ -393,6 +417,16 @@ export default function EditMapPage() {
                 event.originalEvent.stopPropagation();
               }
               handleLayerClick(feature.layer, event.originalEvent.shiftKey);
+            });
+            feature.layer.on('contextmenu', (event: LeafletMouseEvent) => {
+              event.originalEvent.preventDefault();
+              event.originalEvent.stopPropagation();
+              setFeatureTooltip({
+                visible: true,
+                x: event.originalEvent.clientX,
+                y: event.originalEvent.clientY,
+                featureId: feature.featureId || null
+              });
             });
 
             if (feature.featureId) {
@@ -773,6 +807,16 @@ export default function EditMapPage() {
           event.originalEvent.stopPropagation();
         }
         handleLayerClick(layer, event.originalEvent.shiftKey);
+      });
+      layer.on('contextmenu', (event: LeafletMouseEvent) => {
+        event.originalEvent.preventDefault();
+        event.originalEvent.stopPropagation();
+        setFeatureTooltip({
+          visible: true,
+          x: event.originalEvent.clientX,
+          y: event.originalEvent.clientY,
+          featureId: featureId || null
+        });
       });
 
       if (featureId) {
@@ -1417,6 +1461,16 @@ export default function EditMapPage() {
                 event.originalEvent.stopPropagation();
               }
               handleLayerClick(feature.layer, event.originalEvent.shiftKey);
+            });
+            feature.layer.on('contextmenu', (event: LeafletMouseEvent) => {
+              event.originalEvent.preventDefault();
+              event.originalEvent.stopPropagation();
+              setFeatureTooltip({
+                visible: true,
+                x: event.originalEvent.clientX,
+                y: event.originalEvent.clientY,
+                featureId: feature.featureId || null
+              });
             });
 
             // Attach edit/drag/rotate/cut event listeners for database updates
@@ -2222,6 +2276,8 @@ export default function EditMapPage() {
               isVisible: true,
               showTooltip: false,
               openPopupOnClick: false,
+              iconSize: 32, // Default icon size
+              rotation: "0", // Default rotation (string format as expected by backend)
             };
 
             // Add icon fields based on type
@@ -4177,12 +4233,24 @@ export default function EditMapPage() {
         />
       )}
 
-      {/* NEW: Right Properties Panel */}
+      {/* Right Properties Panel */}
       <PropertiesPanel
         isOpen={isPropertiesPanelOpen}
         selectedItem={selectedEntity}
-        onClose={() => setIsPropertiesPanelOpen(false)}
+        onClose={() => {
+          setIsPropertiesPanelOpen(false);
+          setPropertiesPanelHasChanges(false);
+          setPropertiesPanelSaveFn(null);
+        }}
         onUpdate={handleUpdateFeature}
+        onSave={() => {
+          if (propertiesPanelSaveFn) {
+            propertiesPanelSaveFn();
+          }
+        }}
+        hasChanges={propertiesPanelHasChanges}
+        onChangeStatus={setPropertiesPanelHasChanges}
+        onSaveReady={(saveFn) => setPropertiesPanelSaveFn(() => saveFn)}
       />
 
       {/*Timeline Workspace - Only show for StoryMap, hide when Archived */}
@@ -4754,6 +4822,16 @@ export default function EditMapPage() {
           onClose={() => setPoiTooltipModal({ isOpen: false })}
         />
       )}
+
+      {/* Feature Tooltip Modal - Shows feature info on right-click */}
+      <FeatureTooltipModal
+        visible={featureTooltip.visible}
+        x={featureTooltip.x}
+        y={featureTooltip.y}
+        featureId={featureTooltip.featureId}
+        features={features}
+        onClose={() => setFeatureTooltip({ visible: false, x: 0, y: 0, featureId: null })}
+      />
       </main>
     </SharedMarkerProvider>
   );

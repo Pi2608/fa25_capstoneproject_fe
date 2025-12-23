@@ -139,6 +139,7 @@ function buildLocationFormData(payload: CreateLocationReq): FormData {
   if (payload.exitEffect) formData.append("exitEffect", payload.exitEffect);
   if (payload.linkedLocationId) formData.append("linkedLocationId", payload.linkedLocationId);
   if (payload.externalUrl) formData.append("externalUrl", payload.externalUrl);
+  if (payload.rotation !== undefined) formData.append("rotation", payload.rotation);
 
   // Optional number fields
   if (payload.displayOrder !== undefined) formData.append("displayOrder", String(payload.displayOrder));
@@ -207,6 +208,7 @@ export function createSegmentLocation(mapId: string, segmentId: string, body: Om
     mapId,
     locationType: body.locationType,
     displayOrder: body.displayOrder ?? 0,
+    rotation: body.rotation ?? "0",
     zIndex: body.zIndex ?? 100,
     showTooltip: body.showTooltip ?? true,
     iconSize: body.iconSize ?? 32,
@@ -248,6 +250,7 @@ function buildLocationUpdateFormData(payload: UpdateLocationReq): FormData {
   if (payload.externalUrl) formData.append("externalUrl", payload.externalUrl);
   if (payload.markerGeometry) formData.append("markerGeometry", payload.markerGeometry);
   if (payload.locationType) formData.append("locationType", payload.locationType);
+  if (payload.rotation !== undefined) formData.append("rotation", payload.rotation);
 
   // Optional numbers
   if (payload.displayOrder !== undefined) formData.append("displayOrder", String(payload.displayOrder));
