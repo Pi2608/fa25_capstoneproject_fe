@@ -5,6 +5,7 @@ import type { FeatureData } from "@/utils/mapUtils";
 import { extractLayerStyle, applyLayerStyle } from "@/utils/mapUtils";
 import { Icon } from "./Icon";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n/I18nProvider";
 
 interface FeatureStyleEditorProps {
   feature: FeatureData;
@@ -16,9 +17,12 @@ interface FeatureStyleEditorProps {
     isVisible?: boolean;
     zIndex?: number;
   }) => Promise<void>;
+  onChangeStatus?: (hasChanges: boolean) => void;
+  onSaveReady?: (saveFn: () => Promise<void>) => void;
 }
 
-export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProps) {
+export function FeatureStyleEditor({ feature, onUpdate, onChangeStatus, onSaveReady }: FeatureStyleEditorProps) {
+  const { t } = useI18n();
   const [name, setName] = useState(feature.name);
   const [description, setDescription] = useState("");
   const [isVisible, setIsVisible] = useState(feature.isVisible);
@@ -39,13 +43,10 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
   const [newAttrValue, setNewAttrValue] = useState("");
 
   const [activeTab, setActiveTab] = useState<"style" | "attributes">("style");
-  
-  // Refs for debouncing and tracking feature changes
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const hasChangesRef = useRef(false);
+
+  // Refs for tracking feature changes
   const currentFeatureIdRef = useRef<string | undefined>(undefined);
   const isLoadingInitialValuesRef = useRef(false);
-  const isReadyForAutoSaveRef = useRef(false); // Prevents premature autosave
 
   // Load initial values from feature when feature changes
   useEffect(() => {
@@ -55,15 +56,11 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
     if (isNewFeature) {
       currentFeatureIdRef.current = feature.featureId;
       isLoadingInitialValuesRef.current = true;
-      isReadyForAutoSaveRef.current = false; // Block autosave until initial load completes
-      hasChangesRef.current = false;
-
-      // Clear any pending save
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-      }
+      onChangeStatus?.(false);
     }
+
+    // Load name from feature
+    setName(feature.name);
 
     // Load description from feature (separate field, not in properties)
     if (feature.description !== undefined && feature.description !== null) {
@@ -71,6 +68,23 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
     } else {
       setDescription("");
     }
+
+    // Load isVisible from feature
+    setIsVisible(feature.isVisible);
+
+    // Reset to defaults first
+    setZIndex(0);
+    setCustomAttributes({});
+    setColor("#3388ff");
+    setFillColor("#3388ff");
+    setOpacity(1);
+    setFillOpacity(0.2);
+    setWeight(3);
+    setRadius(10);
+    setDashArray("");
+    setNewAttrKey("");
+    setNewAttrValue("");
+    setActiveTab("style");
 
     if (feature.layer) {
       const style = extractLayerStyle(feature.layer);
@@ -118,10 +132,9 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
     if (isNewFeature) {
       setTimeout(() => {
         isLoadingInitialValuesRef.current = false;
-        isReadyForAutoSaveRef.current = true;
       }, 500);
     }
-  }, [feature]);
+  }, [feature, onChangeStatus]);
 
   // Apply style to layer in real-time
   const applyStyleRealtime = useCallback(() => {
@@ -147,14 +160,8 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
     applyLayerStyle(feature.layer, style);
   }, [feature.layer, feature.type, color, fillColor, opacity, fillOpacity, weight, radius, dashArray]);
 
-  // Auto-save function with debouncing
-  const autoSave = useCallback(async () => {
-    if (!hasChangesRef.current) {
-      return;
-    }
-
-    hasChangesRef.current = false;
-
+  // Manual save function
+  const handleSave = useCallback(async () => {
     try {
       const style: Record<string, unknown> = {
         color,
@@ -188,73 +195,42 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
       };
 
       await onUpdate(updates);
+      onChangeStatus?.(false);
     } catch (error) {
-      console.error("[FeatureStyleEditor] Failed to auto-save feature:", error);
+      console.error("[FeatureStyleEditor] Failed to save feature:", error);
     }
-  }, [name, description, color, fillColor, opacity, fillOpacity, weight, radius, dashArray, customAttributes, isVisible, zIndex, feature.type, feature.featureId, onUpdate]);
+  }, [name, description, color, fillColor, opacity, fillOpacity, weight, radius, dashArray, customAttributes, isVisible, zIndex, feature.type, onUpdate, onChangeStatus]);
 
-  // Debounced auto-save
+  // Track changes for real-time preview
   useEffect(() => {
-    // Skip auto-save if loading initial values or not ready yet
+    // Skip if loading initial values
     if (isLoadingInitialValuesRef.current) {
       return;
-    }
-
-    if (!isReadyForAutoSaveRef.current) {
-      return;
-    }
-
-    // Clear existing timeout
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
     }
 
     // Mark that we have changes
-    hasChangesRef.current = true;
+    onChangeStatus?.(true);
 
-    // Apply style in real-time immediately
+    // Apply style in real-time immediately for visual feedback
     applyStyleRealtime();
+  }, [color, fillColor, opacity, fillOpacity, weight, radius, dashArray, name, description, isVisible, zIndex, applyStyleRealtime, onChangeStatus]);
 
-    // Set new timeout for auto-save (2s delay)
-    saveTimeoutRef.current = setTimeout(() => {
-      autoSave();
-    }, 2000);
-
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, [color, fillColor, opacity, fillOpacity, weight, radius, dashArray, name, description, isVisible, zIndex, applyStyleRealtime, autoSave]);
-
-  // Auto-save when attributes change
+  // Track changes when attributes change
   useEffect(() => {
-    // Skip auto-save if loading initial values or not ready yet
+    // Skip if loading initial values
     if (isLoadingInitialValuesRef.current) {
       return;
     }
 
-    if (!isReadyForAutoSaveRef.current) {
-      return;
+    onChangeStatus?.(true);
+  }, [customAttributes, onChangeStatus]);
+
+  // Provide save function to parent
+  useEffect(() => {
+    if (onSaveReady) {
+      onSaveReady(handleSave);
     }
-
-    if (Object.keys(customAttributes).length > 0) {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-
-      hasChangesRef.current = true;
-      saveTimeoutRef.current = setTimeout(() => {
-        autoSave();
-      }, 2000);
-
-      return () => {
-        if (saveTimeoutRef.current) {
-          clearTimeout(saveTimeoutRef.current);
-        }
-      };
-    }
-  }, [customAttributes, autoSave]);
+  }, [handleSave, onSaveReady]);
 
   const handleAddAttribute = () => {
     if (newAttrKey && newAttrValue) {
@@ -284,26 +260,26 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
     <div className="space-y-4">
       {/* Basic Info */}
       <div>
-        <h4 className="text-sm font-medium text-zinc-300 mb-3">Thông tin cơ bản</h4>
+        <h4 className="text-sm font-medium text-zinc-300 mb-3">{t('mapEditor', 'featureStyleBasicInfo')}</h4>
         <div className="space-y-3">
           <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Tên</label>
+            <label className="text-xs text-zinc-400 mb-1 block">{t('mapEditor', 'featureStyleName')}</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="w-full px-2 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded text-zinc-200 focus:border-emerald-500 focus:outline-none transition-colors"
-              placeholder="Tên feature"
+              placeholder={t('mapEditor', 'featureStyleNamePlaceholder')}
             />
           </div>
 
           <div>
-            <label className="text-xs text-zinc-400 mb-1 block">Mô tả</label>
+            <label className="text-xs text-zinc-400 mb-1 block">{t('mapEditor', 'featureStyleDescription')}</label>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-2 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded text-zinc-200 focus:border-emerald-500 focus:outline-none resize-none transition-colors"
-              placeholder="Mô tả tùy chọn"
+              placeholder={t('mapEditor', 'featureStyleDescriptionPlaceholder')}
               rows={2}
             />
           </div>
@@ -316,11 +292,11 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
                 onChange={(e) => setIsVisible(e.target.checked)}
                 className="w-4 h-4 rounded border-zinc-700 bg-zinc-800 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-zinc-900"
               />
-              <span>Hiển thị</span>
+              <span>{t('mapEditor', 'featureStyleVisible')}</span>
             </label>
 
             <div className="flex items-center gap-2 flex-1">
-              <label className="text-xs text-zinc-400">Z-Index:</label>
+              <label className="text-xs text-zinc-400">{t('mapEditor', 'featureStyleZIndex')}</label>
               <input
                 type="number"
                 value={zIndex}
@@ -345,7 +321,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
             )}
           >
             <Icon icon="mdi:palette" className="w-4 h-4 inline mr-1" />
-            Style
+            {t('mapEditor', 'featureStyleTabStyle')}
           </button>
           <button
             onClick={() => setActiveTab("attributes")}
@@ -357,7 +333,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
             )}
           >
             <Icon icon="mdi:tag-multiple" className="w-4 h-4 inline mr-1" />
-            Thuộc tính
+            {t('mapEditor', 'featureStyleTabAttributes')}
           </button>
         </div>
 
@@ -368,7 +344,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
             {supportsColor && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs text-zinc-400 mb-1.5 block">Màu viền</label>
+                  <label className="text-xs text-zinc-400 mb-1.5 block">{t('mapEditor', 'featureStyleBorderColor')}</label>
                   <div className="flex items-center gap-2">
                     <div className="relative w-9 h-9 flex-shrink-0">
                       <input
@@ -376,7 +352,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
                         value={color}
                         onChange={(e) => setColor(e.target.value)}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        title="Chọn màu viền"
+                        title={t('mapEditor', 'featureStyleSelectBorderColor')}
                       />
                       <div
                         className="absolute inset-0 rounded-lg border-2 border-zinc-600 hover:border-emerald-500 transition-all pointer-events-none shadow-sm"
@@ -394,10 +370,10 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
                 </div>
 
                 <br/>
-                
+
                 {supportsFill && (
                   <div>
-                    <label className="text-xs text-zinc-400 mb-1.5 block">Màu nền</label>
+                    <label className="text-xs text-zinc-400 mb-1.5 block">{t('mapEditor', 'featureStyleFillColor')}</label>
                     <div className="flex items-center gap-2">
                       <div className="relative w-9 h-9 flex-shrink-0">
                         <input
@@ -405,7 +381,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
                           value={fillColor}
                           onChange={(e) => setFillColor(e.target.value)}
                           className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                          title="Chọn màu nền"
+                          title={t('mapEditor', 'featureStyleSelectFillColor')}
                         />
                         <div
                           className="absolute inset-0 rounded-lg border-2 border-zinc-600 hover:border-emerald-500 transition-all pointer-events-none shadow-sm"
@@ -428,7 +404,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-zinc-400 mb-1.5 block flex items-center justify-between">
-                  <span>Độ trong suốt viền</span>
+                  <span>{t('mapEditor', 'featureStyleBorderOpacity')}</span>
                   <span className="text-emerald-400 font-medium">{Math.round(opacity * 100)}%</span>
                 </label>
                 <input
@@ -448,7 +424,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
               {supportsFill && (
                 <div>
                   <label className="text-xs text-zinc-400 mb-1.5 block flex items-center justify-between">
-                    <span>Độ trong suốt nền</span>
+                    <span>{t('mapEditor', 'featureStyleFillOpacity')}</span>
                     <span className="text-emerald-400 font-medium">{Math.round(fillOpacity * 100)}%</span>
                   </label>
                   <input
@@ -469,7 +445,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs text-zinc-400 mb-1.5 block">Độ dày viền (px)</label>
+                <label className="text-xs text-zinc-400 mb-1.5 block">{t('mapEditor', 'featureStyleBorderWidth')}</label>
                 <input
                   type="number"
                   min="1"
@@ -482,7 +458,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
 
               {supportsRadius && (
                 <div>
-                  <label className="text-xs text-zinc-400 mb-1.5 block">Bán kính (m)</label>
+                  <label className="text-xs text-zinc-400 mb-1.5 block">{t('mapEditor', 'featureStyleRadius')}</label>
                   <input
                     type="number"
                     min="1"
@@ -499,17 +475,17 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
             {feature.type !== "Line" && (
               <div>
                 <label className="text-xs text-zinc-400 mb-1.5 block">
-                  Kiểu đường viền
+                  {t('mapEditor', 'featureStyleBorderStyle')}
                 </label>
                 <select
                   value={dashArray}
                   onChange={(e) => setDashArray(e.target.value)}
                   className="w-full px-2 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded text-zinc-200 focus:border-emerald-500 focus:outline-none transition-colors cursor-pointer"
                 >
-                  <option value="">Nét liền</option>
-                  <option value="5, 5">Nét đứt</option>
-                  <option value="2, 4">Nét chấm</option>
-                  <option value="10, 5, 2, 5">Nét gạch-chấm</option>
+                  <option value="">{t('mapEditor', 'featureStyleBorderStyleSolid')}</option>
+                  <option value="5, 5">{t('mapEditor', 'featureStyleBorderStyleDashed')}</option>
+                  <option value="2, 4">{t('mapEditor', 'featureStyleBorderStyleDotted')}</option>
+                  <option value="10, 5, 2, 5">{t('mapEditor', 'featureStyleBorderStyleDashDot')}</option>
                 </select>
               </div>
             )}
@@ -519,16 +495,13 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
         {/* Attributes Tab */}
         {activeTab === "attributes" && (
           <div className="space-y-3">
-            <div className="text-xs text-zinc-500 italic mb-2">
-              Thuộc tính sẽ tự động lưu khi bạn thêm hoặc xóa
-            </div>
 
-            <h4 className="text-sm font-medium text-zinc-300">Thuộc tính tùy chỉnh</h4>
+            <h4 className="text-sm font-medium text-zinc-300">{t('mapEditor', 'featureStyleCustomAttributes')}</h4>
 
             {/* Existing attributes */}
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {Object.entries(customAttributes).length === 0 ? (
-                <p className="text-xs text-zinc-500 italic">Chưa có thuộc tính tùy chỉnh.</p>
+                <p className="text-xs text-zinc-500 italic">{t('mapEditor', 'featureStyleNoAttributes')}</p>
               ) : (
                 Object.entries(customAttributes).map(([key, value]) => (
                   <div key={key} className="flex items-center gap-2 bg-zinc-800 rounded p-2 hover:bg-zinc-750 transition-colors">
@@ -539,7 +512,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
                     <button
                       onClick={() => handleRemoveAttribute(key)}
                       className="p-1 hover:bg-zinc-700 rounded transition-colors"
-                      title="Xóa thuộc tính"
+                      title={t('mapEditor', 'featureStyleRemoveAttribute')}
                     >
                       <Icon icon="mdi:close" className="w-4 h-4 text-zinc-400 hover:text-red-400" />
                     </button>
@@ -550,14 +523,14 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
 
             {/* Add new attribute */}
             <div className="border-t border-zinc-800 pt-3 mt-3">
-              <p className="text-xs text-zinc-400 mb-2">Thêm thuộc tính mới</p>
+              <p className="text-xs text-zinc-400 mb-2">{t('mapEditor', 'featureStyleAddAttributeTitle')}</p>
               <div className="space-y-2">
                 <input
                   type="text"
                   value={newAttrKey}
                   onChange={(e) => setNewAttrKey(e.target.value)}
                   className="w-full px-2 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded text-zinc-200 focus:border-emerald-500 focus:outline-none transition-colors"
-                  placeholder="Tên (vd: category, owner, notes)"
+                  placeholder={t('mapEditor', 'featureStyleAttributeNamePlaceholder')}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && newAttrKey && newAttrValue) {
                       e.preventDefault();
@@ -570,7 +543,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
                   value={newAttrValue}
                   onChange={(e) => setNewAttrValue(e.target.value)}
                   className="w-full px-2 py-1.5 text-sm bg-zinc-800 border border-zinc-700 rounded text-zinc-200 focus:border-emerald-500 focus:outline-none transition-colors"
-                  placeholder="Giá trị"
+                  placeholder={t('mapEditor', 'featureStyleAttributeValuePlaceholder')}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && newAttrKey && newAttrValue) {
                       e.preventDefault();
@@ -584,7 +557,7 @@ export function FeatureStyleEditor({ feature, onUpdate }: FeatureStyleEditorProp
                   className="w-full px-3 py-1.5 text-sm bg-emerald-500 hover:bg-emerald-600 disabled:bg-zinc-700 disabled:text-zinc-500 text-white rounded transition-colors flex items-center justify-center gap-2"
                 >
                   <Icon icon="mdi:plus" className="w-4 h-4" />
-                  Thêm thuộc tính
+                  {t('mapEditor', 'featureStyleAddAttributeButton')}
                 </button>
               </div>
             </div>
