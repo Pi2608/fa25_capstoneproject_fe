@@ -39,6 +39,7 @@ import EmbedCodeGenerator from "@/components/map/EmbedCodeGenerator";
 import ReportViolationDialog from "@/components/map/ReportViolationDialog";
 import { LocationInfoPanel } from "@/components/map-editor-ui/LocationInfoPanel";
 import { MapEditorLegend } from "@/components/map-editor-ui";
+import { FeatureAttributesPanel } from "@/components/map-editor-ui/FeatureAttributesPanel";
 
 
 const baseKeyToBackend = (key: BaseKey): BaseLayer => {
@@ -143,6 +144,9 @@ export default function EditMapPage() {
   const [currentSegmentLayers, setCurrentSegmentLayers] = useState<any[]>([]);
   const [currentZoom, setCurrentZoom] = useState<number>(10);
   const [legendCollapsed, setLegendCollapsed] = useState(false);
+
+  // State for feature attributes panel (view mode)
+  const [selectedFeatureForPanel, setSelectedFeatureForPanel] = useState<FeatureData | null>(null);
 
   const [selectedZone, setSelectedZone] = useState<{
     mapZone: import("@/lib/api-maps").MapZone;
@@ -1385,10 +1389,16 @@ export default function EditMapPage() {
         const dbFeatures = await loadFeaturesToMap(detail.id, L, sketch);
 
         if (isViewMode) {
-          // View mode: Only render features, no event handlers
+          // View mode: Add click handlers to show feature attributes panel
           dbFeatures.forEach(feature => {
             if (feature.layer) {
-              // Just render, no handlers
+              // Add click handler to show feature attributes
+              feature.layer.on('click', (event: LeafletMouseEvent) => {
+                if (event.originalEvent) {
+                  event.originalEvent.stopPropagation();
+                }
+                setSelectedFeatureForPanel(feature);
+              });
             }
           });
         } else {
@@ -2072,6 +2082,8 @@ export default function EditMapPage() {
         setCurrentLayer(null);
         setSelectedLayer(null);
         setShowStylePanel(false);
+        // Close feature attributes panel when clicking on empty space
+        setSelectedFeatureForPanel(null);
       }
     };
 
@@ -2265,6 +2277,15 @@ export default function EditMapPage() {
           content={poiTooltipModal.content}
           isOpen={poiTooltipModal.isOpen}
           onClose={() => setPoiTooltipModal({ isOpen: false })}
+        />
+      )}
+
+      {/* Feature Attributes Panel for View Mode */}
+      {isViewMode && (
+        <FeatureAttributesPanel
+          feature={selectedFeatureForPanel}
+          isOpen={selectedFeatureForPanel !== null}
+          onClose={() => setSelectedFeatureForPanel(null)}
         />
       )}
     </main>
