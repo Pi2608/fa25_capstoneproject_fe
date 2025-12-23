@@ -163,6 +163,12 @@ export function usePoiMarkers({
               ">${iconContent}</div>`;
             }
 
+            // Create custom pane for POI markers if it doesn't exist (z-index 650, above overlayPane 400)
+            if (!mapRef.current.getPane('poiPane')) {
+              const poiPane = mapRef.current.createPane('poiPane');
+              poiPane.style.zIndex = '650'; // Higher than overlayPane (400) and tooltipPane (600)
+            }
+
             const marker = L.marker(latLng, {
               icon: L.divIcon({
                 className: "poi-marker",
@@ -171,7 +177,8 @@ export function usePoiMarkers({
                 iconAnchor: [iconSize / 2, iconSize],
                 popupAnchor: [0, -iconSize],
               }),
-              zIndexOffset: poi.zIndex || 100,
+              pane: 'poiPane', // Use custom pane for POI markers
+              zIndexOffset: poi.zIndex || 1000, // High z-index to ensure POI is on top
               interactive: true,
               keyboard: true,
               riseOnHover: true,
