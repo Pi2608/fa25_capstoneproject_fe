@@ -97,8 +97,15 @@ function translateMessageToVi(item: NotificationItem): string {
   return "—";
 }
 
+function trimNotificationMessage(message: string): string {
+  // Remove "Click to continue..." part from payment notification messages
+  return message.replace(/\.\s*Click to continue.*$/i, '.').trim();
+}
+
 function translateMessage(item: NotificationItem, lang: "vi" | "en") {
-  return lang === "vi" ? translateMessageToVi(item) : (item.message || "—");
+  const rawMessage = item.message || "—";
+  const trimmedMessage = trimNotificationMessage(rawMessage);
+  return lang === "vi" ? translateMessageToVi(item) : trimmedMessage;
 }
 
 function parseNotificationMetadata(metadata: string | null | undefined): {

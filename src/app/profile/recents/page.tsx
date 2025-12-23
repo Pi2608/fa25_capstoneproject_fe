@@ -735,7 +735,7 @@ export default function RecentsPage() {
                       ? "border-purple-400/30 bg-purple-500/10 text-purple-300"
                       : "border-blue-400/30 bg-blue-500/10 text-blue-300"
                     }`}>
-                      {m.isStoryMap ? "Story Map" : "Normal Map - Bản đồ thường"}
+                      {m.isStoryMap ? "Story Map" : "Normal Map"}
                     </span>
                   </div>
                   <div className={`text-xs mt-1 ${themeClasses.textMuted}`}>
@@ -996,7 +996,7 @@ export default function RecentsPage() {
                   >
                     View Map
                   </button>
-                  {!map.isStoryMap && (
+                  {/* {!map.isStoryMap && ( */}
                     <button
                       className="w-full px-3 py-2 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-70"
                       onClick={() => handleDuplicateFromGallery(map.id, map)}
@@ -1004,7 +1004,7 @@ export default function RecentsPage() {
                     >
                       {busyKey === map.id ? t("recents", "galleryDuplicating") : t("recents", "galleryDuplicateButton")}
                     </button>
-                  )}
+                  {/* )} */}
                 </div>
               </li>
             ))}
