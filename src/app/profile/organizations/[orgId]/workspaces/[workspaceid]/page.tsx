@@ -73,8 +73,25 @@ function parseApiError(err: unknown): ApiErr {
       return { message: err };
     }
   }
-  if (err instanceof Error) return { message: err.message };
-  return {};
+  if (err instanceof Error) {
+    const msg = err.message || "";
+    if (msg.trim().startsWith("{")) {
+      try {
+        const parsed = JSON.parse(msg);
+        if (isRecord(parsed)) {
+          return {
+            status: pickNum(parsed, "status"),
+            type: pickStr(parsed, "type"),
+            title: pickStr(parsed, "title"),
+            detail: pickStr(parsed, "detail"),
+            message: pickStr(parsed, "message"),
+          };
+        }
+      } catch { }
+    }
+    return { message: msg };
+  }
+
 }
 
 function userMessage(
@@ -93,8 +110,20 @@ function userMessage(
     return t("workspace_detail.manage_delete_failed")
   }
 
-  if (e.detail && !/stack|trace|exception/i.test(e.detail)) return e.detail;
-  if (e.message && !/stack|trace|exception/i.test(e.message)) return e.message;
+  if (status === 403) {
+    const isNotOwner =
+      code.includes("map.notowner") ||
+      code.includes("notowner") ||
+      text.includes("only the map owner") ||
+      text.includes("map owner");
+
+    if (isNotOwner) return t("workspace_detail.err_map_not_owner_delete");
+    return t("workspace_detail.err_forbidden");
+  }
+
+  if (e.detail && !/stack|trace|exception/i.test(e.detail) && !e.detail.trim().startsWith("{")) return e.detail;
+  if (e.message && !/stack|trace|exception/i.test(e.message) && !e.message.trim().startsWith("{")) return e.message;
+
   return t("workspace_detail.err_generic");
 }
 

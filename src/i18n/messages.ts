@@ -1785,6 +1785,8 @@ export const messages = {
             copied: "Đã sao chép",
         },
         workspace_detail: {
+            err_map_not_owner_delete: "Bạn không phải chủ sở hữu bản đồ nên không thể xóa.",
+            err_forbidden: "Bạn không có quyền thực hiện thao tác này.",
             delete_map_title: "Xoá bản đồ",
             delete_map_desc: "Bạn có chắc chắn muốn xoá bản đồ \"{name}\"? Hành động này không thể hoàn tác.",
             delete_map_fallback_name: "bản đồ này",
@@ -4986,6 +4988,8 @@ export const messages = {
                 "Note: You may be redirected to a payment gateway to complete the transaction. After completion, your plan status will be updated automatically.",
         },
         workspace_detail: {
+            err_map_not_owner_delete: "You’re not the map owner, so you can’t delete this map.",
+            err_forbidden: "You don’t have permission to perform this action.",
             manage_delete_failed: "Failed to delete",
             err_generic: "Something went wrong. Please try again.",
             storymap_section_title: "Storymap maps",

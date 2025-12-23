@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, notFound } from "next/navigation";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -235,6 +235,7 @@ export default function OrgDetailPage() {
   const [allWsBusy, setAllWsBusy] = useState(false);
   const [allWsErr, setAllWsErr] = useState<string | null>(null);
   const [allWorkspaces, setAllWorkspaces] = useState<Workspace[]>([]);
+  const manageWsRef = useRef<{ open: () => void } | null>(null);
 
   const { userId: myId, userEmail: myEmail } = useAuth();
 
@@ -1008,11 +1009,13 @@ export default function OrgDetailPage() {
           </h2>
           <div className="flex items-center gap-2">
             <ManageWorkspaces
+              ref={manageWsRef}
               orgId={orgId}
               canManage={isAdminOrOwner}
               onWorkspaceCreated={handleRefresh}
               onWorkspaceDeleted={handleRefresh}
             />
+
             {canAccessQuestionBanks && (
               <>
                 <button
@@ -1065,9 +1068,10 @@ export default function OrgDetailPage() {
               {t("org_detail.no_ws")}
             </p>
             <button
-              onClick={() => router.push(`/profile/workspaces`)}
+              onClick={() => manageWsRef.current?.open()}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-400"
             >
+
               <svg
                 className="w-4 h-4"
                 fill="none"
