@@ -28,8 +28,8 @@
     "@radix-ui/react-separator": "^1.1.7",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@uiw/react-md-editor": "^4.0.11",
     "@types/leaflet-imageoverlay-rotated": "^0.1.8",
+    "@uiw/react-md-editor": "^4.0.11",
     "axios": "^1.11.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -52,6 +52,7 @@
     "react-markdown": "^10.1.0",
     "react-toastify": "^11.0.5",
     "recharts": "^3.5.1",
+    "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7"
   },
