@@ -189,7 +189,7 @@ export default function OrgDetailPage() {
 
   const [shareOpen, setShareOpen] = useState(false);
   const [inviteInput, setInviteInput] = useState("");
-  const [inviteRole, setInviteRole] = useState<"Admin" | "Member" | "Viewer">("Member");
+  // const [inviteRole, setInviteRole] = useState<"Admin" | "Member" | "Viewer">("Member");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
 
@@ -443,8 +443,9 @@ export default function OrgDetailPage() {
         const body: InviteMemberOrganizationReqDto = {
           orgId,
           memberEmail: email,
-          memberType: inviteRole,
+          memberType: "Member",
         };
+
         await inviteMember(body);
       }
       setInviteMsg(
@@ -867,12 +868,12 @@ export default function OrgDetailPage() {
 
         <div className="flex items-center gap-2 relative">
           <div className="relative">
-            <button
+            {/* <button
               onClick={() => setViewOpen((v) => !v)}
               className={`px-3 py-2 rounded-lg border text-sm ${themeClasses.button}`}
             >
               {t("org_detail.view")} ▾
-            </button>
+            </button> */}
             {viewOpen && (
               <div
                 className={`absolute right-0 mt-2 w-64 rounded-lg border shadow-xl p-2 ${themeClasses.panel}`}
@@ -1360,7 +1361,7 @@ export default function OrgDetailPage() {
                 }}
                 disabled={!isOwner}
               />
-              <select
+              {/* <select
                 value={inviteRole}
                 onChange={(e) => setInviteRole(e.target.value as "Admin" | "Member" | "Viewer")}
                 className={`rounded-md border px-2 py-2 text-sm ${themeClasses.select}`}
@@ -1369,7 +1370,7 @@ export default function OrgDetailPage() {
                 <option value="Admin">{t("org_detail.role_admin")}</option>
                 <option value="Member">{t("org_detail.role_member")}</option>
                 <option value="Viewer">{t("org_detail.role_viewer")}</option>
-              </select>
+              </select> */}
               <button
                 onClick={() => void onInvite()}
                 disabled={inviteBusy}
@@ -1377,6 +1378,9 @@ export default function OrgDetailPage() {
               >
                 {inviteBusy ? t("org_detail.inviting") : t("org_detail.invite")}
               </button>
+            </div>
+            <div className={`mt-1 text-xs ${themeClasses.textMuted}`}>
+              Role: Member
             </div>
             {inviteMsg && (
               <div
