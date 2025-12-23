@@ -623,11 +623,13 @@ export function useSegmentPlayback({
     setActiveSegmentId(segmentId);
     setCurrentPlayIndex(segmentIndex);
 
-    // Render the segment on map WITHOUT camera state and transitions
+    // Render the segment on map WITH camera state (move camera to segment)
     await handleViewSegment(segment, {
-      skipCameraState: true,
+      skipCameraState: false,
       transitionType: 'Jump',
       durationMs: 0,
+      cameraAnimationType: 'Fly',
+      cameraAnimationDurationMs: 500,
     });
 
     // Load and play route animations
