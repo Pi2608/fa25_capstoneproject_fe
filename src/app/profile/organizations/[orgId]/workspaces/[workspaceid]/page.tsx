@@ -386,7 +386,7 @@ export default function WorkspaceDetailPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowCreateMapDialog(true)}
-            className="px-4 py-2 rounded-lg bg-emerald-500 text-zinc-900 text-sm font-semibold hover:bg-emerald-400"
+            className="px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400"
           >
             {t("workspace_detail.create_map")}
           </button>
@@ -465,14 +465,15 @@ export default function WorkspaceDetailPage() {
                     onClick={() => router.push(`/maps/${map.id}`)}
                     title={t("workspace_detail.edit")}
                   >
-                    ✏️
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                      <path fill="currentColor" d="m14.06 9l.94.94L5.92 19H5v-.92zm3.6-6c-.25 0-.51.1-.7.29l-1.83 1.83l3.75 3.75l1.83-1.83c.39-.39.39-1.04 0-1.41l-2.34-2.34c-.2-.2-.45-.29-.71-.29m-3.6 3.19L3 17.25V21h3.75L17.81 9.94z"/></svg>
                   </button>
                   <button
                     className="p-1 rounded border border-orange-500/30 bg-orange-500/10 hover:bg-orange-500/20 text-xs text-orange-600 dark:text-orange-300"
                     onClick={() => void handleRemoveMapFromWorkspace(map.id)}
                     title={t("workspace_detail.remove_from_ws")}
                   >
-                    📤
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" d="M13 1H3L0 4v10.5a.5.5 0 0 0 .5.5h15a.5.5 0 0 0 .5-.5V4zm-3 9v3H6v-3H3l5-4l5 4zM2.414 3l1-1h9.171l1 1z"/></svg>
                   </button>
                   <button
                     className="p-1 rounded border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-xs text-red-600 dark:text-red-300"
@@ -485,7 +486,7 @@ export default function WorkspaceDetailPage() {
                     }}
                     title={t("workspace_detail.delete")}
                   >
-                    🗑️
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" fillRule="evenodd" d="M5.75 3V1.5h4.5V3zm-1.5 0V1a1 1 0 0 1 1-1h5.5a1 1 0 0 1 1 1v2h2.5a.75.75 0 0 1 0 1.5h-.365l-.743 9.653A2 2 0 0 1 11.148 16H4.852a2 2 0 0 1-1.994-1.847L2.115 4.5H1.75a.75.75 0 0 1 0-1.5zm-.63 1.5h8.76l-.734 9.538a.5.5 0 0 1-.498.462H4.852a.5.5 0 0 1-.498-.462z" clipRule="evenodd"/></svg>
                   </button>
                 </div>
               </div>
