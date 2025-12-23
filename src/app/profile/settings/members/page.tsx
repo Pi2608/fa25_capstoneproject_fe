@@ -13,6 +13,7 @@ import {
   transferOwnership,
   removeMember,
   inviteMember,
+  deleteOrganization,
   GetOrganizationMembersResDto,
   MemberDto,
   MyOrganizationDto,
@@ -212,6 +213,30 @@ function parseApiError(err: unknown): ApiErr {
   return {};
 }
 
+function getDeleteOrgErrorKey(err: unknown): string {
+  const apiErr = parseApiError(err);
+
+  const type = String(apiErr.type || "").toLowerCase();
+  const title = String(apiErr.title || "").toLowerCase();
+
+  const status =
+    apiErr.status ??
+    (typeof (err as any)?.response?.status === "number"
+      ? (err as any).response.status
+      : 0);
+
+  if (type === "organization.hasworkspaces" || title === "organization.hasworkspaces") {
+    return "settings_members.delete_org_has_workspaces";
+  }
+
+  if (status === 403) return "settings_members.only_owner_delete_org_title";
+  if (status === 404) return "org_detail.err_not_found";
+  if (status === 429) return "org_detail.err_rate_limited";
+  if (status >= 500) return "org_detail.err_server";
+
+  return "settings_members.delete_org_failed";
+}
+
 function inviteUserMessage(
   err: unknown,
   t: (key: string, vars?: Record<string, unknown>) => string
@@ -289,6 +314,14 @@ export default function MembersPage() {
   const [inviteInput, setInviteInput] = useState("");
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<string | null>(null);
+
+  const [deleteOrgOpen, setDeleteOrgOpen] = useState(false);
+  const [deleteOrgBusy, setDeleteOrgBusy] = useState(false);
+
+  const selectedOrg = useMemo(
+    () => orgs.find((o) => o.orgId === selectedOrgId) ?? null,
+    [orgs, selectedOrgId]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -413,6 +446,31 @@ export default function MembersPage() {
   const isOwner = currentUserRow?.license === "Owner";
   const isAdminOrOwner = isOwner;
 
+  const confirmDeleteOrg = async () => {
+    if (!selectedOrgId || !isOwner) return;
+
+    setDeleteOrgBusy(true);
+    try {
+      await deleteOrganization(selectedOrgId);
+
+      showToast("success", t("settings_members.delete_org_success"), 3000);
+
+      setOrgs((prev) => {
+        const remaining = prev.filter((o) => o.orgId !== selectedOrgId);
+        const nextId = remaining[0]?.orgId ?? null;
+        setSelectedOrgId(nextId);
+        return remaining;
+      });
+
+      setDeleteOrgOpen(false);
+    } catch (err) {
+      const key = getDeleteOrgErrorKey(err);
+      showToast("error", t(key), 5000);
+    } finally {
+      setDeleteOrgBusy(false);
+    }
+
+  };
 
   const canTransfer = (target: MemberRow) => {
     if (!currentUserRow) return false;
@@ -612,6 +670,19 @@ export default function MembersPage() {
           >
             {`+ ${t("settings_members.invite_member")}`}
           </button>
+          <button
+            className="ml-2 rounded-lg bg-red-600 px-3 py-1 text-sm font-medium text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+            onClick={() => isOwner && setDeleteOrgOpen(true)}
+            disabled={deleteOrgBusy || !isOwner || !selectedOrgId}
+            title={
+              isOwner
+                ? t("settings_members.delete_org_button_title_owner")
+                : t("settings_members.only_owner_delete_org_title")
+            }
+          >
+            {t("settings_members.delete_org")}
+          </button>
+
         </div>
       </div>
 
@@ -867,6 +938,42 @@ export default function MembersPage() {
                 disabled={rowBusy[transferTarget.memberId]}
               >
                 {t("settings_members.transfer_ownership")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteOrgOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/40">
+          <div className="mx-4 w-full max-w-md rounded-2xl border border-zinc-200/70 bg-white p-6 shadow-xl dark:border-white/10 dark:bg-zinc-900">
+            <h3 className="text-lg font-semibold text-zinc-900 dark:text-white">
+              {t("settings_members.delete_org_modal_title")}
+            </h3>
+
+            <p className="mt-3 text-sm text-zinc-700 dark:text-zinc-200 whitespace-pre-line">
+              {t("settings_members.delete_org_confirm", {
+                name: selectedOrg?.orgName ?? "—",
+              })}
+            </p>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-700 bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                onClick={() => setDeleteOrgOpen(false)}
+                disabled={deleteOrgBusy}
+              >
+                {t("common.cancel")}
+              </button>
+
+              <button
+                type="button"
+                className="rounded-lg px-3 py-1.5 text-sm font-medium text-white bg-red-600 hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={() => void confirmDeleteOrg()}
+                disabled={deleteOrgBusy}
+              >
+                {deleteOrgBusy ? t("common.deleting") : t("settings_members.delete_org")}
               </button>
             </div>
           </div>
