@@ -36,7 +36,27 @@ function formatDate(iso: string) {
   return isNaN(d.getTime()) ? iso : d.toLocaleString();
 }
 
+/**
+ * Calculate total spent from recent transactions
+ * Only counts transactions with status "success" or "paid"
+ *
+ * @param transactions - Array of recent transaction items
+ * @returns Total amount in the transaction's currency
+ */
+function calculateSuccessfulTransactionsTotal(
+  transactions: OrganizationBillingDto["recentTransactions"] | undefined
+): number {
+  if (!transactions || transactions.length === 0) {
+    return 0;
+  }
 
+  return transactions
+    .filter(t => {
+      const status = (t.status ?? "").toLowerCase();
+      return status === "success" || status === "paid";
+    })
+    .reduce((sum, t) => sum + (t.amount || 0), 0);
+}
 
 function StatusBadge({ status }: { status: string }) {
   const { t } = useI18n();
@@ -266,8 +286,8 @@ export default function BillingPage() {
                     </div>
                   </div>
                   <div className="mt-2 text-2xl font-semibold tracking-tight ">
-                    {billing.totalSpentThisMonth !== undefined
-                      ? formatCurrency(billing.totalSpentThisMonth, currency)
+                    {billing.recentTransactions
+                      ? formatCurrency(calculateSuccessfulTransactionsTotal(billing.recentTransactions), currency)
                       : "—"
                     }
                   </div>
