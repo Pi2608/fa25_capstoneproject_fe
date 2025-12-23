@@ -20,6 +20,10 @@ interface PropertiesPanelProps {
   selectedItem: SelectedEntity | null;
   onClose: () => void;
   onUpdate?: (updates: any) => Promise<void>;
+  onSave?: () => void;
+  hasChanges?: boolean;
+  onChangeStatus?: (hasChanges: boolean) => void;
+  onSaveReady?: (saveFn: () => Promise<void>) => void;
 }
 
 export function PropertiesPanel({
@@ -27,6 +31,10 @@ export function PropertiesPanel({
   selectedItem,
   onClose,
   onUpdate,
+  onSave,
+  hasChanges = false,
+  onChangeStatus,
+  onSaveReady,
 }: PropertiesPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { t } = useI18n();
@@ -77,13 +85,31 @@ export function PropertiesPanel({
           />
           <h3 className="font-semibold text-sm text-zinc-100">{t('mapEditor', 'propertiesPanelTitle')}</h3>
         </div>
-        <button
-          onClick={handleClose}
-          className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors"
-          title={t('common', 'close')}
-        >
-          <Icon icon="mdi:close" className="w-4 h-4 text-zinc-400 hover:text-zinc-200" />
-        </button>
+        <div className="flex items-center gap-2">
+          {selectedItem.type === "feature" && onSave && (
+            <button
+              onClick={onSave}
+              disabled={!hasChanges}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium rounded-lg transition-all flex items-center gap-1.5",
+                hasChanges
+                  ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-md"
+                  : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+              )}
+              title={hasChanges ? t('mapEditor', 'propertiesPanelSaveChanges') : t('mapEditor', 'propertiesPanelNoChanges')}
+            >
+              <Icon icon="mdi:content-save" className="w-3.5 h-3.5" />
+              {hasChanges ? t('mapEditor', 'propertiesPanelSaveChanges') : t('mapEditor', 'propertiesPanelNoChanges')}
+            </button>
+          )}
+          <button
+            onClick={handleClose}
+            className="p-1.5 hover:bg-zinc-800 rounded-lg transition-colors"
+            title={t('common', 'close')}
+          >
+            <Icon icon="mdi:close" className="w-4 h-4 text-zinc-400 hover:text-zinc-200" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -98,6 +124,8 @@ export function PropertiesPanel({
           <FeatureStyleEditor
             feature={selectedItem.data as FeatureData}
             onUpdate={onUpdate}
+            onChangeStatus={onChangeStatus}
+            onSaveReady={onSaveReady}
           />
         )}
         {selectedItem.type === "layer" && (

@@ -1037,7 +1037,7 @@ export async function loadFeaturesToMap(
           layer = L.circleMarker([coords[1], coords[0]], {
             radius: 6,
             color: '#3388ff',
-            fillColor: 'white',
+            fillColor: '#3388ff', // Blue fill matching new marker creation
             fillOpacity: 1,
             weight: 2,
             opacity: 1
@@ -1775,7 +1775,7 @@ export async function renderFeatures(
           layer = L.circleMarker([coords[1], coords[0]], {
             radius: 6,
             color: '#3388ff',
-            fillColor: 'white',
+            fillColor: '#3388ff', // Blue fill matching new marker creation
             fillOpacity: 1,
             weight: 2,
             opacity: 1
@@ -2150,7 +2150,7 @@ export async function toggleFeatureVisibility(
           layer = L.circleMarker([coords[1], coords[0]], {
             radius: 6,
             color: '#3388ff',
-            fillColor: 'white',
+            fillColor: '#3388ff', // Blue fill matching new marker creation
             fillOpacity: 1,
             weight: 2,
             opacity: 1

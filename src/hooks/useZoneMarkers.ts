@@ -43,6 +43,12 @@ export function useZoneMarkers({
 
                 const L = (await import("leaflet")).default;
 
+                // Create custom pane for zones if it doesn't exist (z-index 350, below overlayPane 400)
+                if (!mapRef.current.getPane('zonePane')) {
+                    const zonePane = mapRef.current.createPane('zonePane');
+                    zonePane.style.zIndex = '350'; // Below overlayPane (400) to allow POI markers on top
+                }
+
                 // Render each zone
                 for (const mapZone of mapZones) {
                     if (cancelled || !mapRef.current) break;
@@ -68,6 +74,7 @@ export function useZoneMarkers({
 
                         // Create GeoJSON layer with styling
                         const geoJsonLayer = L.geoJSON(geoJsonData, {
+                            pane: 'zonePane', // Use custom pane for zones (lower z-index)
                             style: () => ({
                                 color: mapZone.boundaryColor || "#3388ff",
                                 weight: mapZone.boundaryWidth || 2,
