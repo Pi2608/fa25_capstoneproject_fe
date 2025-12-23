@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { Plus, Trash2, Edit2, X, Check, Image as ImageIcon } from "lucide-react";
-import { 
-  getMapLegendItems, 
-  createMapLegendItem, 
-  updateMapLegendItem, 
+import {
+  getMapLegendItems,
+  createMapLegendItem,
+  updateMapLegendItem,
   deleteMapLegendItem,
   type LayerDTO
 } from "@/lib/api-maps";
@@ -13,6 +13,7 @@ import type { Segment, Location } from "@/lib/api-storymap";
 import type { FeatureData } from "@/utils/mapUtils";
 import { iconEmojiMap, iconLabelMap } from "@/constants/icons";
 import { MapLocation } from "@/lib/api-location";
+import { useI18n } from "@/i18n/I18nProvider";
 
 // Custom Legend Item Type
 export type CustomLegendItem = {
@@ -59,20 +60,20 @@ const LOCATION_TYPE_ICON_MAP: Record<string, { emoji: string; label: string }> =
 };
 
 // Legend Item Component
-function LegendItem({ 
-  emoji, 
-  label, 
-  count, 
-  tooltip, 
+function LegendItem({
+  emoji,
+  label,
+  count,
+  tooltip,
   iconUrl,
   color,
   onEdit,
   onDelete,
   editable = false
-}: { 
-  emoji: string; 
-  label: string; 
-  count?: number; 
+}: {
+  emoji: string;
+  label: string;
+  count?: number;
   tooltip?: string;
   iconUrl?: string;
   color?: string;
@@ -80,16 +81,18 @@ function LegendItem({
   onDelete?: () => void;
   editable?: boolean;
 }) {
+  const { t } = useI18n();
+
   return (
-    <div 
+    <div
       className="flex items-center gap-2 px-2 py-1 rounded hover:bg-zinc-700/50 transition-colors group relative"
       title={tooltip}
     >
       {iconUrl ? (
         <img src={iconUrl} alt={label} className="w-5 h-5 object-contain" />
       ) : color ? (
-        <div 
-          className="w-4 h-4 rounded border border-zinc-600" 
+        <div
+          className="w-4 h-4 rounded border border-zinc-600"
           style={{ backgroundColor: color }}
         />
       ) : (
@@ -104,14 +107,14 @@ function LegendItem({
           <button
             onClick={(e) => { e.stopPropagation(); onEdit?.(); }}
             className="p-1 hover:bg-zinc-600 rounded text-zinc-400 hover:text-white"
-            title="Chỉnh sửa"
+            title={t("mapEditor", "legendEdit")}
           >
             <Edit2 className="w-3 h-3" />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
             className="p-1 hover:bg-red-600 rounded text-zinc-400 hover:text-white"
-            title="Xóa"
+            title={t("mapEditor", "legendDelete")}
           >
             <Trash2 className="w-3 h-3" />
           </button>
@@ -140,6 +143,7 @@ function CustomLegendEditor({
   editingItem?: CustomLegendItem | null;
   availableIcons: Array<{ iconUrl: string; label: string; emoji: string; isCustom?: boolean; isFromLocation?: boolean }>;
 }) {
+  const { t } = useI18n();
   const [emoji, setEmoji] = useState(editingItem?.emoji || "📍");
   const [label, setLabel] = useState(editingItem?.label || "");
   const [description, setDescription] = useState(editingItem?.description || "");
@@ -212,7 +216,7 @@ function CustomLegendEditor({
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
           <h3 className="text-white font-medium">
-            {editingItem ? "Chỉnh sửa chú giải" : "Thêm chú giải mới"}
+            {editingItem ? t("mapEditor", "legendEditTitle") : t("mapEditor", "legendAddTitle")}
           </h3>
           <button
             onClick={onClose}
@@ -229,39 +233,39 @@ function CustomLegendEditor({
             <div className="flex-1 space-y-4">
               {/* Icon Type Toggle */}
               <div>
-                <label className="text-xs text-zinc-400 mb-2 block">Loại biểu tượng</label>
+                <label className="text-xs text-zinc-400 mb-2 block">{t("mapEditor", "legendIconType")}</label>
                 <div className="flex gap-1">
                   <button
                     onClick={() => setIconType("emoji")}
                     className={`flex-1 py-2 px-2 rounded-lg text-xs flex items-center justify-center gap-1 transition-colors ${
-                      iconType === "emoji" 
-                        ? "bg-blue-600 text-white" 
+                      iconType === "emoji"
+                        ? "bg-blue-600 text-white"
                         : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
                     }`}
                   >
-                    <span className="text-base">😀</span> Emoji
+                    <span className="text-base">😀</span> {t("mapEditor", "legendIconTypeEmoji")}
                   </button>
                   <button
                     onClick={() => setIconType("location")}
                     className={`flex-1 py-2 px-2 rounded-lg text-xs flex items-center justify-center gap-1 transition-colors ${
-                      iconType === "location" 
-                        ? "bg-blue-600 text-white" 
+                      iconType === "location"
+                        ? "bg-blue-600 text-white"
                         : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
                     }`}
                     disabled={availableIcons.length === 0}
-                    title={availableIcons.length === 0 ? "Chưa có icon nào từ Location" : "Chọn từ icon Location"}
+                    title={availableIcons.length === 0 ? t("mapEditor", "legendNoIconsFromLocation") : t("mapEditor", "legendIconTypeLocation")}
                   >
-                    <span className="text-base">📍</span> Location
+                    <span className="text-base">📍</span> {t("mapEditor", "legendIconTypeLocation")}
                   </button>
                   <button
                     onClick={() => setIconType("url")}
                     className={`flex-1 py-2 px-2 rounded-lg text-xs flex items-center justify-center gap-1 transition-colors ${
-                      iconType === "url" 
-                        ? "bg-blue-600 text-white" 
+                      iconType === "url"
+                        ? "bg-blue-600 text-white"
                         : "bg-zinc-800 text-zinc-300 hover:bg-zinc-700"
                     }`}
                   >
-                    <ImageIcon className="w-3 h-3" /> URL
+                    <ImageIcon className="w-3 h-3" /> {t("mapEditor", "legendIconTypeUrl")}
                   </button>
                 </div>
               </div>
@@ -269,7 +273,7 @@ function CustomLegendEditor({
               {/* Emoji Picker */}
               {iconType === "emoji" && (
                 <div>
-                  <label className="text-xs text-zinc-400 mb-2 block">Chọn emoji</label>
+                  <label className="text-xs text-zinc-400 mb-2 block">{t("mapEditor", "legendSelectEmoji")}</label>
                   <div className="p-2 bg-zinc-800 border border-zinc-600 rounded-lg grid grid-cols-10 gap-1 max-h-[180px] overflow-y-auto">
                     {EMOJI_OPTIONS.map((e) => (
                       <button
@@ -287,7 +291,7 @@ function CustomLegendEditor({
               {/* Location Icon Picker - Icons from locations (both URL and iconType) */}
               {iconType === "location" && (
                 <div>
-                  <label className="text-xs text-zinc-400 mb-2 block">Icon từ Location ({availableIcons.filter(i => i.isFromLocation).length} icon)</label>
+                  <label className="text-xs text-zinc-400 mb-2 block">{t("mapEditor", "legendIconFromLocation", { count: availableIcons.filter(i => i.isFromLocation).length })}</label>
                   <div className="p-2 bg-zinc-800 border border-zinc-600 rounded-lg max-h-[220px] overflow-y-auto">
                     {availableIcons.some(i => i.isFromLocation) ? (
                       <div className="grid grid-cols-5 gap-2">
@@ -322,8 +326,8 @@ function CustomLegendEditor({
                       </div>
                     ) : (
                       <div className="text-center py-4 text-zinc-500 text-sm">
-                        Chưa có icon nào từ Location.<br/>
-                        <span className="text-xs">Thêm Location với iconType hoặc iconUrl để hiển thị ở đây.</span>
+                        {t("mapEditor", "legendNoIconsFromLocation")}<br/>
+                        <span className="text-xs">{t("mapEditor", "legendNoIconsHint")}</span>
                       </div>
                     )}
                   </div>
@@ -333,17 +337,17 @@ function CustomLegendEditor({
               {/* Custom URL Input */}
               {iconType === "url" && (
                 <div>
-                  <label className="text-xs text-zinc-400 mb-2 block">URL hình ảnh</label>
+                  <label className="text-xs text-zinc-400 mb-2 block">{t("mapEditor", "legendImageUrl")}</label>
                   <input
                     type="url"
                     value={iconUrl}
                     onChange={(e) => setIconUrl(e.target.value)}
-                    placeholder="https://example.com/icon.png"
+                    placeholder={t("mapEditor", "legendImageUrlPlaceholder")}
                     className="w-full py-2 px-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
                   />
                   {iconUrl && (
                     <div className="mt-2 flex items-center gap-2">
-                      <span className="text-xs text-zinc-400">Xem trước:</span>
+                      <span className="text-xs text-zinc-400">{t("mapEditor", "legendPreview")}:</span>
                       <img src={iconUrl} alt="Preview" className="w-8 h-8 object-contain rounded" onError={(e) => (e.currentTarget.style.display = 'none')} />
                     </div>
                   )}
@@ -352,7 +356,7 @@ function CustomLegendEditor({
 
               {/* Color (optional) */}
               <div>
-                <label className="text-xs text-zinc-400 mb-2 block">Màu sắc (tùy chọn)</label>
+                <label className="text-xs text-zinc-400 mb-2 block">{t("mapEditor", "legendColor")}</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="color"
@@ -364,14 +368,14 @@ function CustomLegendEditor({
                     type="text"
                     value={color}
                     onChange={(e) => setColor(e.target.value)}
-                    placeholder="#3388ff"
+                    placeholder={t("mapEditor", "legendColorPlaceholder")}
                     className="flex-1 py-2 px-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
                   />
                   {color && (
                     <button
                       onClick={() => setColor("")}
                       className="p-2 hover:bg-zinc-700 rounded text-zinc-400"
-                      title="Xóa màu"
+                      title={t("mapEditor", "legendClearColor")}
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -384,12 +388,12 @@ function CustomLegendEditor({
             <div className="flex-1 space-y-4">
               {/* Label */}
               <div>
-                <label className="text-xs text-zinc-400 mb-2 block">Tên chú giải *</label>
+                <label className="text-xs text-zinc-400 mb-2 block">{t("mapEditor", "legendName")}</label>
                 <input
                   type="text"
                   value={label}
                   onChange={(e) => setLabel(e.target.value)}
-                  placeholder="Ví dụ: Trạm xe buýt"
+                  placeholder={t("mapEditor", "legendNamePlaceholder")}
                   className="w-full py-2 px-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500"
                   maxLength={50}
                 />
@@ -397,11 +401,11 @@ function CustomLegendEditor({
 
               {/* Description */}
               <div>
-                <label className="text-xs text-zinc-400 mb-2 block">Mô tả (tùy chọn)</label>
+                <label className="text-xs text-zinc-400 mb-2 block">{t("mapEditor", "legendDescription")}</label>
                 <textarea
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Mô tả ngắn về biểu tượng này..."
+                  placeholder={t("mapEditor", "legendDescriptionPlaceholder")}
                   className="w-full py-2 px-3 bg-zinc-800 border border-zinc-600 rounded-lg text-white text-sm focus:outline-none focus:border-blue-500 resize-none"
                   rows={3}
                   maxLength={200}
@@ -410,7 +414,7 @@ function CustomLegendEditor({
 
               {/* Preview */}
               <div className="p-4 bg-zinc-800/50 rounded-lg">
-                <div className="text-xs text-zinc-500 mb-2">Xem trước:</div>
+                <div className="text-xs text-zinc-500 mb-2">{t("mapEditor", "legendPreview")}:</div>
                 <div className="flex items-center gap-3">
                   {(iconType === "location" || iconType === "url") && iconUrl ? (
                     <img src={iconUrl} alt={label} className="w-8 h-8 object-contain" />
@@ -422,7 +426,7 @@ function CustomLegendEditor({
                     <span className="text-2xl">{emoji}</span>
                   )}
                   <div>
-                    <span className="text-sm text-zinc-200 block">{label || "Tên chú giải"}</span>
+                    <span className="text-sm text-zinc-200 block">{label || t("mapEditor", "legendPreviewLabel")}</span>
                     {description && (
                       <span className="text-xs text-zinc-400">{description}</span>
                     )}
@@ -439,7 +443,7 @@ function CustomLegendEditor({
             onClick={onClose}
             className="px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg text-sm transition-colors"
           >
-            Hủy
+            {t("mapEditor", "legendCancel")}
           </button>
           <button
             onClick={handleSave}
@@ -447,7 +451,7 @@ function CustomLegendEditor({
             className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-600 disabled:cursor-not-allowed text-white rounded-lg text-sm transition-colors flex items-center gap-2"
           >
             <Check className="w-4 h-4" />
-            {editingItem ? "Cập nhật" : "Thêm"}
+            {editingItem ? t("mapEditor", "legendUpdate") : t("mapEditor", "legendAdd")}
           </button>
         </div>
       </div>
@@ -483,6 +487,8 @@ export default function MapEditorLegend({
   className = "",
   mapLocations = [],
 }: MapEditorLegendProps) {
+  const { t } = useI18n();
+
   // Custom legend items state
   const [customItems, setCustomItems] = useState<CustomLegendItem[]>([]);
   const [showEditor, setShowEditor] = useState(false);
@@ -583,7 +589,7 @@ export default function MapEditorLegend({
 
   const handleDeleteItem = async (id: string) => {
     if (!mapId) return;
-    if (!confirm("Bạn có chắc muốn xóa mục chú giải này?")) return;
+    if (!confirm(t("mapEditor", "legendDeleteConfirm"))) return;
     
     try {
       if (!id.startsWith("custom-")) {
@@ -714,7 +720,7 @@ export default function MapEditorLegend({
           className="w-full flex items-center justify-between px-3 py-2 bg-zinc-800/80 hover:bg-zinc-700/80 transition-colors"
         >
           <span className="text-sm font-medium text-white flex items-center gap-2">
-            <span>📋</span> Chú giải
+            <span><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm4 18H6V4h7v5h5z"/></svg></span> {t("mapEditor", "legendTitle")}
           </span>
           <span className="text-zinc-400 text-xs">
             {isCollapsed ? "▼" : "▲"}
@@ -728,11 +734,11 @@ export default function MapEditorLegend({
             <div>
               {isEditMode && (
                 <div className="text-[10px] uppercase tracking-wider text-zinc-500 px-2 mb-1 flex items-center justify-between">
-                  <span>Chú giải</span>
+                  <span>{t("mapEditor", "legendTitle")}</span>
                   <button
                     onClick={() => { setEditingItem(null); setShowEditor(true); }}
                     className="p-0.5 hover:bg-zinc-700 rounded text-zinc-400 hover:text-white"
-                    title="Thêm chú giải mới"
+                    title={t("mapEditor", "legendAddNew")}
                   >
                     <Plus className="w-3.5 h-3.5" />
                   </button>
@@ -753,7 +759,7 @@ export default function MapEditorLegend({
               ))}
               {customItems.length === 0 && isEditMode && (
                 <div className="text-xs text-zinc-500 px-2 py-1 italic">
-                  Nhấn + để thêm chú giải
+                  {t("mapEditor", "legendAddHint")}
                 </div>
               )}
             </div>

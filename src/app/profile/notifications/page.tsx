@@ -42,9 +42,29 @@ function typeLabel(type: string | undefined, tr: (k: string) => string) {
   return undefined;
 }
 
+function trimNotificationMessage(message: string): string {
+  // Remove "Click to continue..." part from payment notification messages
+  // Handle cases with or without period before "Click"
+  return message
+    .replace(/\.?\s*Click to continue[^.]*\.?$/i, '.')
+    .replace(/\.\.+/g, '.') // Remove duplicate periods
+    .trim();
+}
+
 function translateMessageToVi(item: NotificationItem): string {
-  const msg = (item.message ?? "").trim();
+  const rawMsg = (item.message ?? "").trim();
+  // Trim "Click to continue..." part before translating
+  const msg = trimNotificationMessage(rawMsg);
   const type = (item.type ?? "").toLowerCase();
+
+  // Handle "You have a pending payment for plan "X"" (with or without closing quote)
+  {
+    const r = /you have a pending payment for plan\s*[""']?([^""'.]+)[""']?/i.exec(msg);
+    if (r) {
+      const plan = r[1].trim();
+      return `Bạn có thanh toán đang chờ xử lý cho gói "${plan}".`;
+    }
+  }
 
   {
     const r = /payment of\s*\$?\s*([\d.,]+)\s*for\s*(.+?)\s*plan\s*completed\s*successfully/i.exec(msg);
@@ -79,11 +99,14 @@ function translateMessageToVi(item: NotificationItem): string {
 
   if (msg) {
     let vi = msg;
+    vi = vi.replace(/You have a pending payment/gi, "Bạn có thanh toán đang chờ xử lý");
+    vi = vi.replace(/pending payment/gi, "thanh toán đang chờ xử lý");
     vi = vi.replace(/Your payment/gi, "Thanh toán của bạn");
     vi = vi.replace(/has been processed successfully/gi, "đã được xử lý thành công");
     vi = vi.replace(/is now active/gi, "hiện đã được kích hoạt");
     vi = vi.replace(/Payment of/gi, "Thanh toán");
     vi = vi.replace(/completed successfully/gi, "hoàn tất thành công");
+    vi = vi.replace(/for plan/gi, "cho gói");
     vi = vi.replace(/for/gi, "cho");
     vi = vi.replace(/plan subscription/gi, "đăng ký gói");
     vi = vi.replace(/plan/gi, "gói");
@@ -95,11 +118,6 @@ function translateMessageToVi(item: NotificationItem): string {
   }
 
   return "—";
-}
-
-function trimNotificationMessage(message: string): string {
-  // Remove "Click to continue..." part from payment notification messages
-  return message.replace(/\.\s*Click to continue.*$/i, '.').trim();
 }
 
 function translateMessage(item: NotificationItem, lang: "vi" | "en") {
