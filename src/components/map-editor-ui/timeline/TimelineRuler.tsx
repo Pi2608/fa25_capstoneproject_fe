@@ -9,6 +9,7 @@ interface TimelineRulerProps {
   zoomLevel: number;
   currentTime: number;
   isPlaying: boolean;
+  isSingleSegmentPlaying?: boolean;
   segments?: Segment[];
   onRouteClick?: (route: RouteAnimation, segmentId: string) => void;
 }
@@ -18,6 +19,7 @@ export function TimelineRuler({
   zoomLevel,
   currentTime,
   isPlaying,
+  isSingleSegmentPlaying = false,
   segments = [],
   onRouteClick,
 }: TimelineRulerProps) {
@@ -65,18 +67,21 @@ export function TimelineRuler({
           })}
         </div>
 
-        <div
-          className={`absolute top-0 bottom-0 w-0.5 pointer-events-none z-10 transition-all duration-100 ${
-            isPlaying
-              ? 'bg-emerald-500 shadow-lg shadow-emerald-500/50'
-              : 'bg-blue-500 shadow-lg shadow-blue-500/50'
-          }`}
-          style={{ left: `${16 + currentTime * pixelsPerSecond}px` }}
-        >
-          <div className={`absolute -top-1 -left-1.5 w-3 h-3 rounded-full ${
-            isPlaying ? 'bg-emerald-500' : 'bg-blue-500'
-          }`} />
-        </div>
+        {/* Hide playhead indicator during single segment play */}
+        {!isSingleSegmentPlaying && (
+          <div
+            className={`absolute top-0 bottom-0 w-0.5 pointer-events-none z-10 transition-all duration-100 ${
+              isPlaying
+                ? 'bg-emerald-500 shadow-lg shadow-emerald-500/50'
+                : 'bg-blue-500 shadow-lg shadow-blue-500/50'
+            }`}
+            style={{ left: `${16 + currentTime * pixelsPerSecond}px` }}
+          >
+            <div className={`absolute -top-1 -left-1.5 w-3 h-3 rounded-full ${
+              isPlaying ? 'bg-emerald-500' : 'bg-blue-500'
+            }`} />
+          </div>
+        )}
       </div>
 
       {/* Route Timing Visualization */}

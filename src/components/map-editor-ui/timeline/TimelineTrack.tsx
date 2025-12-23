@@ -774,6 +774,24 @@ export function TimelineTrack({
             setRouteAnimations((prev) =>
               prev.filter((r) => r.routeAnimationId !== routeId),
             );
+
+            // Dispatch event to notify map and timeline ruler to remove route
+            if (typeof window !== 'undefined') {
+              window.dispatchEvent(
+                new CustomEvent("routeDeleted", {
+                  detail: {
+                    segmentId: segment.segmentId,
+                    routeId,
+                  },
+                }),
+              );
+              window.dispatchEvent(
+                new CustomEvent("routeAnimationChanged", {
+                  detail: { segmentId: segment.segmentId },
+                }),
+              );
+            }
+
             timelineContext.showToast(
               "success",
               timelineContext.t("mapEditor", "success_delete_route"),

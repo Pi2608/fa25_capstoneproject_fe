@@ -71,7 +71,7 @@ export function prettyError(err: unknown, fallback?: string): string {
 
       for (const msg of msgLike) {
         if (/already exists/i.test(msg)) return t("register", "errorEmailExists");
-        if (/otp/i.test(msg) && /invalid|expired/i.test(msg)) return t("register", "errorOtpInvalidExpired");
+        if (/otp/i.test(msg) && /invalid|expired|incorrect/i.test(msg)) return t("register", "errorOtpInvalidExpired");
         if (/too many/i.test(msg) || /rate/i.test(msg)) return t("register", "errorRateLimit");
         if (/500|internal server/i.test(msg)) return t("register", "errorServerBusy");
       }

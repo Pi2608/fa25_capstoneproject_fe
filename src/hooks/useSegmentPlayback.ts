@@ -47,6 +47,7 @@ export function useSegmentPlayback({
   const [segmentStartTime, setSegmentStartTime] = useState<number>(0);
   const [isRouteAnimationOnly, setIsRouteAnimationOnly] = useState(false); // Flag to skip playback loop
   const isSingleSegmentPlayRef = useRef(false); // Ref to track single segment play (doesn't trigger re-render)
+  const [isSingleSegmentPlaying, setIsSingleSegmentPlaying] = useState(false); // State for UI updates
 
   useEffect(() => {
     let cancelled = false;
@@ -561,6 +562,7 @@ export function useSegmentPlayback({
     setSegmentStartTime(0);
     setIsRouteAnimationOnly(false); // Reset flag
     isSingleSegmentPlayRef.current = false; // Reset ref
+    setIsSingleSegmentPlaying(false); // Reset state
 
     // Dispatch event to notify UI components
     if (typeof window !== 'undefined' && wasRouteAnimationOnly) {
@@ -615,6 +617,7 @@ export function useSegmentPlayback({
     // IMPORTANT: Set flags FIRST to prevent auto-play effect from running
     isSingleSegmentPlayRef.current = true;
     setIsRouteAnimationOnly(true);
+    setIsSingleSegmentPlaying(true);
 
     // Set the segment as active
     setActiveSegmentId(segmentId);
@@ -695,6 +698,7 @@ export function useSegmentPlayback({
     routeAnimations,
     segmentStartTime,
     isControllingTime: isRouteAnimationOnly || isSingleSegmentPlayRef.current, // Flag to indicate this hook is managing currentTime
+    isSingleSegmentPlaying, // Flag to hide timeline tracks during single segment play
     handleViewSegment,
     handlePlayPreview,
     handlePausePreview,

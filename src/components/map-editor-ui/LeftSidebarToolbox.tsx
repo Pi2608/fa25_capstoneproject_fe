@@ -57,8 +57,8 @@ import { LibraryView } from "./LibraryView";
 
 interface LeftSidebarToolboxProps {
   isStoryMap?: boolean; // When false, show Locations/Zones instead of Segments/Transitions
-  activeView: "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "search" | "library" | null;
-  onViewChange: (view: "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "search" | "library" | null) => void;
+  activeView: "explorer" | "segments" | "icons" | "locations" | "zones" | "search" | "library" | null;
+  onViewChange: (view: "explorer" | "segments" | "icons" | "locations" | "zones" | "search" | "library" | null) => void;
 
 
   features: FeatureData[];
@@ -97,7 +97,7 @@ interface LeftSidebarToolboxProps {
   onAddLayer?: (data: AttachLayerRequest) => Promise<void>;
 }
 
-type ViewType = "explorer" | "segments" | "transitions" | "icons" | "locations" | "zones" | "search" | "library";
+type ViewType = "explorer" | "segments" | "icons" | "locations" | "zones" | "search" | "library";
 type FormMode = "list" | "create" | "edit";
 
 export function LeftSidebarToolbox({
